@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard Operacional – Somnus Anestesia</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --primary:  #7c3aed;
+      --primary-d:#5b21b6;
+      --primary-l:#ede9fe;
+      --bg:       #f5f3ff;
+      --surface:  #ffffff;
+      --border:   #e5e7eb;
+      --text:     #1e1b4b;
+      --muted:    #6b7280;
+      --green:    #059669;
+      --amber:    #d97706;
+      --red:      #dc2626;
+      --blue:     #2563eb;
+    }
+
+    body { font-family: "Segoe UI", Roboto, Arial, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* ── LOGIN ─────────────────────────────────────── */
+    #login-overlay {
+      position: fixed; inset: 0; background: var(--primary-d);
+      display: flex; align-items: center; justify-content: center; z-index: 999;
+    }
+    #login-overlay.hidden { display: none; }
+
+    .login-card {
+      background: var(--surface); border-radius: 12px; padding: 40px 36px;
+      width: 360px; box-shadow: 0 20px 60px rgba(0,0,0,.3);
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .login-card h2 { color: var(--primary); font-size: 1.4rem; }
+    .login-card p  { color: var(--muted); font-size: .875rem; }
+    .login-card input {
+      padding: 10px 14px; border: 1px solid var(--border); border-radius: 6px;
+      font-size: .9375rem; outline: none;
+    }
+    .login-card input:focus { border-color: var(--primary); border-width: 2px; }
+    .login-card button {
+      background: var(--primary); color: #fff; border: none; border-radius: 6px;
+      padding: 11px; font-size: .9375rem; font-weight: 600; cursor: pointer;
+    }
+    .login-card button:hover { background: var(--primary-d); }
+    #login-error { color: var(--red); font-size: .8125rem; min-height: 18px; }
+
+    /* ── LAYOUT ────────────────────────────────────── */
+    #app { display: none; flex-direction: column; min-height: 100vh; }
+    #app.visible { display: flex; }
+
+    header {
+      background: var(--primary-d); color: #fff;
+      padding: 0 24px; height: 60px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,.15);
+    }
+    .header-brand { display: flex; align-items: center; gap: 12px; }
+    .header-brand h1 { font-size: 1.05rem; font-weight: 700; }
+    .header-brand span { font-size: .75rem; opacity: .75; }
+    .header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .header-actions label { font-size: .8125rem; color: rgba(255,255,255,.85); }
+    .header-actions input[type="date"] {
+      padding: 4px 8px; border-radius: 4px; border: none; font-size: .8125rem;
+      background: rgba(255,255,255,.2); color: #fff; outline: none;
+    }
+    .header-actions input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); }
+    .btn-ghost {
+      background: rgba(255,255,255,.15); color: #fff; border: 1px solid rgba(255,255,255,.3);
+      padding: 5px 14px; border-radius: 5px; font-size: .8125rem; cursor: pointer;
+    }
+    .btn-ghost:hover { background: rgba(255,255,255,.25); }
+
+    main { padding: 24px; max-width: 1400px; width: 100%; margin: 0 auto; flex: 1; }
+
+    /* ── KPI CARDS ─────────────────────────────────── */
+    .kpi-row {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;
+    }
+    @media (max-width: 900px) { .kpi-row { grid-template-columns: repeat(2,1fr); } }
+    @media (max-width: 500px) { .kpi-row { grid-template-columns: 1fr; } }
+
+    .kpi-card {
+      background: var(--surface); border-radius: 10px;
+      padding: 18px 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08);
+      border-left: 4px solid var(--primary);
+    }
+    .kpi-card.green  { border-color: var(--green); }
+    .kpi-card.amber  { border-color: var(--amber); }
+    .kpi-card.blue   { border-color: var(--blue);  }
+    .kpi-label { display: block; font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+    .kpi-value { display: block; font-size: 2rem; font-weight: 700; color: var(--text); line-height: 1; }
+    .kpi-sub   { display: block; font-size: .75rem; color: var(--muted); margin-top: 4px; }
+
+    /* ── CHARTS ────────────────────────────────────── */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      grid-template-rows: auto auto auto;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .chart-card {
+      background: var(--surface); border-radius: 10px;
+      padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    }
+    .chart-card.full  { grid-column: 1 / -1; }
+    .chart-card.wide  { grid-column: 1 / span 1; }
+    .chart-card h3 { font-size: .9rem; font-weight: 600; color: var(--muted); margin-bottom: 16px; text-transform: uppercase; letter-spacing: .06em; }
+    .chart-wrap { position: relative; }
+    .chart-wrap.tall  { height: 280px; }
+    .chart-wrap.short { height: 220px; }
+    @media (max-width: 768px) { .charts-grid { grid-template-columns: 1fr; } .chart-card.full, .chart-card.wide { grid-column: auto; } }
+
+    /* ── TABLE ─────────────────────────────────────── */
+    .table-section {
+      background: var(--surface); border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08); overflow: hidden;
+    }
+    .table-toolbar {
+      padding: 16px 20px;
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      border-bottom: 1px solid var(--border);
+    }
+    .table-toolbar h3 { font-size: 1rem; font-weight: 700; flex: 1; }
+    .table-toolbar input, .table-toolbar select {
+      padding: 7px 10px; border: 1px solid var(--border); border-radius: 5px;
+      font-size: .8125rem; outline: none; background: #fff; color: var(--text);
+    }
+    .table-toolbar input:focus, .table-toolbar select:focus { border-color: var(--primary); }
+    .btn-primary {
+      background: var(--primary); color: #fff; border: none; border-radius: 5px;
+      padding: 7px 16px; font-size: .8125rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+    }
+    .btn-primary:hover { background: var(--primary-d); }
+    .btn-outline {
+      background: #fff; color: var(--primary); border: 1px solid var(--primary);
+      border-radius: 5px; padding: 6px 14px; font-size: .8125rem; cursor: pointer;
+    }
+    .btn-outline:hover { background: var(--primary-l); }
+
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: .8125rem; }
+    thead { background: #f9fafb; }
+    th { padding: 10px 14px; text-align: left; font-weight: 600; color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #faf5ff; }
+
+    .badge {
+      display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px;
+      font-size: .7rem; font-weight: 600;
+    }
+    .badge-pending { background: #fef3c7; color: #92400e; }
+    .badge-paid    { background: #d1fae5; color: #065f46; }
+    .badge-faturado{ background: #dbeafe; color: #1e40af; }
+    .badge-glosa   { background: #fee2e2; color: #991b1b; }
+
+    .icon-btn {
+      background: none; border: none; cursor: pointer; padding: 4px 6px;
+      border-radius: 4px; font-size: .9rem; line-height: 1;
+    }
+    .icon-btn:hover { background: var(--primary-l); }
+    .icon-btn.del:hover { background: #fee2e2; }
+
+    .pagination {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 20px; border-top: 1px solid var(--border); font-size: .8125rem; color: var(--muted);
+    }
+    .page-btns { display: flex; gap: 6px; }
+    .page-btns button {
+      padding: 4px 10px; border: 1px solid var(--border); border-radius: 4px;
+      background: #fff; cursor: pointer; font-size: .8125rem;
+    }
+    .page-btns button:hover { background: var(--primary-l); border-color: var(--primary); }
+    .page-btns button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .page-btns button:disabled { opacity: .4; cursor: default; }
+
+    /* ── EDIT MODAL ────────────────────────────────── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.45);
+      display: none; align-items: center; justify-content: center; z-index: 500;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--surface); border-radius: 10px; padding: 28px 28px 24px;
+      width: 480px; max-width: 95vw; box-shadow: 0 20px 60px rgba(0,0,0,.2);
+    }
+    .modal h3 { font-size: 1.1rem; margin-bottom: 18px; color: var(--primary); }
+    .modal-field { margin-bottom: 14px; }
+    .modal-field label { display: block; font-size: .8125rem; font-weight: 600; margin-bottom: 5px; }
+    .modal-field input, .modal-field select, .modal-field textarea {
+      width: 100%; padding: 8px 12px; border: 1px solid var(--border);
+      border-radius: 5px; font-size: .9rem; outline: none;
+    }
+    .modal-field input:focus, .modal-field select:focus, .modal-field textarea:focus { border-color: var(--primary); }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+    .btn-cancel { background: #f3f4f6; color: var(--text); border: none; border-radius: 5px; padding: 8px 18px; cursor: pointer; font-size: .875rem; }
+    .btn-cancel:hover { background: var(--border); }
+
+    .empty { text-align: center; padding: 40px; color: var(--muted); font-size: .9rem; }
+    .spinner { display: inline-block; width: 28px; height: 28px; border: 3px solid var(--primary-l); border-top-color: var(--primary); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-center { display: flex; justify-content: center; padding: 40px; }
+  </style>
+</head>
+<body>
+
+<!-- ── LOGIN ──────────────────────────────────────────── -->
+<div id="login-overlay">
+  <div class="login-card">
+    <div>
+      <h2>Dashboard Operacional</h2>
+      <p>Somnus Anestesia – acesso restrito</p>
+    </div>
+    <input type="password" id="api-key-input" placeholder="Chave de acesso" />
+    <button onclick="login()">Entrar</button>
+    <span id="login-error"></span>
+  </div>
+</div>
+
+<!-- ── APP ────────────────────────────────────────────── -->
+<div id="app">
+  <header>
+    <div class="header-brand">
+      <div>
+        <h1>Dashboard Operacional</h1>
+        <span>Somnus Anestesia</span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <label>De <input type="date" id="filter-from" onchange="refresh()" /></label>
+      <label>Até <input type="date" id="filter-to" onchange="refresh()" /></label>
+      <button class="btn-ghost" onclick="clearDateFilter()">Todo período</button>
+      <button class="btn-ghost" onclick="refresh()">↺ Atualizar</button>
+      <button class="btn-ghost" onclick="logout()">Sair</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- KPI -->
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <span class="kpi-label">Total de Procedimentos</span>
+        <span class="kpi-value" id="kpi-total">—</span>
+        <span class="kpi-sub" id="kpi-mes">— este mês</span>
+      </div>
+      <div class="kpi-card green">
+        <span class="kpi-label">Receita Total</span>
+        <span class="kpi-value" id="kpi-receita">—</span>
+        <span class="kpi-sub">valores informados</span>
+      </div>
+      <div class="kpi-card amber">
+        <span class="kpi-label">Pendente de Pagamento</span>
+        <span class="kpi-value" id="kpi-pendente">—</span>
+        <span class="kpi-sub">a receber</span>
+      </div>
+      <div class="kpi-card blue">
+        <span class="kpi-label">Anestesistas Ativos</span>
+        <span class="kpi-value" id="kpi-anest">—</span>
+        <span class="kpi-sub">no período</span>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-grid">
+      <div class="chart-card full">
+        <h3>Procedimentos &amp; Receita por Mês</h3>
+        <div class="chart-wrap tall"><canvas id="chart-monthly"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Por Anestesista</h3>
+        <div class="chart-wrap tall"><canvas id="chart-anestesista"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Por Especialidade</h3>
+        <div class="chart-wrap tall"><canvas id="chart-especialidade"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Top Instituições</h3>
+        <div class="chart-wrap tall"><canvas id="chart-instituicao"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Status de Pagamento</h3>
+        <div class="chart-wrap short" style="display:flex;align-items:center;justify-content:center">
+          <canvas id="chart-status" style="max-height:220px"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="table-section">
+      <div class="table-toolbar">
+        <h3>Registros</h3>
+        <input type="text" id="tbl-search" placeholder="Buscar paciente, prontuário, TUSS…" style="width:220px" oninput="debounceSearch()" />
+        <select id="tbl-anest" onchange="tablePage=1;loadTable()">
+          <option value="">Todos anestesistas</option>
+        </select>
+        <select id="tbl-status" onchange="tablePage=1;loadTable()">
+          <option value="">Todos os status</option>
+          <option>Pendente</option>
+          <option>Faturado</option>
+          <option>Pago</option>
+          <option>Glosa</option>
+        </select>
+        <button class="btn-outline" onclick="exportCSV()">⬇ CSV</button>
+        <a href="/index.html" class="btn-primary" style="text-decoration:none;padding:7px 16px;font-size:.8125rem;border-radius:5px">+ Novo Registro</a>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Data</th>
+              <th>Paciente</th>
+              <th>Prontuário</th>
+              <th>TUSS</th>
+              <th>Instituição</th>
+              <th>Anestesista</th>
+              <th>Cirurgião</th>
+              <th>Especialidade</th>
+              <th>Convênio</th>
+              <th>Valor (R$)</th>
+              <th>Status</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tbl-body">
+            <tr><td colspan="13" class="empty">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </main>
+</div>
+
+<!-- ── EDIT MODAL ──────────────────────────────────────── -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal">
+    <h3>Editar Informações Financeiras</h3>
+    <input type="hidden" id="edit-id" />
+    <div class="modal-field">
+      <label>Valor do Procedimento (R$)</label>
+      <input type="number" id="edit-valor" min="0" step="0.01" placeholder="0,00" />
+    </div>
+    <div class="modal-field">
+      <label>Convênio / Plano</label>
+      <input type="text" id="edit-convenio" placeholder="Unimed, Bradesco Saúde, Particular…" />
+    </div>
+    <div class="modal-field">
+      <label>Status do Pagamento</label>
+      <select id="edit-status">
+        <option>Pendente</option>
+        <option>Faturado</option>
+        <option>Pago</option>
+        <option>Glosa</option>
+      </select>
+    </div>
+    <div class="modal-field">
+      <label>Observações</label>
+      <textarea id="edit-obs" rows="3" placeholder="Informações adicionais…"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+      <button class="btn-primary" onclick="saveEdit()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ──────────────────────────────────────────────────────── */
+/*  State                                                   */
+/* ──────────────────────────────────────────────────────── */
+let API_KEY   = '';
+let tablePage = 1;
+const TABLE_LIMIT = 20;
+let searchTimer = null;
+const charts  = {};
+const PALETTE = ['#7c3aed','#2563eb','#059669','#d97706','#dc2626','#7e22ce','#0891b2','#16a34a','#ea580c','#6d28d9','#1d4ed8','#047857','#b45309','#b91c1c','#9333ea'];
+
+/* ──────────────────────────────────────────────────────── */
+/*  Auth                                                    */
+/* ──────────────────────────────────────────────────────── */
+async function login() {
+  const key = document.getElementById('api-key-input').value.trim();
+  if (!key) return;
+  try {
+    const r = await fetch('/api/auth/verify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key }),
+    });
+    const { valid } = await r.json();
+    if (valid) {
+      API_KEY = key;
+      sessionStorage.setItem('somnus-key', key);
+      document.getElementById('login-overlay').classList.add('hidden');
+      document.getElementById('app').classList.add('visible');
+      initDefaultDates();
+      refresh();
+    } else {
+      document.getElementById('login-error').textContent = 'Chave de acesso inválida.';
+    }
+  } catch {
+    document.getElementById('login-error').textContent = 'Servidor indisponível.';
+  }
+}
+
+document.getElementById('api-key-input').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+
+function logout() {
+  sessionStorage.removeItem('somnus-key');
+  location.reload();
+}
+
+/* ──────────────────────────────────────────────────────── */
+/*  Init                                                    */
+/* ──────────────────────────────────────────────────────── */
+function initDefaultDates() {
+  const now = new Date();
+  const from = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+  document.getElementById('filter-from').value = from.toISOString().slice(0,10);
+  document.getElementById('filter-to').value   = now.toISOString().slice(0,10);
+}
+
+function clearDateFilter() {
+  document.getElementById('filter-from').value = '';
+  document.getElementById('filter-to').value   = '';
+  refresh();
+}
+
+function apiHeaders() { return { 'x-api-key': API_KEY }; }
+
+function dateParams() {
+  const p = new URLSearchParams();
+  const f = document.getElementById('filter-from').value;
+  const t = document.getElementById('filter-to').value;
+  if (f) p.set('from', f);
+  if (t) p.set('to', t);
+  return p;
+}
+
+function refresh() { loadStats(); tablePage = 1; loadTable(); }
+
+/* ──────────────────────────────────────────────────────── */
+/*  Stats & Charts                                          */
+/* ──────────────────────────────────────────────────────── */
+async function loadStats() {
+  try {
+    const r = await fetch(`/api/dashboard/stats?${dateParams()}`, { headers: apiHeaders() });
+    if (!r.ok) return;
+    const s = await r.json();
+    renderKPIs(s);
+    renderCharts(s);
+  } catch { /* server offline */ }
+}
+
+function fmt(v) {
+  return v == null ? '—' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 });
+}
+
+function renderKPIs(s) {
+  document.getElementById('kpi-total').textContent    = s.total ?? '—';
+  document.getElementById('kpi-mes').textContent      = `${s.estesMes ?? '—'} este mês`;
+  document.getElementById('kpi-receita').textContent  = fmt(s.totalValor);
+  document.getElementById('kpi-pendente').textContent = fmt(s.pendente);
+  document.getElementById('kpi-anest').textContent    = (s.byAnestesista ?? []).length;
+}
+
+function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+
+function renderCharts(s) {
+  /* Monthly */
+  destroyChart('monthly');
+  const mLabels = (s.byMonth ?? []).map(r => r.label);
+  const mCounts = (s.byMonth ?? []).map(r => r.count);
+  const mValor  = (s.byMonth ?? []).map(r => r.valor);
+  charts.monthly = new Chart(document.getElementById('chart-monthly'), {
+    data: {
+      labels: mLabels,
+      datasets: [
+        { type: 'bar',  label: 'Procedimentos', data: mCounts, backgroundColor: '#ede9fe', borderColor: '#7c3aed', borderWidth: 1.5, yAxisID: 'y' },
+        { type: 'line', label: 'Receita (R$)',  data: mValor,  borderColor: '#059669', backgroundColor: 'transparent', tension: .35, pointRadius: 4, yAxisID: 'y2' },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        y:  { title: { display: true, text: 'Procedimentos' }, beginAtZero: true, ticks: { precision: 0 } },
+        y2: { title: { display: true, text: 'Receita (R$)' }, beginAtZero: true, position: 'right', grid: { drawOnChartArea: false },
+              ticks: { callback: v => 'R$ ' + Number(v).toLocaleString('pt-BR') } },
+      },
+      plugins: { legend: { position: 'bottom' } },
+    },
+  });
+
+  /* Anestesista – horizontal bar */
+  destroyChart('anestesista');
+  const aData = (s.byAnestesista ?? []).slice(0,10);
+  charts.anestesista = new Chart(document.getElementById('chart-anestesista'), {
+    type: 'bar',
+    data: {
+      labels: aData.map(r => r.label),
+      datasets: [{ label: 'Procedimentos', data: aData.map(r => r.count), backgroundColor: PALETTE }],
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { beginAtZero: true, ticks: { precision: 0 } } },
+    },
+  });
+
+  /* Especialidade – horizontal bar */
+  destroyChart('especialidade');
+  const eData = (s.byEspecialidade ?? []).slice(0,12);
+  charts.especialidade = new Chart(document.getElementById('chart-especialidade'), {
+    type: 'bar',
+    data: {
+      labels: eData.map(r => r.label),
+      datasets: [{ label: 'Procedimentos', data: eData.map(r => r.count), backgroundColor: PALETTE.map((c,i) => PALETTE[(i+4) % PALETTE.length]) }],
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { beginAtZero: true, ticks: { precision: 0 } } },
+    },
+  });
+
+  /* Instituição – horizontal bar top 10 */
+  destroyChart('instituicao');
+  const iData = (s.byInstituicao ?? []).slice(0,10);
+  charts.instituicao = new Chart(document.getElementById('chart-instituicao'), {
+    type: 'bar',
+    data: {
+      labels: iData.map(r => r.label.replace('Hospital ', 'H. ')),
+      datasets: [{ label: 'Procedimentos', data: iData.map(r => r.count), backgroundColor: '#c4b5fd' }],
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { beginAtZero: true, ticks: { precision: 0 } } },
+    },
+  });
+
+  /* Status – doughnut */
+  destroyChart('status');
+  const stData = s.byStatus ?? [];
+  const stColors = { Pago: '#059669', Faturado: '#2563eb', Pendente: '#d97706', Glosa: '#dc2626' };
+  charts.status = new Chart(document.getElementById('chart-status'), {
+    type: 'doughnut',
+    data: {
+      labels: stData.map(r => r.label),
+      datasets: [{ data: stData.map(r => r.count), backgroundColor: stData.map(r => stColors[r.label] || '#9ca3af'), hoverOffset: 8 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '65%',
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+    },
+  });
+
+  /* Populate anestesista filter */
+  const sel = document.getElementById('tbl-anest');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Todos anestesistas</option>';
+  (s.byAnestesista ?? []).forEach(r => {
+    const o = document.createElement('option');
+    o.value = r.label; o.textContent = r.label;
+    if (r.label === cur) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+
+/* ──────────────────────────────────────────────────────── */
+/*  Table                                                   */
+/* ──────────────────────────────────────────────────────── */
+function tableParams() {
+  const p = dateParams();
+  p.set('page', tablePage);
+  p.set('limit', TABLE_LIMIT);
+  const q    = document.getElementById('tbl-search').value.trim();
+  const anst = document.getElementById('tbl-anest').value;
+  const stat = document.getElementById('tbl-status').value;
+  if (q)    p.set('q', q);
+  if (anst) p.set('anestesista', anst);
+  if (stat) p.set('status_pagamento', stat);
+  return p;
+}
+
+async function loadTable() {
+  const tbody = document.getElementById('tbl-body');
+  tbody.innerHTML = '<tr><td colspan="13"><div class="loading-center"><span class="spinner"></span></div></td></tr>';
+  try {
+    const r = await fetch(`/api/registros?${tableParams()}`, { headers: apiHeaders() });
+    if (!r.ok) return;
+    const { data, total, page, limit, pages } = await r.json();
+    renderTable(data);
+    renderPagination(total, page, limit, pages);
+  } catch { tbody.innerHTML = '<tr><td colspan="13" class="empty">Erro ao carregar dados.</td></tr>'; }
+}
+
+function badgeClass(s) {
+  return { Pago:'badge-paid', Faturado:'badge-faturado', Pendente:'badge-pending', Glosa:'badge-glosa' }[s] || 'badge-pending';
+}
+
+function renderTable(rows) {
+  const tbody = document.getElementById('tbl-body');
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="13" class="empty">Nenhum registro encontrado.</td></tr>'; return; }
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td>${r.id}</td>
+      <td>${r.data_atendimento}</td>
+      <td title="${r.nome_paciente}">${r.nome_paciente}</td>
+      <td>${r.prontuario}</td>
+      <td>${r.tuss}</td>
+      <td title="${r.instituicao}">${r.instituicao.replace('Hospital ','H. ')}</td>
+      <td>${r.anestesista.split(' ')[0]}</td>
+      <td title="${r.cirurgiao}">${r.cirurgiao.split(' ')[0]} ${r.cirurgiao.split(' ')[1] || ''}</td>
+      <td title="${r.especialidade}">${r.especialidade}</td>
+      <td>${r.convenio || '—'}</td>
+      <td>${r.valor != null ? 'R$ ' + Number(r.valor).toLocaleString('pt-BR', {minimumFractionDigits:2}) : '—'}</td>
+      <td><span class="badge ${badgeClass(r.status_pagamento)}">${r.status_pagamento}</span></td>
+      <td>
+        <button class="icon-btn" title="Editar financeiro" onclick="openEdit(${r.id},'${escJ(r.convenio)}',${r.valor ?? 'null'},'${escJ(r.status_pagamento)}','${escJ(r.observacoes)}')">✏️</button>
+        <button class="icon-btn del" title="Excluir" onclick="deleteRecord(${r.id})">🗑</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function escJ(s) { return s ? String(s).replace(/'/g,"\'").replace(/\n/g,' ') : ''; }
+
+function renderPagination(total, page, limit, pages) {
+  const el = document.getElementById('pagination');
+  if (!total) { el.innerHTML = ''; return; }
+  const from = (page - 1) * limit + 1;
+  const to   = Math.min(page * limit, total);
+  let btns = `<span>${from}–${to} de ${total} registros</span><div class="page-btns">`;
+  btns += `<button onclick="goPage(${page-1})" ${page<=1?'disabled':''}>‹</button>`;
+  const start = Math.max(1, page - 2);
+  const end   = Math.min(pages, page + 2);
+  for (let i = start; i <= end; i++) btns += `<button class="${i===page?'active':''}" onclick="goPage(${i})">${i}</button>`;
+  btns += `<button onclick="goPage(${page+1})" ${page>=pages?'disabled':''}>›</button></div>`;
+  el.innerHTML = btns;
+}
+
+function goPage(p) { tablePage = p; loadTable(); }
+
+function debounceSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { tablePage = 1; loadTable(); }, 400);
+}
+
+/* ──────────────────────────────────────────────────────── */
+/*  Edit modal                                             */
+/* ──────────────────────────────────────────────────────── */
+function openEdit(id, convenio, valor, status, obs) {
+  document.getElementById('edit-id').value       = id;
+  document.getElementById('edit-convenio').value = convenio || '';
+  document.getElementById('edit-valor').value    = valor != null ? valor : '';
+  document.getElementById('edit-status').value   = status || 'Pendente';
+  document.getElementById('edit-obs').value      = obs || '';
+  document.getElementById('edit-modal').classList.add('open');
+}
+function closeModal() { document.getElementById('edit-modal').classList.remove('open'); }
+document.getElementById('edit-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+
+async function saveEdit() {
+  const id = document.getElementById('edit-id').value;
+  const body = {
+    valor:            document.getElementById('edit-valor').value || null,
+    convenio:         document.getElementById('edit-convenio').value || null,
+    status_pagamento: document.getElementById('edit-status').value,
+    observacoes:      document.getElementById('edit-obs').value || null,
+  };
+  await fetch(`/api/registros/${id}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
+    body: JSON.stringify(body),
+  });
+  closeModal();
+  refresh();
+}
+
+/* ──────────────────────────────────────────────────────── */
+/*  Delete                                                  */
+/* ──────────────────────────────────────────────────────── */
+async function deleteRecord(id) {
+  if (!confirm(`Excluir o registro #${id}? Esta ação não pode ser desfeita.`)) return;
+  await fetch(`/api/registros/${id}`, { method: 'DELETE', headers: apiHeaders() });
+  refresh();
+}
+
+/* ──────────────────────────────────────────────────────── */
+/*  Export CSV                                              */
+/* ──────────────────────────────────────────────────────── */
+async function exportCSV() {
+  const p = tableParams();
+  p.set('limit', 9999); p.set('page', 1);
+  const r = await fetch(`/api/registros?${p}`, { headers: apiHeaders() });
+  const { data } = await r.json();
+  const cols = ['id','data_atendimento','nome_paciente','prontuario','tuss','instituicao','anestesista','cirurgiao','especialidade','convenio','valor','status_pagamento','observacoes','created_at'];
+  const csv = [cols.join(';'), ...data.map(row => cols.map(c => `"${(row[c] ?? '').toString().replace(/"/g,'""')}"`).join(';'))].join('\r\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `somnus_registros_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+/* ──────────────────────────────────────────────────────── */
+/*  Boot                                                    */
+/* ──────────────────────────────────────────────────────── */
+(function init() {
+  const saved = sessionStorage.getItem('somnus-key');
+  if (saved) {
+    API_KEY = saved;
+    document.getElementById('login-overlay').classList.add('hidden');
+    document.getElementById('app').classList.add('visible');
+    initDefaultDates();
+    refresh();
+  }
+})();
+</script>
+</body>
+</html>
