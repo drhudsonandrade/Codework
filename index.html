@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>REGISTRO OPERACIONAL – Somnus Anestesia</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Google Sans", Roboto, Arial, sans-serif;
+      background: #f0ebf8;
+      min-height: 100vh;
+      padding: 24px 16px 48px;
+    }
+
+    .form-card {
+      max-width: 640px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.08);
+    }
+
+    .form-header {
+      background: #7c3aed;
+      padding: 24px;
+      border-top: 10px solid #5b21b6;
+    }
+
+    .form-header h1 {
+      color: #fff;
+      font-size: 1.6rem;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+
+    .form-header p {
+      color: rgba(255,255,255,.85);
+      font-size: .875rem;
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+
+    .required-note {
+      background: #fff;
+      padding: 10px 24px;
+      font-size: .8rem;
+      color: #5f6368;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    .required-note span { color: #d93025; }
+
+    .form-body { padding: 8px 24px 24px; }
+
+    .field {
+      margin-top: 20px;
+    }
+
+    label {
+      display: block;
+      font-size: .875rem;
+      font-weight: 500;
+      color: #202124;
+      margin-bottom: 6px;
+    }
+
+    label .req { color: #d93025; margin-left: 2px; }
+
+    .helper {
+      font-size: .75rem;
+      color: #5f6368;
+      margin-top: 4px;
+    }
+
+    input[type="date"],
+    input[type="text"],
+    select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #dadce0;
+      border-radius: 4px;
+      font-size: .9375rem;
+      color: #202124;
+      background: #fff;
+      outline: none;
+      transition: border-color .15s;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+
+    input[type="date"]:focus,
+    input[type="text"]:focus,
+    select:focus {
+      border-color: #7c3aed;
+      border-width: 2px;
+    }
+
+    .select-wrapper {
+      position: relative;
+    }
+
+    .select-wrapper::after {
+      content: "▾";
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+      color: #5f6368;
+      font-size: 1rem;
+    }
+
+    .actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 28px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    button[type="submit"] {
+      background: #7c3aed;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 10px 28px;
+      font-size: .9375rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background .15s;
+    }
+
+    button[type="submit"]:hover { background: #6d28d9; }
+
+    button[type="reset"] {
+      background: none;
+      border: none;
+      color: #7c3aed;
+      font-size: .875rem;
+      cursor: pointer;
+      padding: 8px 4px;
+    }
+
+    button[type="reset"]:hover { text-decoration: underline; }
+
+    .success {
+      display: none;
+      background: #e6f4ea;
+      border: 1px solid #81c995;
+      border-radius: 4px;
+      padding: 16px;
+      color: #137333;
+      font-size: .9375rem;
+      margin-top: 20px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<div class="form-card">
+  <div class="form-header">
+    <h1>REGISTRO OPERACIONAL</h1>
+    <p>Registro de procedimentos anestésicos realizados pela equipe Somnus Anestesia, utilizado para controle operacional, gestão financeira e análise de desempenho.</p>
+  </div>
+
+  <div class="required-note"><span>*</span> Indica uma pergunta obrigatória</div>
+
+  <div class="form-body">
+    <form id="registro-form" novalidate>
+
+      <!-- Data do Atendimento -->
+      <div class="field">
+        <label for="data_atendimento">Data do Atendimento <span class="req">*</span></label>
+        <input type="date" id="data_atendimento" name="data_atendimento" required />
+      </div>
+
+      <!-- Nome Completo do Paciente -->
+      <div class="field">
+        <label for="nome_paciente">Nome Completo do Paciente <span class="req">*</span></label>
+        <input type="text" id="nome_paciente" name="nome_paciente" placeholder="Nome completo sem abreviações" required />
+      </div>
+
+      <!-- Prontuário -->
+      <div class="field">
+        <label for="prontuario">Prontuário <span class="req">*</span></label>
+        <input type="text" id="prontuario" name="prontuario" required />
+      </div>
+
+      <!-- TUSS Principal -->
+      <div class="field">
+        <label for="tuss">TUSS Principal <span class="req">*</span></label>
+        <input type="text" id="tuss" name="tuss" placeholder="Ex.: 31309054" required />
+        <p class="helper">Para cirurgias plásticas, verifique o TUSS específico do procedimento.</p>
+      </div>
+
+      <!-- Instituição -->
+      <div class="field">
+        <label for="instituicao">Instituição <span class="req">*</span></label>
+        <div class="select-wrapper">
+          <select id="instituicao" name="instituicao" required>
+            <option value="" disabled selected>Selecione</option>
+            <option>Hospital Albert Einstein</option>
+            <option>Hospital Albert Sabin</option>
+            <option>Hospital Alemão Oswaldo Cruz</option>
+            <option>Hospital Alvorada Moema</option>
+            <option>Hospital Alvorada Santo Amaro</option>
+            <option>Hospital Assunção</option>
+            <option>Hospital e Maternidade Bartira</option>
+            <option>Hospital Beneficência Portuguesa</option>
+            <option>Hospital Beneficência Portuguesa Mirante</option>
+            <option>Hospital Blanc</option>
+            <option>Hospital Brasil Mauá</option>
+            <option>Hospital e Maternidade Brasil - Santo André</option>
+            <option>Hospital Christóvão da Gama</option>
+            <option>Hospital Cruz Azul</option>
+            <option>Hospital da Luz Vila Mariana</option>
+            <option>Hospital do Coração (HCor)</option>
+            <option>Hospital e Maternidade Master Clin</option>
+            <option>Hospital e Maternidade Nossa Senhora de Lourdes</option>
+            <option>Hospital e Maternidade Santa Marina</option>
+            <option>Hospital Edmundo Vasconcelos</option>
+            <option>Grupo Ana Rosa - Unidade Vila Helena</option>
+            <option>Hospital Inovador - Day Hospital</option>
+            <option>Hospital IFOR</option>
+            <option>Hospital Infantil Sabará</option>
+            <option>Hospital Ipiranga</option>
+            <option>Hospital Japonês Santa Cruz</option>
+            <option>Hospital Leforte Liberdade</option>
+            <option>Hospital Leforte Morumbi</option>
+            <option>Hospital Madre Theodora</option>
+            <option>Hospital Maternidade São Luiz Star</option>
+            <option>Hospital Metropolitano</option>
+            <option>Hospital Moriah</option>
+            <option>Hospital Nipo Brasileiro</option>
+            <option>Hospital Nossa Senhora de Lourdes</option>
+            <option>Hospital Nove de Julho</option>
+            <option>Hospital Paulista</option>
+            <option>Hospital Paulistano</option>
+            <option>Hospital Pro Matre Paulista</option>
+            <option>Hospital Ruben Berta</option>
+            <option>Hospital Samaritano Higienópolis</option>
+            <option>Hospital Samaritano Paulista</option>
+            <option>Hospital Santa Catarina</option>
+            <option>Hospital Santa Clara</option>
+            <option>Hospital Santa Helena</option>
+            <option>Hospital Santa Isabel</option>
+            <option>Hospital Santa Joana</option>
+            <option>Hospital Santa Paula</option>
+            <option>Hospital Santa Virginia</option>
+            <option>Hospital Santo Amaro</option>
+            <option>Hospital São Camilo Ipiranga</option>
+            <option>Hospital São Camilo Pompeia</option>
+            <option>Hospital São Camilo Santana</option>
+            <option>Hospital São José</option>
+            <option>Hospital São Luiz Anália Franco</option>
+            <option>Hospital São Luiz Itaim</option>
+            <option>Hospital São Luiz Jabaquara</option>
+            <option>Hospital São Luiz Morumbi</option>
+            <option>Hospital São Luiz São Caetano</option>
+            <option>Hospital Sepaco</option>
+            <option>Hospital Sírio Libanês</option>
+            <option>Hospital Totalcor</option>
+            <option>Hospital Villa Lobos</option>
+            <option>Hospital Vila Nova Star</option>
+            <option>Hospital Vitória</option>
+            <option>Ideia Fértil</option>
+            <option>Instituto Celle</option>
+            <option>ISMD Estética</option>
+            <option>InVentre - Clínica de Reprodução Humana</option>
+            <option>Instituto do Câncer Dr. Arnaldo</option>
+            <option>Next Medicina Diagnóstica Santo André</option>
+            <option>Stonella Clinic</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Anestesista -->
+      <div class="field">
+        <label for="anestesista">Anestesista <span class="req">*</span></label>
+        <div class="select-wrapper">
+          <select id="anestesista" name="anestesista" required>
+            <option value="" disabled selected>Selecione</option>
+            <option>Fernando Presidio</option>
+            <option>Hudson Andrade</option>
+            <option>Marcela Tavares</option>
+            <option>Marcelo Nogueira</option>
+            <option>Marina Jardim</option>
+            <option>Willian Yamanaka</option>
+            <option>Somnus Anestesia</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Cirurgião -->
+      <div class="field">
+        <label for="cirurgiao">Cirurgião <span class="req">*</span></label>
+        <div class="select-wrapper">
+          <select id="cirurgiao" name="cirurgiao" required>
+            <option value="" disabled selected>Selecione</option>
+            <option>Alfonso Apostólico Netto - CRM 39242</option>
+            <option>Aldo Consentino Filho - CRM 140907</option>
+            <option>Alex Coutinho de Sousa - CRM 174920</option>
+            <option>Amanda Vitiello Pereira Brosco - CRM 198611</option>
+            <option>Anderson Bertolini Soares - CRM 107976</option>
+            <option>André di Francesco Veiga - CRM 163142</option>
+            <option>Andressa Janoni da Costa e Silva - CRO 95720</option>
+            <option>Angela Alves de Aguiar Goto - CRO 54519</option>
+            <option>Anna Carolina Haddad Sayeg - CRM 210026</option>
+            <option>Aristides Sertori Neto - CRM 157438</option>
+            <option>Audrey dos Reis - CRM 121885</option>
+            <option>Bárbara Garcia Barroso - CRM 178500</option>
+            <option>Benjamim Carlos de Brito - CRM 75947</option>
+            <option>Breno Ribeiro Arena - CRO 65677</option>
+            <option>Caio Carrete Mazzei - CRM 210054</option>
+            <option>Camilla da Cunha Pinheiro Pereira - CRM 154573</option>
+            <option>Carlos Henrique Tardini - CRM 81652</option>
+            <option>Carlos Hideki Arakaki - CRM 914-MS</option>
+            <option>Charles Alfred Grander Pedrozo - CRM 177910</option>
+            <option>Dalton Mikio Hirano Hatano - CRM 157472</option>
+            <option>Daniel Alexandre Pereira Consoni - CRM 192598</option>
+            <option>Daniel Holanda Landim - CRM 142057</option>
+            <option>Daniel Luiz Ceroni Gibson - CRM 124451</option>
+            <option>Danilo Monteiro Vieira - CRM 161334</option>
+            <option>Danilo Pereira Torres - CRM 111637</option>
+            <option>Douglas Hideki Ikeuti - CRM 162408</option>
+            <option>Eduardo Augusto Correa Barros - CRM 142550</option>
+            <option>Enrico Montorsi Zanon - CRM 151118</option>
+            <option>Fabrício Yui - CRM 99163</option>
+            <option>Felipe Oliveira Duarte - CRM SC 10146</option>
+            <option>Fernando Fudimori - CRO 87195</option>
+            <option>Flávia Félix Azevedo - CRM 139305</option>
+            <option>Francisco Dada Neto - CRM 201026</option>
+            <option>Gabriela Camilo Teixeira - CRM 209709</option>
+            <option>Guilherme Martinez - CRM 192170</option>
+            <option>Gustavo Henrique Rodrigues Rocha - CRM 122923</option>
+            <option>Henrique Cabrine Moreira - CRO 116901</option>
+            <option>Henrique Von Rondow de Queiroz - CRM 173316</option>
+            <option>Igor Oliveira Meneses - CRM 212032</option>
+            <option>Izabella Brandão Mendes - CRM 87950</option>
+            <option>Jessica Crema Tobara - CRM 155729</option>
+            <option>José Maurício Terci de Abreu - CRM 216753</option>
+            <option>Juliana Munhoz Vergara - CRM 190191</option>
+            <option>Juliane Agarinakamura Serrano - CRM 201058</option>
+            <option>Khalil Smaidi - CRM 183186</option>
+            <option>Kim Lima Nascimento - CRM 186624</option>
+            <option>Laice Gomes Cunha - CRM 204325</option>
+            <option>Larissa Martinez Solda - CRM 191212</option>
+            <option>Layron Miranda Alves - CRM 121001</option>
+            <option>Letícia Saka Holanda - CRM 210206</option>
+            <option>Lilian Pagano Mori - CRM 151914</option>
+            <option>Lucas Bernardo Carvalho de Almeida - CRM 161089</option>
+            <option>Lucas Ferraz de Souza - CRM 166590</option>
+            <option>Luis Eduardo Plumacher Diaz - CRM 189544</option>
+            <option>Luís Felipe Luciani Lopez - CRM 170340</option>
+            <option>Luiza Rocha Vilela - CRM/MG 64799</option>
+            <option>Marcelo Moraes Trincado - CRM 184209</option>
+            <option>Marcos Antonio de Souza - CRM 186039</option>
+            <option>Marcos Vinícius Martins - CRO 110794</option>
+            <option>Mariana Alves Parente Barbosa - CRM 140774</option>
+            <option>Mariana Dias Dimitrov Francica - CRM 124506</option>
+            <option>Mariana Geraldo - CRM 184529</option>
+            <option>Marita Von Rautenfeld - CRM 127090</option>
+            <option>Matheus Bittencourt Machado - CRM 167623</option>
+            <option>Matheus Lobo Camilo - CRM 159967</option>
+            <option>Murilo Crellis de Carvalho - CRM 183303</option>
+            <option>Nara Lie Utiyamada - CRM 193162</option>
+            <option>Natalia Rizzato Alecio - CRM 167908</option>
+            <option>Nathalia Basile Mariotti - CRM 210265</option>
+            <option>Rafael da Rocha Macedo - CRM 121565</option>
+            <option>Rafael Eiji Sakata - CRM 134273</option>
+            <option>Rafael Victorino Marriche - CRM 170048</option>
+            <option>Raul Itocazo Taira - CRM 100767</option>
+            <option>Robinson Toshimitsu Kiyohara - CRM 107749</option>
+            <option>Rodrigo Fileto Gavaldão Moreira - CRM 136520</option>
+            <option>Rodrigo Kiwan Lee - CRM 163817</option>
+            <option>Rodrigo Ribeiro Credidio - CRM 142517</option>
+            <option>Rodrigo Schroll Astolfi - CRM 129417</option>
+            <option>Rogger di Roy Bellido Castro - CRM 256970</option>
+            <option>Rubens Dantas da Silva Junior - CRM 198749</option>
+            <option>Sérgio Mainine - CRM 45039</option>
+            <option>Soraia Mercado Senise Casanova - CRM 86263</option>
+            <option>Thiago Bernardo Carvalho de Almeida - CRM 149498</option>
+            <option>Victor Figueiredo Leite - CRM 155272</option>
+            <option>Victor Martins Manfredi - CRM 185241</option>
+            <option>Vinícius Ayusso Correa Sossa - CRM 162732</option>
+            <option>Vitor Garcia Natal - CRO 127546</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Especialidade -->
+      <div class="field">
+        <label for="especialidade">Especialidade <span class="req">*</span></label>
+        <div class="select-wrapper">
+          <select id="especialidade" name="especialidade" required>
+            <option value="" disabled selected>Selecione</option>
+            <option>Angiologia e Cirurgia Vascular</option>
+            <option>Cirurgia Bariátrica e Metabólica</option>
+            <option>Cirurgia Bucomaxilofacial</option>
+            <option>Cirurgia Cardiovascular</option>
+            <option>Cirurgia Cabeça e Pescoço</option>
+            <option>Cirurgia da Coluna</option>
+            <option>Cirurgia Dentária (Odonto)</option>
+            <option>Cirurgia do Aparelho Digestivo</option>
+            <option>Cirurgia do Joelho</option>
+            <option>Cirurgia do Ombro e Cotovelo</option>
+            <option>Cirurgia do Quadril</option>
+            <option>Cirurgia Estética (Tattoo)</option>
+            <option>Cirurgia Geral</option>
+            <option>Cirurgia Hepatobiliar</option>
+            <option>Cirurgia de Mão</option>
+            <option>Cirurgia Oncológica</option>
+            <option>Cirurgia Pediátrica</option>
+            <option>Cirurgia Pélvica</option>
+            <option>Cirurgia Plástica</option>
+            <option>Cirurgia Refrativa</option>
+            <option>Cirurgia Torácica</option>
+            <option>Cirurgia de Trauma</option>
+            <option>Coloproctologia</option>
+            <option>Dermatologia Cirúrgica</option>
+            <option>Ginecologia</option>
+            <option>Intervenção em Dor</option>
+            <option>Mastologia</option>
+            <option>Neurocirurgia</option>
+            <option>Obstetrícia</option>
+            <option>Oftalmologia</option>
+            <option>Ortopedia e Traumatologia</option>
+            <option>Ortopedia - Mão e microcirurgia</option>
+            <option>Ortopedia - Pé e Tornozelo</option>
+            <option>Otorrinolaringologia</option>
+            <option>Reprodução Humana (FIV)</option>
+            <option>Transplantes (todos os tipos)</option>
+            <option>Urologia</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button type="submit">Enviar</button>
+        <button type="reset">Limpar formulário</button>
+      </div>
+
+      <div class="success" id="success-msg">
+        Registro enviado com sucesso. Obrigado!
+      </div>
+
+    </form>
+  </div>
+</div>
+
+<script>
+  document.getElementById("registro-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (!this.checkValidity()) {
+      this.reportValidity();
+      return;
+    }
+    document.getElementById("success-msg").style.display = "block";
+    this.reset();
+    this.scrollIntoView({ behavior: "smooth", block: "end" });
+  });
+</script>
+
+</body>
+</html>
