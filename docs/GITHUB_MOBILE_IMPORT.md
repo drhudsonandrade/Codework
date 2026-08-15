@@ -1,5 +1,9 @@
 # Import the prepared branch from a phone
 
+> Recovery-only path. The GitHub App is now installed on the private `Codework` repository and PR
+> #2 was created programmatically. Use the steps below only if the repository must be reconstructed
+> from an exported source archive.
+
 No GitHub folder needs to be created in advance. Git creates `.github/workflows`, `scripts`, `mcp`, and the other paths when the branch is committed.
 
 ## Preferred route: browser Codespace

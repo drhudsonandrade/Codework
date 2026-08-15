@@ -38,6 +38,7 @@ REQUIRED_PATHS = (
     "docs/GITHUB_MOBILE_IMPORT.md",
     "docs/MAGALU_PRIVATE_MCP_SETUP.md",
     "docs/PRE_DEPLOYMENT_VALIDATION_2026-08-15.md",
+    "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md",
     "docs/PR_BODY.md",
 )
 
@@ -95,10 +96,12 @@ def validate(root: Path) -> list[str]:
             errors.append("Fallow workflow must pin wrapper and CLI to 3.16.0")
 
     runbook = root / "docs/MAGALU_PRIVATE_MCP_SETUP.md"
-    if runbook.is_file() and "PRE-DEPLOYMENT VALIDATION PASS / POST-DEPLOYMENT PENDENTE" not in runbook.read_text(
-        encoding="utf-8"
-    ):
-        errors.append("runbook must preserve the pending post-deployment status")
+    if runbook.is_file():
+        runbook_text = runbook.read_text(encoding="utf-8")
+        if "PRE-DEPLOYMENT VALIDATION PASS / POST-DEPLOYMENT PENDENTE" not in runbook_text:
+            errors.append("runbook must preserve the pending post-deployment status")
+        if "--entrypoint /bin/bash" in runbook_text:
+            errors.append("runbook must not bypass the micromamba container entrypoint")
 
     for path in root.rglob("*"):
         if not path.is_file() or any(part in SKIP_PARTS for part in path.parts):

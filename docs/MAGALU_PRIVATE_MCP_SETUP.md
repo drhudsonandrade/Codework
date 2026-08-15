@@ -77,10 +77,13 @@ Run acquisition in the container with the persistent reference mount. It creates
 docker run --rm -it \
   -e REF_ROOT=/refs \
   -v /srv/genome/refs:/refs \
-  --entrypoint /bin/bash \
   codework-genome:local \
   /opt/codework/scripts/fetch_grch38.sh
 ```
+
+Do not override the image entrypoint. The upstream micromamba entrypoint activates the pinned
+environment before the script starts; forcing `/bin/bash` bypasses that activation and makes the
+installed executables appear to be missing.
 
 External approval procedure:
 
@@ -100,14 +103,12 @@ docker run --rm -it \
   --memory=110g --cpus=16 \
   -e REF_ROOT=/refs \
   -v /srv/genome/refs:/refs \
-  --entrypoint /bin/bash \
   codework-genome:local \
   /opt/codework/scripts/build_bwa_mem2_index.sh
 
 docker run --rm -it \
   -e REF_ROOT=/refs \
   -v /srv/genome/refs:/refs:ro \
-  --entrypoint /bin/bash \
   codework-genome:local \
   /opt/codework/scripts/validate_grch38.sh
 ```
@@ -119,7 +120,6 @@ Both commands must exit 0. The second command verifies 9/9 artifacts, the approv
 ```bash
 docker run --rm -it \
   -v /srv/genome/results:/results \
-  --entrypoint /bin/bash \
   codework-genome:local \
   /opt/codework/scripts/run_canary.sh /results/canary-initial
 ```

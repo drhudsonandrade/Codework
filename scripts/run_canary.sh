@@ -12,6 +12,9 @@ fi
 
 mkdir -p "$OUTPUT_DIR" "$WORK_DIR"
 "$PROJECT_ROOT/scripts/check_versions.sh" > "$OUTPUT_DIR/tool_versions.tsv"
+if command -v micromamba >/dev/null 2>&1; then
+  micromamba list --name base --explicit > "$OUTPUT_DIR/conda-explicit.lock.txt"
+fi
 python3 "$PROJECT_ROOT/scripts/generate_canary.py" "$WORK_DIR/input"
 
 reference="$WORK_DIR/input/reference.fa"

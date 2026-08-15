@@ -28,6 +28,20 @@ class RepoContractTest(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         self.assertEqual(validator.validate(root), [])
 
+    def test_contract_rejects_micromamba_entrypoint_bypass(self):
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runbook = root / "docs" / "MAGALU_PRIVATE_MCP_SETUP.md"
+            runbook.parent.mkdir(parents=True)
+            runbook.write_text(
+                "PRE-DEPLOYMENT VALIDATION PASS / POST-DEPLOYMENT PENDENTE\n"
+                "docker run --entrypoint /bin/bash image command\n",
+                encoding="utf-8",
+            )
+            errors = validator.validate(root)
+        self.assertIn("runbook must not bypass the micromamba container entrypoint", errors)
+
 
 if __name__ == "__main__":
     unittest.main()

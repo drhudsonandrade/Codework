@@ -1,7 +1,7 @@
 # Fallow security candidate review
 
-Review date: 2026-08-15 UTC  
-Analyzer: Fallow 3.16.0  
+Review date: 2026-08-15 UTC
+Analyzer: Fallow 3.16.0
 Command: `fallow security --format json --quiet --surface`
 
 Fallow surfaced 12 medium-severity path-traversal **candidates** and no high-severity candidate. They were manually verified as controlled path construction, not confirmed vulnerabilities:

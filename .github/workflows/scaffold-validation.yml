@@ -56,7 +56,7 @@ jobs:
           name: synthetic-canary-${{ github.sha }}
           path: ci-results/canary/
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90
 
   publish-ghcr:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -74,7 +74,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v6
+        id: publish
         with:
           context: .
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/codework-genome:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+      - name: Record immutable image reference
+        run: |
+          printf 'ghcr.io/%s/codework-genome@%s\n' \
+            '${{ github.repository_owner }}' '${{ steps.publish.outputs.digest }}' \
+            | tee ghcr-image-reference.txt
+          printf '### Published image\n\n`%s`\n' \
+            "$(cat ghcr-image-reference.txt)" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload image reference
+        uses: actions/upload-artifact@v4
+        with:
+          name: ghcr-image-reference-${{ github.sha }}
+          path: ghcr-image-reference.txt
+          if-no-files-found: error
+          retention-days: 90

@@ -8,6 +8,19 @@
 
 **Tech Stack:** Docker, micromamba/conda-lock-style environment specification, Nextflow 26.04.6, samtools 1.24, bcftools 1.24, bwa-mem2 package 2.3/executable 2.2.1, GATK 4.6.2.0, Snakemake 7.32.4, TypeScript, MCP SDK, GitHub Actions and Fallow v3.16.0.
 
+## Execution record — 2026-08-15 UTC
+
+The repository, container specification, synthetic dual-caller canary, private MCP, CI, GRCh38
+lifecycle scripts and recovery documentation were implemented on branch
+`codex/genome-runtime-mcp`. GitHub Actions passed the Fallow gate, container build, 7/7 runtime gate
+and exact three-variant bcftools/GATK canary. A final recovery update removes the stale container
+entrypoint override and adds durable evidence instructions.
+
+The checkboxes below describe implementation work and are preserved as the original plan. Target-VM
+execution is intentionally not marked as deployment completion. GRCh38 acquisition, external lock
+approval, full human BWA indexing, Secure MCP Tunnel activation, WGS/GIAB execution and section 260
+15/15 remain future-host gates.
+
 ## Global Constraints
 
 - Never commit DNA, FASTQ/BAM/CRAM/VCF outputs, GRCh38 binaries, credentials, API keys, tunnel profiles or logs containing genomic data.
