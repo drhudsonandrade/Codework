@@ -1,0 +1,56 @@
+# Secrets and local connector state
+.env
+.env.*
+!.env.example
+.noodle/
+.fallow/
+*tunnel*.json
+*tunnel*.toml
+
+# JavaScript/Python build state
+node_modules/
+dist/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Workflow state and logs
+.nextflow*
+work/
+.snakemake/
+logs/
+audit/
+results/
+
+# Personal or derived genomic data
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+*.sam
+*.bam
+*.bai
+*.cram
+*.crai
+*.vcf
+*.vcf.gz
+*.g.vcf.gz
+*.tbi
+*.csi
+
+# Reference bundles and indexes
+refs/
+data/
+*.fa
+*.fasta
+*.fai
+*.dict
+*.0123
+*.amb
+*.ann
+*.bwt.2bit.64
+*.pac
+GRCh38.lock.sha256
+GRCh38.lock.sha256.pending
+GRCh38.lock.sha256.approved
+!manifests/GRCh38.lock.sha256.example

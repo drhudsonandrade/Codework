@@ -1,0 +1,10 @@
+artifact_id	target	url	transform	provider	build
+fasta	Homo_sapiens_assembly38.fasta	https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/Homo_sapiens_assembly38.fasta	direct	Broad GATK resource bundle	GRCh38
+fai	Homo_sapiens_assembly38.fasta.fai	https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/Homo_sapiens_assembly38.fasta.fai	direct	Broad GATK resource bundle	GRCh38
+dict	Homo_sapiens_assembly38.dict	https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/Homo_sapiens_assembly38.dict	direct	Broad GATK resource bundle	GRCh38
+gencode_gtf	gencode.v50.primary_assembly.annotation.gtf.gz	https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50/gencode.v50.primary_assembly.annotation.gtf.gz	direct	GENCODE/EMBL-EBI	GRCh38.p14
+dbsnp	Homo_sapiens_assembly38.dbsnp138.vcf.gz	https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/Homo_sapiens_assembly38.dbsnp138.vcf	bgzip_tabix	Broad GATK resource bundle	GRCh38
+dbsnp_tbi	Homo_sapiens_assembly38.dbsnp138.vcf.gz.tbi	generated-from:dbsnp	generated_tbi	Local tabix 1.24	GRCh38
+mills	Mills_and_1000G_gold_standard.indels.hg38.vcf.gz	https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/Mills_and_1000G_gold_standard.indels.hg38.vcf	bgzip_tabix	Broad GATK resource bundle	GRCh38
+mills_tbi	Mills_and_1000G_gold_standard.indels.hg38.vcf.gz.tbi	generated-from:mills	generated_tbi	Local tabix 1.24	GRCh38
+blacklist	hg38-blacklist.v2.bed.gz	https://raw.githubusercontent.com/Boyle-Lab/Blacklist/master/lists/hg38-blacklist.v2.bed.gz	direct	Boyle Lab ENCODE blacklist	GRCh38/hg38

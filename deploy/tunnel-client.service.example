@@ -1,0 +1,21 @@
+[Unit]
+Description=OpenAI Secure MCP Tunnel client for Codework genome MCP
+Wants=network-online.target genome-mcp.service
+After=network-online.target genome-mcp.service
+
+[Service]
+Type=simple
+User=genome
+Group=genome
+EnvironmentFile=/etc/codework/tunnel-client.env
+ExecStart=/usr/local/bin/tunnel-client run --profile codework-genome
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/codework-tunnel
+
+[Install]
+WantedBy=multi-user.target
