@@ -1,0 +1,6 @@
+# EXAMPLE ONLY. Do not rename this file to an approved lock.
+# Generate GRCh38.lock.sha256.pending on the target VM, independently review
+# source provenance and every SHA-256, then install the reviewed file as:
+#   /srv/genome/refs/GRCh38.lock.sha256.approved
+# Expected sha256sum format:
+# <64 lowercase hex characters><two spaces><artifact filename>

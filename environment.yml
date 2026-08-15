@@ -1,0 +1,20 @@
+name: codework-ngs
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - python=3.11
+  - openjdk=17
+  - nodejs=22
+  - samtools=1.24
+  - bcftools=1.24
+  - htslib=1.24
+  - bwa-mem2=2.3
+  - gatk4=4.6.2.0
+  - nextflow=26.04.6
+  - snakemake-minimal=7.32.4
+  - curl
+  - coreutils
+  - jq
+  - pigz

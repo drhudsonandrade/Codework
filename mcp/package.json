@@ -1,0 +1,25 @@
+{
+  "name": "codework-genome-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "start": "node dist/src/server.js",
+    "fallow": "fallow audit --format json --quiet --base main"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.6",
+    "@types/node": "24.10.1",
+    "fallow": "3.16.0",
+    "typescript": "5.9.3"
+  }
+}

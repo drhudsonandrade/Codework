@@ -1,0 +1,77 @@
+name: Genome runtime scaffold
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mcp/package-lock.json
+      - name: Validate repository contract
+        run: python3 scripts/validate_repo.py
+      - name: Validate shell and Python
+        run: |
+          bash -n scripts/*.sh
+          python3 -m unittest discover -s tests -v
+      - name: Build and test MCP
+        working-directory: mcp
+        run: |
+          npm ci --ignore-scripts
+          npm test
+
+  container-canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned tool image
+        run: docker build --tag codework-genome:${{ github.sha }} .
+      - name: Run non-sensitive canary
+        run: |
+          mkdir -p ci-results
+          docker run --rm \
+            --entrypoint /bin/bash \
+            --volume "$PWD/ci-results:/results" \
+            codework-genome:${{ github.sha }} \
+            /opt/codework/scripts/run_canary.sh /results/canary
+      - name: Upload canary report
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-canary-${{ github.sha }}
+          path: ci-results/canary/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-ghcr:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [static, container-canary]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/codework-genome:${{ github.sha }}

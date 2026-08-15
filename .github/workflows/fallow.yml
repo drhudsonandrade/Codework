@@ -1,0 +1,34 @@
+name: Fallow
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mcp/package-lock.json
+      - name: Install pinned MCP dependencies
+        run: npm ci --prefix mcp --ignore-scripts
+      - name: Audit changed TypeScript/JavaScript
+        uses: fallow-rs/fallow@v3.16.0
+        with:
+          command: audit
+          version: 3.16.0
+          fail-on-issues: true
+      - name: Surface security candidates for reviewer verification
+        working-directory: mcp
+        run: ./node_modules/.bin/fallow security --format github-summary --quiet >> "$GITHUB_STEP_SUMMARY"
