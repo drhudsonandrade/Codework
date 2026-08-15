@@ -42,12 +42,16 @@ jobs:
       - name: Run non-sensitive canary
         run: |
           mkdir -p ci-results
+          # The image runs as the unprivileged mambauser. Make only this
+          # ephemeral runner directory writable by that container user.
+          chmod 0777 ci-results
           docker run --rm \
             --entrypoint /bin/bash \
             --volume "$PWD/ci-results:/results" \
             codework-genome:${{ github.sha }} \
             /opt/codework/scripts/run_canary.sh /results/canary
       - name: Upload canary report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: synthetic-canary-${{ github.sha }}
