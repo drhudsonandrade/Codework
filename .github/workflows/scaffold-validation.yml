@@ -46,7 +46,6 @@ jobs:
           # ephemeral runner directory writable by that container user.
           chmod 0777 ci-results
           docker run --rm \
-            --entrypoint /bin/bash \
             --volume "$PWD/ci-results:/results" \
             codework-genome:${{ github.sha }} \
             /opt/codework/scripts/run_canary.sh /results/canary
