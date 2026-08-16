@@ -8,8 +8,10 @@ on:
       - 'main.nf'
       - 'nextflow.config'
       - 'workflows/**'
+      - 'evidence_adapters/**'
       - 'scripts/prepare_latest_candidate.py'
       - 'scripts/promote_latest_candidate.py'
+      - 'scripts/refresh_evidence_sources.py'
       - 'scripts/freshness_gate.py'
       - 'scripts/latest_runtime_resource_gate.py'
       - 'scripts/runtime_resource_gate.py'
@@ -27,8 +29,10 @@ on:
       - 'main.nf'
       - 'nextflow.config'
       - 'workflows/**'
+      - 'evidence_adapters/**'
       - 'scripts/prepare_latest_candidate.py'
       - 'scripts/promote_latest_candidate.py'
+      - 'scripts/refresh_evidence_sources.py'
       - 'scripts/freshness_gate.py'
       - 'scripts/latest_runtime_resource_gate.py'
       - 'scripts/runtime_resource_gate.py'
@@ -52,12 +56,13 @@ permissions:
 
 # PRE-DNA invariant:
 # 1) preserve the pinned production environment as evidence;
-# 2) create an isolated environment with version pins removed;
-# 3) let the configured Conda channels resolve the latest mutually compatible stack;
-# 4) build an immutable candidate image;
-# 5) execute both direct caller canary and Nextflow orchestration canary on that exact image;
-# 6) promote the candidate for THIS SESSION only when both canaries are PASS;
-# 7) run the freshness gate and Runtime/Resource Gate before real DNA is allowed.
+# 2) resolve a latest mutually compatible candidate in isolation;
+# 3) build an immutable candidate image;
+# 4) execute direct caller + Nextflow orchestration canaries on that exact image;
+# 5) session-promote only when both canaries PASS and package inventory is complete;
+# 6) verify critical official evidence-source capability/freshness without bulk blind download;
+# 7) run the freshness gate; stale/unavailable tool OR evidence source blocks DNA;
+# 8) re-run the current-session Runtime/Resource Gate before real calling.
 
 jobs:
   preflight:
@@ -68,8 +73,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Initialize evidence and validate repository
         run: |
-          mkdir -p results/runtime-gate results/freshness results/canary results/nextflow-canary
-          chmod 0777 results results/runtime-gate results/freshness results/canary results/nextflow-canary
+          mkdir -p results/runtime-gate results/freshness results/canary results/nextflow-canary results/evidence-sources
+          chmod 0777 results results/runtime-gate results/freshness results/canary results/nextflow-canary results/evidence-sources
           python3 scripts/validate_repo.py
       - name: Resolve latest mutually compatible candidate without mutating repository history
         run: |
@@ -97,18 +102,28 @@ jobs:
             genoma-ngs-latest:${{ github.sha }} \
             nextflow run /opt/codework/main.nf --mode canary --outdir /workspace/results/nextflow-canary -ansi-log false
           jq -e '.status == "PASS"' results/nextflow-canary/canary/report.json >/dev/null
-      - name: Session-promote candidate and enforce freshness gate
+      - name: Session-promote candidate
         run: |
           jq -e '.status == "PASS"' results/canary/report.json >/dev/null
           jq -e '.status == "PASS"' results/nextflow-canary/canary/report.json >/dev/null
           python3 scripts/promote_latest_candidate.py \
             --canary results/canary/report.json \
             --inventory results/canary/conda-inventory.json \
-            --output results/freshness/state.json
+            --output results/freshness/state-toolchain.json
+      - name: Refresh critical official evidence-source capability and recency
+        run: |
+          python3 scripts/refresh_evidence_sources.py \
+            --input-state results/freshness/state-toolchain.json \
+            --output-state results/freshness/state.json \
+            --snapshots-output results/evidence-sources/capability-snapshots.json
+          jq -e 'length == 6 and all(.[]; .status == "VERIFICADO" and .retrieval_evidence.result_digest != null)' \
+            results/evidence-sources/capability-snapshots.json >/dev/null
+      - name: Enforce combined toolchain + evidence freshness gate
+        run: |
           python3 scripts/freshness_gate.py \
             --input results/freshness/state.json \
             --output results/freshness/gate.json
-          jq -e '.ready_for_dna == true' results/freshness/gate.json >/dev/null
+          jq -e '.ready_for_dna == true and (.evidence_sources | length) == 6' results/freshness/gate.json >/dev/null
       - name: Execute current-session Runtime/Resource Gate
         run: |
           docker run --rm \
@@ -123,7 +138,7 @@ jobs:
         run: |
           jq -e '.checks.executables_and_versions.status == "EXECUTADO"' results/runtime-gate/preflight.json >/dev/null
           jq -e '.ready_for_real_calling == false' results/runtime-gate/preflight.json >/dev/null
-          echo 'Latest-tested toolchain and Nextflow orchestration EXECUTADO. Standard hosted preflight intentionally does not claim full GRCh38 readiness.'
+          echo 'Latest-tested toolchain + Nextflow + official evidence-source freshness EXECUTADO/VERIFICADO. Hosted preflight intentionally does not claim full GRCh38 readiness.'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -140,8 +155,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Initialize evidence, validate repository and host capacity
         run: |
-          mkdir -p results/runtime-gate results/freshness results/canary results/nextflow-canary results/grch38
-          chmod 0777 results results/runtime-gate results/freshness results/canary results/nextflow-canary results/grch38
+          mkdir -p results/runtime-gate results/freshness results/canary results/nextflow-canary results/grch38 results/evidence-sources
+          chmod 0777 results results/runtime-gate results/freshness results/canary results/nextflow-canary results/grch38 results/evidence-sources
           python3 scripts/validate_repo.py
           : "${REF_ROOT:=/srv/genoma/refs/GRCh38}"
           echo "REF_ROOT=$REF_ROOT" >> "$GITHUB_ENV"
@@ -173,9 +188,13 @@ jobs:
           python3 scripts/promote_latest_candidate.py \
             --canary results/canary/report.json \
             --inventory results/canary/conda-inventory.json \
-            --output results/freshness/state.json
+            --output results/freshness/state-toolchain.json
+          python3 scripts/refresh_evidence_sources.py \
+            --input-state results/freshness/state-toolchain.json \
+            --output-state results/freshness/state.json \
+            --snapshots-output results/evidence-sources/capability-snapshots.json
           python3 scripts/freshness_gate.py --input results/freshness/state.json --output results/freshness/gate.json
-          jq -e '.ready_for_dna == true' results/freshness/gate.json >/dev/null
+          jq -e '.ready_for_dna == true and (.evidence_sources | length) == 6' results/freshness/gate.json >/dev/null
       - name: Validate approved GRCh38 source bundle before index generation
         run: |
           test -s "$REF_ROOT/GRCh38.lock.sha256.approved" || { echo 'NÃO DISPONÍVEL: externally approved GRCh38 lock missing'; exit 2; }
@@ -205,10 +224,18 @@ jobs:
             genoma-ngs-latest:${{ github.sha }} \
             /opt/codework/scripts/validate_bwa_mem2_functional.sh \
             | tee results/grch38/bwa-functional.txt
+      - name: Re-run combined freshness immediately before Runtime/Resource Gate
+        run: |
+          python3 scripts/refresh_evidence_sources.py \
+            --input-state results/freshness/state-toolchain.json \
+            --output-state results/freshness/state-pre-runtime.json \
+            --snapshots-output results/evidence-sources/capability-snapshots-pre-runtime.json
+          python3 scripts/freshness_gate.py \
+            --input results/freshness/state-pre-runtime.json \
+            --output results/freshness/gate-pre-runtime.json
+          jq -e '.ready_for_dna == true and (.evidence_sources | length) == 6' results/freshness/gate-pre-runtime.json >/dev/null
       - name: Re-run full current-session Runtime/Resource Gate
         run: |
-          python3 scripts/freshness_gate.py --input results/freshness/state.json --output results/freshness/gate-pre-runtime.json
-          jq -e '.ready_for_dna == true' results/freshness/gate-pre-runtime.json >/dev/null
           docker run --rm -e REF_ROOT=/refs \
             -v "$REF_ROOT:/refs:ro" -v "$PWD/results:/workspace/results" \
             genoma-ngs-latest:${{ github.sha }} \
