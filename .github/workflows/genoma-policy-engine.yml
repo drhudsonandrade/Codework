@@ -123,10 +123,17 @@ jobs:
             genoma-policy-engine:${{ github.sha }})
           cleanup() { docker logs "$cid" || true; docker rm -f "$cid" >/dev/null 2>&1 || true; }
           trap cleanup EXIT
+
+          http_ready=0
           for _ in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8787/healthz >/tmp/health.json; then break; fi
+            if curl -fsS http://127.0.0.1:8787/healthz >/tmp/health.json; then
+              http_ready=1
+              break
+            fi
             sleep 1
           done
+          test "$http_ready" = 1
+
           python - <<'PY'
           import json
           from pathlib import Path
@@ -146,7 +153,20 @@ jobs:
           assert p['section_count'] == 263
           assert len(p['sha256']) == 64
           PY
-          test "$(docker inspect --format='{{.State.Health.Status}}' "$cid")" = healthy
+
+          health_state=starting
+          for _ in $(seq 1 30); do
+            health_state=$(docker inspect --format='{{.State.Health.Status}}' "$cid")
+            if [ "$health_state" = healthy ]; then
+              break
+            fi
+            if [ "$health_state" = unhealthy ]; then
+              docker logs "$cid"
+              exit 1
+            fi
+            sleep 1
+          done
+          test "$health_state" = healthy
 
   publish:
     name: Publish immutable OCI image + provenance
