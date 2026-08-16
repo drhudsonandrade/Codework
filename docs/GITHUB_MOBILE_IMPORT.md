@@ -8,7 +8,7 @@ No GitHub folder needs to be created in advance. Git creates `.github/workflows`
 
 ## Preferred route: browser Codespace
 
-1. Make `drhudsonandrade/Codework` private before connecting a genomic VM or storing operational metadata.
+1. Keep the `Codework` repository private before connecting a genomic VM or storing operational metadata.
 2. Open the repository in GitHub, choose **Code → Codespaces → Create codespace on main**. If the menu is hidden on the phone, request the desktop site.
 3. In the Codespace file explorer, use **Upload…** and select `codework-genome-runtime-2026-08-15.zip` from the phone.
 4. Open the Codespace terminal and run:
@@ -35,10 +35,7 @@ git commit -m "chore: prepare private genomic analysis runtime"
 git push -u origin codex/genome-runtime-mcp
 ```
 
-7. Open:
-
-<https://github.com/drhudsonandrade/Codework/compare/main...codex/genome-runtime-mcp?expand=1>
-
+7. Open the compare page for the current private repository and compare `main...codex/genome-runtime-mcp`.
 8. Use the title and text in `docs/PR_BODY.md`, select **Create draft pull request**, and wait for both workflows to finish.
 9. Do not merge if Fallow, the repository contract, MCP tests, container build, or synthetic GATK/bcftools canary fails.
 
