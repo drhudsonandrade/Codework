@@ -26,3 +26,13 @@ test_reject_haplogroup_direct_descent if {
   input_doc := object.union(base, {"claims":[{"nature":"INFERÊNCIA","domain":"CURIOSIDADE","status":"INFERIDO","priority":"P5","uses_haplogroup":true,"direct_ethnicity_or_descent":true}]})
   not guard.allow with input as input_doc
 }
+
+test_reject_cross_build_before_harmonization if {
+  input_doc := object.union(base, {"claims":[{"nature":"ASSOCIAÇÃO","domain":"PESQUISA","status":"INFERIDO","priority":"P5","cross_build_comparison":true,"build_harmonized":false,"ref_alt_verified":false,"strand_verified":false}]})
+  not guard.allow with input as input_doc
+}
+
+test_reject_clinvar_simple_vote if {
+  input_doc := object.union(base, {"claims":[{"nature":"ASSOCIAÇÃO","domain":"PESQUISA","status":"INFERIDO","priority":"P5","clinvar_conflict":true,"clinvar_simple_vote":true,"clinvar_conflict_resolution":{}}]})
+  not guard.allow with input as input_doc
+}
