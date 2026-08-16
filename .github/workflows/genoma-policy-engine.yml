@@ -42,22 +42,30 @@ jobs:
       - name: Verify fixture identity and 263-section parser contract
         working-directory: policy_engine
         run: python -m genoma_policy ruleset-check
-      - name: Install package without network dependencies
-        run: python -m pip install --no-build-isolation --no-deps ./policy_engine
-      - name: Installed CLI check against CI fixture
-        run: genoma-policy ruleset-check
+      - name: Verify portable stdlib CLI without package manager
+        run: |
+          chmod +x policy_engine/scripts/genoma-policy
+          policy_engine/scripts/genoma-policy ruleset-check
+          python -m compileall -q policy_engine/genoma_policy
       - name: Independent 15-case deterministic safety smoke
-        run: genoma-policy smoke --output genoma-policy-smoke.json
+        run: policy_engine/scripts/genoma-policy smoke --output "$GITHUB_WORKSPACE/genoma-policy-smoke.json"
       - name: Compile complete 263-rule catalog
-        run: genoma-policy catalog --output genoma-ruleset-catalog.json
+        run: policy_engine/scripts/genoma-policy catalog --output "$GITHUB_WORKSPACE/genoma-ruleset-catalog.json"
       - name: Verify JSON schema syntax
         run: python -m json.tool policy_engine/policy/schema/execution-manifest.schema.json >/dev/null
+      - name: Build portable deterministic source archive
+        run: |
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+            -czf genoma-policy-engine-source.tgz policy_engine
+          sha256sum genoma-policy-engine-source.tgz > genoma-policy-engine-source.tgz.sha256
       - uses: actions/upload-artifact@v4
         with:
           name: genoma-policy-verification-${{ github.sha }}
           path: |
             genoma-policy-smoke.json
             genoma-ruleset-catalog.json
+            genoma-policy-engine-source.tgz
+            genoma-policy-engine-source.tgz.sha256
           retention-days: 90
           if-no-files-found: error
 
