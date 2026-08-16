@@ -1,15 +1,6 @@
 name: GENOMA canonical production ceremony
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'normative/**'
-      - 'policy_engine/**'
-      - 'deploy/attestations/bootstrap-project-v3.3.json'
-      - 'scripts/materialize_ruleset.py'
-      - 'scripts/run_live_post_deployment_smoke.py'
-      - '.github/workflows/genoma-production-ceremony.yml'
   workflow_dispatch:
 
 permissions:
