@@ -11,9 +11,23 @@ if [[ -s "$OUTPUT_DIR/report.json" ]] && jq -e '.status == "PASS"' "$OUTPUT_DIR/
 fi
 
 mkdir -p "$OUTPUT_DIR" "$WORK_DIR"
-"$PROJECT_ROOT/scripts/check_versions.sh" > "$OUTPUT_DIR/tool_versions.tsv"
+if [[ "${CANARY_VERSION_POLICY:-PINNED}" == "PINNED" ]]; then
+  "$PROJECT_ROOT/scripts/check_versions.sh" > "$OUTPUT_DIR/tool_versions.tsv"
+else
+  {
+    printf 'tool\tversion\n'
+    printf 'java\t%s\n' "$(java -version 2>&1 | head -1)"
+    printf 'samtools\t%s\n' "$(samtools --version | head -1)"
+    printf 'bcftools\t%s\n' "$(bcftools --version | head -1)"
+    printf 'bwa-mem2\t%s\n' "$(bwa-mem2 version 2>&1 | head -1 || true)"
+    printf 'gatk\t%s\n' "$(gatk --version 2>&1 | tail -1)"
+    printf 'nextflow\t%s\n' "$(nextflow -version 2>&1 | grep -m1 version || true)"
+    printf 'snakemake\t%s\n' "$(snakemake --version 2>&1 | head -1)"
+  } > "$OUTPUT_DIR/tool_versions.tsv"
+fi
 if command -v micromamba >/dev/null 2>&1; then
   micromamba list --name base --explicit > "$OUTPUT_DIR/conda-explicit.lock.txt"
+  micromamba list --name base --json > "$OUTPUT_DIR/conda-inventory.json"
 fi
 python3 "$PROJECT_ROOT/scripts/generate_canary.py" "$WORK_DIR/input"
 
@@ -72,10 +86,12 @@ jq --null-input \
   --slurpfile fixture "$WORK_DIR/input/fixture.json" \
   --slurpfile bcftools "$OUTPUT_DIR/bcftools.score.json" \
   --slurpfile gatk "$OUTPUT_DIR/gatk.score.json" \
+  --arg version_policy "${CANARY_VERSION_POLICY:-PINNED}" \
   '{
     status: "PASS",
     classification: "synthetic functional canary; not clinical validation",
     sensitive_data: false,
+    version_policy: $version_policy,
     fixture: $fixture[0],
     callers: {bcftools: $bcftools[0], gatk_haplotypecaller: $gatk[0]},
     limitations: [

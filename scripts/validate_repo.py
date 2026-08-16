@@ -1,26 +1,34 @@
 #!/usr/bin/env python3
-"""Validate static repository safety, sealed normative integrity, and deployment scaffold."""
+"""Validate static repository safety and the shared sealed normative contract."""
 from __future__ import annotations
 
-import base64
 import csv
-import gzip
-import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 
-CANONICAL_RULESET = "REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt"
-CANONICAL_RULESET_SHA256 = "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a"
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.sealed_ruleset import EXPECTED_NAME, EXPECTED_SHA, SealedRulesetError, verify_transport
+
+CANONICAL_RULESET = EXPECTED_NAME
+CANONICAL_RULESET_SHA256 = EXPECTED_SHA
 REQUIRED_PATHS = (
     ".fallowrc.json", ".github/workflows/fallow.yml", ".github/workflows/scaffold-validation.yml",
     ".github/workflows/genoma-policy-engine.yml", ".github/workflows/genoma-production-ceremony.yml",
     ".github/workflows/genoma-ngs-runtime-gate.yml", ".gitignore", "Dockerfile", "environment.yml", "main.nf", "nextflow.config",
     "manifests/GRCh38.sources.tsv", "manifests/GRCh38.lock.sha256.example", "manifests/RULESET_V3.3.sha256",
-    "normative/sealed/GENOMA_RULESET_v3.3.txt.gz.b64", "normative/sealed/MANIFEST.json", "normative/sealed/README.md",
-    "scripts/check_versions.sh", "scripts/fetch_grch38.sh", "scripts/build_bwa_mem2_index.sh", "scripts/validate_grch38.sh",
-    "scripts/generate_canary.py", "scripts/score_variants.py", "scripts/run_canary.sh", "scripts/verify_ruleset.sh",
-    "scripts/materialize_ruleset.py", "scripts/run_live_post_deployment_smoke.py", "scripts/runtime_resource_gate.py",
+    "normative/sealed/MANIFEST.json", "normative/sealed/README.md",
+    "scripts/__init__.py", "scripts/sealed_ruleset.py", "scripts/check_versions.sh", "scripts/fetch_grch38.sh",
+    "scripts/build_bwa_mem2_index.sh", "scripts/validate_grch38.sh", "scripts/generate_canary.py",
+    "scripts/score_variants.py", "scripts/run_canary.sh", "scripts/verify_ruleset.sh", "scripts/materialize_ruleset.py",
+    "scripts/run_live_post_deployment_smoke.py", "scripts/runtime_resource_gate.py",
+    "scripts/prepare_latest_candidate.py", "scripts/promote_latest_candidate.py", "scripts/freshness_gate.py",
+    "scripts/latest_runtime_resource_gate.py", "scripts/generate_report.py",
+    "reporting/__init__.py", "reporting/catalog.json", "reporting/engine.py",
     "policy_engine/pyproject.toml", "policy_engine/genoma_policy/engine.py", "policy_engine/genoma_policy/attestation.py",
     "policy_engine/genoma_policy/ledger.py", "policy_engine/policy/schema/execution-manifest.schema.json", "policy_engine/Dockerfile",
     "mcp/package.json", "mcp/package-lock.json", "mcp/tsconfig.json", "mcp/src/server.ts", "deploy/docker-compose.yml",
@@ -39,63 +47,11 @@ FORBIDDEN_SUFFIXES = (".fastq", ".fq", ".bam", ".bai", ".cram", ".crai", ".vcf",
 SKIP_PARTS = {".git", "node_modules", "dist", "__pycache__", ".pytest_cache"}
 
 
-def sha256(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
-
-
-def top_level_sections(text: str) -> list[int]:
-    expected = 0
-    found: list[int] = []
-    for raw in text.splitlines():
-        match = re.match(r"^(\d+)\.\s+(.+?)\s*$", raw.strip())
-        if not match:
-            continue
-        number = int(match.group(1))
-        if number != expected:
-            continue
-        found.append(number)
-        expected += 1
-        if expected == 263:
-            break
-    return found
-
-
 def validate_sealed_ruleset(root: Path, errors: list[str]) -> None:
-    manifest_path = root / "normative/sealed/MANIFEST.json"
-    transport_path = root / "normative/sealed/GENOMA_RULESET_v3.3.txt.gz.b64"
-    if not manifest_path.is_file() or not transport_path.is_file():
-        return
+    sealed_dir = root / "normative" / "sealed"
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        encoded = transport_path.read_bytes()
-        normalized_transport = b"".join(encoded.split())
-        if manifest.get("active_at_rest") is not False:
-            errors.append("sealed normative transport must declare active_at_rest=false")
-        if manifest.get("raw_sha256") != CANONICAL_RULESET_SHA256 or manifest.get("canonical_filename") != CANONICAL_RULESET:
-            errors.append("sealed normative manifest identity mismatch")
-        if sha256(normalized_transport) != manifest.get("transport_sha256"):
-            errors.append("sealed normative transport SHA-256 mismatch")
-            return
-        compressed = base64.b64decode(normalized_transport, validate=True)
-        if sha256(compressed) != manifest.get("gzip_sha256"):
-            errors.append("sealed normative gzip SHA-256 mismatch")
-            return
-        raw = gzip.decompress(compressed)
-        if sha256(raw) != CANONICAL_RULESET_SHA256:
-            errors.append("sealed normative payload does not decode to canonical raw SHA-256")
-            return
-        text = raw.decode("utf-8")
-        head = set(text.splitlines()[:20])
-        required = {
-            "STATUS NORMATIVO: VIGENTE", "VERSÃO NORMATIVA: v3.3",
-            "DATA FORMAL DE EMISSÃO E VIGÊNCIA: 14/08/2026", f"ARQUIVO CANÔNICO: {CANONICAL_RULESET}",
-        }
-        if not required.issubset(head):
-            errors.append("sealed normative payload header mismatch")
-        sections = top_level_sections(text)
-        if sections != list(range(263)):
-            errors.append(f"sealed normative payload top-level section sequence mismatch: {len(sections)}")
-    except (OSError, UnicodeError, ValueError, gzip.BadGzipFile, json.JSONDecodeError) as exc:
+        verify_transport(sealed_dir)
+    except (OSError, UnicodeError, ValueError, SealedRulesetError) as exc:
         errors.append(f"sealed normative transport invalid: {type(exc).__name__}: {exc}")
 
 
@@ -105,6 +61,8 @@ def validate(root: Path) -> list[str]:
         if not (root / relative).is_file():
             errors.append(f"missing required path: {relative}")
 
+    # The active plaintext ruleset is created only at runtime. Keeping an active copy in
+    # the repository would violate the normative uniqueness contract.
     active = []
     for candidate in root.rglob("REGRAS_PROJETO_GENOMA*.txt"):
         if any(part in SKIP_PARTS for part in candidate.parts):
@@ -113,7 +71,7 @@ def validate(root: Path) -> list[str]:
             text = candidate.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
-        if "STATUS NORMATIVO: VIGENTE" in text:
+        if re.search(r"^STATUS NORMATIVO:\s*VIGENTE\s*$", text, re.MULTILINE):
             active.append(candidate.relative_to(root))
     if active:
         errors.append(f"active normative ruleset must be materialized at runtime, not duplicated in repo; found {active}")
@@ -166,8 +124,7 @@ def validate(root: Path) -> list[str]:
 
 
 def main() -> None:
-    root = Path(__file__).resolve().parents[1]
-    errors = validate(root)
+    errors = validate(ROOT)
     if errors:
         for error in errors:
             print(f"FAIL\t{error}")
@@ -175,8 +132,10 @@ def main() -> None:
     print("PASS\trepository_contract")
     print("PASS\truleset_manifest_contract\tv3.3 raw SHA-256 pinned")
     print("PASS\trepository_active_rulesets\t0")
-    print("PASS\tsealed_normative_transport\tbyte-exact canonical v3.3 verified in memory")
+    print("PASS\tsealed_normative_transport\tchunked transport verified through shared decoder")
     print("PASS\tgrch38_manifest\t9/9")
+    print("PASS\tpre_dna_readiness_contract\tlatest-tested candidate + freshness gate + runtime/resource gate present")
+    print("PASS\treporting_contract\t11-model deterministic renderer present")
     print("PASS\toptional_adapters\tcore has no Cloudflare/Temporal/Supabase/OpenAI runtime dependency")
 
 

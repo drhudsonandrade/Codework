@@ -7,19 +7,42 @@ from .gates_common import ALLOWED_OPERATIONAL, _gate, _get_list, _parse_iso_date
 
 class EvidenceGates:
     def _evidence_gate(self, manifest: dict[str, Any]):
+        """Require attributable, reproducible and time-bounded evidence references.
+
+        A status label alone is not proof. Mutable sources must carry a resolvable
+        locator plus retrieval evidence (query/snapshot digest). Clinical and
+        predisposition claims must reference at least one primary or official source.
+        """
         reasons: list[str] = []
         sources = {s.get("id"): s for s in _get_list(manifest, "sources") if isinstance(s, dict) and s.get("id")}
         for source_id, source in sources.items():
+            if source.get("status") == "VERIFICADO" and not source.get("locator"):
+                reasons.append(f"verified source {source_id} missing locator")
+            retrieval = source.get("retrieval_evidence") if isinstance(source.get("retrieval_evidence"), dict) else {}
+            if source.get("status") == "VERIFICADO":
+                if not retrieval.get("method"):
+                    reasons.append(f"verified source {source_id} missing retrieval_evidence.method")
+                if not (retrieval.get("result_digest") or retrieval.get("snapshot_id") or retrieval.get("query_id")):
+                    reasons.append(f"verified source {source_id} missing retrieval_evidence result_digest/snapshot_id/query_id")
             if source.get("mutable") is True:
                 if source.get("status") != "VERIFICADO": reasons.append(f"mutable source {source_id} not VERIFICADO")
                 if not source.get("version"): reasons.append(f"mutable source {source_id} missing version")
                 if not _parse_iso_date(str(source.get("checked_at", ""))): reasons.append(f"mutable source {source_id} missing valid checked_at date")
+                if not source.get("locator"): reasons.append(f"mutable source {source_id} missing locator")
+                if not retrieval: reasons.append(f"mutable source {source_id} missing retrieval_evidence")
         for idx, claim in enumerate(_get_list(manifest, "claims")):
             if not isinstance(claim, dict): continue
             refs = claim.get("evidence_refs", []) if isinstance(claim.get("evidence_refs"), list) else []
-            if claim.get("domain") in {"CLÍNICO", "PREDISPOSIÇÃO"} and not refs: reasons.append(f"claim[{idx}] clinical/predisposition claim lacks evidence_refs")
+            clinical = claim.get("domain") in {"CLÍNICO", "PREDISPOSIÇÃO"}
+            if clinical and not refs: reasons.append(f"claim[{idx}] clinical/predisposition claim lacks evidence_refs")
+            known_refs: list[dict[str, Any]] = []
             for ref in refs:
-                if ref not in sources: reasons.append(f"claim[{idx}] references unknown evidence source {ref}")
+                if ref not in sources:
+                    reasons.append(f"claim[{idx}] references unknown evidence source {ref}")
+                else:
+                    known_refs.append(sources[ref])
+            if clinical and known_refs and not any(source.get("primary_or_official") is True for source in known_refs):
+                reasons.append(f"claim[{idx}] clinical/predisposition claim lacks primary/official evidence source")
         return _gate("EVIDENCE_RECENCY_GATE", not reasons, reasons)
 
     def _capability_honesty_gate(self, manifest: dict[str, Any]):
@@ -57,41 +80,26 @@ class EvidenceGates:
         return _gate("NEGATIVE_EVIDENCE_SCOPE_GATE", not reasons, reasons)
 
     def _build_harmonization_gate(self, manifest: dict[str, Any]):
-        """Fail closed when cross-build/chip-vs-VCF comparison precedes harmonization."""
         reasons: list[str] = []
         for idx, claim in enumerate(_get_list(manifest, "claims")):
-            if not isinstance(claim, dict) or claim.get("cross_build_comparison") is not True:
-                continue
-            if not claim.get("source_build") or not claim.get("target_build"):
-                reasons.append(f"claim[{idx}] cross-build comparison missing source/target build")
-            if claim.get("build_harmonized") is not True:
-                reasons.append(f"claim[{idx}] build not harmonized before comparison")
-            if claim.get("ref_alt_verified") is not True:
-                reasons.append(f"claim[{idx}] REF/ALT not verified after harmonization")
-            if claim.get("strand_verified") is not True:
-                reasons.append(f"claim[{idx}] strand not verified before concordance/conflict conclusion")
-            if claim.get("concordance_or_conflict_concluded") is True and any(
-                claim.get(key) is not True for key in ("build_harmonized", "ref_alt_verified", "strand_verified")
-            ):
+            if not isinstance(claim, dict) or claim.get("cross_build_comparison") is not True: continue
+            if not claim.get("source_build") or not claim.get("target_build"): reasons.append(f"claim[{idx}] cross-build comparison missing source/target build")
+            if claim.get("build_harmonized") is not True: reasons.append(f"claim[{idx}] build not harmonized before comparison")
+            if claim.get("ref_alt_verified") is not True: reasons.append(f"claim[{idx}] REF/ALT not verified after harmonization")
+            if claim.get("strand_verified") is not True: reasons.append(f"claim[{idx}] strand not verified before concordance/conflict conclusion")
+            if claim.get("concordance_or_conflict_concluded") is True and any(claim.get(key) is not True for key in ("build_harmonized", "ref_alt_verified", "strand_verified")):
                 reasons.append(f"claim[{idx}] concluded concordance/conflict before complete harmonization")
         return _gate("BUILD_HARMONIZATION_GATE", not reasons, reasons)
 
     def _clinvar_conflict_gate(self, manifest: dict[str, Any]):
-        """Require an evidence-weighted Conflict Dossier rather than classification voting."""
         reasons: list[str] = []
-        required = (
-            "review_status_considered", "vcep_considered", "condition_matched",
-            "evidence_reviewed", "dates_reviewed", "conflict_dossier",
-        )
+        required = ("review_status_considered", "vcep_considered", "condition_matched", "evidence_reviewed", "dates_reviewed", "conflict_dossier")
         for idx, claim in enumerate(_get_list(manifest, "claims")):
-            if not isinstance(claim, dict) or claim.get("clinvar_conflict") is not True:
-                continue
-            if claim.get("clinvar_simple_vote") is True:
-                reasons.append(f"claim[{idx}] resolves ClinVar conflict by simple vote")
+            if not isinstance(claim, dict) or claim.get("clinvar_conflict") is not True: continue
+            if claim.get("clinvar_simple_vote") is True: reasons.append(f"claim[{idx}] resolves ClinVar conflict by simple vote")
             resolution = claim.get("clinvar_conflict_resolution", {}) if isinstance(claim.get("clinvar_conflict_resolution"), dict) else {}
             for key in required:
-                if resolution.get(key) is not True:
-                    reasons.append(f"claim[{idx}] ClinVar conflict resolution missing {key}")
+                if resolution.get(key) is not True: reasons.append(f"claim[{idx}] ClinVar conflict resolution missing {key}")
         return _gate("CLINVAR_CONFLICT_GATE", not reasons, reasons)
 
     def _ancestry_gate(self, manifest: dict[str, Any]):
