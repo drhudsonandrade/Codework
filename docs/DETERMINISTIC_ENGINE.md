@@ -1,24 +1,27 @@
-# Deterministic GENOMA engine
+# Deterministic GENOMA engine v0.3.0
 
-The runtime is split into four independently replaceable planes.
+The runtime is split into four independently replaceable planes:
 
-1. **Policy Control Plane** — verifies the externally mounted canonical v3.3 ruleset, compiles 263 stable rule identities, applies deterministic gates and validates structured attestations for rules that cannot honestly become booleans.
-2. **Scientific Data Plane** — Nextflow/container workflows own input provenance, QC, references, calling and other scientific execution. Real calling always requires a fresh current-session Runtime/Resource Gate.
-3. **Evidence Plane** — evidence is represented by portable IDs, mutable-source versions/dates, content hashes and attestation traces. A database may project/index those records, but is not required by the core engine.
-4. **Audit Plane** — deterministic reports, JSONL hash-chain ledger, CI artifacts, OCI image digests and supply-chain provenance.
+1. **Policy Control Plane** — verifies the canonical v3.3 ruleset, compiles 263 stable rule identities, applies deterministic gates and validates structured attestations for rules that cannot honestly become booleans.
+2. **Scientific Data Plane** — Nextflow/container workflows own provenance, QC, references, alignment/calling and scientific execution. Real calling always requires a fresh current-session Runtime/Resource Gate.
+3. **Evidence Plane** — portable evidence IDs, source versions/dates, content hashes and attestation traces. Databases are optional projections, not canonical truth.
+4. **Audit Plane** — deterministic reports, JSONL hash-chain ledger, live deployment evidence, OCI image digests, SBOM and build provenance.
 
 ## Structured scientific attestation
 
-Every analysis-relevant normative section is machine-addressable as `GENOMA-V3.3-S000` through `GENOMA-V3.3-S262` with a section SHA-256. A non-binary rule must record applicability, one of the five operational statuses, a decision, justification, evidence references, actor/method/run, timestamp, input/output hashes and tool versions. `PROPOSTO` or `NÃO DISPONÍVEL` cannot be used to claim `SATISFIED`; unresolved or blocked sections prevent the analysis-relevant operation from being ready.
+Every analysis-relevant normative section is machine-addressable as `GENOMA-V3.3-S000` through `GENOMA-V3.3-S262` with a section SHA-256. A non-binary rule records applicability, one of the five operational statuses, a decision, justification, evidence references, actor/method/run, timestamp, input/output hashes and tool versions. `PROPOSTO` or `NÃO DISPONÍVEL` cannot claim `SATISFIED`.
 
-## One active ruleset
+## Single active ruleset without Git plaintext duplication
 
-The normative TXT is an external immutable runtime input, mounted read-only. The repository stores the expected canonical SHA-256 but not a second active copy. `GENOMA_RULESET_PATH` and `GENOMA_RULESET_SHA_MANIFEST` may point to controlled local paths. The resolver fails closed on missing/conflicting identity.
+Git contains an inactive deterministic base64(gzip) transport under `normative/sealed/` plus the external raw SHA manifest. CI decodes it in memory and proves it is byte-exact to canonical SHA-256 `187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a`.
+
+`scripts/materialize_ruleset.py` is the only activation path: exact identity + hash + section sequence are verified, the canonical filename is atomically materialized as `0444`, and production mounts it read-only. The repository contract still requires **zero active plaintext `VIGENTE` TXT files** at rest.
 
 ## Independent execution
 
 ```bash
-export GENOMA_RULESET_PATH=/secure/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt
+python3 scripts/materialize_ruleset.py --output-dir /secure/genoma-normative
+export GENOMA_RULESET_PATH=/secure/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt
 export GENOMA_RULESET_SHA_MANIFEST=$PWD/manifests/RULESET_V3.3.sha256
 cd policy_engine
 python -m unittest discover -s tests -v
@@ -27,21 +30,12 @@ python -m genoma_policy smoke
 python -m genoma_policy serve --host 127.0.0.1 --port 8787
 ```
 
-Container:
+Container deployment and the canonical 15-case live ceremony are documented in `docs/PRODUCTION_CEREMONY.md`.
 
-```bash
-docker build -f policy_engine/Dockerfile -t genoma-policy-engine:0.2.0 .
-GENOMA_RULESET_PATH=/secure/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt \
-GENOMA_RULESET_SHA_MANIFEST=$PWD/manifests/RULESET_V3.3.sha256 \
-  docker compose -f policy_engine/docker-compose.yml up --build
-```
+## Safety gates added in v0.3.0
 
-ChatGPT, MCP, Cloudflare, Temporal, Supabase and any future UI/orchestrator are optional adapters. The deterministic engine has no OpenAI or LLM dependency.
+`BUILD_HARMONIZATION_GATE` explicitly prevents GRCh37/GRCh38/chip-vs-VCF concordance claims before build, REF/ALT and strand harmonization. `CLINVAR_CONFLICT_GATE` explicitly rejects simple voting and requires review status, VCEP, condition matching, evidence, dates and a Conflict Dossier.
 
-## CI guarantees and limits
+## Optional services
 
-`.github/workflows/genoma-policy-engine.yml` uses a clearly marked synthetic v3.3 fixture to test the parser/263-rule infrastructure contract without publishing a duplicate normative TXT. Separately, the repository manifest pins the verified canonical SHA-256. CI runs Python tests, independent 15-case deterministic safety smoke, OPA/Rego, Gitleaks, real Docker build/runtime smoke and publishes an immutable GHCR image after merge to `main`.
-
-For supply-chain traceability, the image is published with BuildKit registry-native OCI provenance (`mode=max`) plus SBOM and the workflow verifies that attached attestation manifests exist in the resulting OCI index. This does not depend on GitHub's repository-attestation storage API, which is not available for this user-owned private repository configuration.
-
-CI infrastructure smoke is not the section-260 live project smoke and never grants `POST-DEPLOYMENT PASS`.
+ChatGPT/MCP, Cloudflare, Temporal, Supabase, Vercel and microfn are optional adapters. The core has no OpenAI/LLM dependency and can run from Python/OCI on any compatible host.
