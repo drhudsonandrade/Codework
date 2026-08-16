@@ -96,11 +96,11 @@ jobs:
             -v "$PWD/results:/workspace/results" \
             genoma-ngs-latest:${{ github.sha }} \
             nextflow run /opt/codework/main.nf --mode canary --outdir /workspace/results/nextflow-canary -ansi-log false
-          jq -e '.status == "PASS"' results/nextflow-canary/report.json >/dev/null
+          jq -e '.status == "PASS"' results/nextflow-canary/canary/report.json >/dev/null
       - name: Session-promote candidate and enforce freshness gate
         run: |
           jq -e '.status == "PASS"' results/canary/report.json >/dev/null
-          jq -e '.status == "PASS"' results/nextflow-canary/report.json >/dev/null
+          jq -e '.status == "PASS"' results/nextflow-canary/canary/report.json >/dev/null
           python3 scripts/promote_latest_candidate.py \
             --canary results/canary/report.json \
             --inventory results/canary/conda-inventory.json \
@@ -169,7 +169,7 @@ jobs:
             -v "$PWD/results:/workspace/results" \
             genoma-ngs-latest:${{ github.sha }} \
             nextflow run /opt/codework/main.nf --mode canary --outdir /workspace/results/nextflow-canary -ansi-log false
-          jq -e '.status == "PASS"' results/nextflow-canary/report.json >/dev/null
+          jq -e '.status == "PASS"' results/nextflow-canary/canary/report.json >/dev/null
           python3 scripts/promote_latest_candidate.py \
             --canary results/canary/report.json \
             --inventory results/canary/conda-inventory.json \
