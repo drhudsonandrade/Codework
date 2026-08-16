@@ -16,15 +16,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Create source archive
+      - name: Create source archive outside the directory being archived
         run: |
-          tar --exclude='.git' -czf genoma-source.tgz .
-          sha256sum genoma-source.tgz > genoma-source.tgz.sha256
+          tar --exclude='.git' -czf "$RUNNER_TEMP/genoma-source.tgz" .
+          sha256sum "$RUNNER_TEMP/genoma-source.tgz" > "$RUNNER_TEMP/genoma-source.tgz.sha256"
       - uses: actions/upload-artifact@v4
         with:
           name: genoma-source-${{ github.sha }}
           path: |
-            genoma-source.tgz
-            genoma-source.tgz.sha256
+            ${{ runner.temp }}/genoma-source.tgz
+            ${{ runner.temp }}/genoma-source.tgz.sha256
           retention-days: 7
           if-no-files-found: error
