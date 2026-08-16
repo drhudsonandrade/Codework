@@ -24,15 +24,15 @@ REQUIRED_PATHS = (
     "manifests/GRCh38.sources.tsv", "manifests/GRCh38.lock.sha256.example", "manifests/RULESET_V3.3.sha256",
     "normative/sealed/MANIFEST.json", "normative/sealed/README.md",
     "scripts/__init__.py", "scripts/sealed_ruleset.py", "scripts/check_versions.sh", "scripts/fetch_grch38.sh",
-    "scripts/build_bwa_mem2_index.sh", "scripts/validate_grch38.sh", "scripts/generate_canary.py",
-    "scripts/score_variants.py", "scripts/run_canary.sh", "scripts/verify_ruleset.sh", "scripts/materialize_ruleset.py",
-    "scripts/run_live_post_deployment_smoke.py", "scripts/runtime_resource_gate.py",
+    "scripts/build_bwa_mem2_index.sh", "scripts/validate_grch38.sh", "scripts/validate_bwa_mem2_functional.sh",
+    "scripts/generate_canary.py", "scripts/score_variants.py", "scripts/run_canary.sh", "scripts/verify_ruleset.sh",
+    "scripts/materialize_ruleset.py", "scripts/run_live_post_deployment_smoke.py", "scripts/runtime_resource_gate.py",
     "scripts/prepare_latest_candidate.py", "scripts/promote_latest_candidate.py", "scripts/freshness_gate.py",
     "scripts/latest_runtime_resource_gate.py", "scripts/verify_runtime_gate_manifest.py",
     "scripts/wgs_input_gate.py", "scripts/wgs_align_or_stage.sh", "scripts/build_wgs_curated_manifest.py",
-    "scripts/query_evidence.py", "scripts/generate_report.py",
-    "reporting/__init__.py", "reporting/catalog.json", "reporting/engine.py", "reporting/editorial_v3.py",
-    "reporting/requirements.txt", "evidence_adapters/__init__.py",
+    "scripts/query_evidence.py", "scripts/build_adapter_capabilities.py", "scripts/generate_report.py",
+    "scripts/generate_all_reports.py", "reporting/__init__.py", "reporting/catalog.json", "reporting/engine.py",
+    "reporting/editorial_v3.py", "reporting/requirements.txt", "evidence_adapters/__init__.py",
     "policy_engine/pyproject.toml", "policy_engine/genoma_policy/engine.py", "policy_engine/genoma_policy/attestation.py",
     "policy_engine/genoma_policy/ledger.py", "policy_engine/policy/schema/execution-manifest.schema.json", "policy_engine/Dockerfile",
     "mcp/package.json", "mcp/package-lock.json", "mcp/tsconfig.json", "mcp/src/server.ts", "deploy/docker-compose.yml",
@@ -66,8 +66,6 @@ def validate(root: Path) -> list[str]:
         if not (root / relative).is_file():
             errors.append(f"missing required path: {relative}")
 
-    # The active plaintext ruleset is created only at runtime. Keeping an active copy in
-    # the repository would violate the normative uniqueness contract.
     active = []
     for candidate in root.rglob("REGRAS_PROJETO_GENOMA*.txt"):
         if any(part in SKIP_PARTS for part in candidate.parts):
@@ -143,9 +141,18 @@ def validate(root: Path) -> list[str]:
         text = ngs_gate.read_text(encoding="utf-8")
         if "bash -lc './scripts/run_canary.sh" in text:
             errors.append("NGS gate must not bypass micromamba environment with a login-shell canary")
-        for token in ("promotion_status", "freshness_gate.py", "GRCh38.lock.sha256.approved", "[self-hosted, linux, x64, genoma-production, highmem]"):
-            if token not in text and token != "promotion_status":
+        for token in (
+            "freshness_gate.py", "GRCh38.lock.sha256.approved",
+            "[self-hosted, linux, x64, genoma-production, highmem]",
+            "nextflow run /opt/codework/main.nf --mode canary",
+            "validate_bwa_mem2_functional.sh",
+        ):
+            if token not in text:
                 errors.append(f"NGS gate missing current-session readiness contract: {token}")
+
+    nextflow_cfg = root / "nextflow.config"
+    if nextflow_cfg.is_file() and "nextflowVersion = '!>=26.04.6'" not in nextflow_cfg.read_text(encoding="utf-8"):
+        errors.append("Nextflow manifest must permit tested forward versions while enforcing minimum 26.04.6")
 
     adapters = root / "evidence_adapters/__init__.py"
     if adapters.is_file():
@@ -200,7 +207,7 @@ def main() -> None:
     print("PASS\trepository_active_rulesets\t0")
     print("PASS\tsealed_normative_transport\tchunked transport verified through shared decoder")
     print("PASS\tgrch38_manifest\t9/9")
-    print("PASS\tpre_dna_readiness_contract\tlatest-tested candidate + canary + session promotion + freshness + runtime/resource gate present")
+    print("PASS\tpre_dna_readiness_contract\tlatest-tested candidate + direct/Nextflow canaries + session promotion + freshness + runtime/resource gate present")
     print("PASS\twgs_scientific_data_plane_contract\treal SNV/indel path + explicit unsupported complex classes")
     print("PASS\tevidence_adapter_contract\tClinVar/ClinGen/CPIC/ClinPGx/gnomAD/PGS Catalog traceable adapters present")
     print("PASS\treporting_contract\t11-model deterministic renderer + PDF/DOCX editorial v3 present")
