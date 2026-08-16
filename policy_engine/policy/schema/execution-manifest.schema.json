@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genoma.local/schema/execution-manifest-v3.3.json",
+  "title": "GENOMA v3.3 Execution Manifest",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["case_id", "session_id", "ruleset", "operation", "section_attestations"],
+  "properties": {
+    "case_id": {"type": "string", "minLength": 1},
+    "session_id": {"type": "string", "minLength": 1},
+    "ruleset": {"type": "object", "required": ["version", "sha256", "effective_date"], "properties": {"version": {"const": "v3.3"}, "effective_date": {"const": "14/08/2026"}, "sha256": {"const": "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a"}}},
+    "operation": {"type": "object", "required": ["name", "analysis_relevant", "requires_real_calling", "output"], "properties": {"name": {"type": "string"}, "analysis_relevant": {"type": "boolean"}, "requires_real_calling": {"type": "boolean"}, "output": {"enum": ["ANALYSIS", "FINAL_AUDITED_REPORT", "MODEL", "QC_ONLY", "RESEARCH"]}}},
+    "inputs": {"type": "array", "items": {"type": "object", "required": ["id", "kind", "source", "sha256"], "properties": {"id": {"type": "string"}, "kind": {"type": "string"}, "source": {"type": "string"}, "sha256": {"type": "string", "minLength": 3}, "build": {"type": ["string", "null"]}, "transformed": {"type": "boolean"}, "parent_sha256": {"type": "string"}}}},
+    "consent": {"type": "object", "properties": {"verified": {"type": "boolean"}, "version": {"type": "string"}, "authorized_domains": {"type": "array", "items": {"type": "string"}}}},
+    "qc": {"type": "object", "properties": {"status": {"$ref": "#/$defs/operationalStatus"}, "passed": {"type": "boolean"}, "evidence_refs": {"type": "array", "items": {"type": "string"}}}},
+    "claims": {"type": "array", "items": {"type": "object", "required": ["id", "nature", "domain", "status", "priority"], "properties": {"id": {"type": "string"}, "nature": {"enum": ["FATO CONFIRMADO", "INFERÊNCIA", "ASSOCIAÇÃO", "HIPÓTESE", "DESCONHECIDO"]}, "domain": {"enum": ["CLÍNICO", "PREDISPOSIÇÃO", "PESQUISA", "CURIOSIDADE"]}, "status": {"$ref": "#/$defs/operationalStatus"}, "priority": {"enum": ["P1", "P2", "P3", "P4", "P5"]}, "evidence_refs": {"type": "array", "items": {"type": "string"}}}}},
+    "section_attestations": {"type": "array", "minItems": 263, "maxItems": 263, "items": {"type": "object", "additionalProperties": false, "required": ["section", "rule_id", "rule_sha256", "applicability", "status", "decision", "justification", "evidence_refs", "trace"], "properties": {
+      "section": {"type": "integer", "minimum": 0, "maximum": 262}, "rule_id": {"type": "string", "pattern": "^GENOMA-V3\\.3-S[0-9]{3}$"}, "rule_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+      "applicability": {"enum": ["APPLICABLE", "NOT_APPLICABLE", "UNRESOLVED"]}, "status": {"$ref": "#/$defs/operationalStatus"}, "decision": {"enum": ["SATISFIED", "BLOCKED", "NOT_APPLICABLE", "UNRESOLVED"]},
+      "justification": {"type": "string", "minLength": 1}, "evidence_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+      "trace": {"type": "object", "additionalProperties": false, "required": ["attestation_id", "created_at", "actor_type", "actor_id", "method", "run_id", "input_sha256", "output_sha256", "tool_versions"], "properties": {
+        "attestation_id": {"type": "string", "minLength": 1}, "created_at": {"type": "string", "format": "date-time"}, "actor_type": {"enum": ["HUMAN", "SOFTWARE", "SERVICE"]}, "actor_id": {"type": "string", "minLength": 1}, "method": {"type": "string", "minLength": 1}, "run_id": {"type": "string", "minLength": 1},
+        "input_sha256": {"type": "array", "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}, "output_sha256": {"type": "array", "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}, "tool_versions": {"type": "object", "additionalProperties": {"type": "string"}}
+      }}
+    }}}
+  },
+  "$defs": {"operationalStatus": {"enum": ["EXECUTADO", "VERIFICADO", "INFERIDO", "PROPOSTO", "NÃO DISPONÍVEL"]}}
+}

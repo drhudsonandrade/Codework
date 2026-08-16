@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "genoma-policy-engine"
+version = "0.2.0"
+description = "Executable policy engine for GENOMA ruleset v3.3"
+readme = "README_GENOMA_POLICY.md"
+requires-python = ">=3.11"
+authors = [{name = "Projeto GENOMA"}]
+license = {text = "Private project - all rights reserved"}
+dependencies = []
+
+[project.scripts]
+genoma-policy = "genoma_policy.cli:main"
+
+[tool.setuptools]
+packages = ["genoma_policy"]

@@ -1,0 +1,16 @@
+services:
+  policy-engine:
+    build:
+      context: ..
+      dockerfile: policy_engine/Dockerfile
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - "${GENOMA_RULESET_PATH:?set GENOMA_RULESET_PATH}:/run/genoma/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt:ro"
+      - "${GENOMA_RULESET_SHA_MANIFEST:?set GENOMA_RULESET_SHA_MANIFEST}:/run/genoma/manifests/RULESET_V3.3.sha256:ro"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
