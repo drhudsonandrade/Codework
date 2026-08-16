@@ -3,7 +3,7 @@
 
 The renderer never interprets DNA. It only turns already-curated, provenance-bearing
 structured data into publication artifacts. Scientific interpretation remains upstream
-behind the policy/QC/evidence gates.
+behind the policy/QC/evidence/audit gates.
 """
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent
 CATALOG_PATH = ROOT / "catalog.json"
 EXPECTED_RULESET = {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026"}
+REQUIRED_PLANES = ("policy_control", "scientific_data", "evidence", "audit")
 
 
 class ReportReleaseError(RuntimeError):
@@ -37,10 +38,29 @@ def _publication_blockers(data: dict[str, Any]) -> list[str]:
     for key, expected in EXPECTED_RULESET.items():
         if ruleset.get(key) != expected:
             blockers.append(f"ruleset:{key}")
-    gate = data.get("publication_gate") if isinstance(data.get("publication_gate"), dict) else {}
+
+    publication = data.get("publication_gate") if isinstance(data.get("publication_gate"), dict) else {}
     for key in ("passed", "consent_verified", "qc_verified", "evidence_verified", "placeholders_resolved"):
-        if gate.get(key) is not True:
+        if publication.get(key) is not True:
             blockers.append(f"publication_gate:{key}")
+
+    policy = data.get("policy_evaluation") if isinstance(data.get("policy_evaluation"), dict) else {}
+    if policy.get("ready_for_requested_operation") is not True:
+        blockers.append("policy_evaluation:ready_for_requested_operation")
+    planes = policy.get("planes") if isinstance(policy.get("planes"), dict) else {}
+    for plane_name in REQUIRED_PLANES:
+        plane = planes.get(plane_name) if isinstance(planes.get(plane_name), dict) else {}
+        if plane.get("state") != "PASS":
+            blockers.append(f"policy_evaluation:plane:{plane_name}")
+
+    gates = policy.get("gates") if isinstance(policy.get("gates"), list) else []
+    final_audit = next((g for g in gates if isinstance(g, dict) and g.get("gate") == "FINAL_AUDIT_GATE"), None)
+    if not isinstance(final_audit, dict) or final_audit.get("state") != "PASS":
+        blockers.append("policy_evaluation:FINAL_AUDIT_GATE")
+
+    # POST_DEPLOYMENT is intentionally not a report-release blocker. The actual status
+    # is printed in the report. The ruleset allows the project to remain PENDENTE until
+    # the separate live deployment ceremony has genuinely passed.
     return blockers
 
 
