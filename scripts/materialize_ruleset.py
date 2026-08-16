@@ -88,9 +88,10 @@ def materialize(output_dir: Path) -> tuple[Path, dict[str, object]]:
         raise RuntimeError("sealed manifest canonical filename mismatch")
     transport = SEALED_DIR / str(manifest.get("transport_file"))
     encoded = transport.read_bytes()
-    if sha256_bytes(encoded) != manifest.get("transport_sha256"):
+    normalized_transport = b"".join(encoded.split())
+    if sha256_bytes(normalized_transport) != manifest.get("transport_sha256"):
         raise RuntimeError("sealed transport SHA-256 mismatch")
-    compressed = base64.b64decode(b"".join(encoded.split()), validate=True)
+    compressed = base64.b64decode(normalized_transport, validate=True)
     if sha256_bytes(compressed) != manifest.get("gzip_sha256"):
         raise RuntimeError("sealed gzip SHA-256 mismatch")
     raw = gzip.decompress(compressed)
