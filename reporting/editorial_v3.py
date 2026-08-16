@@ -60,7 +60,7 @@ def _pdf(rendered: dict[str, Any], path: Path) -> None:
     banner = Table(
         [
             [Paragraph(title, styles["GenomaTitle"])],
-            [Paragraph("Resultado estruturado com rastreabilidade, limites metodológicos e linguagem técnica/leiga.", styles["GenomaSubtitle"])],
+            [Paragraph("RESULTADO GENÔMICO · Saída determinística com rastreabilidade, limites metodológicos e linguagem técnica/leiga.", styles["GenomaSubtitle"])],
         ],
         colWidths=[176 * mm],
     )
@@ -282,7 +282,7 @@ def _docx(rendered: dict[str, Any], path: Path) -> None:
     run.font.color.rgb = RGBColor(255, 255, 255)
     paragraph = banner.cell(1, 0).paragraphs[0]
     paragraph.paragraph_format.space_after = Pt(12)
-    run = paragraph.add_run("Resultado estruturado com rastreabilidade, limites metodológicos e linguagem técnica/leiga.")
+    run = paragraph.add_run("RESULTADO GENÔMICO · Saída determinística com rastreabilidade, limites metodológicos e linguagem técnica/leiga.")
     run.font.size = Pt(10)
     run.font.color.rgb = RGBColor.from_string("D7E3EF")
     doc.add_paragraph().paragraph_format.space_after = Pt(1)
