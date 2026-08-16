@@ -20,7 +20,8 @@ class WorkflowContractTest(unittest.TestCase):
     def test_latest_candidate_must_execute_nextflow_orchestration_before_promotion(self):
         workflow = (ROOT / ".github/workflows/genoma-ngs-runtime-gate.yml").read_text(encoding="utf-8")
         self.assertIn("nextflow run /opt/codework/main.nf --mode canary", workflow)
-        self.assertIn("results/nextflow-canary/report.json", workflow)
+        self.assertIn("results/nextflow-canary/canary/report.json", workflow)
+        self.assertNotIn("results/nextflow-canary/report.json", workflow)
         config = (ROOT / "nextflow.config").read_text(encoding="utf-8")
         self.assertIn("nextflowVersion = '!>=26.04.6'", config)
 
