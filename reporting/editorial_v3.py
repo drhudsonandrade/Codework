@@ -21,38 +21,58 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _verified_external_manifest(template_dir: Path) -> tuple[dict[str, Any], dict[str, str]]:
-    """Load coordinates only from the hash-pinned external v3 template pack.
+def _verified_coordinate_manifest(template_dir: Path) -> tuple[dict[str, Any], dict[str, str]]:
+    """Load coordinates only from a hash-pinned v3 coordinate pair.
 
-    The large coordinate inventory is intentionally not stored in the application repository.
-    The repository carries only its approved SHA-256 identities. A modified pack fails closed.
+    Prefer the historical approved external pair when installed. Otherwise accept the v2
+    pair produced deterministically from the exact hash-pinned v3.0 PDFs, but only if both
+    generated artifacts match the SHA-256 identities carried by the repository index.
     """
     index = json.loads(_template_v3.MANIFEST_PATH.read_text(encoding="utf-8"))
-    manifest_meta = index.get("external_coordinate_manifest") or {}
-    detail_meta = index.get("external_coordinate_detail") or {}
-    manifest_path = template_dir / str(manifest_meta.get("filename") or "")
-    detail_path = template_dir / str(detail_meta.get("filename") or "")
-    if not manifest_path.is_file() or not detail_path.is_file():
-        raise _template_v3.TemplateV3Error("external v3 coordinate manifest/detail is missing from template pack")
-    actual_manifest = _sha256(manifest_path)
-    actual_detail = _sha256(detail_path)
-    if actual_manifest != manifest_meta.get("sha256"):
-        raise _template_v3.TemplateV3Error("external v3 coordinate manifest checksum mismatch")
-    if actual_detail != detail_meta.get("sha256"):
-        raise _template_v3.TemplateV3Error("external v3 coordinate detail checksum mismatch")
-    detailed = _ORIGINAL_LOADER(manifest_path)
-    return detailed, {
-        "manifest": actual_manifest,
-        "detail": actual_detail,
-    }
+    pairs = (
+        ("external", index.get("external_coordinate_manifest") or {}, index.get("external_coordinate_detail") or {}),
+        ("generated", index.get("generated_coordinate_manifest") or {}, index.get("generated_coordinate_detail") or {}),
+    )
+    errors: list[str] = []
+    for mode, manifest_meta, detail_meta in pairs:
+        manifest_path = template_dir / str(manifest_meta.get("filename") or "")
+        detail_path = template_dir / str(detail_meta.get("filename") or "")
+        if not manifest_path.is_file() or not detail_path.is_file():
+            errors.append(f"{mode}:missing")
+            continue
+        actual_manifest = _sha256(manifest_path)
+        actual_detail = _sha256(detail_path)
+        if actual_manifest != manifest_meta.get("sha256") or actual_detail != detail_meta.get("sha256"):
+            raise _template_v3.TemplateV3Error(f"{mode} v3 coordinate checksum mismatch")
+        if mode == "external":
+            detailed = _ORIGINAL_LOADER(manifest_path)
+        else:
+            detailed = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if detailed.get("schema") != "genoma-editorial-v3-reference-manifest-v2":
+                raise _template_v3.TemplateV3Error("generated v3 coordinate schema mismatch")
+            if set(detailed.get("reports", {})) != {f"{i:02d}" for i in range(1, 12)}:
+                raise _template_v3.TemplateV3Error("generated v3 coordinate report set mismatch")
+            for rid, summary in index["reports"].items():
+                detail = detailed["reports"][rid]
+                for key in ("filename", "sha256", "page_count", "placeholder_count"):
+                    if detail.get(key) != summary.get(key):
+                        raise _template_v3.TemplateV3Error(f"generated coordinate/index mismatch: {rid}:{key}")
+        return detailed, {
+            "mode": mode,
+            "manifest": actual_manifest,
+            "detail": actual_detail,
+        }
+    raise _template_v3.TemplateV3Error(
+        "no approved v3 coordinate pair is installed; run scripts/install_report_templates.py on the exact template pack (" + ",".join(errors) + ")"
+    )
 
 
 def write_editorial_bundle(rendered: dict[str, Any], output_dir: Path, *, stem: str | None = None) -> dict[str, Path]:
     """Route final publishing through the exact v3 template engine when requested.
 
     Programmatic rendering remains available for development fixtures. Final template-v3
-    publishing fails closed if the external reference pack or its coordinate inventory differs
-    from the hash-pinned v3.0 reference identities.
+    publishing fails closed if the reference PDF or coordinate inventory differs from its
+    pinned identity.
     """
     if not _template_v3.template_mode_requested(rendered):
         return _programmatic_write_editorial_bundle(rendered, output_dir, stem=stem)
@@ -65,11 +85,10 @@ def write_editorial_bundle(rendered: dict[str, Any], output_dir: Path, *, stem: 
     data = rendered.get("data", {}) if isinstance(rendered.get("data"), dict) else {}
     strict = bool(data.get("template_fields_complete"))
     template_dir = _template_v3.template_dir_from_environment()
-    detailed_manifest, coordinate_hashes = _verified_external_manifest(template_dir)
+    detailed_manifest, coordinate_hashes = _verified_coordinate_manifest(template_dir)
 
-    # template_v3's internal helpers call load_reference_manifest() without a path. Bind that
-    # call to the already hash-verified external coordinate manifest for the duration of this
-    # render. The lock prevents cross-request manifest races in concurrent report generation.
+    # Internal template helpers call load_reference_manifest() without a path. Bind that call
+    # to the already hash-verified coordinate inventory for the duration of this render.
     with _TEMPLATE_LOCK:
         previous_loader = _template_v3.load_reference_manifest
         _template_v3.load_reference_manifest = lambda *args, **kwargs: detailed_manifest
@@ -89,7 +108,7 @@ def write_editorial_bundle(rendered: dict[str, Any], output_dir: Path, *, stem: 
         "docx": docx_runtime,
         "coordinate_manifest_sha256": coordinate_hashes,
         "visual_reference": "GENOMA model suite v3.0",
-        "claim_rule": "PDF pixel parity and DOCX visual parity are reported separately; DOCX renderer-dependence is never promoted to pixel-identical without measured evidence.",
+        "claim_rule": "PDF static-pixel parity and DOCX visual parity are reported separately; DOCX renderer-dependence is never promoted to pixel-identical without measured evidence.",
     }
     (output_dir / f"{stem}.editorial.json").write_text(
         json.dumps(runtime, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
