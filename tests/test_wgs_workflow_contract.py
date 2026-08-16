@@ -12,20 +12,26 @@ class WgsWorkflowContractTest(unittest.TestCase):
         self.assertIn("WGS_PRODUCTION", main)
         self.assertIn("CANARY", main)
         self.assertIn("runtime_gate_manifest", main)
+        self.assertIn("freshness_state_manifest", main)
 
     def test_real_wgs_workflow_has_fail_closed_scientific_planes(self):
         workflow = (ROOT / "workflows/wgs.nf").read_text(encoding="utf-8")
         for token in (
             "VERIFY_RUNTIME_GATE",
+            "REFRESH_FRESHNESS_GATE",
+            "VERIFY_CONSENT_PROVENANCE",
             "INGEST_AND_QC",
             "ALIGN_OR_STAGE",
+            "RERUN_SAMPLE_RUNTIME_GATE",
             "CALL_SHORT_VARIANTS",
             "NORMALIZE_VARIANTS",
+            "ANNOTATE_EVIDENCE",
             "BUILD_CURATED_MANIFEST",
             "POLICY_EVALUATE",
             "GENERATE_REPORTS",
         ):
             self.assertIn(token, workflow)
+        self.assertIn("ready_for_first_dna_read", workflow)
         self.assertIn("unsupported_variant_classes", workflow)
 
     def test_wgs_does_not_claim_specialized_classes_from_generic_vcf(self):
