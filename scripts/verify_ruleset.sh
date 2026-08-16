@@ -29,7 +29,7 @@ observed=$(sha256sum "$RULESET_PATH" | awk '{print $1}')
 grep -Fxq 'STATUS NORMATIVO: VIGENTE' "$RULESET_PATH"
 grep -Fxq 'VERSÃO NORMATIVA: v3.3' "$RULESET_PATH"
 grep -Fxq 'DATA FORMAL DE EMISSÃO E VIGÊNCIA: 14/08/2026' "$RULESET_PATH"
-grep -Fxq 'IDENTIFICADOR NORMATIVO: GENOMA-HUDSON-RULESET-v3.3' "$RULESET_PATH"
+grep -Fxq 'IDENTIFICADOR NORMATIVO: GENOMA--RULESET-v3.3' "$RULESET_PATH"
 
 printf 'ruleset_hash\tPASS\tsha256=%s\n' "$observed"
 printf 'ruleset_header\tPASS\tstatus=VIGENTE\tversion=v3.3\tdate=14/08/2026\n'
