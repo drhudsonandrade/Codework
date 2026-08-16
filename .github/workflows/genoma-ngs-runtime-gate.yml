@@ -1,0 +1,82 @@
+name: GENOMA NGS Runtime Resource Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'preflight uses GitHub-hosted runner; full-grch38 requires a self-hosted high-memory production runner'
+        required: true
+        default: preflight
+        type: choice
+        options: [preflight, full-grch38]
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    if: inputs.mode == 'preflight'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned NGS runtime image
+        run: docker build --tag genoma-ngs-runtime:${{ github.sha }} .
+      - name: Execute current-session toolchain + synthetic calling canary
+        run: |
+          mkdir -p results/runtime-gate
+          docker run --rm \
+            -v "$PWD/results:/workspace/results" \
+            genoma-ngs-runtime:${{ github.sha }} \
+            bash -lc './scripts/run_canary.sh /workspace/results/canary && python3 scripts/runtime_resource_gate.py --ref-root /refs --bam /workspace/results/canary/work/CANARY.sorted.bam --output /workspace/results/runtime-gate/preflight.json'
+      - name: Record honest preflight limitation
+        run: |
+          jq -e '.checks.executables_and_versions.status == "EXECUTADO"' results/runtime-gate/preflight.json >/dev/null
+          jq -e '.ready_for_real_calling == false' results/runtime-gate/preflight.json >/dev/null
+          echo 'Standard GitHub-hosted preflight intentionally does not claim full GRCh38 production readiness.'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: genoma-ngs-runtime-preflight-${{ github.sha }}
+          path: results/runtime-gate/preflight.json
+          retention-days: 90
+
+  full-grch38:
+    if: inputs.mode == 'full-grch38'
+    runs-on: [self-hosted, linux, x64, genoma-production, highmem]
+    timeout-minutes: 1440
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert production reference root and host capacity
+        run: |
+          : "${REF_ROOT:=/srv/genoma/refs/GRCh38}"
+          echo "REF_ROOT=$REF_ROOT" >> "$GITHUB_ENV"
+          test -d "$REF_ROOT"
+          awk '/MemTotal:/ {if ($2 < 100663296) exit 1}' /proc/meminfo
+          df -Pk "$REF_ROOT" | awk 'NR==2 {if ($4 < 104857600) exit 1}'
+      - name: Build pinned NGS runtime image
+        run: docker build --tag genoma-ngs-runtime:${{ github.sha }} .
+      - name: Verify/download locked GRCh38 resources
+        run: |
+          test -s "$REF_ROOT/GRCh38.lock.sha256.approved" || { echo 'NÃO DISPONÍVEL: externally approved GRCh38 lock missing'; exit 2; }
+          docker run --rm -e REF_ROOT=/refs -v "$REF_ROOT:/refs" genoma-ngs-runtime:${{ github.sha }} bash -lc './scripts/validate_grch38.sh'
+      - name: Build BWA-MEM2 indexes only when absent
+        run: |
+          fasta="$REF_ROOT/Homo_sapiens_assembly38.fasta"
+          if [ ! -s "${fasta}.bwt.2bit.64" ]; then
+            docker run --rm -e REF_ROOT=/refs -v "$REF_ROOT:/refs" genoma-ngs-runtime:${{ github.sha }} bash -lc './scripts/build_bwa_mem2_index.sh'
+          fi
+      - name: Re-run full current-session Runtime/Resource Gate
+        run: |
+          mkdir -p results/runtime-gate
+          docker run --rm -e REF_ROOT=/refs \
+            -v "$REF_ROOT:/refs:ro" -v "$PWD/results:/workspace/results" \
+            genoma-ngs-runtime:${{ github.sha }} \
+            bash -lc 'python3 scripts/runtime_resource_gate.py --ref-root /refs --output /workspace/results/runtime-gate/full-grch38.json'
+          jq -e '.checks.executables_and_versions.status == "EXECUTADO" and .checks.reference_build_and_contigs.status == "EXECUTADO" and .checks.fasta_fai_dictionary.status == "EXECUTADO" and .checks.aligner_indexes.status == "EXECUTADO" and .checks.required_resources_checksums.status == "EXECUTADO"' results/runtime-gate/full-grch38.json >/dev/null
+          echo 'Reference/tool portion EXECUTADO. Sample/read-group/data integrity remains per-case and must be re-run with actual FASTQ/BAM/CRAM before calling.'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: genoma-ngs-runtime-full-${{ github.sha }}
+          path: results/runtime-gate/full-grch38.json
+          retention-days: 365
