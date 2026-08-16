@@ -16,6 +16,7 @@ MANAGED_RUNTIME_PACKAGES = (
     "snakemake-minimal",
     "curl",
     "procps-ng",
+    "poppler",
     "jq",
     "pigz",
 )

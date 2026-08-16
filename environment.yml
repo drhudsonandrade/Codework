@@ -17,5 +17,6 @@ dependencies:
   - curl
   - coreutils
   - procps-ng
+  - poppler=26.07.0
   - jq
   - pigz
