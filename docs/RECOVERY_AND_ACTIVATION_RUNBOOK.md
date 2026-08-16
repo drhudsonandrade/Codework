@@ -16,7 +16,7 @@ suite passes 15/15 with no critical failure.
 | Layer | Source of truth | Retention rule | Recovery role |
 |---|---|---|---|
 | Source and configuration | Private GitHub repository, protected `main` | No fixed workflow-artifact expiry; retained while the repository/account is retained | Rebuild every component from reviewed source |
-| Executable environment | `ghcr.io/drhudsonandrade/codework-genome` pinned by digest | Retained under the repository owner's package policy | Pull the exact tested container without resolving packages again |
+| Executable environment | `ghcr.io/<github-owner>/codework-genome` pinned by digest | Retained under the repository owner's package policy | Pull the exact tested container without resolving packages again |
 | Build/test evidence | Recovery bundle in the project's persistent document store | Retained until the owner deletes it or an account/workspace policy removes it | Preserve the synthetic canary ZIP, checksums and release evidence beyond Actions retention |
 | GitHub Actions artifacts | `synthetic-canary-*` and `ghcr-image-reference-*` | Requested retention: 90 days, capped by repository/org policy | Convenient CI evidence only; never the sole backup |
 | Future genomic data | Encrypted VM block/object storage plus an independent encrypted backup | Provider lifecycle policy controlled by the owner | Store FASTQ/BAM/CRAM/VCF and GRCh38; never commit or upload them through ChatGPT |
@@ -38,11 +38,11 @@ keeping at least two independent copies and retaining the manifests needed to ve
 
 ## Clean recovery from GitHub and GHCR
 
-Use a trusted Linux host with Docker. Replace the digest placeholder with the value recorded by the
-successful main-branch workflow or the recovery manifest.
+Use a trusted Linux host with Docker. Replace the placeholders with the current private repository owner and the digest recorded by the successful main-branch workflow or the recovery manifest.
 
 ```bash
-git clone https://github.com/drhudsonandrade/Codework.git
+export GITHUB_REPOSITORY_OWNER='<github-owner>'
+git clone "https://github.com/${GITHUB_REPOSITORY_OWNER}/Codework.git"
 cd Codework
 git switch main
 python3 scripts/validate_repo.py
@@ -50,9 +50,9 @@ python3 -m unittest discover -s tests -v
 npm ci --prefix mcp --ignore-scripts
 npm test --prefix mcp
 
-docker pull ghcr.io/drhudsonandrade/codework-genome@sha256:REPLACE_WITH_VERIFIED_DIGEST
+docker pull "ghcr.io/${GITHUB_REPOSITORY_OWNER}/codework-genome@sha256:REPLACE_WITH_VERIFIED_DIGEST"
 docker run --rm \
-  ghcr.io/drhudsonandrade/codework-genome@sha256:REPLACE_WITH_VERIFIED_DIGEST \
+  "ghcr.io/${GITHUB_REPOSITORY_OWNER}/codework-genome@sha256:REPLACE_WITH_VERIFIED_DIGEST" \
   /opt/codework/scripts/check_versions.sh
 ```
 
