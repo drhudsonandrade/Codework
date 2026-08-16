@@ -1,0 +1,125 @@
+name: GENOMA Per-Sample Runtime Resource Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      sample_id:
+        description: 'Pseudonymous local sample directory name under /srv/genoma/samples (letters, numbers, dot, underscore, dash only)'
+        required: true
+        type: string
+      input_kind:
+        description: 'Input files expected inside the local sample directory'
+        required: true
+        default: bam
+        type: choice
+        options: [bam, cram, fastq]
+      caller:
+        description: 'Caller compatibility profile'
+        required: true
+        default: gatk-haplotypecaller
+        type: choice
+        options: [gatk-haplotypecaller, bcftools, deepvariant]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: genoma-sample-${{ inputs.sample_id }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: Fresh gate on private production runner
+    runs-on: [self-hosted, linux, x64, genoma-production]
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve only local pre-provisioned sample and immutable runtime image
+        id: resolve
+        shell: bash
+        env:
+          SAMPLE_ID: ${{ inputs.sample_id }}
+          INPUT_KIND: ${{ inputs.input_kind }}
+          CALLER: ${{ inputs.caller }}
+        run: |
+          set -euo pipefail
+          [[ "$SAMPLE_ID" =~ ^[A-Za-z0-9._-]{1,80}$ ]] || { echo 'invalid pseudonymous sample_id'; exit 2; }
+          sample_root="/srv/genoma/samples/$SAMPLE_ID"
+          test -d "$sample_root" || { echo 'NÃO DISPONÍVEL: local sample directory missing'; exit 2; }
+          image_file=/srv/genoma/runtime/genoma-ngs-grch38.image
+          test -s "$image_file" || { echo 'NÃO DISPONÍVEL: immutable NGS+GRCh38 image reference not provisioned'; exit 2; }
+          image=$(tr -d '[:space:]' < "$image_file")
+          [[ "$image" =~ ^ghcr\.io/.+@sha256:[0-9a-f]{64}$ ]] || { echo 'invalid non-immutable image reference'; exit 2; }
+          mkdir -p results/sample-runtime-gate
+          echo "sample_root=$sample_root" >> "$GITHUB_OUTPUT"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          case "$INPUT_KIND" in
+            bam)  test -s "$sample_root/input.bam"  || { echo 'NÃO DISPONÍVEL: input.bam missing'; exit 2; } ;;
+            cram) test -s "$sample_root/input.cram" || { echo 'NÃO DISPONÍVEL: input.cram missing'; exit 2; } ;;
+            fastq)
+              test -s "$sample_root/R1.fastq.gz" || { echo 'NÃO DISPONÍVEL: R1.fastq.gz missing'; exit 2; }
+              test -s "$sample_root/R2.fastq.gz" || { echo 'NÃO DISPONÍVEL: R2.fastq.gz missing'; exit 2; }
+              ;;
+          esac
+          if [ "$CALLER" = deepvariant ]; then
+            test -s /srv/genoma/models/deepvariant/model.ckpt || { echo 'NÃO DISPONÍVEL: DeepVariant model missing'; exit 2; }
+          fi
+      - name: Pull runtime by immutable digest
+        run: docker pull '${{ steps.resolve.outputs.image }}'
+      - name: Execute fresh Runtime/Resource Gate inside the exact production image
+        shell: bash
+        env:
+          SAMPLE_ID: ${{ inputs.sample_id }}
+          INPUT_KIND: ${{ inputs.input_kind }}
+          CALLER: ${{ inputs.caller }}
+          IMAGE: ${{ steps.resolve.outputs.image }}
+          SAMPLE_ROOT: ${{ steps.resolve.outputs.sample_root }}
+        run: |
+          set -euo pipefail
+          args=(--ref-root /refs --caller "$CALLER" --require-real-calling --output /evidence/runtime-resource-gate.json --session-id "github-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}")
+          case "$INPUT_KIND" in
+            bam) args+=(--bam /sample/input.bam) ;;
+            cram) args+=(--cram /sample/input.cram) ;;
+            fastq) args+=(--fastq-r1 /sample/R1.fastq.gz --fastq-r2 /sample/R2.fastq.gz) ;;
+          esac
+          model_mount=()
+          if [ "$CALLER" = deepvariant ]; then
+            model_mount=(-v /srv/genoma/models/deepvariant/model.ckpt:/models/deepvariant/model.ckpt:ro)
+            args+=(--model /models/deepvariant/model.ckpt)
+          fi
+          docker run --rm \
+            --read-only --tmpfs /tmp:rw,noexec,nosuid,nodev,size=4g \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            -v "$SAMPLE_ROOT:/sample:ro" \
+            -v "$PWD/results/sample-runtime-gate:/evidence" \
+            "${model_mount[@]}" \
+            "$IMAGE" python3 scripts/runtime_resource_gate.py "${args[@]}"
+      - name: Assert no inherited PASS and every required gate executed in this session
+        shell: bash
+        run: |
+          set -euo pipefail
+          f=results/sample-runtime-gate/runtime-resource-gate.json
+          jq -e '.inherited_from_previous_session == false and .ready_for_real_calling == true and .status == "EXECUTADO"' "$f" >/dev/null
+          jq -e '[.checks[].status] | all(. == "EXECUTADO")' "$f" >/dev/null
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('results/sample-runtime-gate/runtime-resource-gate.json')
+          data=json.loads(p.read_text())
+          # Remove local absolute paths from the shareable audit projection; preserve hashes/status/tool versions.
+          def scrub(x):
+              if isinstance(x, dict):
+                  return {k: ('<private-local-path>' if k == 'path' and isinstance(v,str) else scrub(v)) for k,v in x.items()}
+              if isinstance(x, list): return [scrub(v) for v in x]
+              return x
+          Path('results/sample-runtime-gate/runtime-resource-gate.redacted.json').write_text(json.dumps(scrub(data),ensure_ascii=False,indent=2)+'\n')
+          PY
+          sha256sum results/sample-runtime-gate/runtime-resource-gate.redacted.json > results/sample-runtime-gate/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: genoma-runtime-gate-${{ inputs.sample_id }}-${{ github.run_id }}
+          path: |
+            results/sample-runtime-gate/runtime-resource-gate.redacted.json
+            results/sample-runtime-gate/SHA256SUMS
+          retention-days: 365
+          if-no-files-found: error
