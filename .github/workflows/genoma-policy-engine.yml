@@ -169,7 +169,7 @@ jobs:
           test "$health_state" = healthy
 
   publish:
-    name: Publish immutable OCI image + provenance
+    name: Publish immutable OCI image + embedded provenance
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [policy, rego, secrets, container]
     runs-on: ubuntu-latest
@@ -177,8 +177,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-      id-token: write
-      attestations: write
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v3
@@ -186,13 +184,15 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push immutable policy image
+      - name: Build and push immutable policy image with OCI provenance and SBOM
         id: push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: policy_engine/Dockerfile
           push: true
+          provenance: mode=max
+          sbom: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/genoma-policy-engine:${{ github.sha }}
             ghcr.io/${{ github.repository_owner }}/genoma-policy-engine:v0.2.0
@@ -200,18 +200,30 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=0.2.0
-      - name: Generate build provenance attestation
-        uses: actions/attest@v4
-        with:
-          subject-name: ghcr.io/${{ github.repository_owner }}/genoma-policy-engine
-          subject-digest: ${{ steps.push.outputs.digest }}
-          push-to-registry: true
-      - name: Record immutable image reference
+      - name: Verify OCI index contains attached attestations
+        env:
+          IMAGE_REF: ghcr.io/${{ github.repository_owner }}/genoma-policy-engine@${{ steps.push.outputs.digest }}
+        run: |
+          docker buildx imagetools inspect "$IMAGE_REF" --raw > genoma-policy-oci-index.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('genoma-policy-oci-index.json').read_text())
+          manifests = data.get('manifests', [])
+          assert manifests, 'OCI index has no manifests'
+          attached = [m for m in manifests if m.get('platform', {}).get('os') == 'unknown' and m.get('platform', {}).get('architecture') == 'unknown']
+          assert attached, 'no attached OCI provenance/SBOM manifest found'
+          PY
+      - name: Record immutable image reference and digest
         run: |
           printf 'ghcr.io/%s/genoma-policy-engine@%s\n' '${{ github.repository_owner }}' '${{ steps.push.outputs.digest }}' | tee genoma-policy-image-reference.txt
+          printf '%s\n' '${{ steps.push.outputs.digest }}' > genoma-policy-image-digest.txt
       - uses: actions/upload-artifact@v4
         with:
           name: genoma-policy-image-reference-${{ github.sha }}
-          path: genoma-policy-image-reference.txt
+          path: |
+            genoma-policy-image-reference.txt
+            genoma-policy-image-digest.txt
+            genoma-policy-oci-index.json
           retention-days: 90
           if-no-files-found: error
