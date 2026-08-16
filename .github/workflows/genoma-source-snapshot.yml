@@ -10,6 +10,7 @@ on:
 permissions:
   contents: read
 
+# Ephemeral developer artifact used only to make renderer QA reproducible.
 jobs:
   snapshot:
     runs-on: ubuntu-latest
