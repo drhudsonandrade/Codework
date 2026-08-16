@@ -1,6 +1,15 @@
 name: GENOMA Production Witness
 
 on:
+  pull_request:
+    paths:
+      - 'normative/**'
+      - 'manifests/RULESET_V3.3.sha256'
+      - 'policy_engine/**'
+      - 'scripts/materialize_ruleset.py'
+      - 'scripts/run_live_post_deployment_smoke.py'
+      - 'deploy/attestations/bootstrap-project-v3.3.json'
+      - '.github/workflows/genoma-production-witness.yml'
   push:
     branches: [main]
     paths:
@@ -17,7 +26,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: genoma-production-witness
+  group: genoma-production-witness-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -142,6 +151,7 @@ jobs:
           retention-days: 365
           if-no-files-found: error
       - name: Publish PASS witness to dedicated audit-evidence branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
         run: |
           set -euo pipefail
