@@ -1,6 +1,31 @@
 name: GENOMA NGS Runtime Resource Gate
 
 on:
+  pull_request:
+    paths:
+      - 'environment.yml'
+      - 'Dockerfile'
+      - 'scripts/prepare_latest_candidate.py'
+      - 'scripts/promote_latest_candidate.py'
+      - 'scripts/freshness_gate.py'
+      - 'scripts/latest_runtime_resource_gate.py'
+      - 'scripts/runtime_resource_gate.py'
+      - 'scripts/run_canary.sh'
+      - '.github/workflows/genoma-ngs-runtime-gate.yml'
+      - 'normative/**'
+  push:
+    branches: [main]
+    paths:
+      - 'environment.yml'
+      - 'Dockerfile'
+      - 'scripts/prepare_latest_candidate.py'
+      - 'scripts/promote_latest_candidate.py'
+      - 'scripts/freshness_gate.py'
+      - 'scripts/latest_runtime_resource_gate.py'
+      - 'scripts/runtime_resource_gate.py'
+      - 'scripts/run_canary.sh'
+      - '.github/workflows/genoma-ngs-runtime-gate.yml'
+      - 'normative/**'
   workflow_dispatch:
     inputs:
       mode:
@@ -24,7 +49,7 @@ permissions:
 
 jobs:
   preflight:
-    if: inputs.mode == 'preflight'
+    if: github.event_name != 'workflow_dispatch' || inputs.mode == 'preflight'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -83,7 +108,7 @@ jobs:
           if-no-files-found: error
 
   full-grch38:
-    if: inputs.mode == 'full-grch38'
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'full-grch38'
     runs-on: [self-hosted, linux, x64, genoma-production, highmem]
     timeout-minutes: 1440
     steps:
