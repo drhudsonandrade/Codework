@@ -6,7 +6,7 @@
 
 Repository creation, CI success and a synthetic canary do not establish post-deployment status. Promotion requires deployment on the target VM, current runtime/resource gates, a live MCP canary, and the section 260 suite at 15/15 with no critical failure.
 
-The external ruleset manifest is `manifests/RULESET_V3.3.sha256`. Its SHA-256 was calculated from the supplied canonical v3.3 file; the ruleset text itself is intentionally not committed to the public repository. Verify the secure copy before use:
+The external ruleset manifest is `manifests/RULESET_V3.3.sha256`. Its SHA-256 was calculated from the supplied canonical v3.3 file; the ruleset text itself is intentionally not committed to the repository. Verify the secure copy before use:
 
 ```bash
 scripts/verify_ruleset.sh /secure/project-sources/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt
@@ -18,11 +18,11 @@ This confirms the hash and the `VIGENTE`/`v3.3`/`14/08/2026` header but delibera
 
 You do not need to create folders in advance. Git creates paths such as `.github/workflows` when files are committed.
 
-1. Open <https://github.com/settings/installations> while signed in to the GitHub account that owns `drhudsonandrade/Codework`.
+1. Open <https://github.com/settings/installations> while signed in to the GitHub account that owns the private `Codework` repository.
 2. Locate the ChatGPT/OpenAI GitHub App and choose **Configure**.
 3. Under repository access, choose **Only select repositories** and select `Codework`, or choose all repositories if that broader scope is intentional.
 4. Confirm the requested permissions include repository contents and pull requests. GitHub App permissions are defined by the app; if write permissions are not requested, reconnecting cannot upgrade them.
-5. Open `https://github.com/drhudsonandrade/Codework/settings/actions` and allow Actions for the repository.
+5. Open the repository's **Settings → Actions** page and allow Actions for the repository.
 6. Before attaching any self-hosted runner, make the repository private. Never execute workflows from untrusted forks on the genomic VM.
 
 If ChatGPT still shows the repository but calls return `Unknown tool`, start a new ChatGPT conversation after reconnecting. If GitHub returns `403 Resource not accessible by integration`, re-open the installation page and verify that `Codework` is selected; this is an installation-scope problem, not a missing repository folder.
@@ -50,11 +50,12 @@ Enable disk encryption and restrict SSH/firewall access before copying any perso
 
 ## 3. Repository and container
 
-Clone the private repository on the VM and build or pull an immutable image:
+Clone the private repository on the VM and build or pull an immutable image. Set the owner at execution time instead of hard-coding a personal account name:
 
 ```bash
+export GITHUB_REPOSITORY_OWNER='<github-owner>'
 sudo install -d -o genome -g genome -m 0750 /opt/codework
-sudo -u genome git clone https://github.com/drhudsonandrade/Codework.git /opt/codework
+sudo -u genome git clone "https://github.com/${GITHUB_REPOSITORY_OWNER}/Codework.git" /opt/codework
 cd /opt/codework
 docker build --tag codework-genome:local .
 ```
@@ -62,7 +63,7 @@ docker build --tag codework-genome:local .
 After the main-branch workflow publishes GHCR, prefer a digest-pinned image in `/etc/codework/genome-mcp.env`:
 
 ```text
-GENOME_IMAGE=ghcr.io/drhudsonandrade/codework-genome@sha256:REPLACE_WITH_VERIFIED_DIGEST
+GENOME_IMAGE=ghcr.io/<github-owner>/codework-genome@sha256:REPLACE_WITH_VERIFIED_DIGEST
 MCP_MEMORY_LIMIT=12g
 MCP_CPU_LIMIT=4
 ```
