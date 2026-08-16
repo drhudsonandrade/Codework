@@ -1,0 +1,80 @@
+name: GENOMA visual QA candidates
+
+on:
+  push:
+    branches:
+      - fix/genoma-v3-pixel-qa-highmem
+    paths:
+      - 'reporting/**'
+      - 'tests/**'
+      - '.github/workflows/genoma-visual-qa-candidates.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  render-candidates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned renderer dependencies
+        run: pip install -r reporting/requirements.txt
+      - name: Generate all 11 v3 fixture reports
+        run: |
+          mkdir -p visual-qa/candidates
+          python3 - <<'PY'
+          from pathlib import Path
+          from reporting.engine import render_document
+          from reporting.editorial_v3 import write_editorial_bundle
+
+          PASSING_POLICY = {
+              'ready_for_requested_operation': True,
+              'planes': {
+                  'policy_control': {'state': 'PASS'},
+                  'scientific_data': {'state': 'PASS'},
+                  'evidence': {'state': 'PASS'},
+                  'audit': {'state': 'PASS'},
+              },
+              'gates': [{'gate': 'FINAL_AUDIT_GATE', 'state': 'PASS', 'blocking': True}],
+          }
+          data = {
+              'case_id': 'CASE-VISUAL-REFERENCE',
+              'summary': 'Conteúdo rastreável para teste editorial de regressão visual.',
+              'ruleset': {'status': 'VIGENTE', 'version': 'v3.3', 'effective_date': '14/08/2026'},
+              'publication_gate': {
+                  'passed': True,
+                  'consent_verified': True,
+                  'qc_verified': True,
+                  'evidence_verified': True,
+                  'placeholders_resolved': True,
+              },
+              'policy_evaluation': PASSING_POLICY,
+              'post_deployment_status': 'PASS',
+              'sections': {},
+              'findings': [],
+              'execution_manifest': {'status': 'VERIFICADO'},
+              'sources': ['fixture:visual-reference'],
+              'limitations': 'Fixture editorial; não representa paciente.',
+          }
+          out = Path('visual-qa/candidates')
+          for i in range(1, 12):
+              rid = f'{i:02d}'
+              rendered = render_document(rid, data, mode='FINAL')
+              write_editorial_bundle(rendered, out, stem=rid)
+          PY
+      - name: Structural validation
+        run: |
+          test "$(find visual-qa/candidates -maxdepth 1 -name '*.pdf' | wc -l)" -eq 11
+          test "$(find visual-qa/candidates -maxdepth 1 -name '*.docx' | wc -l)" -eq 11
+          python3 -m unittest tests.test_editorial_renderers -v
+      - uses: actions/upload-artifact@v4
+        with:
+          name: genoma-v3-visual-candidates-${{ github.sha }}
+          path: visual-qa/candidates
+          retention-days: 30
+          if-no-files-found: error
