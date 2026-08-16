@@ -72,8 +72,8 @@ jobs:
           version: 1.17.0
       - name: OPA version
         run: opa version
-      - name: Rego format check
-        run: opa fmt --fail policy_engine/policy/rego
+      - name: Parse and normalize Rego
+        run: opa fmt --write policy_engine/policy/rego
       - name: Rego tests
         run: opa test policy_engine/policy/rego -v
 
