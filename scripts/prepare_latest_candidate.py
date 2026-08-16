@@ -15,7 +15,7 @@ from pathlib import Path
 
 DEFAULT_MANAGED = {
     "python", "openjdk", "nodejs", "samtools", "bcftools", "htslib",
-    "bwa-mem2", "gatk4", "nextflow", "snakemake-minimal", "curl", "jq", "pigz",
+    "bwa-mem2", "gatk4", "nextflow", "snakemake-minimal", "curl", "procps-ng", "jq", "pigz",
 }
 
 _DEP = re.compile(r"^(\s*-\s*)([A-Za-z0-9_.+-]+)(?:=[^\s#]+)?(\s*(?:#.*)?)$")
@@ -38,8 +38,6 @@ def prepare_candidate(source: Path, destination: Path, *, managed: set[str] | No
             output.append(line)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text("".join(output), encoding="utf-8")
-    ordered = [name for name in DEFAULT_MANAGED if name in unpinned]
-    # Stable human-oriented order follows source occurrence when custom sets are used.
     ordered = [name for name in unpinned if name in managed]
     return {
         "schema": "genoma-latest-candidate-v1",
