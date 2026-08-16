@@ -1,0 +1,107 @@
+name: GENOMA canonical production ceremony
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'normative/**'
+      - 'policy_engine/**'
+      - 'deploy/attestations/bootstrap-project-v3.3.json'
+      - 'scripts/materialize_ruleset.py'
+      - 'scripts/run_live_post_deployment_smoke.py'
+      - '.github/workflows/genoma-production-ceremony.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-section-260:
+    name: Real instance + canonical live 15/15
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate repository and canonical transport
+        run: python3 scripts/validate_repo.py
+      - name: Materialize byte-exact normative source
+        run: |
+          mkdir -p "$RUNNER_TEMP/genoma-normative" production-evidence
+          python3 scripts/materialize_ruleset.py \
+            --output-dir "$RUNNER_TEMP/genoma-normative" \
+            --evidence production-evidence/ruleset-materialization.json
+          canonical="$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt"
+          test "$(stat -c '%a' "$canonical")" = 444
+          echo '187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a  '"$canonical" | sha256sum -c -
+      - name: Build exact policy image for this commit
+        run: |
+          docker build --file policy_engine/Dockerfile --tag genoma-policy-live:${{ github.sha }} .
+          docker image inspect genoma-policy-live:${{ github.sha }} --format '{{.Id}}' | tee production-evidence/container-image-id.txt
+      - name: Deploy hardened live instance with read-only canonical TXT
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          canonical="$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt"
+          cid=$(docker run -d --name genoma-policy-live \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            -v "$canonical:/run/genoma/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt:ro" \
+            -v "$PWD/manifests/RULESET_V3.3.sha256:/run/genoma/manifests/RULESET_V3.3.sha256:ro" \
+            -p 127.0.0.1:8787:8787 \
+            genoma-policy-live:${{ github.sha }})
+          echo "$cid" > production-evidence/container-id.txt
+          for _ in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8787/healthz > production-evidence/healthz.json && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8787/v1/ruleset > production-evidence/live-ruleset.json
+          docker inspect "$cid" > production-evidence/container-inspect.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('production-evidence/live-ruleset.json').read_text())
+          assert p['status']=='VIGENTE'; assert p['version']=='v3.3'; assert p['effective_date']=='14/08/2026'
+          assert p['sha256']=='187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a'
+          assert p['section_count']==263
+          inspect=json.loads(Path('production-evidence/container-inspect.json').read_text())[0]
+          mount=next(m for m in inspect['Mounts'] if m['Destination'].endswith('REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt'))
+          assert mount['RW'] is False
+          assert inspect['HostConfig']['ReadonlyRootfs'] is True
+          assert inspect['HostConfig']['CapDrop']==['ALL']
+          PY
+      - name: Execute canonical section-260 live smoke through HTTP
+        run: |
+          python3 scripts/run_live_post_deployment_smoke.py \
+            --base-url http://127.0.0.1:8787 \
+            --bootstrap-attestation deploy/attestations/bootstrap-project-v3.3.json \
+            --deployment-id "github-${GITHUB_RUN_ID}-${GITHUB_SHA}" \
+            --output production-evidence/live-section-260.json
+      - name: Hash complete evidence bundle and verify result
+        run: |
+          jq -e '.passed == 15 and .total == 15 and .critical_failures == 0 and .post_deployment_status == "PASS"' production-evidence/live-section-260.json >/dev/null
+          (cd production-evidence && sha256sum * | sort) > production-evidence.sha256
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('production-evidence/live-section-260.json').read_text())
+          print(f"POST-DEPLOYMENT {p['post_deployment_status']}: {p['passed']}/{p['total']}, critical_failures={p['critical_failures']}")
+          PY
+      - name: Stop live instance after evidence capture
+        if: always()
+        run: |
+          docker logs genoma-policy-live > production-evidence/container.log 2>&1 || true
+          docker rm -f genoma-policy-live >/dev/null 2>&1 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: genoma-post-deployment-evidence-${{ github.sha }}
+          path: |
+            production-evidence/
+            production-evidence.sha256
+          retention-days: 365
+          if-no-files-found: error
