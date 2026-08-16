@@ -11,6 +11,9 @@ on:
       - 'scripts/latest_runtime_resource_gate.py'
       - 'scripts/runtime_resource_gate.py'
       - 'scripts/run_canary.sh'
+      - 'scripts/validate_grch38.sh'
+      - 'scripts/validate_bwa_mem2_functional.sh'
+      - 'scripts/build_bwa_mem2_index.sh'
       - '.github/workflows/genoma-ngs-runtime-gate.yml'
       - 'normative/**'
   push:
@@ -24,6 +27,9 @@ on:
       - 'scripts/latest_runtime_resource_gate.py'
       - 'scripts/runtime_resource_gate.py'
       - 'scripts/run_canary.sh'
+      - 'scripts/validate_grch38.sh'
+      - 'scripts/validate_bwa_mem2_functional.sh'
+      - 'scripts/build_bwa_mem2_index.sh'
       - '.github/workflows/genoma-ngs-runtime-gate.yml'
       - 'normative/**'
   workflow_dispatch:
@@ -119,8 +125,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Initialize evidence, validate repository and host capacity
         run: |
-          mkdir -p results/runtime-gate results/freshness results/canary
-          chmod 0777 results results/runtime-gate results/freshness results/canary
+          mkdir -p results/runtime-gate results/freshness results/canary results/grch38
+          chmod 0777 results results/runtime-gate results/freshness results/canary results/grch38
           python3 scripts/validate_repo.py
           : "${REF_ROOT:=/srv/genoma/refs/GRCh38}"
           echo "REF_ROOT=$REF_ROOT" >> "$GITHUB_ENV"
@@ -150,29 +156,44 @@ jobs:
             --output results/freshness/state.json
           python3 scripts/freshness_gate.py --input results/freshness/state.json --output results/freshness/gate.json
           jq -e '.ready_for_dna == true' results/freshness/gate.json >/dev/null
-      - name: Verify locked GRCh38 resources
+      - name: Validate approved GRCh38 source bundle before index generation
         run: |
           test -s "$REF_ROOT/GRCh38.lock.sha256.approved" || { echo 'NÃO DISPONÍVEL: externally approved GRCh38 lock missing'; exit 2; }
-          docker run --rm -e REF_ROOT=/refs \
-            -v "$REF_ROOT:/refs" \
+          docker run --rm -e REF_ROOT=/refs -e REQUIRE_BWA_INDEX=0 \
+            -v "$REF_ROOT:/refs:ro" \
             genoma-ngs-latest:${{ github.sha }} \
-            /opt/codework/scripts/validate_grch38.sh
+            /opt/codework/scripts/validate_grch38.sh \
+            | tee results/grch38/source-validation.txt
       - name: Build BWA-MEM2 indexes only when absent
         run: |
           fasta="$REF_ROOT/Homo_sapiens_assembly38.fasta"
-          if [ ! -s "${fasta}.bwt.2bit.64" ]; then
+          if [ ! -s "${fasta}.0123" ] || [ ! -s "${fasta}.amb" ] || [ ! -s "${fasta}.ann" ] || [ ! -s "${fasta}.bwt.2bit.64" ] || [ ! -s "${fasta}.pac" ]; then
             docker run --rm -e REF_ROOT=/refs \
               -v "$REF_ROOT:/refs" \
               genoma-ngs-latest:${{ github.sha }} \
               /opt/codework/scripts/build_bwa_mem2_index.sh
           fi
+      - name: Revalidate 9/9 resources, checksums, contigs and BWA-MEM2 indexes functionally
+        run: |
+          docker run --rm -e REF_ROOT=/refs -e REQUIRE_BWA_INDEX=1 \
+            -v "$REF_ROOT:/refs:ro" \
+            genoma-ngs-latest:${{ github.sha }} \
+            /opt/codework/scripts/validate_grch38.sh \
+            | tee results/grch38/final-validation.txt
+          docker run --rm -e REF_ROOT=/refs \
+            -v "$REF_ROOT:/refs:ro" \
+            genoma-ngs-latest:${{ github.sha }} \
+            /opt/codework/scripts/validate_bwa_mem2_functional.sh \
+            | tee results/grch38/bwa-functional.txt
       - name: Re-run full current-session Runtime/Resource Gate
         run: |
+          python3 scripts/freshness_gate.py --input results/freshness/state.json --output results/freshness/gate-pre-runtime.json
+          jq -e '.ready_for_dna == true' results/freshness/gate-pre-runtime.json >/dev/null
           docker run --rm -e REF_ROOT=/refs \
             -v "$REF_ROOT:/refs:ro" -v "$PWD/results:/workspace/results" \
             genoma-ngs-latest:${{ github.sha }} \
             python3 /opt/codework/scripts/latest_runtime_resource_gate.py \
-              --freshness-gate /workspace/results/freshness/gate.json \
+              --freshness-gate /workspace/results/freshness/gate-pre-runtime.json \
               --ref-root /refs \
               --output /workspace/results/runtime-gate/full-grch38.json
           jq -e '.checks.executables_and_versions.status == "EXECUTADO" and .checks.reference_build_and_contigs.status == "EXECUTADO" and .checks.fasta_fai_dictionary.status == "EXECUTADO" and .checks.aligner_indexes.status == "EXECUTADO" and .checks.required_resources_checksums.status == "EXECUTADO"' results/runtime-gate/full-grch38.json >/dev/null
