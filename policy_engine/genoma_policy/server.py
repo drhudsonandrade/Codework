@@ -11,7 +11,7 @@ from .smoke import run_smoke
 
 class PolicyHandler(BaseHTTPRequestHandler):
     engine: PolicyEngine
-    server_version = "GENOMA-Policy/0.2.0"
+    server_version = "GENOMA-Policy/0.3.0"
 
     def _json(self, status: int, payload: object) -> None:
         body = (json.dumps(payload, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
@@ -33,7 +33,7 @@ class PolicyHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         if self.path == "/healthz":
-            self._json(200, {"status": "ok", "engine": "genoma-policy-engine", "version": "0.2.0"})
+            self._json(200, {"status": "ok", "engine": "genoma-policy-engine", "version": "0.3.0"})
             return
         if self.path == "/v1/ruleset":
             self._json(200, self.engine.ruleset.metadata())
