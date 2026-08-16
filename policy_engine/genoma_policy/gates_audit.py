@@ -6,6 +6,7 @@ from .attestation import validate_section_attestation
 from .gates_common import CRITICAL_FINAL_AUDIT_KEYS, _as_bool, _gate, _get_list
 from .models import GateResult, GateState
 
+
 class AuditGates:
     def _section_coverage_summary(self, manifest: dict[str, Any]) -> dict[str, Any]:
         attestations = _get_list(manifest, "section_attestations")
@@ -39,7 +40,12 @@ class AuditGates:
         groups = {
             "policy_control": ("RULESET_GATE", "TAXONOMY_GATE", "RULE_COVERAGE_GATE"),
             "scientific_data": ("DATA_PROVENANCE_GATE", "CONSENT_GATE", "QC_GATE", "RUNTIME_RESOURCE_GATE"),
-            "evidence": ("EVIDENCE_RECENCY_GATE", "CAPABILITY_HONESTY_GATE", "CLINICAL_CONFIRMATION_GATE", "NEGATIVE_EVIDENCE_SCOPE_GATE", "ANCESTRY_AWARE_GATE", "REPRODUCTIVE_GATE", "PGX_COMPLEX_LOCUS_GATE", "TRAIT_NONDETERMINISM_GATE", "SCREENING_DIAGNOSIS_GATE"),
+            "evidence": (
+                "EVIDENCE_RECENCY_GATE", "CAPABILITY_HONESTY_GATE", "CLINICAL_CONFIRMATION_GATE",
+                "NEGATIVE_EVIDENCE_SCOPE_GATE", "BUILD_HARMONIZATION_GATE", "CLINVAR_CONFLICT_GATE",
+                "ANCESTRY_AWARE_GATE", "REPRODUCTIVE_GATE", "PGX_COMPLEX_LOCUS_GATE",
+                "TRAIT_NONDETERMINISM_GATE", "SCREENING_DIAGNOSIS_GATE",
+            ),
             "audit": ("FINAL_AUDIT_GATE",),
         }
         result: dict[str, Any] = {}

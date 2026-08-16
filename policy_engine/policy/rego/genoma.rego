@@ -85,6 +85,48 @@ deny contains msg if {
 deny contains msg if {
   some i
   claim := input.claims[i]
+  object.get(claim, "cross_build_comparison", false) == true
+  object.get(claim, "build_harmonized", false) != true
+  msg := sprintf("BUILD: claim[%d] comparison before build harmonization", [i])
+}
+
+deny contains msg if {
+  some i
+  claim := input.claims[i]
+  object.get(claim, "cross_build_comparison", false) == true
+  object.get(claim, "ref_alt_verified", false) != true
+  msg := sprintf("BUILD: claim[%d] REF/ALT not verified", [i])
+}
+
+deny contains msg if {
+  some i
+  claim := input.claims[i]
+  object.get(claim, "cross_build_comparison", false) == true
+  object.get(claim, "strand_verified", false) != true
+  msg := sprintf("BUILD: claim[%d] strand not verified", [i])
+}
+
+deny contains msg if {
+  some i
+  claim := input.claims[i]
+  object.get(claim, "clinvar_conflict", false) == true
+  object.get(claim, "clinvar_simple_vote", false) == true
+  msg := sprintf("CLINVAR: claim[%d] conflict resolved by simple vote", [i])
+}
+
+deny contains msg if {
+  some i
+  claim := input.claims[i]
+  object.get(claim, "clinvar_conflict", false) == true
+  resolution := object.get(claim, "clinvar_conflict_resolution", {})
+  some field in {"review_status_considered", "vcep_considered", "condition_matched", "evidence_reviewed", "dates_reviewed", "conflict_dossier"}
+  object.get(resolution, field, false) != true
+  msg := sprintf("CLINVAR: claim[%d] incomplete Conflict Dossier field %s", [i, field])
+}
+
+deny contains msg if {
+  some i
+  claim := input.claims[i]
   object.get(claim, "uses_haplogroup", false) == true
   object.get(claim, "direct_ethnicity_or_descent", false) == true
   msg := sprintf("ANCESTRY: claim[%d] converts haplogroup to ethnicity/direct descent", [i])

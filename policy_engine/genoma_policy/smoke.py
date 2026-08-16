@@ -22,15 +22,15 @@ def _claim(**overrides: Any) -> dict[str, Any]:
 
 
 def _all_na(ruleset: Ruleset) -> list[dict[str, Any]]:
-    return [{"section": s.number, "rule_id": s.rule_id, "rule_sha256": s.sha256, "applicability": "NOT_APPLICABLE", "status": "VERIFICADO", "decision": "NOT_APPLICABLE", "justification": "smoke fixture", "evidence_refs": [], "trace": {"attestation_id": f"smoke:{s.rule_id}", "created_at": "2026-08-15T23:00:00-03:00", "actor_type": "SOFTWARE", "actor_id": "genoma-policy-smoke", "method": "fixture", "run_id": "SMOKE", "input_sha256": [], "output_sha256": [], "tool_versions": {"genoma-policy-engine": "0.2.0"}}} for s in ruleset.sections]
+    return [{"section": s.number, "rule_id": s.rule_id, "rule_sha256": s.sha256, "applicability": "NOT_APPLICABLE", "status": "VERIFICADO", "decision": "NOT_APPLICABLE", "justification": "smoke fixture", "evidence_refs": [], "trace": {"attestation_id": f"smoke:{s.rule_id}", "created_at": "2026-08-15T23:00:00-03:00", "actor_type": "SOFTWARE", "actor_id": "genoma-policy-smoke", "method": "fixture", "run_id": "SMOKE", "input_sha256": [], "output_sha256": [], "tool_versions": {"genoma-policy-engine": "0.3.0"}}} for s in ruleset.sections]
 
 
 def smoke_cases(ruleset: Ruleset) -> list[tuple[str, str, dict[str, Any]]]:
     cases: list[tuple[str, str, dict[str, Any]]] = []
     m=_baseline(ruleset); m["claims"]=[_claim(negative_result=True,disease_excluded=True,all_relevant_mechanisms_assessed=False)]; cases.append(("SMOKE-01","NEGATIVE_EVIDENCE_SCOPE_GATE",m))
     m=_baseline(ruleset); m["operation"]["analysis_relevant"]=True; m["inputs"]=[{"id":"x","kind":"vcf","source":"fixture","sha256":"abc"}]; m["qc"]={"status":"EXECUTADO","passed":False,"evidence_refs":["smoke:qc"]}; m["claims"]=[_claim(nature="FATO CONFIRMADO",technical_quality_flag="LOW")]; m["section_attestations"]=_all_na(ruleset); cases.append(("SMOKE-02","QC_GATE",m))
-    m=_baseline(ruleset); m["claims"]=[_claim(negative_result=True,disease_excluded=True,all_relevant_mechanisms_assessed=False)]; cases.append(("SMOKE-03","NEGATIVE_EVIDENCE_SCOPE_GATE",m))
-    m=_baseline(ruleset); m["sources"]=[{"id":"clinvar","mutable":True,"status":"INFERIDO","accessible":True}]; cases.append(("SMOKE-04","EVIDENCE_RECENCY_GATE",m))
+    m=_baseline(ruleset); m["claims"]=[_claim(cross_build_comparison=True,source_build="GRCh37",target_build="GRCh38",build_harmonized=False,ref_alt_verified=False,strand_verified=False)]; cases.append(("SMOKE-03","BUILD_HARMONIZATION_GATE",m))
+    m=_baseline(ruleset); m["claims"]=[_claim(clinvar_conflict=True,clinvar_simple_vote=True,clinvar_conflict_resolution={"review_status_considered":False,"vcep_considered":False,"condition_matched":False,"evidence_reviewed":False,"dates_reviewed":False,"conflict_dossier":False})]; cases.append(("SMOKE-04","CLINVAR_CONFLICT_GATE",m))
     m=_baseline(ruleset); m["reproductive"]={"carrier_partner_recommendation":True,"partner_full_relevant_scope":False}; cases.append(("SMOKE-05","REPRODUCTIVE_GATE",m))
     m=_baseline(ruleset); m["reproductive"]={"both_carriers_same_gene":True,"causal_combination_verified":False,"inheritance_verified":True,"phase_addressed":False}; cases.append(("SMOKE-06","REPRODUCTIVE_GATE",m))
     m=_baseline(ruleset); m["claims"]=[_claim(prs=True,ancestry_calibrated=False)]; cases.append(("SMOKE-07","ANCESTRY_AWARE_GATE",m))

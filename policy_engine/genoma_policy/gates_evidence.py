@@ -4,6 +4,7 @@ from typing import Any
 
 from .gates_common import ALLOWED_OPERATIONAL, _gate, _get_list, _parse_iso_date
 
+
 class EvidenceGates:
     def _evidence_gate(self, manifest: dict[str, Any]):
         reasons: list[str] = []
@@ -54,6 +55,44 @@ class EvidenceGates:
             if not claim.get("scope_statement"): reasons.append(f"claim[{idx}] negative result lacks method/locus/class scope statement")
             if claim.get("disease_excluded") is True and claim.get("all_relevant_mechanisms_assessed") is not True: reasons.append(f"claim[{idx}] excludes disease beyond assessed mechanisms")
         return _gate("NEGATIVE_EVIDENCE_SCOPE_GATE", not reasons, reasons)
+
+    def _build_harmonization_gate(self, manifest: dict[str, Any]):
+        """Fail closed when cross-build/chip-vs-VCF comparison precedes harmonization."""
+        reasons: list[str] = []
+        for idx, claim in enumerate(_get_list(manifest, "claims")):
+            if not isinstance(claim, dict) or claim.get("cross_build_comparison") is not True:
+                continue
+            if not claim.get("source_build") or not claim.get("target_build"):
+                reasons.append(f"claim[{idx}] cross-build comparison missing source/target build")
+            if claim.get("build_harmonized") is not True:
+                reasons.append(f"claim[{idx}] build not harmonized before comparison")
+            if claim.get("ref_alt_verified") is not True:
+                reasons.append(f"claim[{idx}] REF/ALT not verified after harmonization")
+            if claim.get("strand_verified") is not True:
+                reasons.append(f"claim[{idx}] strand not verified before concordance/conflict conclusion")
+            if claim.get("concordance_or_conflict_concluded") is True and any(
+                claim.get(key) is not True for key in ("build_harmonized", "ref_alt_verified", "strand_verified")
+            ):
+                reasons.append(f"claim[{idx}] concluded concordance/conflict before complete harmonization")
+        return _gate("BUILD_HARMONIZATION_GATE", not reasons, reasons)
+
+    def _clinvar_conflict_gate(self, manifest: dict[str, Any]):
+        """Require an evidence-weighted Conflict Dossier rather than classification voting."""
+        reasons: list[str] = []
+        required = (
+            "review_status_considered", "vcep_considered", "condition_matched",
+            "evidence_reviewed", "dates_reviewed", "conflict_dossier",
+        )
+        for idx, claim in enumerate(_get_list(manifest, "claims")):
+            if not isinstance(claim, dict) or claim.get("clinvar_conflict") is not True:
+                continue
+            if claim.get("clinvar_simple_vote") is True:
+                reasons.append(f"claim[{idx}] resolves ClinVar conflict by simple vote")
+            resolution = claim.get("clinvar_conflict_resolution", {}) if isinstance(claim.get("clinvar_conflict_resolution"), dict) else {}
+            for key in required:
+                if resolution.get(key) is not True:
+                    reasons.append(f"claim[{idx}] ClinVar conflict resolution missing {key}")
+        return _gate("CLINVAR_CONFLICT_GATE", not reasons, reasons)
 
     def _ancestry_gate(self, manifest: dict[str, Any]):
         reasons: list[str] = []
