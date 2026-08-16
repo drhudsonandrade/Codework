@@ -24,11 +24,15 @@ class WorkflowContractTest(unittest.TestCase):
         config = (ROOT / "nextflow.config").read_text(encoding="utf-8")
         self.assertIn("nextflowVersion = '!>=26.04.6'", config)
 
-    def test_nextflow_runtime_contains_procps_and_latest_candidate_tracks_it(self):
+    def test_nextflow_runtime_contains_procps_and_resolve_promote_share_one_contract(self):
         environment = (ROOT / "environment.yml").read_text(encoding="utf-8")
         self.assertIn("- procps-ng", environment)
+        contract = (ROOT / "scripts/runtime_stack.py").read_text(encoding="utf-8")
+        self.assertIn('"procps-ng"', contract)
         candidate = (ROOT / "scripts/prepare_latest_candidate.py").read_text(encoding="utf-8")
-        self.assertIn('"procps-ng"', candidate)
+        promotion = (ROOT / "scripts/promote_latest_candidate.py").read_text(encoding="utf-8")
+        self.assertIn("MANAGED_RUNTIME_PACKAGES", candidate)
+        self.assertIn("MANAGED_RUNTIME_PACKAGES", promotion)
 
     def test_full_grch38_remains_explicit_highmem_dispatch(self):
         workflow = (ROOT / ".github/workflows/genoma-ngs-runtime-gate.yml").read_text(encoding="utf-8")
