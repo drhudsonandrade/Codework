@@ -68,7 +68,7 @@ jobs:
           docker run --rm \
             -v "$PWD/results:/workspace/results" \
             genoma-ngs-latest:${{ github.sha }} \
-            bash -lc 'python3 scripts/runtime_resource_gate.py --ref-root /refs --bam /workspace/results/canary/work/CANARY.sorted.bam --output /workspace/results/runtime-gate/preflight.json'
+            bash -lc 'python3 scripts/latest_runtime_resource_gate.py --freshness-gate /workspace/results/freshness/gate.json --ref-root /refs --bam /workspace/results/canary/work/CANARY.sorted.bam --output /workspace/results/runtime-gate/preflight.json'
       - name: Record honest preflight limitation
         run: |
           jq -e '.checks.executables_and_versions.status == "EXECUTADO"' results/runtime-gate/preflight.json >/dev/null
@@ -136,7 +136,7 @@ jobs:
           docker run --rm -e REF_ROOT=/refs \
             -v "$REF_ROOT:/refs:ro" -v "$PWD/results:/workspace/results" \
             genoma-ngs-latest:${{ github.sha }} \
-            bash -lc 'python3 scripts/runtime_resource_gate.py --ref-root /refs --output /workspace/results/runtime-gate/full-grch38.json'
+            bash -lc 'python3 scripts/latest_runtime_resource_gate.py --freshness-gate /workspace/results/freshness/gate.json --ref-root /refs --output /workspace/results/runtime-gate/full-grch38.json'
           jq -e '.checks.executables_and_versions.status == "EXECUTADO" and .checks.reference_build_and_contigs.status == "EXECUTADO" and .checks.fasta_fai_dictionary.status == "EXECUTADO" and .checks.aligner_indexes.status == "EXECUTADO" and .checks.required_resources_checksums.status == "EXECUTADO"' results/runtime-gate/full-grch38.json >/dev/null
           echo 'Tool/reference portion EXECUTADO. Per-sample FASTQ/BAM/CRAM integrity and read-group checks must still run with the actual case before calling.'
       - uses: actions/upload-artifact@v4
