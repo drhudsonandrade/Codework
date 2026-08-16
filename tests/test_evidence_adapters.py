@@ -1,6 +1,7 @@
 import hashlib
 import json
 import unittest
+from urllib.parse import parse_qs, urlparse
 
 
 class FakeTransport:
@@ -52,13 +53,28 @@ class EvidenceAdapterTest(unittest.TestCase):
         self.assertFalse(snapshot["accessible"])
         self.assertNotIn("result_digest", snapshot.get("retrieval_evidence", {}))
 
-    def test_clinpgx_uses_new_hostname_not_retired_pharmgkb_hostname(self):
+    def test_clinpgx_uses_current_openapi_parameters_and_new_hostname(self):
         from evidence_adapters import get_adapter
 
-        adapter = get_adapter("clinpgx", transport=FakeTransport({"data": []}))
-        snapshot = adapter.query({"path": "data/gene", "limit": 1}, checked_at="2026-08-16T14:00:00Z")
-        self.assertTrue(snapshot["locator"].startswith("https://api.clinpgx.org/"))
+        transport = FakeTransport([{"id": "PA124", "symbol": "CYP2C19"}])
+        adapter = get_adapter("clinpgx", transport=transport)
+        snapshot = adapter.query(
+            {"path": "data/gene", "params": {"symbol": "CYP2C19", "view": "min"}},
+            checked_at="2026-08-16T14:00:00Z",
+        )
+        parsed = urlparse(snapshot["locator"])
+        self.assertEqual(parsed.netloc, "api.clinpgx.org")
+        self.assertEqual(parsed.path, "/v1/data/gene")
+        self.assertEqual(parse_qs(parsed.query), {"symbol": ["CYP2C19"], "view": ["min"]})
         self.assertNotIn("api.pharmgkb.org", snapshot["locator"])
+        self.assertNotIn("limit", parse_qs(parsed.query))
+
+    def test_clinpgx_does_not_invent_unsupported_top_level_limit_parameter(self):
+        from evidence_adapters import get_adapter
+
+        adapter = get_adapter("clinpgx", transport=FakeTransport([]))
+        snapshot = adapter.query({"path": "data/gene", "limit": 1}, checked_at="2026-08-16T14:00:00Z")
+        self.assertNotIn("limit", parse_qs(urlparse(snapshot["locator"]).query))
 
 
 if __name__ == "__main__":
