@@ -27,14 +27,15 @@ REQUIRED_PATHS = (
     "scripts/build_bwa_mem2_index.sh", "scripts/validate_grch38.sh", "scripts/validate_bwa_mem2_functional.sh",
     "scripts/generate_canary.py", "scripts/score_variants.py", "scripts/run_canary.sh", "scripts/verify_ruleset.sh",
     "scripts/materialize_ruleset.py", "scripts/run_live_post_deployment_smoke.py", "scripts/runtime_resource_gate.py",
-    "scripts/prepare_latest_candidate.py", "scripts/promote_latest_candidate.py", "scripts/freshness_gate.py",
-    "scripts/latest_runtime_resource_gate.py", "scripts/verify_runtime_gate_manifest.py",
-    "scripts/wgs_input_gate.py", "scripts/wgs_align_or_stage.sh", "scripts/build_wgs_curated_manifest.py",
-    "scripts/query_evidence.py", "scripts/build_adapter_capabilities.py", "scripts/generate_report.py",
-    "scripts/generate_all_reports.py", "reporting/__init__.py", "reporting/catalog.json", "reporting/engine.py",
-    "reporting/editorial_v3.py", "reporting/requirements.txt", "evidence_adapters/__init__.py",
-    "policy_engine/pyproject.toml", "policy_engine/genoma_policy/engine.py", "policy_engine/genoma_policy/attestation.py",
-    "policy_engine/genoma_policy/ledger.py", "policy_engine/policy/schema/execution-manifest.schema.json", "policy_engine/Dockerfile",
+    "scripts/runtime_stack.py", "scripts/prepare_latest_candidate.py", "scripts/promote_latest_candidate.py",
+    "scripts/freshness_gate.py", "scripts/latest_runtime_resource_gate.py", "scripts/verify_runtime_gate_manifest.py",
+    "scripts/wgs_consent_gate.py", "scripts/wgs_input_gate.py", "scripts/wgs_align_or_stage.sh",
+    "scripts/build_wgs_curated_manifest.py", "scripts/query_evidence.py", "scripts/build_adapter_capabilities.py",
+    "scripts/generate_report.py", "scripts/generate_all_reports.py", "reporting/__init__.py", "reporting/catalog.json",
+    "reporting/engine.py", "reporting/editorial_v3.py", "reporting/editorial_v3_hifi.py", "reporting/requirements.txt",
+    "evidence_adapters/__init__.py", "policy_engine/pyproject.toml", "policy_engine/genoma_policy/engine.py",
+    "policy_engine/genoma_policy/attestation.py", "policy_engine/genoma_policy/ledger.py",
+    "policy_engine/policy/schema/execution-manifest.schema.json", "policy_engine/Dockerfile",
     "mcp/package.json", "mcp/package-lock.json", "mcp/tsconfig.json", "mcp/src/server.ts", "deploy/docker-compose.yml",
     "deploy/attestations/bootstrap-project-v3.3.json", "adapters/README.md", "adapters/config.example.json",
     "docs/FALLOW_SECURITY_REVIEW.md", "docs/GITHUB_MOBILE_IMPORT.md", "docs/MAGALU_PRIVATE_MCP_SETUP.md",
@@ -119,10 +120,10 @@ def validate(root: Path) -> list[str]:
     if wgs_nf.is_file():
         text = wgs_nf.read_text(encoding="utf-8")
         for token in (
-            "VERIFY_RUNTIME_GATE", "REFRESH_FRESHNESS_GATE", "INGEST_AND_QC", "ALIGN_OR_STAGE",
-            "RERUN_SAMPLE_RUNTIME_GATE", "CALL_SHORT_VARIANTS", "NORMALIZE_VARIANTS", "ANNOTATE_EVIDENCE",
-            "BUILD_CURATED_MANIFEST", "POLICY_EVALUATE", "GENERATE_REPORTS", "unsupported_variant_classes",
-            "NÃO DISPONÍVEL", "CYP2D6", "CNV", "SV",
+            "VERIFY_RUNTIME_GATE", "REFRESH_FRESHNESS_GATE", "VERIFY_CONSENT_PROVENANCE", "ready_for_first_dna_read",
+            "INGEST_AND_QC", "ALIGN_OR_STAGE", "RERUN_SAMPLE_RUNTIME_GATE", "CALL_SHORT_VARIANTS",
+            "NORMALIZE_VARIANTS", "ANNOTATE_EVIDENCE", "BUILD_CURATED_MANIFEST", "POLICY_EVALUATE",
+            "GENERATE_REPORTS", "unsupported_variant_classes", "NÃO DISPONÍVEL", "CYP2D6", "CNV", "SV",
         ):
             if token not in text:
                 errors.append(f"WGS workflow missing fail-closed contract token: {token}")
@@ -144,8 +145,7 @@ def validate(root: Path) -> list[str]:
         for token in (
             "freshness_gate.py", "GRCh38.lock.sha256.approved",
             "[self-hosted, linux, x64, genoma-production, highmem]",
-            "nextflow run /opt/codework/main.nf --mode canary",
-            "validate_bwa_mem2_functional.sh",
+            "nextflow run /opt/codework/main.nf --mode canary", "validate_bwa_mem2_functional.sh",
         ):
             if token not in text:
                 errors.append(f"NGS gate missing current-session readiness contract: {token}")
@@ -166,12 +166,20 @@ def validate(root: Path) -> list[str]:
             if token not in text:
                 errors.append(f"evidence adapter contract missing: {token}")
 
-    renderer = root / "reporting/editorial_v3.py"
+    renderer = root / "reporting/editorial_v3_hifi.py"
     if renderer.is_file():
         text = renderer.read_text(encoding="utf-8")
-        for token in ("0B1F33", "0F766E", "A16207", "F2F4F7", "RESULTADO GENÔMICO", "write_editorial_bundle"):
+        for token in ("0B1F33", "0F766E", "A16207", "F2F4F7", "RESULTADO GENÔMICO", "write_editorial_bundle", "DejaVu Sans"):
             if token not in text:
-                errors.append(f"editorial v3 renderer contract missing: {token}")
+                errors.append(f"editorial v3 high-fidelity renderer contract missing: {token}")
+
+    catalog = root / "reporting/catalog.json"
+    if catalog.is_file():
+        models = json.loads(catalog.read_text(encoding="utf-8"))
+        expected_accents = {"01": "0F766E", "02": "2563EB", "03": "7C3AED", "04": "166534", "05": "475467", "06": "B42318", "07": "A16207", "08": "0F766E", "09": "475467", "10": "0B1F33", "11": "0B1F33"}
+        for report_id, accent in expected_accents.items():
+            if models.get(report_id, {}).get("accent") != accent:
+                errors.append(f"report {report_id} v3 accent mismatch")
 
     requirements = root / "reporting/requirements.txt"
     if requirements.is_file():
@@ -208,9 +216,9 @@ def main() -> None:
     print("PASS\tsealed_normative_transport\tchunked transport verified through shared decoder")
     print("PASS\tgrch38_manifest\t9/9")
     print("PASS\tpre_dna_readiness_contract\tlatest-tested candidate + direct/Nextflow canaries + session promotion + freshness + runtime/resource gate present")
-    print("PASS\twgs_scientific_data_plane_contract\treal SNV/indel path + explicit unsupported complex classes")
+    print("PASS\twgs_scientific_data_plane_contract\tconsent/provenance + real SNV/indel path + explicit unsupported complex classes")
     print("PASS\tevidence_adapter_contract\tClinVar/ClinGen/CPIC/ClinPGx/gnomAD/PGS Catalog traceable adapters present")
-    print("PASS\treporting_contract\t11-model deterministic renderer + PDF/DOCX editorial v3 present")
+    print("PASS\treporting_contract\t11-model deterministic renderer + report-specific high-fidelity PDF/DOCX v3 present")
     print("PASS\toptional_adapters\tcore has no Cloudflare/Temporal/Supabase/OpenAI runtime dependency")
 
 
