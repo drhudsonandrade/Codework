@@ -1,12 +1,12 @@
 nextflow.enable.dsl = 2
 
 /*
- * Production Scientific Data Plane for real WGS SNV/small-indel processing.
+ * GENOMA production Scientific Data Plane for real WGS SNV/small-indel processing.
  *
- * This workflow is deliberately fail-closed. It does NOT claim CNV, SV, repeat-
- * expansion, HLA, CYP2D6, mtDNA-specialized, or other complex-class coverage from a
- * generic short-variant VCF. Those classes are emitted as NÃO DISPONÍVEL in the
- * capability manifest until specialized validated workflows are added.
+ * The technical output includes an explicit `unsupported_variant_classes` field.
+ * Generic short-variant calling MUST NOT be promoted to CNV, SV, repeat-expansion,
+ * HLA, CYP2D6, mtDNA-specialized or other complex-class coverage. Those remain
+ * NÃO DISPONÍVEL until a specialized validated workflow is actually executed.
  */
 
 process VERIFY_RUNTIME_GATE {
@@ -60,9 +60,9 @@ process INGEST_AND_QC {
 
     script:
     """
-    mkdir -p qc
     test -s '${verified_runtime}'
     test -s '${current_freshness}'
+    mkdir -p qc
     python3 '${workflow.projectDir}/scripts/wgs_input_gate.py' \
       --manifest '${sample_dir}/sample-manifest.json' \
       --output qc/input-qc.json
@@ -88,7 +88,7 @@ process ALIGN_OR_STAGE {
     """
     test -s '${input_qc}'
     mkdir -p aligned
-    WGS_THREADS=${task.cpus} WGS_SORT_THREADS=${Math.max(1, (task.cpus as int) / 2 as int)} \
+    WGS_THREADS=${task.cpus} WGS_SORT_THREADS=${task.cpus} \
       bash '${workflow.projectDir}/scripts/wgs_align_or_stage.sh' \
         '${sample_dir}/sample-manifest.json' \
         '${ref_root}/Homo_sapiens_assembly38.fasta' \
@@ -109,6 +109,7 @@ process RERUN_SAMPLE_RUNTIME_GATE {
 
     script:
     """
+    test -s '${bai}'
     mkdir -p gate freshness
     python3 '${workflow.projectDir}/scripts/freshness_gate.py' \
       --input '${freshness_state_manifest}' \
@@ -181,6 +182,7 @@ process NORMALIZE_VARIANTS {
 
     script:
     """
+    test -s '${raw_vcf_index}'
     mkdir -p normalized
     ref='${ref_root}/Homo_sapiens_assembly38.fasta'
     bcftools norm -f "\$ref" -m -any '${raw_vcf}' -Ou \
@@ -191,7 +193,7 @@ process NORMALIZE_VARIANTS {
 }
 
 process ANNOTATE_EVIDENCE {
-    tag 'evidence-adapter-snapshot'
+    tag 'evidence-adapter-capabilities'
 
     input:
     path normalized_vcf
@@ -202,18 +204,9 @@ process ANNOTATE_EVIDENCE {
     script:
     """
     mkdir -p evidence
-    python3 - <<'PY'
-    import json
-    from evidence_adapters import ADAPTERS
-    payload = {
-      'schema': 'genoma-evidence-adapter-capabilities-v1',
-      'status': 'VERIFICADO',
-      'adapters': sorted(ADAPTERS),
-      'note': 'Variant-specific queries are executed during curation; this step never fabricates a consulted source.',
-      'vcf': 'sample.normalized.vcf.gz'
-    }
-    open('evidence/adapter-capabilities.json','w',encoding='utf-8').write(json.dumps(payload,ensure_ascii=False,indent=2)+'\n')
-    PY
+    python3 '${workflow.projectDir}/scripts/build_adapter_capabilities.py' \
+      --vcf '${normalized_vcf}' \
+      --output evidence/adapter-capabilities.json
     """
 }
 
@@ -234,6 +227,9 @@ process BUILD_CURATED_MANIFEST {
 
     script:
     """
+    test -s '${normalized_index}'
+    test -s '${input_qc}'
+    test -s '${evidence_snapshot}'
     mkdir -p curation
     python3 '${workflow.projectDir}/scripts/build_wgs_curated_manifest.py' \
       --case-id '${case_id}' \
@@ -241,6 +237,7 @@ process BUILD_CURATED_MANIFEST {
       --vcf '${normalized_vcf}' \
       --runtime-gate '${pre_call_gate}' \
       --output curation/analysis-manifest.json
+    jq -e '.unsupported_variant_classes | index("CNV") and index("SV") and index("CYP2D6")' curation/analysis-manifest.json >/dev/null
     """
 }
 
@@ -255,27 +252,25 @@ process POLICY_EVALUATE {
 
     script:
     """
-    mkdir -p policy
+    mkdir -p policy/normative
+    python3 '${workflow.projectDir}/scripts/materialize_ruleset.py' \
+      --output-dir policy/normative \
+      --evidence policy/ruleset-materialization.json
+    canonical='policy/normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt'
     set +e
+    GENOMA_RULESET_PATH="\$canonical" \
+    GENOMA_RULESET_SHA_MANIFEST='${workflow.projectDir}/manifests/RULESET_V3.3.sha256' \
     PYTHONPATH='${workflow.projectDir}/policy_engine' \
-      python3 -m genoma_policy evaluate '${curation_manifest}' > policy/evaluation.json
+      python3 -m genoma_policy evaluate '${curation_manifest}' --output policy/evaluation.json
     code=\$?
     set -e
-    if [ \$code -ne 0 ]; then
-      # Expected until evidence/clinical curation/final audit are genuinely complete.
-      python3 - <<'PY'
-    import json
-    from pathlib import Path
-    p=Path('policy/evaluation.json')
-    if not p.exists() or not p.read_text(encoding='utf-8').strip():
-        p.write_text(json.dumps({'status':'NÃO DISPONÍVEL','reason':'policy evaluation blocked or unavailable'},ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-    PY
-    fi
+    test -s policy/evaluation.json
+    printf '%s\n' "\$code" > policy/evaluation.exit-code
     """
 }
 
 process GENERATE_REPORTS {
-    tag 'eleven-final-reports'
+    tag 'eleven-report-release-gate'
 
     input:
     path curation_manifest
@@ -286,18 +281,10 @@ process GENERATE_REPORTS {
 
     script:
     """
-    mkdir -p reports
-    python3 - <<'PY'
-    import json
-    from pathlib import Path
-    p=json.loads(Path('${curation_manifest}').read_text(encoding='utf-8'))
-    if p.get('publication_gate',{}).get('passed') is not True:
-        raise SystemExit('NÃO DISPONÍVEL: final reports remain blocked until curation/Evidence/Final Audit are VERIFICADO')
-    PY
-    for id in \$(seq -w 1 11); do
-      python3 '${workflow.projectDir}/scripts/generate_report.py' \
-        --report "\$id" --mode FINAL --input '${curation_manifest}' --output-dir reports
-    done
+    test -s '${policy_evaluation}'
+    python3 '${workflow.projectDir}/scripts/generate_all_reports.py' \
+      --input '${curation_manifest}' \
+      --output-dir reports
     """
 }
 
@@ -320,13 +307,13 @@ workflow WGS_PRODUCTION {
     NORMALIZE_VARIANTS(CALL_SHORT_VARIANTS.out.raw_vcf, CALL_SHORT_VARIANTS.out.raw_vcf_index, ref_root)
     ANNOTATE_EVIDENCE(NORMALIZE_VARIANTS.out.normalized_vcf)
     BUILD_CURATED_MANIFEST(
-      NORMALIZE_VARIANTS.out.normalized_vcf,
-      NORMALIZE_VARIANTS.out.normalized_index,
-      RERUN_SAMPLE_RUNTIME_GATE.out.pre_call_gate,
-      INGEST_AND_QC.out.input_qc,
-      ANNOTATE_EVIDENCE.out.evidence_snapshot,
-      case_id,
-      sample_id
+        NORMALIZE_VARIANTS.out.normalized_vcf,
+        NORMALIZE_VARIANTS.out.normalized_index,
+        RERUN_SAMPLE_RUNTIME_GATE.out.pre_call_gate,
+        INGEST_AND_QC.out.input_qc,
+        ANNOTATE_EVIDENCE.out.evidence_snapshot,
+        case_id,
+        sample_id
     )
     POLICY_EVALUATE(BUILD_CURATED_MANIFEST.out.curation_manifest)
     GENERATE_REPORTS(BUILD_CURATED_MANIFEST.out.curation_manifest, POLICY_EVALUATE.out.policy_evaluation)
