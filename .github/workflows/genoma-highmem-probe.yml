@@ -1,10 +1,6 @@
 name: GENOMA high-memory self-hosted probe
 
 on:
-  push:
-    branches: [fix/genoma-v3-pixel-qa-highmem]
-    paths:
-      - '.github/workflows/genoma-highmem-probe.yml'
   workflow_dispatch:
 
 permissions:

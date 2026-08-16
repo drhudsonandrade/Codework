@@ -12,6 +12,39 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("--deployment-id", workflow)
         self.assertNotIn("--output-dir evidence/live-section-260", workflow)
 
+    def test_production_witness_covers_every_main_commit(self):
+        workflow = (ROOT / ".github/workflows/genoma-production-witness.yml").read_text(encoding="utf-8")
+        header = workflow.split("permissions:", 1)[0]
+        self.assertIn("push:\n    branches: [main]", header)
+        push_block = header.split("push:\n", 1)[1].split("workflow_dispatch:", 1)[0]
+        self.assertNotIn("paths:", push_block)
+
+    def test_production_witness_write_permission_is_isolated_to_main_publish_job(self):
+        workflow = (ROOT / ".github/workflows/genoma-production-witness.yml").read_text(encoding="utf-8")
+        self.assertIn("permissions:\n  contents: read", workflow)
+        self.assertIn("publish-witness:", workflow)
+        publish = workflow.split("publish-witness:", 1)[1]
+        self.assertIn("if: github.event_name == 'push' && github.ref == 'refs/heads/main'", publish)
+        self.assertIn("permissions:\n      contents: write", publish)
+        witness = workflow.split("jobs:", 1)[1].split("publish-witness:", 1)[0]
+        self.assertNotIn("contents: write", witness)
+
+    def test_manual_production_ceremony_does_not_duplicate_every_main_push(self):
+        workflow = (ROOT / ".github/workflows/genoma-production-ceremony.yml").read_text(encoding="utf-8")
+        header = workflow.split("permissions:", 1)[0]
+        self.assertIn("workflow_dispatch:", header)
+        self.assertNotIn("push:", header)
+
+    def test_legacy_editorial_chunk_materializer_is_removed(self):
+        self.assertFalse((ROOT / ".github/workflows/genoma-materialize-editorial-upload.yml").exists())
+
+    def test_highmem_probe_is_manual_and_not_bound_to_retired_feature_branch(self):
+        workflow = (ROOT / ".github/workflows/genoma-highmem-probe.yml").read_text(encoding="utf-8")
+        header = workflow.split("permissions:", 1)[0]
+        self.assertIn("workflow_dispatch:", header)
+        self.assertNotIn("fix/genoma-v3-pixel-qa-highmem", header)
+        self.assertNotIn("push:", header)
+
     def test_ngs_canary_does_not_bypass_micromamba_entrypoint_with_login_shell(self):
         workflow = (ROOT / ".github/workflows/genoma-ngs-runtime-gate.yml").read_text(encoding="utf-8")
         self.assertIn("/opt/codework/scripts/run_canary.sh /workspace/results/canary", workflow)

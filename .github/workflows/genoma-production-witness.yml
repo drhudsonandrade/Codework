@@ -12,18 +12,10 @@ on:
       - '.github/workflows/genoma-production-witness.yml'
   push:
     branches: [main]
-    paths:
-      - 'normative/**'
-      - 'manifests/RULESET_V3.3.sha256'
-      - 'policy_engine/**'
-      - 'scripts/materialize_ruleset.py'
-      - 'scripts/run_live_post_deployment_smoke.py'
-      - 'deploy/attestations/bootstrap-project-v3.3.json'
-      - '.github/workflows/genoma-production-witness.yml'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: genoma-production-witness-${{ github.ref }}
@@ -31,7 +23,7 @@ concurrency:
 
 jobs:
   witness:
-    name: Independent live witness + durable audit branch
+    name: Independent live witness
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -150,16 +142,34 @@ jobs:
           path: evidence
           retention-days: 365
           if-no-files-found: error
-      - name: Publish PASS witness to dedicated audit-evidence branch
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+  publish-witness:
+    name: Publish PASS witness to audit-evidence
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: witness
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: genoma-production-witness-${{ github.sha }}
+          path: downloaded-evidence
+      - name: Publish immutable witness with an idempotent exact-SHA guard
         shell: bash
         run: |
           set -euo pipefail
+          witness=$(find downloaded-evidence -type f -name witness.json -print -quit)
+          sums=$(find downloaded-evidence -type f -name SHA256SUMS -print -quit)
+          test -n "$witness" && test -n "$sums"
           git config user.name 'genoma-audit-bot'
           git config user.email 'genoma-audit-bot@users.noreply.github.com'
           tmp=$(mktemp -d)
-          cp evidence/witness.json "$tmp/witness.json"
-          cp evidence/SHA256SUMS "$tmp/SHA256SUMS"
+          cp "$witness" "$tmp/witness.json"
+          cp "$sums" "$tmp/SHA256SUMS"
           if git ls-remote --exit-code origin refs/heads/audit-evidence >/dev/null 2>&1; then
             git fetch origin audit-evidence:audit-evidence
             git checkout audit-evidence
@@ -167,10 +177,16 @@ jobs:
             git checkout --orphan audit-evidence
             git rm -rf . >/dev/null 2>&1 || true
           fi
-          mkdir -p witnesses/${GITHUB_SHA}
-          cp "$tmp/witness.json" witnesses/${GITHUB_SHA}/witness.json
-          cp "$tmp/SHA256SUMS" witnesses/${GITHUB_SHA}/SHA256SUMS
+          if [ -f "witnesses/${GITHUB_SHA}/witness.json" ]; then
+            cmp "$tmp/witness.json" "witnesses/${GITHUB_SHA}/witness.json"
+            cmp "$tmp/SHA256SUMS" "witnesses/${GITHUB_SHA}/SHA256SUMS"
+            echo "Witness for ${GITHUB_SHA} is already published identically."
+            exit 0
+          fi
+          mkdir -p "witnesses/${GITHUB_SHA}"
+          cp "$tmp/witness.json" "witnesses/${GITHUB_SHA}/witness.json"
+          cp "$tmp/SHA256SUMS" "witnesses/${GITHUB_SHA}/SHA256SUMS"
           cp "$tmp/witness.json" latest.json
-          git add witnesses/${GITHUB_SHA} latest.json
+          git add "witnesses/${GITHUB_SHA}" latest.json
           git commit -m "audit: production witness ${GITHUB_SHA} [skip ci]"
           git push origin HEAD:audit-evidence
