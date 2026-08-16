@@ -17,11 +17,19 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("/opt/codework/scripts/run_canary.sh /workspace/results/canary", workflow)
         self.assertNotIn("bash -lc './scripts/run_canary.sh", workflow)
 
+    def test_latest_candidate_must_execute_nextflow_orchestration_before_promotion(self):
+        workflow = (ROOT / ".github/workflows/genoma-ngs-runtime-gate.yml").read_text(encoding="utf-8")
+        self.assertIn("nextflow run /opt/codework/main.nf --mode canary", workflow)
+        self.assertIn("results/nextflow-canary/report.json", workflow)
+        config = (ROOT / "nextflow.config").read_text(encoding="utf-8")
+        self.assertIn("nextflowVersion = '!>=26.04.6'", config)
+
     def test_full_grch38_remains_explicit_highmem_dispatch(self):
         workflow = (ROOT / ".github/workflows/genoma-ngs-runtime-gate.yml").read_text(encoding="utf-8")
         self.assertIn("[self-hosted, linux, x64, genoma-production, highmem]", workflow)
         self.assertIn("validate_grch38.sh", workflow)
         self.assertIn("GRCh38.lock.sha256.approved", workflow)
+        self.assertIn("validate_bwa_mem2_functional.sh", workflow)
 
 
 if __name__ == "__main__":
