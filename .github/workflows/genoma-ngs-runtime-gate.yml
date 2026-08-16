@@ -107,7 +107,8 @@ jobs:
           jq -e '.status == "PASS"' results/canary/report.json >/dev/null
           jq -e '.status == "PASS"' results/nextflow-canary/canary/report.json >/dev/null
           python3 scripts/promote_latest_candidate.py \
-            --canary results/canary/report.json \
+            --functional-canary results/canary/report.json \
+            --orchestration-canary results/nextflow-canary/canary/report.json \
             --inventory results/canary/conda-inventory.json \
             --output results/freshness/state-toolchain.json
       - name: Refresh critical official evidence-source capability and recency
@@ -186,7 +187,8 @@ jobs:
             nextflow run /opt/codework/main.nf --mode canary --outdir /workspace/results/nextflow-canary -ansi-log false
           jq -e '.status == "PASS"' results/nextflow-canary/canary/report.json >/dev/null
           python3 scripts/promote_latest_candidate.py \
-            --canary results/canary/report.json \
+            --functional-canary results/canary/report.json \
+            --orchestration-canary results/nextflow-canary/canary/report.json \
             --inventory results/canary/conda-inventory.json \
             --output results/freshness/state-toolchain.json
           python3 scripts/refresh_evidence_sources.py \
