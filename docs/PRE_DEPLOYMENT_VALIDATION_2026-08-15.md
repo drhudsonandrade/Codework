@@ -11,7 +11,7 @@ target-host, GRCh38, WGS, GIAB or clinical validation.
 
 | Gate | Result | Evidence |
 |---|---|---|
-| GitHub App access | PASS | Private repository `drhudsonandrade/Codework`; authenticated integration has admin, push and pull access. |
+| GitHub App access | PASS | Private `Codework` repository; authenticated integration has admin, push and pull access. |
 | Pull request | PASS | Draft PR #2 from `codex/genome-runtime-mcp` to `main`; head `959b42c2d652899d8e6685773288551de3db8d2b` before the final recovery update. |
 | Fallow workflow | PASS | Run `31857676073`. |
 | Container/runtime workflow | PASS | Run `31857676091`. |
@@ -28,7 +28,7 @@ target-host, GRCh38, WGS, GIAB or clinical validation.
 | Shell syntax | PASS | Every `scripts/*.sh` passed `bash -n`. |
 | Repository contract | PASS | Required paths, payload exclusions, status label and lock rules. |
 | GRCh38 source manifest | PASS | Exactly 9/9 declared artifacts; the payload remains unavailable until the future VM. |
-| Ruleset identity | PASS | SHA-256 `ebad57ae4864418bd5d8e9126c12fbf938b341af5fb73d3511e63e6a8eae221a`; `VIGENTE`; v3.3; 14/08/2026. |
+| Ruleset identity | PASS | SHA-256 `187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a`; `VIGENTE`; v3.3; 14/08/2026. |
 | Fallow 3.16.0 quality | PASS | 0 issues and no critical/high/moderate complexity finding. |
 | Fallow security | REVIEWED | 12 bounded path-construction candidates, 0 high; candidates are not asserted vulnerabilities. |
 
