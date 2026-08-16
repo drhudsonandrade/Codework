@@ -1,0 +1,65 @@
+{
+  "schema": "genoma-production-witness-v1",
+  "operational_status": "VERIFICADO",
+  "post_deployment_status": "PASS",
+  "ruleset": {
+    "status": "VIGENTE",
+    "version": "v3.3",
+    "effective_date": "14/08/2026",
+    "sha256": "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a"
+  },
+  "section_260": {
+    "passed": 15,
+    "total": 15,
+    "critical_failures": 0
+  },
+  "git_sha": "df56e40618a5272bff6f7f58cd1477d9908cda3b",
+  "workflow_run_id": "31958305177",
+  "workflow_run_attempt": "1",
+  "created_at": "2026-08-16T16:20:25.910251Z",
+  "evidence_files": [
+    {
+      "path": "container-id.txt",
+      "sha256": "353a9d4c6348a8d3d10da2b5fd80edc9074593ef647d6cefa49c4e414a006e28",
+      "size_bytes": 65
+    },
+    {
+      "path": "container.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    {
+      "path": "docker-inspect.json",
+      "sha256": "d4cca3a34a034b68a5b3839dab1cf4c6b19656c37668baef0804c5faa340b6de",
+      "size_bytes": 11242
+    },
+    {
+      "path": "health.json",
+      "sha256": "a83d85734d6857633dd287a6bd352b68484869f2bb7c5bbe62445fa35efdefd6",
+      "size_bytes": 79
+    },
+    {
+      "path": "image-id.txt",
+      "sha256": "a2a5aff2e60d5339dd61b85bf3c47e0f4d1dae093d9d255dd2771bc02fc886b9",
+      "size_bytes": 72
+    },
+    {
+      "path": "live-ruleset.json",
+      "sha256": "7a948791ce47fe3c5df68b0db169a713242b6f50cea03eb5314c4e8ca3093216",
+      "size_bytes": 303
+    },
+    {
+      "path": "live-section-260/summary.json",
+      "sha256": "e538f0be8e9c14e26684cdbe670a55ff7084ce9f0f7d51489dbd2ff84fa2b5ae",
+      "size_bytes": 13342
+    },
+    {
+      "path": "ruleset-materialization.json",
+      "sha256": "68b7eaeff2be704d6a856eedd30e44357faadf497cf970832f601f78aa4a03f1",
+      "size_bytes": 3108
+    }
+  ],
+  "limitations": [
+    "This witness validates the deterministic policy deployment and live section-260 safety scenarios. It does not substitute for the per-session NGS Runtime/Resource Gate or per-sample FASTQ/BAM/CRAM integrity."
+  ]
+}
