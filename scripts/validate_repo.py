@@ -26,6 +26,9 @@ REQUIRED_PATHS = (
     "scripts/build_bwa_mem2_index.sh", "scripts/validate_grch38.sh", "scripts/generate_canary.py",
     "scripts/score_variants.py", "scripts/run_canary.sh", "scripts/verify_ruleset.sh", "scripts/materialize_ruleset.py",
     "scripts/run_live_post_deployment_smoke.py", "scripts/runtime_resource_gate.py",
+    "scripts/prepare_latest_candidate.py", "scripts/promote_latest_candidate.py", "scripts/freshness_gate.py",
+    "scripts/latest_runtime_resource_gate.py", "scripts/generate_report.py",
+    "reporting/__init__.py", "reporting/catalog.json", "reporting/engine.py",
     "policy_engine/pyproject.toml", "policy_engine/genoma_policy/engine.py", "policy_engine/genoma_policy/attestation.py",
     "policy_engine/genoma_policy/ledger.py", "policy_engine/policy/schema/execution-manifest.schema.json", "policy_engine/Dockerfile",
     "mcp/package.json", "mcp/package-lock.json", "mcp/tsconfig.json", "mcp/src/server.ts", "deploy/docker-compose.yml",
@@ -131,6 +134,8 @@ def main() -> None:
     print("PASS\trepository_active_rulesets\t0")
     print("PASS\tsealed_normative_transport\tchunked transport verified through shared decoder")
     print("PASS\tgrch38_manifest\t9/9")
+    print("PASS\tpre_dna_readiness_contract\tlatest-tested candidate + freshness gate + runtime/resource gate present")
+    print("PASS\treporting_contract\t11-model deterministic renderer present")
     print("PASS\toptional_adapters\tcore has no Cloudflare/Temporal/Supabase/OpenAI runtime dependency")
 
 
