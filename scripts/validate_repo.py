@@ -68,14 +68,15 @@ def validate_sealed_ruleset(root: Path, errors: list[str]) -> None:
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         encoded = transport_path.read_bytes()
+        normalized_transport = b"".join(encoded.split())
         if manifest.get("active_at_rest") is not False:
             errors.append("sealed normative transport must declare active_at_rest=false")
         if manifest.get("raw_sha256") != CANONICAL_RULESET_SHA256 or manifest.get("canonical_filename") != CANONICAL_RULESET:
             errors.append("sealed normative manifest identity mismatch")
-        if sha256(encoded) != manifest.get("transport_sha256"):
+        if sha256(normalized_transport) != manifest.get("transport_sha256"):
             errors.append("sealed normative transport SHA-256 mismatch")
             return
-        compressed = base64.b64decode(b"".join(encoded.split()), validate=True)
+        compressed = base64.b64decode(normalized_transport, validate=True)
         if sha256(compressed) != manifest.get("gzip_sha256"):
             errors.append("sealed normative gzip SHA-256 mismatch")
             return
