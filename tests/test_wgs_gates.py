@@ -33,6 +33,33 @@ class WgsGateTest(unittest.TestCase):
         self.assertTrue(any("sample_read_group_integrity" in e for e in errors))
         self.assertTrue(any("fastq_bam_cram_integrity" in e for e in errors))
 
+    def test_consent_gate_passes_only_for_explicit_verified_genomic_analysis_scope(self):
+        from scripts.wgs_consent_gate import evaluate_consent
+        manifest = {
+            "sample_id": "S1",
+            "consent": {
+                "status": "VERIFICADO",
+                "consent_id": "consent-1",
+                "version": "1",
+                "purposes": ["genomic_analysis", "clinical_report"],
+                "secondary_findings": "AUTHORIZED",
+            },
+            "provenance": {
+                "status": "VERIFICADO",
+                "source": "laboratory-export",
+                "chain_of_custody_ref": "custody-1",
+            },
+        }
+        result = evaluate_consent(manifest, requested_purpose="genomic_analysis")
+        self.assertEqual(result["status"], "VERIFICADO")
+        self.assertTrue(result["ready_for_first_dna_read"])
+
+    def test_consent_gate_blocks_missing_or_unverified_scope(self):
+        from scripts.wgs_consent_gate import evaluate_consent
+        result = evaluate_consent({"sample_id": "S1", "consent": {"status": "PROPOSTO"}}, requested_purpose="genomic_analysis")
+        self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+        self.assertFalse(result["ready_for_first_dna_read"])
+
     def test_fastq_manifest_requires_declared_read_group(self):
         from scripts.wgs_input_gate import validate_manifest
         with tempfile.TemporaryDirectory() as td:
