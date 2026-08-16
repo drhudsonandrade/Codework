@@ -1,0 +1,4 @@
+title = "GENOMA policy engine secret scan"
+
+[extend]
+useDefault = true
