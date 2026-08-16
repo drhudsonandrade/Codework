@@ -76,7 +76,7 @@ jobs:
           docker run --rm -e CANARY_VERSION_POLICY=INVENTORY \
             -v "$PWD/results:/workspace/results" \
             genoma-ngs-latest:${{ github.sha }} \
-            bash -lc './scripts/run_canary.sh /workspace/results/canary'
+            /opt/codework/scripts/run_canary.sh /workspace/results/canary
           jq -e '.status == "PASS"' results/canary/report.json >/dev/null
       - name: Session-promote candidate and enforce freshness gate
         run: |
@@ -93,7 +93,11 @@ jobs:
           docker run --rm \
             -v "$PWD/results:/workspace/results" \
             genoma-ngs-latest:${{ github.sha }} \
-            bash -lc 'python3 scripts/latest_runtime_resource_gate.py --freshness-gate /workspace/results/freshness/gate.json --ref-root /refs --bam /workspace/results/canary/work/CANARY.sorted.bam --output /workspace/results/runtime-gate/preflight.json'
+            python3 /opt/codework/scripts/latest_runtime_resource_gate.py \
+              --freshness-gate /workspace/results/freshness/gate.json \
+              --ref-root /refs \
+              --bam /workspace/results/canary/work/CANARY.sorted.bam \
+              --output /workspace/results/runtime-gate/preflight.json
       - name: Record honest preflight limitation
         run: |
           jq -e '.checks.executables_and_versions.status == "EXECUTADO"' results/runtime-gate/preflight.json >/dev/null
@@ -138,7 +142,7 @@ jobs:
           docker run --rm -e CANARY_VERSION_POLICY=INVENTORY \
             -v "$PWD/results:/workspace/results" \
             genoma-ngs-latest:${{ github.sha }} \
-            bash -lc './scripts/run_canary.sh /workspace/results/canary'
+            /opt/codework/scripts/run_canary.sh /workspace/results/canary
           jq -e '.status == "PASS"' results/canary/report.json >/dev/null
           python3 scripts/promote_latest_candidate.py \
             --canary results/canary/report.json \
@@ -149,19 +153,28 @@ jobs:
       - name: Verify locked GRCh38 resources
         run: |
           test -s "$REF_ROOT/GRCh38.lock.sha256.approved" || { echo 'NÃO DISPONÍVEL: externally approved GRCh38 lock missing'; exit 2; }
-          docker run --rm -e REF_ROOT=/refs -v "$REF_ROOT:/refs" genoma-ngs-latest:${{ github.sha }} bash -lc './scripts/validate_grch38.sh'
+          docker run --rm -e REF_ROOT=/refs \
+            -v "$REF_ROOT:/refs" \
+            genoma-ngs-latest:${{ github.sha }} \
+            /opt/codework/scripts/validate_grch38.sh
       - name: Build BWA-MEM2 indexes only when absent
         run: |
           fasta="$REF_ROOT/Homo_sapiens_assembly38.fasta"
           if [ ! -s "${fasta}.bwt.2bit.64" ]; then
-            docker run --rm -e REF_ROOT=/refs -v "$REF_ROOT:/refs" genoma-ngs-latest:${{ github.sha }} bash -lc './scripts/build_bwa_mem2_index.sh'
+            docker run --rm -e REF_ROOT=/refs \
+              -v "$REF_ROOT:/refs" \
+              genoma-ngs-latest:${{ github.sha }} \
+              /opt/codework/scripts/build_bwa_mem2_index.sh
           fi
       - name: Re-run full current-session Runtime/Resource Gate
         run: |
           docker run --rm -e REF_ROOT=/refs \
             -v "$REF_ROOT:/refs:ro" -v "$PWD/results:/workspace/results" \
             genoma-ngs-latest:${{ github.sha }} \
-            bash -lc 'python3 scripts/latest_runtime_resource_gate.py --freshness-gate /workspace/results/freshness/gate.json --ref-root /refs --output /workspace/results/runtime-gate/full-grch38.json'
+            python3 /opt/codework/scripts/latest_runtime_resource_gate.py \
+              --freshness-gate /workspace/results/freshness/gate.json \
+              --ref-root /refs \
+              --output /workspace/results/runtime-gate/full-grch38.json
           jq -e '.checks.executables_and_versions.status == "EXECUTADO" and .checks.reference_build_and_contigs.status == "EXECUTADO" and .checks.fasta_fai_dictionary.status == "EXECUTADO" and .checks.aligner_indexes.status == "EXECUTADO" and .checks.required_resources_checksums.status == "EXECUTADO"' results/runtime-gate/full-grch38.json >/dev/null
           echo 'Tool/reference portion EXECUTADO. Per-sample FASTQ/BAM/CRAM integrity and read-group checks must still run with the actual case before calling.'
       - uses: actions/upload-artifact@v4
