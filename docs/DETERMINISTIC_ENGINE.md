@@ -40,6 +40,8 @@ ChatGPT, MCP, Cloudflare, Temporal, Supabase and any future UI/orchestrator are 
 
 ## CI guarantees and limits
 
-`.github/workflows/genoma-policy-engine.yml` uses a clearly marked synthetic v3.3 fixture to test the parser/263-rule infrastructure contract without publishing a duplicate normative TXT. Separately, the repository manifest pins the verified canonical SHA-256. CI runs Python tests, independent 15-case deterministic safety smoke, OPA/Rego, Gitleaks, real Docker build/runtime smoke and publishes an immutable GHCR image with provenance after merge to `main`.
+`.github/workflows/genoma-policy-engine.yml` uses a clearly marked synthetic v3.3 fixture to test the parser/263-rule infrastructure contract without publishing a duplicate normative TXT. Separately, the repository manifest pins the verified canonical SHA-256. CI runs Python tests, independent 15-case deterministic safety smoke, OPA/Rego, Gitleaks, real Docker build/runtime smoke and publishes an immutable GHCR image after merge to `main`.
+
+For supply-chain traceability, the image is published with BuildKit registry-native OCI provenance (`mode=max`) plus SBOM and the workflow verifies that attached attestation manifests exist in the resulting OCI index. This does not depend on GitHub's repository-attestation storage API, which is not available for this user-owned private repository configuration.
 
 CI infrastructure smoke is not the section-260 live project smoke and never grants `POST-DEPLOYMENT PASS`.
