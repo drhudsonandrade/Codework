@@ -10,7 +10,8 @@
   "gzip_sha256": "5bf76c0f478167f71f8364e81de0a6139cd974d79cd02a8baf92b92b2d8fe659",
   "gzip_size_bytes": 72059,
   "transport_file": "GENOMA_RULESET_v3.3.txt.gz.b64",
-  "transport_sha256": "769c0297d89b025a737bad0800c86e9bc025601522ca86bb8c6582a13540e31e",
+  "transport_sha256": "2f29d261d64c316d7e54f65113ab427b01d92d8d162e7c7908564e9375e5d951",
+  "transport_sha256_scope": "base64 payload after ASCII whitespace normalization",
   "section_count": 263,
   "active_at_rest": false,
   "activation_contract": "materialize byte-exact canonical TXT at runtime, verify identity+hash+0-262, chmod 0444, mount read-only; never commit active plaintext ruleset"
