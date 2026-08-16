@@ -47,6 +47,26 @@ process REFRESH_FRESHNESS_GATE {
     """
 }
 
+process VERIFY_CONSENT_PROVENANCE {
+    tag 'consent-provenance-before-first-dna-read'
+
+    input:
+    path sample_dir
+
+    output:
+    path 'consent/gate.json', emit: consent_gate
+
+    script:
+    """
+    mkdir -p consent
+    python3 '${workflow.projectDir}/scripts/wgs_consent_gate.py' \
+      --manifest '${sample_dir}/sample-manifest.json' \
+      --purpose genomic_analysis \
+      --output consent/gate.json
+    jq -e '.ready_for_first_dna_read == true and .status == "VERIFICADO"' consent/gate.json >/dev/null
+    """
+}
+
 process INGEST_AND_QC {
     tag 'wgs-input-qc'
 
@@ -54,6 +74,7 @@ process INGEST_AND_QC {
     path sample_dir
     path verified_runtime
     path current_freshness
+    path consent_gate
 
     output:
     path 'qc/input-qc.json', emit: input_qc
@@ -62,6 +83,7 @@ process INGEST_AND_QC {
     """
     test -s '${verified_runtime}'
     test -s '${current_freshness}'
+    jq -e '.ready_for_first_dna_read == true and .status == "VERIFICADO"' '${consent_gate}' >/dev/null
     mkdir -p qc
     python3 '${workflow.projectDir}/scripts/wgs_input_gate.py' \
       --manifest '${sample_dir}/sample-manifest.json' \
@@ -300,7 +322,13 @@ workflow WGS_PRODUCTION {
     main:
     VERIFY_RUNTIME_GATE(runtime_gate_manifest)
     REFRESH_FRESHNESS_GATE(freshness_state_manifest)
-    INGEST_AND_QC(sample_dir, VERIFY_RUNTIME_GATE.out.verified_runtime, REFRESH_FRESHNESS_GATE.out.current_freshness)
+    VERIFY_CONSENT_PROVENANCE(sample_dir)
+    INGEST_AND_QC(
+        sample_dir,
+        VERIFY_RUNTIME_GATE.out.verified_runtime,
+        REFRESH_FRESHNESS_GATE.out.current_freshness,
+        VERIFY_CONSENT_PROVENANCE.out.consent_gate
+    )
     ALIGN_OR_STAGE(sample_dir, INGEST_AND_QC.out.input_qc, ref_root)
     RERUN_SAMPLE_RUNTIME_GATE(ALIGN_OR_STAGE.out.alignment, freshness_state_manifest, ref_root)
     CALL_SHORT_VARIANTS(ALIGN_OR_STAGE.out.alignment, RERUN_SAMPLE_RUNTIME_GATE.out.pre_call_gate, ref_root)
