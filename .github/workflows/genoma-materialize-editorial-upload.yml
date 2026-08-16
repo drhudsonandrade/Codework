@@ -1,0 +1,38 @@
+name: GENOMA materialize editorial QA upload
+
+on:
+  push:
+    branches: [fix/genoma-v3-pixel-qa-highmem]
+    paths:
+      - '.genoma-upload/READY'
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Assemble exact files from checked chunks and verify SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS=$'\t' read -r chunk_dir destination expected_sha; do
+            [ -n "$chunk_dir" ] || continue
+            mkdir -p "$(dirname "$destination")"
+            cat ".genoma-upload/$chunk_dir"/part-* > "$destination"
+            printf '%s  %s\n' "$expected_sha" "$destination" | sha256sum -c -
+          done < .genoma-upload/MANIFEST.tsv
+      - name: Commit materialized renderer and remove transport chunks
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .genoma-upload
+          git config user.name 'genoma-build-bot'
+          git config user.email 'genoma-build-bot@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: materialize v3 template renderer and pixel QA evidence'
+          git push origin HEAD:fix/genoma-v3-pixel-qa-highmem

@@ -23,12 +23,52 @@ else
     printf 'gatk\t%s\n' "$(gatk --version 2>&1 | tail -1)"
     printf 'nextflow\t%s\n' "$(nextflow -version 2>&1 | grep -m1 version || true)"
     printf 'snakemake\t%s\n' "$(snakemake --version 2>&1 | head -1)"
+    printf 'pdftoppm\t%s\n' "$(pdftoppm -v 2>&1 | head -1)"
+    printf 'pdftocairo\t%s\n' "$(pdftocairo -v 2>&1 | head -1)"
   } > "$OUTPUT_DIR/tool_versions.tsv"
 fi
 if command -v micromamba >/dev/null 2>&1; then
   micromamba list --name base --explicit > "$OUTPUT_DIR/conda-explicit.lock.txt"
   micromamba list --name base --json > "$OUTPUT_DIR/conda-inventory.json"
 fi
+# Functional editorial runtime canary is part of the same candidate witness.
+# This makes session promotion contingent on the PDF/DOCX renderer stack, not only NGS executables.
+python3 - <<'PY' "$WORK_DIR/editorial-canary.pdf" "$OUTPUT_DIR/editorial-runtime.json"
+import importlib.metadata as md
+import json, sys
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+pdf, out = sys.argv[1], sys.argv[2]
+c = canvas.Canvas(pdf, pagesize=A4)
+c.drawString(72, 760, "GENOMA editorial runtime canary")
+c.save()
+payload = {
+    "status": "PENDING",
+    "python_packages": {
+        "reportlab": md.version("reportlab"),
+        "python-docx": md.version("python-docx"),
+        "pypdf": md.version("pypdf"),
+        "Pillow": md.version("Pillow"),
+    },
+}
+open(out, "w", encoding="utf-8").write(json.dumps(payload, indent=2) + "\n")
+PY
+pdftoppm -singlefile -r 72 -png "$WORK_DIR/editorial-canary.pdf" "$WORK_DIR/editorial-canary" >/dev/null 2>&1
+pdftocairo -svg "$WORK_DIR/editorial-canary.pdf" "$WORK_DIR/editorial-canary.svg" >/dev/null 2>&1
+test -s "$WORK_DIR/editorial-canary.png"
+test -s "$WORK_DIR/editorial-canary.svg"
+python3 - <<'PY' "$OUTPUT_DIR/editorial-runtime.json"
+import json, subprocess, sys
+p=sys.argv[1]; d=json.load(open(p, encoding="utf-8"))
+d.update({
+    "status":"PASS",
+    "pdftoppm":subprocess.run(["pdftoppm","-v"],capture_output=True,text=True,check=True).stderr.splitlines()[0],
+    "pdftocairo":subprocess.run(["pdftocairo","-v"],capture_output=True,text=True,check=True).stderr.splitlines()[0],
+    "functional_outputs":["PNG","SVG"],
+})
+open(p,"w",encoding="utf-8").write(json.dumps(d,indent=2)+"\n")
+PY
+
 python3 "$PROJECT_ROOT/scripts/generate_canary.py" "$WORK_DIR/input"
 
 reference="$WORK_DIR/input/reference.fa"
@@ -86,6 +126,7 @@ jq --null-input \
   --slurpfile fixture "$WORK_DIR/input/fixture.json" \
   --slurpfile bcftools "$OUTPUT_DIR/bcftools.score.json" \
   --slurpfile gatk "$OUTPUT_DIR/gatk.score.json" \
+  --slurpfile editorial "$OUTPUT_DIR/editorial-runtime.json" \
   --arg version_policy "${CANARY_VERSION_POLICY:-PINNED}" \
   '{
     status: "PASS",
@@ -94,6 +135,7 @@ jq --null-input \
     version_policy: $version_policy,
     fixture: $fixture[0],
     callers: {bcftools: $bcftools[0], gatk_haplotypecaller: $gatk[0]},
+    editorial_runtime: $editorial[0],
     limitations: [
       "three synthetic SNPs only",
       "no difficult regions, indels, CNV, SV, repeats, contamination, BQSR or WGS benchmark",

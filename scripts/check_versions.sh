@@ -36,6 +36,8 @@ check_version bwa-mem2 '2.2.1' bwa-mem2 version
 check_version gatk '4.6.2.0' gatk --version
 check_version nextflow '26.04.6' nextflow -version
 check_version snakemake '7.32.4' snakemake --version
+check_version pdftoppm '26.07.0' pdftoppm -v
+check_version pdftocairo '26.07.0' pdftocairo -v
 
 if (( failures > 0 )); then
   printf 'runtime_gate\tFAIL\tfailures=%d\n' "$failures"
