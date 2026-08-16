@@ -7,6 +7,9 @@ COPY --chown=$MAMBA_USER:$MAMBA_USER environment.yml /tmp/environment.yml
 RUN micromamba install --yes --name base --file /tmp/environment.yml \
     && micromamba clean --all --yes
 
+COPY --chown=$MAMBA_USER:$MAMBA_USER reporting/requirements.txt /tmp/reporting-requirements.txt
+RUN python -m pip install --no-cache-dir --disable-pip-version-check -r /tmp/reporting-requirements.txt
+
 COPY --chown=$MAMBA_USER:$MAMBA_USER mcp/package.json mcp/package-lock.json /opt/codework/mcp/
 RUN cd /opt/codework/mcp \
     && npm ci --ignore-scripts

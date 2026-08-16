@@ -29,6 +29,10 @@ def load_catalog() -> dict[str, dict[str, Any]]:
     catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     if not isinstance(catalog, dict) or sorted(catalog) != [f"{i:02d}" for i in range(1, 12)]:
         raise ReportReleaseError("report catalog must contain exactly models 01..11")
+    required = {"code", "accent", "slug", "title", "tagline", "purpose", "audience", "sections"}
+    for report_id, model in catalog.items():
+        if not isinstance(model, dict) or not required.issubset(model):
+            raise ReportReleaseError(f"report model {report_id} missing v3 editorial metadata")
     return catalog
 
 
@@ -57,10 +61,6 @@ def _publication_blockers(data: dict[str, Any]) -> list[str]:
     final_audit = next((g for g in gates if isinstance(g, dict) and g.get("gate") == "FINAL_AUDIT_GATE"), None)
     if not isinstance(final_audit, dict) or final_audit.get("state") != "PASS":
         blockers.append("policy_evaluation:FINAL_AUDIT_GATE")
-
-    # POST_DEPLOYMENT is intentionally not a report-release blocker. The actual status
-    # is printed in the report. The ruleset allows the project to remain PENDENTE until
-    # the separate live deployment ceremony has genuinely passed.
     return blockers
 
 
@@ -76,11 +76,14 @@ def _model_markdown(report_id: str, model: dict[str, Any]) -> str:
     lines = [
         f"# {model['title']}",
         "",
+        f"**{model['tagline']}**",
+        "",
         "**MODELO — NÃO É RESULTADO GENÉTICO**",
         "",
-        f"Modelo GENOMA v3.0 / {report_id}. Ruleset exigido: v3.3 / VIGENTE / 14/08/2026.",
+        f"Modelo GENOMA v3.0 / {model['code']}. Ruleset exigido: v3.3 / VIGENTE / 14/08/2026.",
         "",
         f"Finalidade: {model['purpose']}",
+        f"Público: {model['audience']}",
         "",
     ]
     for section in model["sections"]:
@@ -100,12 +103,22 @@ def _final_markdown(report_id: str, model: dict[str, Any], data: dict[str, Any])
     lines = [
         f"# {model['title']}",
         "",
+        f"**{model['tagline']}**",
+        "",
         "**RESULTADO GENÔMICO — SAÍDA DETERMINÍSTICA DO PIPELINE DE RELATÓRIO**",
         "",
         f"Caso: {_safe(data.get('case_id'))}",
-        f"Versão do modelo: v3.0/{report_id}",
+        f"Versão do modelo: v3.0/{model['code']}",
         "Ruleset: v3.3 / VIGENTE / 14/08/2026",
         f"POST-DEPLOYMENT: {_safe(data.get('post_deployment_status'), 'PENDENTE')}",
+        "",
+        "## Finalidade",
+        "",
+        model["purpose"],
+        "",
+        "## Público",
+        "",
+        model["audience"],
         "",
         "## Resumo executivo",
         "",
@@ -166,7 +179,6 @@ def _final_markdown(report_id: str, model: dict[str, Any], data: dict[str, Any])
 
 
 def _to_html(markdown: str, title: str) -> str:
-    # Deliberately tiny renderer: preserves text faithfully without a Markdown dependency.
     body: list[str] = []
     in_code = False
     code: list[str] = []
@@ -216,8 +228,13 @@ def render_document(report_id: str, data: dict[str, Any], *, mode: str = "MODEL"
     metadata = {
         "schema": "genoma-report-bundle-v1",
         "report_id": report_id,
+        "code": model["code"],
+        "accent": model["accent"],
         "slug": model["slug"],
         "title": model["title"],
+        "tagline": model["tagline"],
+        "purpose": model["purpose"],
+        "audience": model["audience"],
         "mode": mode,
         "generated_at": generated_at,
         "ruleset_required": deepcopy(EXPECTED_RULESET),

@@ -19,18 +19,23 @@ CANONICAL_RULESET_SHA256 = EXPECTED_SHA
 REQUIRED_PATHS = (
     ".fallowrc.json", ".github/workflows/fallow.yml", ".github/workflows/scaffold-validation.yml",
     ".github/workflows/genoma-policy-engine.yml", ".github/workflows/genoma-production-ceremony.yml",
-    ".github/workflows/genoma-ngs-runtime-gate.yml", ".gitignore", "Dockerfile", "environment.yml", "main.nf", "nextflow.config",
+    ".github/workflows/genoma-production-witness.yml", ".github/workflows/genoma-ngs-runtime-gate.yml",
+    ".gitignore", "Dockerfile", "environment.yml", "main.nf", "nextflow.config", "workflows/wgs.nf",
     "manifests/GRCh38.sources.tsv", "manifests/GRCh38.lock.sha256.example", "manifests/RULESET_V3.3.sha256",
     "normative/sealed/MANIFEST.json", "normative/sealed/README.md",
     "scripts/__init__.py", "scripts/sealed_ruleset.py", "scripts/check_versions.sh", "scripts/fetch_grch38.sh",
-    "scripts/build_bwa_mem2_index.sh", "scripts/validate_grch38.sh", "scripts/generate_canary.py",
-    "scripts/score_variants.py", "scripts/run_canary.sh", "scripts/verify_ruleset.sh", "scripts/materialize_ruleset.py",
-    "scripts/run_live_post_deployment_smoke.py", "scripts/runtime_resource_gate.py",
-    "scripts/prepare_latest_candidate.py", "scripts/promote_latest_candidate.py", "scripts/freshness_gate.py",
-    "scripts/latest_runtime_resource_gate.py", "scripts/generate_report.py",
-    "reporting/__init__.py", "reporting/catalog.json", "reporting/engine.py",
-    "policy_engine/pyproject.toml", "policy_engine/genoma_policy/engine.py", "policy_engine/genoma_policy/attestation.py",
-    "policy_engine/genoma_policy/ledger.py", "policy_engine/policy/schema/execution-manifest.schema.json", "policy_engine/Dockerfile",
+    "scripts/build_bwa_mem2_index.sh", "scripts/validate_grch38.sh", "scripts/validate_bwa_mem2_functional.sh",
+    "scripts/generate_canary.py", "scripts/score_variants.py", "scripts/run_canary.sh", "scripts/verify_ruleset.sh",
+    "scripts/materialize_ruleset.py", "scripts/run_live_post_deployment_smoke.py", "scripts/runtime_resource_gate.py",
+    "scripts/runtime_stack.py", "scripts/prepare_latest_candidate.py", "scripts/promote_latest_candidate.py",
+    "scripts/freshness_gate.py", "scripts/latest_runtime_resource_gate.py", "scripts/verify_runtime_gate_manifest.py",
+    "scripts/wgs_consent_gate.py", "scripts/wgs_input_gate.py", "scripts/wgs_align_or_stage.sh",
+    "scripts/build_wgs_curated_manifest.py", "scripts/query_evidence.py", "scripts/build_adapter_capabilities.py",
+    "scripts/generate_report.py", "scripts/generate_all_reports.py", "reporting/__init__.py", "reporting/catalog.json",
+    "reporting/engine.py", "reporting/editorial_v3.py", "reporting/editorial_v3_hifi.py", "reporting/requirements.txt",
+    "evidence_adapters/__init__.py", "policy_engine/pyproject.toml", "policy_engine/genoma_policy/engine.py",
+    "policy_engine/genoma_policy/attestation.py", "policy_engine/genoma_policy/ledger.py",
+    "policy_engine/policy/schema/execution-manifest.schema.json", "policy_engine/Dockerfile",
     "mcp/package.json", "mcp/package-lock.json", "mcp/tsconfig.json", "mcp/src/server.ts", "deploy/docker-compose.yml",
     "deploy/attestations/bootstrap-project-v3.3.json", "adapters/README.md", "adapters/config.example.json",
     "docs/FALLOW_SECURITY_REVIEW.md", "docs/GITHUB_MOBILE_IMPORT.md", "docs/MAGALU_PRIVATE_MCP_SETUP.md",
@@ -43,6 +48,7 @@ EXPECTED_ARTIFACTS = {
     "Homo_sapiens_assembly38.dbsnp138.vcf.gz.tbi", "Mills_and_1000G_gold_standard.indels.hg38.vcf.gz",
     "Mills_and_1000G_gold_standard.indels.hg38.vcf.gz.tbi", "hg38-blacklist.v2.bed.gz",
 }
+EXPECTED_EVIDENCE_ADAPTERS = {"clinvar", "clingen", "cpic", "clinpgx", "gnomad", "pgs_catalog"}
 FORBIDDEN_SUFFIXES = (".fastq", ".fq", ".bam", ".bai", ".cram", ".crai", ".vcf", ".tbi")
 SKIP_PARTS = {".git", "node_modules", "dist", "__pycache__", ".pytest_cache"}
 
@@ -61,8 +67,6 @@ def validate(root: Path) -> list[str]:
         if not (root / relative).is_file():
             errors.append(f"missing required path: {relative}")
 
-    # The active plaintext ruleset is created only at runtime. Keeping an active copy in
-    # the repository would violate the normative uniqueness contract.
     active = []
     for candidate in root.rglob("REGRAS_PROJETO_GENOMA*.txt"):
         if any(part in SKIP_PARTS for part in candidate.parts):
@@ -106,6 +110,83 @@ def validate(root: Path) -> list[str]:
     if runbook.is_file() and "--entrypoint /bin/bash" in runbook.read_text(encoding="utf-8"):
         errors.append("runbook must not bypass the micromamba container entrypoint")
 
+    main_nf = root / "main.nf"
+    wgs_nf = root / "workflows/wgs.nf"
+    if main_nf.is_file():
+        text = main_nf.read_text(encoding="utf-8")
+        for token in ("params.mode", "WGS_PRODUCTION", "CANARY", "runtime_gate_manifest", "freshness_state_manifest"):
+            if token not in text:
+                errors.append(f"main.nf missing production dispatcher contract token: {token}")
+    if wgs_nf.is_file():
+        text = wgs_nf.read_text(encoding="utf-8")
+        for token in (
+            "VERIFY_RUNTIME_GATE", "REFRESH_FRESHNESS_GATE", "VERIFY_CONSENT_PROVENANCE", "ready_for_first_dna_read",
+            "INGEST_AND_QC", "ALIGN_OR_STAGE", "RERUN_SAMPLE_RUNTIME_GATE", "CALL_SHORT_VARIANTS",
+            "NORMALIZE_VARIANTS", "ANNOTATE_EVIDENCE", "BUILD_CURATED_MANIFEST", "POLICY_EVALUATE",
+            "GENERATE_REPORTS", "unsupported_variant_classes", "NÃO DISPONÍVEL", "CYP2D6", "CNV", "SV",
+        ):
+            if token not in text:
+                errors.append(f"WGS workflow missing fail-closed contract token: {token}")
+
+    witness = root / ".github/workflows/genoma-production-witness.yml"
+    if witness.is_file():
+        text = witness.read_text(encoding="utf-8")
+        if "--output-dir evidence/live-section-260" in text:
+            errors.append("Production Witness still uses obsolete live smoke --output-dir contract")
+        for token in ("--deployment-id", "--output evidence/live-section-260/summary.json"):
+            if token not in text:
+                errors.append(f"Production Witness missing current live smoke contract: {token}")
+
+    ngs_gate = root / ".github/workflows/genoma-ngs-runtime-gate.yml"
+    if ngs_gate.is_file():
+        text = ngs_gate.read_text(encoding="utf-8")
+        if "bash -lc './scripts/run_canary.sh" in text:
+            errors.append("NGS gate must not bypass micromamba environment with a login-shell canary")
+        for token in (
+            "freshness_gate.py", "GRCh38.lock.sha256.approved",
+            "[self-hosted, linux, x64, genoma-production, highmem]",
+            "nextflow run /opt/codework/main.nf --mode canary", "validate_bwa_mem2_functional.sh",
+        ):
+            if token not in text:
+                errors.append(f"NGS gate missing current-session readiness contract: {token}")
+
+    nextflow_cfg = root / "nextflow.config"
+    if nextflow_cfg.is_file() and "nextflowVersion = '!>=26.04.6'" not in nextflow_cfg.read_text(encoding="utf-8"):
+        errors.append("Nextflow manifest must permit tested forward versions while enforcing minimum 26.04.6")
+
+    adapters = root / "evidence_adapters/__init__.py"
+    if adapters.is_file():
+        text = adapters.read_text(encoding="utf-8")
+        for key in EXPECTED_EVIDENCE_ADAPTERS:
+            if f'"{key}"' not in text:
+                errors.append(f"missing evidence adapter: {key}")
+        if "api.pharmgkb.org" in text:
+            errors.append("retired PharmGKB API hostname must not be used; use ClinPGx")
+        for token in ("result_digest", "checked_at", "locator", "NÃO DISPONÍVEL", "VERIFICADO"):
+            if token not in text:
+                errors.append(f"evidence adapter contract missing: {token}")
+
+    renderer = root / "reporting/editorial_v3_hifi.py"
+    if renderer.is_file():
+        text = renderer.read_text(encoding="utf-8")
+        for token in ("0B1F33", "0F766E", "A16207", "F2F4F7", "RESULTADO GENÔMICO", "write_editorial_bundle", "DejaVu Sans"):
+            if token not in text:
+                errors.append(f"editorial v3 high-fidelity renderer contract missing: {token}")
+
+    catalog = root / "reporting/catalog.json"
+    if catalog.is_file():
+        models = json.loads(catalog.read_text(encoding="utf-8"))
+        expected_accents = {"01": "0F766E", "02": "2563EB", "03": "7C3AED", "04": "166534", "05": "475467", "06": "B42318", "07": "A16207", "08": "0F766E", "09": "475467", "10": "0B1F33", "11": "0B1F33"}
+        for report_id, accent in expected_accents.items():
+            if models.get(report_id, {}).get("accent") != accent:
+                errors.append(f"report {report_id} v3 accent mismatch")
+
+    requirements = root / "reporting/requirements.txt"
+    if requirements.is_file():
+        req = requirements.read_text(encoding="utf-8")
+        if "python-docx==" not in req or "reportlab==" not in req:
+            errors.append("editorial renderer dependencies must be exact-pinned")
+
     for path in root.rglob("*"):
         if not path.is_file() or any(part in SKIP_PARTS for part in path.parts):
             continue
@@ -134,8 +215,10 @@ def main() -> None:
     print("PASS\trepository_active_rulesets\t0")
     print("PASS\tsealed_normative_transport\tchunked transport verified through shared decoder")
     print("PASS\tgrch38_manifest\t9/9")
-    print("PASS\tpre_dna_readiness_contract\tlatest-tested candidate + freshness gate + runtime/resource gate present")
-    print("PASS\treporting_contract\t11-model deterministic renderer present")
+    print("PASS\tpre_dna_readiness_contract\tlatest-tested candidate + direct/Nextflow canaries + session promotion + freshness + runtime/resource gate present")
+    print("PASS\twgs_scientific_data_plane_contract\tconsent/provenance + real SNV/indel path + explicit unsupported complex classes")
+    print("PASS\tevidence_adapter_contract\tClinVar/ClinGen/CPIC/ClinPGx/gnomAD/PGS Catalog traceable adapters present")
+    print("PASS\treporting_contract\t11-model deterministic renderer + report-specific high-fidelity PDF/DOCX v3 present")
     print("PASS\toptional_adapters\tcore has no Cloudflare/Temporal/Supabase/OpenAI runtime dependency")
 
 

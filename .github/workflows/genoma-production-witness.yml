@@ -1,6 +1,15 @@
 name: GENOMA Production Witness
 
 on:
+  pull_request:
+    paths:
+      - 'normative/**'
+      - 'manifests/RULESET_V3.3.sha256'
+      - 'policy_engine/**'
+      - 'scripts/materialize_ruleset.py'
+      - 'scripts/run_live_post_deployment_smoke.py'
+      - 'deploy/attestations/bootstrap-project-v3.3.json'
+      - '.github/workflows/genoma-production-witness.yml'
   push:
     branches: [main]
     paths:
@@ -17,7 +26,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: genoma-production-witness
+  group: genoma-production-witness-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -86,10 +95,12 @@ jobs:
           PY
       - name: Execute all 15 section-260 scenarios through the live HTTP instance
         run: |
+          mkdir -p evidence/live-section-260
           python3 scripts/run_live_post_deployment_smoke.py \
             --base-url http://127.0.0.1:8787 \
             --bootstrap-attestation deploy/attestations/bootstrap-project-v3.3.json \
-            --output-dir evidence/live-section-260
+            --deployment-id "witness-${GITHUB_RUN_ID}-${GITHUB_SHA}" \
+            --output evidence/live-section-260/summary.json
           jq -e '.passed == 15 and .total == 15 and .critical_failures == 0 and .post_deployment_status == "PASS"' evidence/live-section-260/summary.json >/dev/null
       - name: Capture logs and construct content-addressed witness
         if: always()
@@ -140,6 +151,7 @@ jobs:
           retention-days: 365
           if-no-files-found: error
       - name: Publish PASS witness to dedicated audit-evidence branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
         run: |
           set -euo pipefail

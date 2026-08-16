@@ -4,10 +4,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-MANAGED = ("python", "openjdk", "nodejs", "samtools", "bcftools", "htslib", "bwa-mem2", "gatk4", "nextflow", "snakemake-minimal", "curl", "jq", "pigz")
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.runtime_stack import MANAGED_RUNTIME_PACKAGES
 
 
 def promote(canary_path: Path, inventory_path: Path, *, max_age_hours: int = 24) -> dict:
@@ -21,7 +26,7 @@ def promote(canary_path: Path, inventory_path: Path, *, max_age_hours: int = 24)
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     components = []
     missing = []
-    for name in MANAGED:
+    for name in MANAGED_RUNTIME_PACKAGES:
         version = versions.get(name)
         if not version:
             missing.append(name)

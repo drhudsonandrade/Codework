@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from reporting.editorial_v3 import write_editorial_bundle
 from reporting.engine import ReportReleaseError, render_document, write_bundle
 
 
@@ -27,8 +28,10 @@ def main() -> int:
     data = json.loads(Path(args.input).read_text(encoding="utf-8")) if args.input else {}
     try:
         rendered = render_document(args.report, data, mode=args.mode)
-        paths = write_bundle(rendered, Path(args.output_dir), stem=args.stem)
-    except ReportReleaseError as exc:
+        output_dir = Path(args.output_dir)
+        paths = write_bundle(rendered, output_dir, stem=args.stem)
+        paths.update(write_editorial_bundle(rendered, output_dir, stem=args.stem))
+    except (ReportReleaseError, RuntimeError, ValueError) as exc:
         print(f"REPORT BLOCKED: {exc}", file=sys.stderr)
         return 2
     print(json.dumps({k: str(v) for k, v in paths.items()}, ensure_ascii=False, indent=2))

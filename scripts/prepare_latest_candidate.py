@@ -11,18 +11,20 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from pathlib import Path
 
-DEFAULT_MANAGED = {
-    "python", "openjdk", "nodejs", "samtools", "bcftools", "htslib",
-    "bwa-mem2", "gatk4", "nextflow", "snakemake-minimal", "curl", "jq", "pigz",
-}
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.runtime_stack import MANAGED_RUNTIME_PACKAGES, MANAGED_RUNTIME_SET
 
 _DEP = re.compile(r"^(\s*-\s*)([A-Za-z0-9_.+-]+)(?:=[^\s#]+)?(\s*(?:#.*)?)$")
 
 
 def prepare_candidate(source: Path, destination: Path, *, managed: set[str] | None = None) -> dict[str, object]:
-    managed = managed or set(DEFAULT_MANAGED)
+    managed_set = set(managed) if managed is not None else set(MANAGED_RUNTIME_SET)
     original = source.read_text(encoding="utf-8")
     unpinned: list[str] = []
     output: list[str] = []
@@ -30,7 +32,7 @@ def prepare_candidate(source: Path, destination: Path, *, managed: set[str] | No
         ending = "\n" if line.endswith("\n") else ""
         body = line[:-1] if ending else line
         match = _DEP.match(body)
-        if match and match.group(2) in managed and "=" in body.split("#", 1)[0]:
+        if match and match.group(2) in managed_set and "=" in body.split("#", 1)[0]:
             prefix, package, suffix = match.groups()
             output.append(f"{prefix}{package}{suffix}{ending}")
             unpinned.append(package)
@@ -38,15 +40,14 @@ def prepare_candidate(source: Path, destination: Path, *, managed: set[str] | No
             output.append(line)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text("".join(output), encoding="utf-8")
-    ordered = [name for name in DEFAULT_MANAGED if name in unpinned]
-    # Stable human-oriented order follows source occurrence when custom sets are used.
-    ordered = [name for name in unpinned if name in managed]
+    ordered = [name for name in MANAGED_RUNTIME_PACKAGES if name in unpinned]
+    extras = [name for name in unpinned if name not in ordered]
     return {
         "schema": "genoma-latest-candidate-v1",
         "source": str(source),
         "destination": str(destination),
-        "managed": sorted(managed),
-        "unpinned": ordered,
+        "managed": sorted(managed_set),
+        "unpinned": ordered + extras,
         "production_source_mutated": False,
     }
 
