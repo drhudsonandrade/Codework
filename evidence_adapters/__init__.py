@@ -63,10 +63,12 @@ class EvidenceAdapter:
             url = self.spec.base_url + path + (("?" + _qs(params)) if params else "")
             return urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "GENOMA-evidence-adapter/1"})
         if self.key == "clinpgx":
+            # ClinPGx publishes an OpenAPI contract at /openapi.json. Query parameters
+            # are endpoint-specific (for /data/gene: accessionId, symbol, view); unlike
+            # CPIC, a generic `limit` parameter is not valid. We therefore pass only the
+            # explicit `params` object and never invent cross-provider pagination fields.
             path = str(query.get("path") or "data/gene").lstrip("/")
             params = query.get("params") if isinstance(query.get("params"), dict) else {}
-            if "limit" in query:
-                params = {**params, "limit": query["limit"]}
             url = self.spec.base_url + path + (("?" + _qs(params)) if params else "")
             return urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "GENOMA-evidence-adapter/1"})
         if self.key == "gnomad":
