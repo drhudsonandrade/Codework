@@ -1,0 +1,42 @@
+                if raw is None: unresolved.append(item["field_id"]); continue
+                bg=str(item["background"]); default="#FFFFFF" if _is_dark(bg) else "#17212B"; value=_normalize_value(raw,default_color=default); bbox=[float(x) for x in item["bbox"]]; fsize=float(value["font_size_pt"] or item.get("font_size_pt") or 7.0)
+                _cover, draw = _replacement_geometry(item, float(meta["page_size_pt"][0]), fields_by_page.get(page_no, []))
+                # Editable textbox follows the same peer-bounded geometry as PDF, preventing overlap.
+                width=max(8.0,draw[2]-draw[0]); height=max(8.0,draw[3]-draw[1])
+                fsize=_fit_single_line_size(value["value"], width, fsize, _register_fonts()["bold"])
+                _add_vml_textbox(p,bbox=[draw[0],draw[1],draw[0]+width,draw[1]+height],background=bg,text=value["value"],color=value["color"],font_size=fsize,box_id=f"GENOMA_FIELD_{page_no}_{replaced_fields+1}"); replaced_fields+=1
+            if page_no < len(pngs):
+                br=doc.add_paragraph(); br.paragraph_format.space_before=Pt(0); br.paragraph_format.space_after=Pt(0); br.add_run().add_break(WD_BREAK.PAGE)
+        path.parent.mkdir(parents=True,exist_ok=True); doc.save(path); _patch_docx_svg(path,svgs)
+    finally:
+        shutil.rmtree(work,ignore_errors=True)
+    if strict and unresolved:
+        path.unlink(missing_ok=True); raise TemplateV3Error(f"strict v3 DOCX rendering refused: {len(unresolved)} unresolved fields")
+    return {
+        "mode":"template-v3-svg-docx",
+        "template":template.name,
+        "template_sha256":meta["sha256"],
+        "template_status":"VERIFICADO",
+        "page_count":meta["page_count"],
+        "replaced_fields":replaced_fields,
+        "replaced_controlled_spans":replaced_controls,
+        "unresolved_fields":unresolved,
+        "strict":strict,
+        "editable_dynamic_fields":True,
+        "static_chrome":"SVG page plate generated from the exact v3 reference PDF",
+        "pixel_identity_note":"DOCX is renderer-dependent; exact PDF pixel identity is tested separately and must not be inferred from DOCX structure.",
+    }
+
+
+def template_mode_requested(rendered: dict[str, Any]) -> bool:
+    data=rendered.get("data") if isinstance(rendered.get("data"),dict) else {}
+    return str(data.get("editorial_mode") or os.environ.get("GENOMA_EDITORIAL_MODE") or "").lower() in {"template-v3","v3-template","pixel-v3"}
+
+
+def template_dir_from_environment() -> Path:
+    raw=os.environ.get("GENOMA_REPORT_TEMPLATE_DIR")
+    if not raw: raise TemplateV3Error("GENOMA_REPORT_TEMPLATE_DIR is required for template-v3 mode")
+    return Path(raw)
+
+
+__all__=["TemplateV3Error","load_reference_manifest","verify_template_pack","render_pdf_from_template","render_docx_from_template","template_mode_requested","template_dir_from_environment"]
