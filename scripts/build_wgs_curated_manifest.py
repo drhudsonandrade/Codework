@@ -6,6 +6,13 @@ import hashlib
 import json
 from pathlib import Path
 
+RULESET = {
+    "status": "VIGENTE",
+    "version": "v3.4",
+    "effective_date": "17/08/2026",
+    "sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
+}
+
 
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
@@ -61,7 +68,7 @@ def main() -> int:
         "schema": "genoma-wgs-curation-manifest-v1",
         "case_id": args.case_id,
         "sample_id": args.sample_id,
-        "ruleset": {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026"},
+        "ruleset": RULESET,
         "summary": "Pipeline técnico executado para SNV/indel. Interpretação clínica e publicação final permanecem bloqueadas até curadoria, Evidence Gate e Final Audit.",
         "wgs_artifacts": {
             "normalized_vcf": str(vcf),
