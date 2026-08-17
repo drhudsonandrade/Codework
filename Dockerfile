@@ -1,4 +1,4 @@
-FROM mambaorg/micromamba:2.3.2
+FROM mambaorg/micromamba:2.3.2-ubuntu22.04@sha256:0e87302b8b802b595c947f408e02c436c1d49aa582132ddaa4cd5e1c991a4871
 
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
 WORKDIR /opt/codework

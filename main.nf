@@ -8,8 +8,16 @@ params.freshness_state_manifest = params.freshness_state_manifest ?: null
 params.ref_root = params.ref_root ?: null
 params.case_id = params.case_id ?: null
 params.sample_id = params.sample_id ?: null
+params.array_input = params.array_input ?: null
+params.array_build = params.array_build ?: null
+params.array_strand = params.array_strand ?: null
+params.array_build_evidence = params.array_build_evidence ?: null
+params.array_strand_evidence = params.array_strand_evidence ?: null
+params.array_evidence_mode = params.array_evidence_mode ?: 'plan-only'
+params.array_target_manifest = params.array_target_manifest ?: 'config/partial_genome_annotation_targets.json'
 
 include { WGS_PRODUCTION } from './workflows/wgs'
+include { ARRAY_PRODUCTION } from './workflows/array'
 
 process CANARY {
     tag 'synthetic-germline-canary'
@@ -64,7 +72,40 @@ workflow {
             sample_id_ch
         )
     }
+    else if (params.mode == 'array') {
+        def missing = []
+        if (!params.array_input) missing << 'array_input'
+        if (!params.case_id) missing << 'case_id'
+        if (!params.array_build) missing << 'array_build'
+        if (!params.array_strand) missing << 'array_strand'
+        if (!params.array_build_evidence) missing << 'array_build_evidence'
+        if (!params.array_strand_evidence) missing << 'array_strand_evidence'
+        if (!(params.array_evidence_mode in ['plan-only', 'live'])) missing << 'array_evidence_mode(plan-only|live)'
+        if (missing) {
+            error "ARRAY_PRODUCTION blocked: missing/invalid required parameters: ${missing.join(', ')}"
+        }
+
+        array_input_ch = Channel.fromPath(params.array_input, checkIfExists: true)
+        target_manifest_ch = Channel.fromPath(params.array_target_manifest, checkIfExists: true)
+        case_id_ch = Channel.value(params.case_id)
+        build_ch = Channel.value(params.array_build)
+        strand_ch = Channel.value(params.array_strand)
+        build_evidence_ch = Channel.value(params.array_build_evidence)
+        strand_evidence_ch = Channel.value(params.array_strand_evidence)
+        evidence_mode_ch = Channel.value(params.array_evidence_mode)
+
+        ARRAY_PRODUCTION(
+            array_input_ch,
+            case_id_ch,
+            build_ch,
+            strand_ch,
+            build_evidence_ch,
+            strand_evidence_ch,
+            evidence_mode_ch,
+            target_manifest_ch
+        )
+    }
     else {
-        error "Unknown --mode '${params.mode}'. Allowed: canary, wgs"
+        error "Unknown --mode '${params.mode}'. Allowed: canary, wgs, array"
     }
 }

@@ -16,11 +16,14 @@ from scripts.sealed_ruleset import EXPECTED_NAME, EXPECTED_SHA, SealedRulesetErr
 
 CANONICAL_RULESET = EXPECTED_NAME
 CANONICAL_RULESET_SHA256 = EXPECTED_SHA
+FALLOW_ACTION_SHA = "45fd28766199acb1f939f6862274a37aad12770b"
 REQUIRED_PATHS = (
     ".fallowrc.json", ".github/workflows/fallow.yml", ".github/workflows/scaffold-validation.yml",
     ".github/workflows/genoma-policy-engine.yml", ".github/workflows/genoma-production-ceremony.yml",
     ".github/workflows/genoma-production-witness.yml", ".github/workflows/genoma-ngs-runtime-gate.yml",
-    ".gitignore", "Dockerfile", "environment.yml", "main.nf", "nextflow.config", "workflows/wgs.nf",
+    ".github/workflows/genoma-snp-array.yml", ".gitignore", "Dockerfile", "environment.yml", "main.nf",
+    "nextflow.config", "workflows/wgs.nf", "workflows/array.nf", "array_pipeline/qc.py",
+    "array_pipeline/annotation.py", "array_pipeline/targets.py", "config/partial_genome_annotation_targets.json",
     "manifests/GRCh38.sources.tsv", "manifests/GRCh38.lock.sha256.example", "manifests/RULESET_V3.3.sha256",
     "normative/sealed/MANIFEST.json", "normative/sealed/README.md",
     "scripts/__init__.py", "scripts/sealed_ruleset.py", "scripts/check_versions.sh", "scripts/fetch_grch38.sh",
@@ -31,16 +34,21 @@ REQUIRED_PATHS = (
     "scripts/freshness_gate.py", "scripts/latest_runtime_resource_gate.py", "scripts/verify_runtime_gate_manifest.py",
     "scripts/wgs_consent_gate.py", "scripts/wgs_input_gate.py", "scripts/wgs_align_or_stage.sh",
     "scripts/build_wgs_curated_manifest.py", "scripts/query_evidence.py", "scripts/build_adapter_capabilities.py",
+    "scripts/run_snp_array.py", "scripts/annotate_partial_genome.py", "scripts/build_array_case_manifest.py",
+    "scripts/verify_prebuilt_bwa_mem2_bundle.py", "scripts/verify_supply_chain_lock.py",
     "scripts/generate_report.py", "scripts/generate_all_reports.py", "reporting/__init__.py", "reporting/catalog.json",
     "reporting/engine.py", "reporting/editorial_v3.py", "reporting/editorial_v3_hifi.py", "reporting/requirements.txt",
-    "evidence_adapters/__init__.py", "policy_engine/pyproject.toml", "policy_engine/genoma_policy/engine.py",
-    "policy_engine/genoma_policy/attestation.py", "policy_engine/genoma_policy/ledger.py",
-    "policy_engine/policy/schema/execution-manifest.schema.json", "policy_engine/Dockerfile",
-    "mcp/package.json", "mcp/package-lock.json", "mcp/tsconfig.json", "mcp/src/server.ts", "deploy/docker-compose.yml",
-    "deploy/attestations/bootstrap-project-v3.3.json", "adapters/README.md", "adapters/config.example.json",
-    "docs/FALLOW_SECURITY_REVIEW.md", "docs/GITHUB_MOBILE_IMPORT.md", "docs/MAGALU_PRIVATE_MCP_SETUP.md",
-    "docs/PRE_DEPLOYMENT_VALIDATION_2026-08-15.md", "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md", "docs/PR_BODY.md",
-    "docs/DETERMINISTIC_ENGINE.md", "docs/PRODUCTION_CEREMONY.md", "docs/PORTABILITY_MATRIX.md",
+    "reporting/reference_v3_manifest.json", "template_store/v3.0/MANIFEST.json", "locks/actions-lock.json",
+    "locks/runtime-lock.json", "evidence_adapters/__init__.py", "policy_engine/pyproject.toml",
+    "policy_engine/genoma_policy/engine.py", "policy_engine/genoma_policy/attestation.py",
+    "policy_engine/genoma_policy/ledger.py", "policy_engine/policy/schema/execution-manifest.schema.json",
+    "policy_engine/Dockerfile", "mcp/package.json", "mcp/package-lock.json", "mcp/tsconfig.json", "mcp/src/server.ts",
+    "deploy/docker-compose.yml", "deploy/attestations/bootstrap-project-v3.3.json", "adapters/README.md",
+    "adapters/config.example.json", "docs/FALLOW_SECURITY_REVIEW.md", "docs/GITHUB_MOBILE_IMPORT.md",
+    "docs/MAGALU_PRIVATE_MCP_SETUP.md", "docs/PRE_DEPLOYMENT_VALIDATION_2026-08-15.md",
+    "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md", "docs/PR_BODY.md", "docs/DETERMINISTIC_ENGINE.md",
+    "docs/PRODUCTION_CEREMONY.md", "docs/PORTABILITY_MATRIX.md", "docs/GRCH38_COMPUTE_STRATEGY.md",
+    "docs/audits/GENOMA_V0.8_PREIMPLEMENTATION_AUDIT_2026-08-16.md",
 )
 EXPECTED_ARTIFACTS = {
     "Homo_sapiens_assembly38.fasta", "Homo_sapiens_assembly38.fasta.fai", "Homo_sapiens_assembly38.dict",
@@ -102,31 +110,34 @@ def validate(root: Path) -> list[str]:
 
     fw = root / ".github/workflows/fallow.yml"
     if fw.is_file():
-        text = fw.read_text()
-        if "fallow-rs/fallow@v3.16.0" not in text or "version: 3.16.0" not in text:
-            errors.append("Fallow workflow must pin wrapper and CLI to 3.16.0")
+        text = fw.read_text(encoding="utf-8")
+        if f"fallow-rs/fallow@{FALLOW_ACTION_SHA}" not in text or "version: 3.16.0" not in text:
+            errors.append("Fallow workflow must pin wrapper SHA and CLI 3.16.0")
 
     runbook = root / "docs/MAGALU_PRIVATE_MCP_SETUP.md"
     if runbook.is_file() and "--entrypoint /bin/bash" in runbook.read_text(encoding="utf-8"):
         errors.append("runbook must not bypass the micromamba container entrypoint")
 
     main_nf = root / "main.nf"
-    wgs_nf = root / "workflows/wgs.nf"
     if main_nf.is_file():
         text = main_nf.read_text(encoding="utf-8")
-        for token in ("params.mode", "WGS_PRODUCTION", "CANARY", "runtime_gate_manifest", "freshness_state_manifest"):
+        for token in ("params.mode", "WGS_PRODUCTION", "ARRAY_PRODUCTION", "CANARY", "array_input", "array_build_evidence", "array_strand_evidence"):
             if token not in text:
-                errors.append(f"main.nf missing production dispatcher contract token: {token}")
+                errors.append(f"main.nf missing dispatcher contract token: {token}")
+
+    wgs_nf = root / "workflows/wgs.nf"
     if wgs_nf.is_file():
         text = wgs_nf.read_text(encoding="utf-8")
-        for token in (
-            "VERIFY_RUNTIME_GATE", "REFRESH_FRESHNESS_GATE", "VERIFY_CONSENT_PROVENANCE", "ready_for_first_dna_read",
-            "INGEST_AND_QC", "ALIGN_OR_STAGE", "RERUN_SAMPLE_RUNTIME_GATE", "CALL_SHORT_VARIANTS",
-            "NORMALIZE_VARIANTS", "ANNOTATE_EVIDENCE", "BUILD_CURATED_MANIFEST", "POLICY_EVALUATE",
-            "GENERATE_REPORTS", "unsupported_variant_classes", "NÃO DISPONÍVEL", "CYP2D6", "CNV", "SV",
-        ):
+        for token in ("VERIFY_RUNTIME_GATE", "REFRESH_FRESHNESS_GATE", "VERIFY_CONSENT_PROVENANCE", "ready_for_first_dna_read", "INGEST_AND_QC", "ALIGN_OR_STAGE", "RERUN_SAMPLE_RUNTIME_GATE", "CALL_SHORT_VARIANTS", "NORMALIZE_VARIANTS", "ANNOTATE_EVIDENCE", "BUILD_CURATED_MANIFEST", "POLICY_EVALUATE", "GENERATE_REPORTS", "unsupported_variant_classes", "NÃO DISPONÍVEL", "CYP2D6", "CNV", "SV"):
             if token not in text:
                 errors.append(f"WGS workflow missing fail-closed contract token: {token}")
+
+    array_nf = root / "workflows/array.nf"
+    if array_nf.is_file():
+        text = array_nf.read_text(encoding="utf-8")
+        for token in ("ARRAY_QC", "ARRAY_ANNOTATE", "ARRAY_BUILD_MANIFEST", "ARRAY_POLICY_EVALUATE", "ARRAY_GENERATE_REPORTS", "LIMITED_INTERPRETATION_GATE", "plan-only", "live"):
+            if token not in text:
+                errors.append(f"SNP-array workflow missing fail-closed contract token: {token}")
 
     witness = root / ".github/workflows/genoma-production-witness.yml"
     if witness.is_file():
@@ -142,11 +153,7 @@ def validate(root: Path) -> list[str]:
         text = ngs_gate.read_text(encoding="utf-8")
         if "bash -lc './scripts/run_canary.sh" in text:
             errors.append("NGS gate must not bypass micromamba environment with a login-shell canary")
-        for token in (
-            "freshness_gate.py", "GRCh38.lock.sha256.approved",
-            "[self-hosted, linux, x64, genoma-production, highmem]",
-            "nextflow run /opt/codework/main.nf --mode canary", "validate_bwa_mem2_functional.sh",
-        ):
+        for token in ("freshness_gate.py", "GRCh38.lock.sha256.approved", "[self-hosted, linux, x64, genoma-production, highmem]", "nextflow run /opt/codework/main.nf --mode canary", "validate_bwa_mem2_functional.sh", "verify_supply_chain_lock.py"):
             if token not in text:
                 errors.append(f"NGS gate missing current-session readiness contract: {token}")
 
@@ -213,12 +220,14 @@ def main() -> None:
     print("PASS\trepository_contract")
     print("PASS\truleset_manifest_contract\tv3.3 raw SHA-256 pinned")
     print("PASS\trepository_active_rulesets\t0")
-    print("PASS\tsealed_normative_transport\tchunked transport verified through shared decoder")
+    print("PASS\tsealed_normative_transport\tshared decoder")
     print("PASS\tgrch38_manifest\t9/9")
-    print("PASS\tpre_dna_readiness_contract\tlatest-tested candidate + direct/Nextflow canaries + session promotion + freshness + runtime/resource gate present")
-    print("PASS\twgs_scientific_data_plane_contract\tconsent/provenance + real SNV/indel path + explicit unsupported complex classes")
-    print("PASS\tevidence_adapter_contract\tClinVar/ClinGen/CPIC/ClinPGx/gnomAD/PGS Catalog traceable adapters present")
-    print("PASS\treporting_contract\t11-model deterministic renderer + report-specific high-fidelity PDF/DOCX v3 present")
+    print("PASS\tpre_dna_readiness_contract\tlatest-tested candidate + canaries + freshness + runtime/resource gate")
+    print("PASS\twgs_scientific_data_plane_contract\treal SNV/indel path + explicit unsupported classes")
+    print("PASS\tarray_scientific_data_plane_contract\tQC + target-first evidence + policy/report handoff")
+    print("PASS\tevidence_adapter_contract\tClinVar/ClinGen/CPIC/ClinPGx/gnomAD/PGS Catalog")
+    print("PASS\tsupply_chain_contract\tworkflow/action/container lock paths present")
+    print("PASS\treporting_contract\t11-model deterministic renderer and reference identities")
     print("PASS\toptional_adapters\tcore has no Cloudflare/Temporal/Supabase/OpenAI runtime dependency")
 
 
