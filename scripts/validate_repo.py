@@ -114,6 +114,10 @@ def validate(root: Path) -> list[str]:
         if f"fallow-rs/fallow@{FALLOW_ACTION_SHA}" not in text or "version: 3.16.0" not in text:
             errors.append("Fallow workflow must pin wrapper SHA and CLI 3.16.0")
 
+    runbook = root / "docs/MAGALU_PRIVATE_MCP_SETUP.md"
+    if runbook.is_file() and "--entrypoint /bin/bash" in runbook.read_text(encoding="utf-8"):
+        errors.append("runbook must not bypass the micromamba container entrypoint")
+
     main_nf = root / "main.nf"
     if main_nf.is_file():
         text = main_nf.read_text(encoding="utf-8")
