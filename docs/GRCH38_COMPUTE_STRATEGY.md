@@ -2,57 +2,72 @@
 
 ## Objective
 
-Avoid a permanently running >=96 GiB physical runner without weakening the GENOMA v3.3 Runtime/Resource Gate.
+Eliminate the need for a permanently running >=96 GiB physical runner **without weakening** the GENOMA v3.3 Runtime/Resource Gate.
 
-## Why ordinary runners cannot simply be merged
+## Constraint verified from primary sources
 
-BWA-MEM2 documents index creation as requiring `28N GB` of memory where `N` is reference size; for a human reference this is roughly an 80-90 GiB class operation. Its compressed human index is about 10 GB on disk/in memory after creation. GitHub standard private Linux runners are substantially smaller. Independent GitHub Actions jobs do not share one process address space, so adding many small runners does not create one 90 GiB heap.
+BWA-MEM2 documents index creation as requiring `28N GB` of memory where `N` is reference size; for a human reference this is an ~80–90 GiB-class one-time operation. The current human index is about 10 GB on disk/in memory after construction. Standard GitHub-hosted Linux runners for private repositories provide 8 GB RAM and 14 GB SSD. Separate Actions jobs do not share one process address space, so multiple 8 GB runners cannot be combined into one 80–90 GB indexing process.
 
 Primary references:
-- https://github.com/bwa-mem2/bwa-mem2/blob/master/README.md
-- https://docs.github.com/en/actions/reference/runners/github-hosted-runners
+- `bwa-mem2/bwa-mem2` README and issue #118;
+- GitHub Actions hosted-runner reference;
+- GitHub Packages billing documentation;
+- Broad/GATK public GRCh38 resource bundle documentation.
 
-## Supported strategies
+## Recommended architecture: no permanent high-memory machine
 
-### A. `self-hosted-build` - canonical high-memory build
+### Path A — prebuilt BWA-MEM2, content-addressed and verified
 
-Status until run: **NÃO DISPONÍVEL**.
+**Status until an actual approved bundle is supplied: NÃO DISPONÍVEL.**
 
-1. Bring up any Linux x64 machine with the required RAM/disk only for the build window.
-2. Install/register the GitHub runner labels `genoma-production,highmem` or execute the reviewed commands manually.
-3. Validate the approved 9/9 GRCh38 source bundle before index creation.
-4. Build the five BWA-MEM2 index files.
-5. Create and independently review `BWA_MEM2.index.sha256.approved` binding the exact FASTA plus all five index files.
-6. Execute `validate_grch38.sh`, `verify_prebuilt_bwa_mem2_bundle.py --run-functional`, and the full current-session Runtime/Resource Gate.
-7. Publish only the content-addressed reference/index bundle to durable private storage; terminate the expensive VM.
+This is the preferred zero-permanent-machine design already enforced by `scripts/verify_prebuilt_bwa_mem2_bundle.py`.
 
-This means high-memory compute can be **ephemeral**, not permanent.
+1. Build the BWA-MEM2 index once on any temporary >=96 GiB machine **or** obtain an independently trusted index that is demonstrably for the exact approved FASTA.
+2. Bind the FASTA and all five BWA-MEM2 index files in `BWA_MEM2.index.sha256.approved`.
+3. Run checksum, contig and functional alignment validation.
+4. Publish the verified reference/index bundle as a content-addressed OCI artifact/image.
+5. Destroy the high-memory builder.
+6. Every future execution pulls by immutable digest and reruns the Runtime/Resource Gate in that session.
 
-### B. `prebuilt-verified` - no repeated high-memory build
+GitHub currently documents Container Registry image storage/bandwidth as free; therefore GHCR can serve as the durable reference-distribution layer without a permanently rented server. This billing condition is external and must be rechecked before relying on it long term.
 
-Status until an actual bundle is supplied: **NÃO DISPONÍVEL**.
+### Path B — Broad prebuilt classic-BWA GRCh38 indices, no high-memory build at all
 
-The system may consume an already-built BWA-MEM2 index only when:
+**Status: PROPOSTO; requires benchmark before replacing the current BWA-MEM2 production aligner.**
 
-- `Homo_sapiens_assembly38.fasta` and all five index files exist;
-- `BWA_MEM2.index.sha256.approved` contains exactly those six basenames;
-- all six SHA-256 values match;
-- the regular GRCh38 source lock remains valid;
-- `validate_grch38.sh` passes 9/9 resources/contigs/checksums;
-- `validate_bwa_mem2_functional.sh` passes on the actual execution host;
-- the Runtime/Resource Gate is rerun in the same session.
+Broad/GATK publishes the classic-BWA GRCh38 index family for the same `Homo_sapiens_assembly38.fasta` (`.64.alt`, `.64.amb`, `.64.ann`, `.64.bwt`, `.64.pac`, `.64.sa`). A future validated lane can therefore download those official prebuilt files rather than run any indexing step.
 
-No index downloaded merely because it is labelled "hg38" is acceptable.
+Advantages:
+- eliminates the >=80 GiB BWA-MEM2 index-construction event;
+- avoids a permanent self-hosted runner;
+- source artifacts are public scientific references and can be checksum-locked.
 
-### C. Existing 24 GiB-class host + swap - emergency build path
+Trade-off:
+- this changes the production aligner from BWA-MEM2 to classic BWA-MEM; it is **not** silently interchangeable. GENOMA must first benchmark mapping/QC and reproduce the canary/variant-calling acceptance criteria before promoting this lane from PROPOSTO to EXECUTADO/VERIFICADO.
 
-Status: **PROPOSTO**, not the preferred route.
+### Path C — ephemeral high-memory foundry
 
-A machine with less physical RAM can sometimes complete a memory-heavy indexing job by adding a large swap file, provided virtual memory and free disk satisfy the gate. This is dramatically slower and less predictable than real RAM and must be treated as a one-time build experiment, not as a production performance assumption. The resulting index still must pass the same hashes and functional validation.
+**Status until run: NÃO DISPONÍVEL.**
 
-## Free/zero-permanent-cost conclusion
+If BWA-MEM2 must remain the aligner, provision high memory only for the indexing window, build and verify the content-addressed bundle, publish it, and terminate the machine. This converts the recurring infrastructure requirement into a one-time foundry event. A cloud free trial/academic credit/borrowed machine may cover that event, but availability is provider/account-specific and is never assumed by the code.
 
-- A reliable **permanent** free 96 GiB GitHub runner is not part of the standard private-repository runner offering.
-- A one-time free-trial/academic/borrowed high-memory VM can be used for the build if available, then destroyed; GENOMA does not depend on that provider afterwards.
-- The most provider-independent architecture is therefore **one-time high-memory generation -> content-addressed private index bundle -> repeated prebuilt verification on future hosts**.
-- If no high-memory machine or independently trusted matching prebuilt index is available, `full-grch38` remains `NÃO DISPONÍVEL`; the SNP-array lane remains independent and can still run.
+### Path D — sub-96 GiB host with large swap
+
+**Status: PROPOSTO, emergency only.**
+
+Swap may allow an under-RAM machine to complete indexing, but it is dramatically slower and less predictable. It cannot be represented as equivalent performance or as a VERIFIED route without a real successful run and the same downstream checks.
+
+## What is and is not solved
+
+**Solved architecturally / EXECUTADO in code:**
+- high-memory is no longer required to be permanent;
+- prebuilt BWA-MEM2 indices are accepted only via exact FASTA/index checksum lock and functional validation;
+- the full-grch38 gate remains separate from partial SNP-array readiness;
+- GitHub Actions cannot infer success merely because an object is named `hg38`.
+
+**NÃO DISPONÍVEL until evidence exists:**
+- an actual approved BWA-MEM2 GRCh38 index bundle stored by immutable digest;
+- a real full-grch38 Runtime/Resource Gate on the target execution session.
+
+**PROPOSTO:**
+- benchmark/promote the Broad classic-BWA prebuilt-index lane if the goal is to eliminate even the one-time high-memory foundry.
