@@ -10,6 +10,7 @@ SKIP={'.git','node_modules','dist','__pycache__','.pytest_cache','.mypy_cache'}
 GENOMIC=('.fastq','.fq','.bam','.bai','.cram','.crai','.vcf','.tbi','.fastq.gz','.fq.gz','.vcf.gz')
 REQUIRED=(
 'normative/sealed/v3.4/MANIFEST.json','manifests/RULESET_V3.4.sha256','template_store/v3.1/MANIFEST.json','template_store/v3.1/inbox/README.md',
+'reporting/reference_v3_manifest.json','reporting/reference_v3_manifest.json.gz.b64',
 'scripts/sealed_ruleset.py','scripts/materialize_ruleset.py','scripts/source_integrity_audit.py','scripts/pre_analysis_master_gate.py','scripts/verify_template_store.py','scripts/verify_supply_chain_lock.py','scripts/generate_all_reports.py',
 'workflows/wgs.nf','workflows/array.nf','main.nf','policy_engine/genoma_policy/ruleset.py','policy_engine/genoma_policy/models.py','reporting/engine.py','locks/runtime-lock.json','locks/actions-lock.json',
 '.github/workflows/genoma-audit.yml','.github/workflows/genoma-policy-engine.yml','.github/workflows/genoma-production-witness.yml','.github/workflows/genoma-production-ceremony.yml','.github/workflows/materialize-template-pdfs.yml')
@@ -18,6 +19,7 @@ def validate(root:Path=ROOT)->list[str]:
  e=[]
  for r in REQUIRED:
   if not (root/r).is_file():e.append(f'missing required path: {r}')
+ if (root/'manifests'/'RULESET_V3.3.sha256').exists():e.append('superseded RULESET_V3.3.sha256 must be removed')
  try:
   v=verify_transport(root/'normative'/'sealed'/'v3.4')
   if v.get('raw_sha256')!=EXPECTED_SHA or v.get('section_count')!=263:e.append('v3.4 sealed identity mismatch')
@@ -34,7 +36,7 @@ def validate(root:Path=ROOT)->list[str]:
  tm=root/'template_store'/'v3.1'/'MANIFEST.json'
  if tm.is_file():
   try:
-   d=json.loads(txt(tm)); reports=d.get('reports',{}); rs=d.get('ruleset',{})
+   d=json.loads(txt(tm));reports=d.get('reports',{});rs=d.get('ruleset',{})
    if d.get('template_version')!='v3.1' or d.get('status')!='VIGENTE':e.append('template manifest is not v3.1/VIGENTE')
    if set(reports)!={f'{i:02d}' for i in range(1,12)}:e.append('template manifest must define 01..11')
    if rs.get('version')!='v3.4' or rs.get('sha256')!=EXPECTED_SHA:e.append('template suite is not bound to v3.4')
@@ -50,7 +52,8 @@ def validate(root:Path=ROOT)->list[str]:
   'workflows/wgs.nf':('PRE_ANALYSIS_MASTER_GATE','RULESET_V3.4.sha256','REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt','--strict','ready_for_requested_operation == true'),
   'workflows/array.nf':('ARRAY_PRE_ANALYSIS_MASTER_GATE','RULESET_V3.4.sha256','REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt','--strict','array-consent-provenance'),
   'main.nf':('array_consent_manifest','runtime_gate_manifest','freshness_state_manifest'),
-  'reporting/engine.py':('"version": "v3.4"','EXPECTED_TEMPLATE_SUITE = "v3.1"')}
+  'reporting/engine.py':('"version": "v3.4"','EXPECTED_TEMPLATE_SUITE = "v3.1"'),
+  'reporting/editorial_v3.py':('template_store" / "v3.1"','GENOMA_REPORT_TEMPLATES_v3.1_DETERMINISTIC.zip')}
  for r,need in tokens.items():
   p=root/r
   if p.is_file():
@@ -61,7 +64,7 @@ def validate(root:Path=ROOT)->list[str]:
   if '[skip ci]' in txt(p).lower():e.append(f'workflow contains forbidden CI bypass: {p.relative_to(root)}')
  for p in root.rglob('*'):
   if not p.is_file() or any(x in SKIP for x in p.parts):continue
-  rel=p.relative_to(root); name=p.name.lower()
+  rel=p.relative_to(root);name=p.name.lower()
   if name.endswith(GENOMIC):e.append(f'genomic/reference payload must not be committed: {rel}')
   try:s=txt(p)
   except (UnicodeDecodeError,OSError):continue
