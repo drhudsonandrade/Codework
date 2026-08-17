@@ -23,6 +23,6 @@ There must be exactly one active runtime copy of `REGRAS_PROJETO_GENOMA_VIGENTE_
 - **Core-only:** Python CLI/HTTP. No external service, LLM, database or edge provider required.
 - **Policy container:** OCI/Docker with the canonical TXT mounted read-only.
 - **Scientific workflow:** Nextflow/container runtime with a fresh Runtime/Resource Gate before real calling.
-- **Optional interfaces:** MCP/ChatGPT, web UI, Cloudflare ingress, Temporal orchestration and Supabase evidence index.
+- **Optional interfaces:** MCP, web UI, Cloudflare ingress, Temporal orchestration and Supabase evidence index.
 
 Post-deployment status is evidence-driven. Never infer it from README text; use the most recent `genoma-post-deployment-evidence-<commit>` artifact and the ruleset-defined gate.
