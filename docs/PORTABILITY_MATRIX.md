@@ -1,27 +1,27 @@
 # Portability and longevity matrix
 
-GENOMA adopts standards and patterns from mature genomics/workflow ecosystems while keeping its policy semantics independent.
+GENOMA adopts standards and patterns from mature genomics/workflow ecosystems while keeping policy semantics independent.
 
 | Concern | GENOMA design | Comparable mature pattern | Lock-in stance |
 |---|---|---|---|
-| Workflow portability | Nextflow/container Scientific Data Plane; future WES adapter | GA4GH Workflow Execution Service abstracts workflow engines/environments | Core policy does not depend on WES or Nextflow |
-| Task portability | container/task contract; future TES adapter | GA4GH Task Execution Service targets HPC/cloud task execution | Optional adapter |
+| Workflow portability | Nextflow/container Scientific Data Plane; future WES adapter | GA4GH Workflow Execution Service | Core policy does not depend on WES or Nextflow |
+| Task portability | container/task contract; future TES adapter | GA4GH Task Execution Service | Optional adapter |
 | Data location abstraction | content-addressed evidence refs; future DRS adapter | GA4GH Data Repository Service | Optional adapter |
-| Workflow engine | current Nextflow + shell/CLI | Nextflow supports multiple executors and container backends | Replaceable |
-| Durable orchestration | no requirement in core | Temporal replay/history + Activities | Optional |
-| Edge/security | loopback/private origin first | Cloudflare Tunnel/Access can avoid exposing the origin | Optional |
-| Evidence query database | rebuildable projection | PostgreSQL/Supabase with grants + RLS | Optional, never canonical |
-| Supply-chain provenance | OCI digest + BuildKit provenance + SBOM | SLSA provenance concepts | Registry/provider replaceable |
-| Policy | Python deterministic gates + Rego parity + structured attestations | Policy-as-code / independent policy engines | Normative TXT remains source |
-| Human/AI interface | CLI + HTTP first; MCP/ChatGPT adapter | vendor UI/agent ecosystems | Fully optional |
+| Workflow engine | current Nextflow + shell/CLI | multiple executors/container backends | Replaceable |
+| Durable orchestration | no requirement in core | event-history/replay workflow systems | Optional |
+| Edge/security | loopback/private origin first | authenticated private tunnel/zero-trust ingress | Optional |
+| Evidence query database | rebuildable projection | PostgreSQL-compatible SQL with grants/RLS | Optional, never canonical |
+| Supply-chain provenance | OCI digest + provenance + SBOM | SLSA provenance concepts | Registry/provider replaceable |
+| Policy | Python deterministic gates + Rego parity + structured attestations | policy-as-code | Normative TXT remains source |
+| Human/agent interface | CLI + HTTP first; MCP optional | standard tool-interface ecosystems | Fully optional |
 
 ## Design advantages over monolithic systems
 
-1. **Scientific truth is not in the UI.** A ChatGPT, web application, notebook or future agent can disappear without changing the stored execution evidence.
-2. **Normative text is content-addressed.** Each rule is machine-addressable and rules requiring judgement retain structured attestation instead of fake booleans.
-3. **Data plane and policy plane fail independently.** A workflow can execute but fail policy; a policy can be healthy while NGS compute is unavailable. Neither is allowed to impersonate the other.
-4. **Audit evidence is exportable.** JSON/JSONL, SHA-256, OCI digests and plain files survive vendor changes better than proprietary dashboards.
-5. **Federation-ready.** GA4GH WES/TES/DRS-compatible adapters can be added later without rewriting the core.
+1. Scientific truth is not stored in the UI.
+2. Normative text is content-addressed.
+3. Data plane and policy plane fail independently and fail closed.
+4. Audit evidence is exportable as plain JSON/JSONL, SHA-256 and OCI metadata.
+5. GA4GH-compatible adapters can be added later without rewriting the core.
 
 ## Primary references
 
@@ -30,8 +30,5 @@ GENOMA adopts standards and patterns from mature genomics/workflow ecosystems wh
 - Nextflow executors: https://docs.seqera.io/nextflow/executor
 - Nextflow containers: https://docs.seqera.io/nextflow/container
 - GitHub self-hosted runners: https://docs.github.com/actions/hosting-your-own-runners
-- Temporal workflows: https://docs.temporal.io/workflows
-- Cloudflare Tunnel: https://developers.cloudflare.com/tunnel/
-- Supabase API security/RLS: https://supabase.com/docs/guides/api/securing-your-api
 - GATK resource bundle: https://gatk.broadinstitute.org/hc/en-us/articles/360035890811-Resource-bundle
 - BWA-MEM2: https://github.com/bwa-mem2/bwa-mem2
