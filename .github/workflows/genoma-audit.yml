@@ -1,4 +1,4 @@
-name: GENOMA v1.0 four-plane audit
+name: GENOMA four-plane audit
 
 on:
   pull_request:
@@ -12,7 +12,7 @@ permissions:
 jobs:
   audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -30,24 +30,18 @@ jobs:
           python3 scripts/source_integrity_audit.py --output source-integrity.json
           python3 scripts/verify_template_store.py | tee template-store-verification.json
           python3 scripts/verify_supply_chain_lock.py
-      - name: Unit tests for deterministic architecture
+      - name: Compile every Python source file
         run: |
-          python3 -m unittest \
-            tests.test_snp_array_qc \
-            tests.test_array_scientific_data_plane \
-            tests.test_partial_genome_annotation \
-            tests.test_grch38_compute_strategy \
-            tests.test_supply_chain_lock \
-            tests.test_template_store \
-            tests.test_genoma_audit \
-            tests.test_workflow_contracts \
-            tests.test_pre_analysis_hardening -v
+          python3 -m compileall -q \
+            scripts reporting array_pipeline evidence_adapters policy_engine tests
+      - name: Run the complete deterministic test suite
+        run: python3 -m unittest discover -s tests -v
       - name: Four-plane audit
         run: python3 scripts/genoma_audit.py --output audit.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: genoma-v1.0-audit-${{ github.sha }}
+          name: genoma-audit-${{ github.sha }}
           path: |
             audit.json
             source-integrity.json
