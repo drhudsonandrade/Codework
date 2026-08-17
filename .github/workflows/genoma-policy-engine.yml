@@ -3,7 +3,7 @@ name: GENOMA deterministic policy engine
 on:
   pull_request:
     paths:
-      - 'manifests/RULESET_V3.3.sha256'
+      - 'manifests/RULESET_V3.4.sha256'
       - 'normative/**'
       - 'policy_engine/**'
       - 'locks/**'
@@ -17,7 +17,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'manifests/RULESET_V3.3.sha256'
+      - 'manifests/RULESET_V3.4.sha256'
       - 'normative/**'
       - 'policy_engine/**'
       - 'locks/**'
@@ -51,10 +51,10 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/genoma-normative"
           python3 scripts/materialize_ruleset.py --output-dir "$RUNNER_TEMP/genoma-normative" --evidence "$GITHUB_WORKSPACE/ruleset-materialization.json"
-          echo "GENOMA_RULESET_PATH=$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt" >> "$GITHUB_ENV"
-          echo "GENOMA_RULESET_SHA_MANIFEST=$GITHUB_WORKSPACE/manifests/RULESET_V3.3.sha256" >> "$GITHUB_ENV"
+          echo "GENOMA_RULESET_PATH=$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt" >> "$GITHUB_ENV"
+          echo "GENOMA_RULESET_SHA_MANIFEST=$GITHUB_WORKSPACE/manifests/RULESET_V3.4.sha256" >> "$GITHUB_ENV"
           echo 'GENOMA_EXPECT_CANONICAL_SHA=1' >> "$GITHUB_ENV"
-      - name: Unit tests against actual canonical v3.3 bytes
+      - name: Unit tests against actual canonical v3.4 bytes
         working-directory: policy_engine
         run: python -m unittest discover -s tests -v
       - name: Verify canonical identity and 263-section parser contract
@@ -71,7 +71,7 @@ jobs:
         run: policy_engine/scripts/genoma-policy catalog --output "$GITHUB_WORKSPACE/genoma-ruleset-catalog.json"
       - name: Build portable deterministic source archive
         run: |
-          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -czf genoma-policy-engine-source.tgz policy_engine scripts/materialize_ruleset.py scripts/run_live_post_deployment_smoke.py normative/sealed adapters locks template_store/v3.0/MANIFEST.json
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -czf genoma-policy-engine-source.tgz policy_engine scripts/materialize_ruleset.py scripts/run_live_post_deployment_smoke.py normative/sealed/v3.4 adapters locks template_store/v3.1/MANIFEST.json
           sha256sum genoma-policy-engine-source.tgz > genoma-policy-engine-source.tgz.sha256
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -122,16 +122,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          canonical="$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt"
-          cid=$(docker run -d --read-only --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m --cap-drop ALL --security-opt no-new-privileges:true -v "$canonical:/run/genoma/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt:ro" -v "$PWD/manifests/RULESET_V3.3.sha256:/run/genoma/manifests/RULESET_V3.3.sha256:ro" -p 127.0.0.1:8787:8787 genoma-policy-engine:${{ github.sha }})
+          canonical="$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
+          cid=$(docker run -d --read-only --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m --cap-drop ALL --security-opt no-new-privileges:true -v "$canonical:/run/genoma/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt:ro" -v "$PWD/manifests/RULESET_V3.4.sha256:/run/genoma/manifests/RULESET_V3.4.sha256:ro" -p 127.0.0.1:8787:8787 genoma-policy-engine:${{ github.sha }})
           trap 'docker logs "$cid" || true; docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
           for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:8787/healthz >/tmp/health.json && break; sleep 1; done
           curl -fsS http://127.0.0.1:8787/v1/ruleset >/tmp/ruleset.json
           python - <<'PY'
           import json
           p=json.load(open('/tmp/ruleset.json'))
-          assert p['status']=='VIGENTE' and p['version']=='v3.3' and p['effective_date']=='14/08/2026'
-          assert p['sha256']=='187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a' and p['section_count']==263
+          assert p['status']=='VIGENTE' and p['version']=='v3.4' and p['effective_date']=='17/08/2026'
+          assert p['sha256']=='ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580' and p['section_count']==263
           PY
 
   publish:
@@ -164,11 +164,11 @@ jobs:
           sbom: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/genoma-policy-engine:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/genoma-policy-engine:v0.8.0
+            ghcr.io/${{ github.repository_owner }}/genoma-policy-engine:v0.9.0
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=0.8.0
+            org.opencontainers.image.version=0.9.0
       - name: Verify OCI attestations
         env:
           IMAGE_REF: ghcr.io/${{ github.repository_owner }}/genoma-policy-engine@${{ steps.push.outputs.digest }}
