@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from scripts.source_integrity_audit import audit
 from scripts.wgs_input_gate import resolve
 
 
@@ -44,6 +45,15 @@ class PreAnalysisHardeningTest(unittest.TestCase):
             if any(term in low for term in forbidden):
                 hits.append(str(path.relative_to(ROOT)))
         self.assertEqual(hits, [])
+
+    def test_whole_tree_source_integrity_audit_is_blocking_and_clean(self):
+        result = audit(ROOT)
+        self.assertEqual(result["blocking_failures"], [])
+        self.assertEqual(result["operational_status"], "VERIFICADO")
+        self.assertEqual(result["provider_hits"], [])
+        self.assertEqual(result["risky_code_hits"], [])
+        self.assertEqual(result["python_parse_errors"], [])
+        self.assertEqual(result["unpinned_actions"], [])
 
 
 if __name__ == "__main__":
