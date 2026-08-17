@@ -2,7 +2,7 @@
 
 ## Design invariant
 
-The canonical ruleset is data; the policy engine is deterministic software; scientific workflows are separate executors; evidence and audit are portable records. No conversational model is trusted as the source of truth.
+The canonical ruleset is data; the policy engine is deterministic software; scientific workflows are separate executors; evidence and audit are portable records. No external model or hosted interface is trusted as the source of truth.
 
 ## Plane 1 — Policy Control Plane
 
@@ -18,11 +18,11 @@ Evidence is identified by stable IDs. Mutable sources carry version and checked-
 
 ## Plane 4 — Audit Plane
 
-The engine emits deterministic reports and an optional tamper-evident JSONL hash chain. CI records tests, independent safety smoke, OPA/Rego, Gitleaks, real Docker build/run and immutable OCI image digest/provenance.
+The engine emits deterministic reports and an optional tamper-evident JSONL hash chain. CI records tests, independent safety smoke, policy parity, secret scanning, real container build/run and immutable OCI image digest/provenance.
 
 ## Optional interfaces
 
-CLI, HTTP and OCI are first-class. MCP/ChatGPT, web UIs, Cloudflare Tunnel, Temporal, Supabase or future providers are adapters only. Their disappearance must not prevent local policy execution.
+CLI, HTTP and OCI are first-class. MCP, web UIs, private ingress, durable workflow services, SQL projections and future interfaces are adapters only. Their disappearance must not prevent local policy execution.
 
 ## Failure behavior
 
@@ -30,4 +30,4 @@ CLI, HTTP and OCI are first-class. MCP/ChatGPT, web UIs, Cloudflare Tunnel, Temp
 - Missing evidence/justification/trace → fail closed for analysis-relevant attestation coverage.
 - `PROPOSTO` or `NÃO DISPONÍVEL` claiming satisfaction → fail closed.
 - Missing current-session runtime proof for real calling → fail closed.
-- POST-DEPLOYMENT conditions absent → PENDING and never promoted by CI.
+- POST-DEPLOYMENT conditions absent → PENDING and never promoted by ordinary CI.
