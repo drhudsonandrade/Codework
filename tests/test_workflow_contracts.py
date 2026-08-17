@@ -88,6 +88,18 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("GRCh38.lock.sha256.approved", workflow)
         self.assertIn("validate_bwa_mem2_functional.sh", workflow)
 
+    def test_real_analysis_parameters_are_validated_before_shell_interpolation(self):
+        main = (ROOT / "main.nf").read_text(encoding="utf-8")
+        self.assertIn("requireBoundedIdentifier", main)
+        self.assertIn("requireSafePathParameter", main)
+        self.assertIn("array_build_evidence_ch = Channel.fromPath", main)
+        self.assertIn("array_strand_evidence_ch = Channel.fromPath", main)
+        array = (ROOT / "workflows/array.nf").read_text(encoding="utf-8")
+        self.assertIn("path build_evidence", array)
+        self.assertIn("path strand_evidence", array)
+        wgs = (ROOT / "workflows/wgs.nf").read_text(encoding="utf-8")
+        self.assertIn("--policy '${policy_evaluation}'", wgs)
+
 
 if __name__ == "__main__":
     unittest.main()
