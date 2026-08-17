@@ -1,14 +1,15 @@
-name: GENOMA Production Witness
+name: GENOMA Production Witness v3.4
 
 on:
   pull_request:
     paths:
       - 'normative/**'
-      - 'manifests/RULESET_V3.3.sha256'
+      - 'manifests/RULESET_V3.4.sha256'
       - 'policy_engine/**'
       - 'scripts/materialize_ruleset.py'
       - 'scripts/run_live_post_deployment_smoke.py'
-      - 'deploy/attestations/bootstrap-project-v3.3.json'
+      - 'scripts/validate_repo.py'
+      - 'deploy/attestations/bootstrap-project-v3.4.json'
       - '.github/workflows/genoma-production-witness.yml'
   push:
     branches: [main]
@@ -18,12 +19,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: genoma-production-witness-${{ github.ref }}
+  group: genoma-production-witness-v3-4-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   witness:
-    name: Independent live witness
+    name: Independent live witness v3.4
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -33,26 +34,33 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
-      - name: Validate repository and canonical sealed transport
-        run: python3 scripts/validate_repo.py
-      - name: Materialize exact canonical v3.3 as immutable runtime file
+          cache: pip
+          cache-dependency-path: reporting/requirements.txt
+      - name: Install pinned audit dependencies
+        run: python3 -m pip install --disable-pip-version-check -r reporting/requirements.txt
+      - name: Validate repository, templates and canonical sealed transport
+        run: |
+          set -euo pipefail
+          python3 scripts/validate_repo.py
+          python3 scripts/source_integrity_audit.py --output evidence-source-integrity.json
+          python3 scripts/verify_template_store.py > evidence-template-store.json
+      - name: Materialize exact canonical v3.4 as immutable runtime file
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/genoma-normative" evidence
           python3 scripts/materialize_ruleset.py \
             --output-dir "$RUNNER_TEMP/genoma-normative" \
             --evidence evidence/ruleset-materialization.json
-          canonical="$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt"
+          canonical="$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
           test "$(stat -c '%a' "$canonical")" = 444
-          printf '%s  %s\n' '187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a' "$canonical" | sha256sum -c -
+          printf '%s  %s\n' 'ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580' "$canonical" | sha256sum -c -
           echo "GENOMA_RULESET_PATH=$canonical" >> "$GITHUB_ENV"
-          echo "GENOMA_RULESET_SHA_MANIFEST=$GITHUB_WORKSPACE/manifests/RULESET_V3.3.sha256" >> "$GITHUB_ENV"
-          echo 'GENOMA_EXPECT_CANONICAL_SHA=1' >> "$GITHUB_ENV"
+          echo "GENOMA_RULESET_SHA_MANIFEST=$GITHUB_WORKSPACE/manifests/RULESET_V3.4.sha256" >> "$GITHUB_ENV"
       - name: Build exact policy image
         run: |
           docker build -f policy_engine/Dockerfile -t genoma-policy-witness:${GITHUB_SHA} .
           docker image inspect genoma-policy-witness:${GITHUB_SHA} --format '{{.Id}}' | tee evidence/image-id.txt
-      - name: Start hardened real container with canonical TXT mounted read-only
+      - name: Start hardened live container with canonical TXT mounted read-only
         shell: bash
         run: |
           set -euo pipefail
@@ -61,8 +69,8 @@ jobs:
             --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m \
             --cap-drop ALL \
             --security-opt no-new-privileges:true \
-            -v "$GENOMA_RULESET_PATH:/run/genoma/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt:ro" \
-            -v "$GENOMA_RULESET_SHA_MANIFEST:/run/genoma/manifests/RULESET_V3.3.sha256:ro" \
+            -v "$GENOMA_RULESET_PATH:/run/genoma/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt:ro" \
+            -v "$GENOMA_RULESET_SHA_MANIFEST:/run/genoma/manifests/RULESET_V3.4.sha256:ro" \
             -p 127.0.0.1:8787:8787 \
             genoma-policy-witness:${GITHUB_SHA})
           echo "$cid" | tee evidence/container-id.txt
@@ -74,23 +82,23 @@ jobs:
           curl -fsS http://127.0.0.1:8787/v1/ruleset > evidence/live-ruleset.json
           docker inspect "$cid" > evidence/docker-inspect.json
           test "$(docker inspect "$cid" --format '{{.HostConfig.ReadonlyRootfs}}')" = true
-          test "$(docker inspect "$cid" --format '{{range .Mounts}}{{if eq .Destination "/run/genoma/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt"}}{{.RW}}{{end}}{{end}}')" = false
+          test "$(docker inspect "$cid" --format '{{range .Mounts}}{{if eq .Destination "/run/genoma/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"}}{{.RW}}{{end}}{{end}}')" = false
           python - <<'PY'
           import json
           from pathlib import Path
           p=json.loads(Path('evidence/live-ruleset.json').read_text())
           assert p['status']=='VIGENTE'
-          assert p['version']=='v3.3'
-          assert p['effective_date']=='14/08/2026'
-          assert p['sha256']=='187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a'
+          assert p['version']=='v3.4'
+          assert p['effective_date']=='17/08/2026'
+          assert p['sha256']=='ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580'
           assert p['section_count']==263
           PY
-      - name: Execute all 15 section-260 scenarios through the live HTTP instance
+      - name: Execute all 15 section-260 scenarios through live HTTP
         run: |
           mkdir -p evidence/live-section-260
           python3 scripts/run_live_post_deployment_smoke.py \
             --base-url http://127.0.0.1:8787 \
-            --bootstrap-attestation deploy/attestations/bootstrap-project-v3.3.json \
+            --bootstrap-attestation deploy/attestations/bootstrap-project-v3.4.json \
             --deployment-id "witness-${GITHUB_RUN_ID}-${GITHUB_SHA}" \
             --output evidence/live-section-260/summary.json
           jq -e '.passed == 15 and .total == 15 and .critical_failures == 0 and .post_deployment_status == "PASS"' evidence/live-section-260/summary.json >/dev/null
@@ -104,26 +112,26 @@ jobs:
             docker rm -f "$GENOMA_WITNESS_CID" >/dev/null 2>&1
           fi
           set -e
+          cp evidence-source-integrity.json evidence/source-integrity.json 2>/dev/null || true
+          cp evidence-template-store.json evidence/template-store.json 2>/dev/null || true
           python - <<'PY'
           import hashlib, json, os
           from datetime import datetime, timezone
           from pathlib import Path
           root=Path('evidence')
           summary_path=root/'live-section-260'/'summary.json'
-          if not summary_path.exists():
-              raise SystemExit('live section-260 summary missing')
+          if not summary_path.exists(): raise SystemExit('live section-260 summary missing')
           live=json.loads(summary_path.read_text())
           if not (live.get('passed')==15 and live.get('total')==15 and live.get('critical_failures')==0 and live.get('post_deployment_status')=='PASS'):
               raise SystemExit('refusing to create PASS witness from non-PASS live result')
           files=[]
           for p in sorted(x for x in root.rglob('*') if x.is_file() and x.name not in {'SHA256SUMS','witness.json'}):
-              h=hashlib.sha256(p.read_bytes()).hexdigest()
-              files.append({'path':str(p.relative_to(root)),'sha256':h,'size_bytes':p.stat().st_size})
+              files.append({'path':str(p.relative_to(root)),'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'size_bytes':p.stat().st_size})
           witness={
-              'schema':'genoma-production-witness-v1',
+              'schema':'genoma-production-witness-v2',
               'operational_status':'VERIFICADO',
               'post_deployment_status':'PASS',
-              'ruleset':{'status':'VIGENTE','version':'v3.3','effective_date':'14/08/2026','sha256':'187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a'},
+              'ruleset':{'status':'VIGENTE','version':'v3.4','effective_date':'17/08/2026','sha256':'ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580'},
               'section_260':{'passed':15,'total':15,'critical_failures':0},
               'git_sha':os.environ['GITHUB_SHA'],
               'workflow_run_id':os.environ['GITHUB_RUN_ID'],
@@ -136,6 +144,7 @@ jobs:
           PY
           (cd evidence && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
       - name: Upload immutable run evidence
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: genoma-production-witness-${{ github.sha }}
@@ -158,7 +167,7 @@ jobs:
         with:
           name: genoma-production-witness-${{ github.sha }}
           path: downloaded-evidence
-      - name: Publish immutable witness with an idempotent exact-SHA guard
+      - name: Publish immutable witness with exact-SHA guard
         shell: bash
         run: |
           set -euo pipefail
@@ -188,5 +197,5 @@ jobs:
           cp "$tmp/SHA256SUMS" "witnesses/${GITHUB_SHA}/SHA256SUMS"
           cp "$tmp/witness.json" latest.json
           git add "witnesses/${GITHUB_SHA}" latest.json
-          git commit -m "audit: production witness ${GITHUB_SHA} [skip ci]"
+          git commit -m "audit: production witness ${GITHUB_SHA}"
           git push origin HEAD:audit-evidence
