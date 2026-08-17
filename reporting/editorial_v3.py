@@ -16,6 +16,29 @@ ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_STORE = ROOT / "template_store" / "v3.1"
 INBOX_ZIP = TEMPLATE_STORE / "inbox" / "GENOMA_REPORT_TEMPLATES_v3.1_DETERMINISTIC.zip"
 
+# Stable public design contract used by tests and downstream renderers.
+DESIGN = {
+    "navy": "0B1F33",
+    "teal": "0F766E",
+    "amber": "A16207",
+    "light_gray": "F2F4F7",
+    "a4_mm": (210, 297),
+}
+
+V31_SYSTEM_REPLACEMENTS = {
+    "MODELO REUTILIZÁVEL v3.1": "RESULTADO GENÔMICO v3.1",
+    "MODELO EDITÁVEL": "RESULTADO GERADO",
+    "NÃO INSERIDOS": "CONTROLADOS",
+    "MODELO — NÃO É RESULTADO GENÉTICO": "RESULTADO GENÔMICO — VERSÃO FINAL",
+    "MODELO — NÃO É RESULTADO": "RESULTADO GENÔMICO — VERSÃO FINAL",
+    "MODELO SEM DADOS PESSOAIS": "RESULTADO GENÔMICO",
+    "GENOMA-RULESET-v3.4": "GENOMA-RULESET-v3.4",
+    "Campos em azul são placeholders obrigatórios ou condicionais; preencher com dado rastreável ou declarar NÃO DISPONÍVEL.":
+        "Dados ausentes permanecem NÃO DISPONÍVEL; consulte limitações, fontes e status operacional.",
+    "MODEL_EXPLANATION":
+        "Resultado gerado sob controle de QC, evidência e publicação. Achados capazes de alterar conduta exigem confirmação apropriada.",
+}
+
 
 class EditorialRenderError(RuntimeError):
     pass
@@ -39,6 +62,7 @@ def _document_title(rendered: dict[str, Any]) -> str:
 def _programmatic_docx(rendered: dict[str, Any], path: Path) -> None:
     from docx import Document
     from docx.shared import Pt
+
     document = Document()
     document.core_properties.title = _document_title(rendered)
     style = document.styles["Normal"]
@@ -63,8 +87,9 @@ def _programmatic_docx(rendered: dict[str, Any], path: Path) -> None:
 
 def _programmatic_pdf(rendered: dict[str, Any], path: Path) -> None:
     from reportlab.lib.pagesizes import A4
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
     from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+
     styles = getSampleStyleSheet()
     story = []
     for raw in str(rendered["markdown"]).splitlines():
@@ -92,19 +117,18 @@ def _use_template(rendered: dict[str, Any]) -> bool:
 
 
 def _configure_v31_replacements() -> None:
+    """Install the complete v3.1 final-state replacement set atomically in memory.
+
+    Keeping this list complete prevents template-only labels from leaking into FINAL
+    artifacts after SYSTEM_REPLACEMENTS is cleared.
+    """
     _template_v3.SYSTEM_REPLACEMENTS.clear()
-    _template_v3.SYSTEM_REPLACEMENTS.update(
-        {
-            "MODELO REUTILIZÁVEL v3.1": "RESULTADO GENÔMICO v3.1",
-            "MODELO — NÃO É RESULTADO": "RESULTADO GENÔMICO — VERSÃO FINAL",
-            "MODELO — NÃO É RESULTADO GENÉTICO": "RESULTADO GENÔMICO — VERSÃO FINAL",
-            "GENOMA-RULESET-v3.4": "GENOMA-RULESET-v3.4",
-        }
-    )
+    _template_v3.SYSTEM_REPLACEMENTS.update(V31_SYSTEM_REPLACEMENTS)
 
 
 def _extract_verified_template_zip() -> Path:
     from scripts.verify_template_store import verify
+
     result = verify(materialize=False)
     if result.get("operational_status") != "VERIFICADO":
         raise EditorialRenderError("v3.1 template source is not verified")
@@ -166,9 +190,19 @@ def write_editorial_bundle(rendered: dict[str, Any], output_dir: Path, *, stem: 
         try:
             manifest = _verified_reference(report_id, template_dir)
             strict = str(os.environ.get("GENOMA_TEMPLATE_STRICT") or "1").lower() not in {"0", "false", "no"}
-            pdf_info = _template_v3.render_pdf_from_template(report_id, rendered, template_dir, pdf, strict=strict, coordinate_manifest=manifest)
-            docx_info = _template_v3.render_docx_from_template(report_id, rendered, template_dir, docx, strict=strict, coordinate_manifest=manifest)
-            info = {"mode": "template-v3.1", "template_suite": "v3.1", "status": "EXECUTADO", "pdf": pdf_info, "docx": docx_info}
+            pdf_info = _template_v3.render_pdf_from_template(
+                report_id, rendered, template_dir, pdf, strict=strict, coordinate_manifest=manifest
+            )
+            docx_info = _template_v3.render_docx_from_template(
+                report_id, rendered, template_dir, docx, strict=strict, coordinate_manifest=manifest
+            )
+            info = {
+                "mode": "template-v3.1",
+                "template_suite": "v3.1",
+                "status": "EXECUTADO",
+                "pdf": pdf_info,
+                "docx": docx_info,
+            }
         finally:
             if cleanup is not None:
                 shutil.rmtree(cleanup, ignore_errors=True)
