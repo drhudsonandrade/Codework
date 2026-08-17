@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
 import tempfile
 import unittest
@@ -20,11 +21,39 @@ class PartialGenomeAnnotationTest(unittest.TestCase):
             f.write("rs999999,1,100,AA,consensus,AA,AA,GM\n")
         return p
 
+    def _evidence(self, array: Path) -> str:
+        sha = hashlib.sha256(array.read_bytes()).hexdigest()
+        return json.dumps({
+            "status": "VERIFICADO",
+            "decision": "SATISFIED",
+            "justification": "Synthetic annotation fixture explicitly controls build and strand.",
+            "evidence_refs": ["synthetic-annotation-fixture"],
+            "trace": {
+                "attestation_id": "annotation-fixture-provenance",
+                "created_at": "2026-08-17T00:00:00Z",
+                "actor_type": "SOFTWARE",
+                "actor_id": "tests.test_partial_genome_annotation",
+                "method": "deterministic fixture",
+                "run_id": "unit-test",
+                "input_sha256": [sha],
+                "output_sha256": [],
+                "tool_versions": {"test": "1"},
+            },
+        })
+
     def test_plan_only_is_target_first_and_not_verified_evidence(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             array = self._fixture(root)
-            qc = inspect_array(array, case_id="SYN", build="GRCh37", strand="forward", build_evidence="fixture", strand_evidence="fixture")
+            evidence = self._evidence(array)
+            qc = inspect_array(
+                array,
+                case_id="SYN",
+                build="GRCh37",
+                strand="forward",
+                build_evidence=evidence,
+                strand_evidence=evidence,
+            )
             qc_path = root / "qc.json"
             qc_path.write_text(json.dumps(qc), encoding="utf-8")
             target_path = Path(__file__).resolve().parents[1] / "config" / "partial_genome_annotation_targets.json"
