@@ -20,6 +20,8 @@ def validate(root:Path=ROOT)->list[str]:
  for r in REQUIRED:
   if not (root/r).is_file():e.append(f'missing required path: {r}')
  if (root/'manifests'/'RULESET_V3.3.sha256').exists():e.append('superseded RULESET_V3.3.sha256 must be removed')
+ legacy_parts=sorted((root/'normative'/'sealed'/'parts').glob('part-*.b64')) if (root/'normative'/'sealed'/'parts').exists() else []
+ if legacy_parts:e.append('legacy sealed normative chunks must be removed: '+', '.join(str(p.relative_to(root)) for p in legacy_parts))
  try:
   v=verify_transport(root/'normative'/'sealed'/'v3.4')
   if v.get('raw_sha256')!=EXPECTED_SHA or v.get('section_count')!=263:e.append('v3.4 sealed identity mismatch')
