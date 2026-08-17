@@ -6,9 +6,10 @@ import json
 import os
 import shutil
 import tempfile
+import threading
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from . import template_v3 as _template_v3
 from .reference_v31 import load_verified_reference
@@ -16,6 +17,7 @@ from .reference_v31 import load_verified_reference
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_STORE = ROOT / "template_store" / "v3.1"
 INBOX_ZIP = TEMPLATE_STORE / "inbox" / "GENOMA_REPORT_TEMPLATES_v3.1_DETERMINISTIC.zip"
+_RENDER_LOCK = threading.RLock()
 
 DESIGN = {
     "navy": "0B1F33",
@@ -102,7 +104,8 @@ def _programmatic_pdf(rendered: dict[str, Any], path: Path) -> None:
         elif raw.strip() in {"```json", "```"}:
             continue
         elif raw.strip():
-            story.append(Paragraph(raw.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"), styles["BodyText"]))
+            safe = raw.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            story.append(Paragraph(safe, styles["BodyText"]))
         story.append(Spacer(1, 4))
     path.parent.mkdir(parents=True, exist_ok=True)
     SimpleDocTemplate(str(path), pagesize=A4, title=_document_title(rendered)).build(story)
@@ -163,6 +166,37 @@ def _verified_reference(report_id: str, template_dir: Path) -> dict[str, Any]:
     return manifest
 
 
+def _render_using_verified_manifest(
+    rendered: dict[str, Any],
+    template_dir: Path,
+    pdf: Path,
+    docx: Path,
+    manifest: dict[str, Any],
+    *,
+    strict: bool,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Render through the legacy low-level engine without letting it reload stale/missing coordinates.
+
+    The low-level renderer still owns the exact PDF/DOCX mechanics. This adapter serializes
+    access, installs the verified v3.1 replacement map, and temporarily binds its manifest
+    loader to the already SHA-verified v3.1 coordinate payload. The original loader and
+    replacement map are restored even when rendering fails.
+    """
+    with _RENDER_LOCK:
+        original_loader: Callable[..., dict[str, Any]] = _template_v3.load_reference_manifest
+        original_replacements = dict(_template_v3.SYSTEM_REPLACEMENTS)
+        try:
+            _configure_v31_replacements()
+            _template_v3.load_reference_manifest = lambda path=_template_v3.MANIFEST_PATH: manifest
+            pdf_info = _template_v3.render_pdf_from_template(rendered, pdf, template_dir, strict=strict)
+            docx_info = _template_v3.render_docx_from_template(rendered, docx, template_dir, strict=strict)
+            return pdf_info, docx_info
+        finally:
+            _template_v3.load_reference_manifest = original_loader
+            _template_v3.SYSTEM_REPLACEMENTS.clear()
+            _template_v3.SYSTEM_REPLACEMENTS.update(original_replacements)
+
+
 def write_editorial_bundle(rendered: dict[str, Any], output_dir: Path, *, stem: str | None = None) -> dict[str, Path]:
     _require_final_data(rendered)
     meta = rendered.get("metadata") if isinstance(rendered.get("metadata"), dict) else {}
@@ -180,16 +214,12 @@ def write_editorial_bundle(rendered: dict[str, Any], output_dir: Path, *, stem: 
         _programmatic_pdf(rendered, pdf)
         info = {"mode": "programmatic", "template_suite": "v3.1", "status": "EXECUTADO"}
     else:
-        _configure_v31_replacements()
         template_dir, cleanup = _template_dir()
         try:
             manifest = _verified_reference(report_id, template_dir)
             strict = str(os.environ.get("GENOMA_TEMPLATE_STRICT") or "1").lower() not in {"0", "false", "no"}
-            pdf_info = _template_v3.render_pdf_from_template(
-                report_id, rendered, template_dir, pdf, strict=strict, coordinate_manifest=manifest
-            )
-            docx_info = _template_v3.render_docx_from_template(
-                report_id, rendered, template_dir, docx, strict=strict, coordinate_manifest=manifest
+            pdf_info, docx_info = _render_using_verified_manifest(
+                rendered, template_dir, pdf, docx, manifest, strict=strict
             )
             info = {
                 "mode": "template-v3.1",
