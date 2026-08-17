@@ -38,28 +38,49 @@ jobs:
           python-version: '3.12'
       - name: Install pinned renderer dependencies
         run: pip install -r reporting/requirements.txt
-      - name: Validate pinned v3 reference identities and static pixel QA evidence
+      - name: Validate current v3.1 identities and historical v3.0 pixel-QA evidence
         run: |
           python3 - <<'PY'
           import json
           from pathlib import Path
-          index=json.loads(Path('reporting/reference_v3_manifest.json').read_text())
-          qa=json.loads(Path('docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_2026-08-16.json').read_text())
-          assert set(index['reports']) == {f'{i:02d}' for i in range(1,12)}
-          assert index['coordinate_compiler']['id'] == 'fitz-1.26.7-genoma-v2'
+
+          current = json.loads(Path('reporting/reference_v3_manifest.json').read_text())
+          legacy = json.loads(Path('template_store/v3.0/MANIFEST.json').read_text())
+          qa = json.loads(Path('docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_2026-08-16.json').read_text())
+
+          expected = {f'{i:02d}' for i in range(1, 12)}
+          assert current['reference_suite'] == 'GENOMA v3.1'
+          assert current['ruleset'] == {
+              'effective_date': '17/08/2026',
+              'sha256': 'ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580',
+              'status': 'VIGENTE',
+              'version': 'v3.4',
+          }
+          assert set(current['reports']) == expected
+          assert set(legacy['reports']) == expected
+
+          # The 200-DPI evidence is historical evidence for the immutable v3.0 suite.
+          # It must never be silently re-labelled as evidence for the v3.1 bytes.
           assert qa['status'] == 'VERIFICADO'
-          assert qa['aggregate'] == {'outside_changed_pixels': 0, 'reference_pages': 100, 'reports': 11, 'result': 'PASS'}
-          assert qa['coordinate_compiler']['manifest_sha256'] == index['generated_coordinate_manifest']['sha256']
-          assert qa['coordinate_compiler']['compressed_detail_sha256'] == index['generated_coordinate_detail']['sha256']
-          for rid, meta in index['reports'].items():
-              assert qa['reports'][rid]['sha256'] == meta['sha256']
-              assert qa['reports'][rid]['pages'] == meta['page_count']
-              assert qa['coordinate_compiler']['field_counts'][rid] == meta['placeholder_count']
+          assert qa['aggregate'] == {
+              'outside_changed_pixels': 0,
+              'reference_pages': 100,
+              'reports': 11,
+              'result': 'PASS',
+          }
+          assert qa['coordinate_compiler']['name'] == 'fitz-1.26.7-genoma-v2'
+          for rid in sorted(expected):
+              old = legacy['reports'][rid]
+              assert qa['reports'][rid]['sha256'] == old['sha256']
+              assert qa['reports'][rid]['pages'] == old['page_count']
               assert qa['reports'][rid]['qa']['outside_changed_pixels'] == 0
-          print('pinned v3 static pixel QA evidence: PASS')
+              assert qa['coordinate_compiler']['field_counts'][rid] == current['reports'][rid]['placeholder_count']
+
+          print('current v3.1 identity contract: PASS')
+          print('historical v3.0 static pixel-QA evidence contract: PASS')
           PY
-      - name: Verify immutable private template store when materialized
-        run: python3 scripts/verify_template_store.py --allow-sealed-only
+      - name: Verify immutable v3.1 template store
+        run: python3 scripts/verify_template_store.py
       - name: Coordinate compiler synthetic smoke
         run: |
           python3 - <<'PY'
@@ -101,7 +122,7 @@ jobs:
           data = {
               'case_id': 'CASE-VISUAL-REFERENCE',
               'summary': 'Conteúdo rastreável para teste editorial de regressão visual.',
-              'ruleset': {'status': 'VIGENTE', 'version': 'v3.3', 'effective_date': '14/08/2026'},
+              'ruleset': {'status': 'VIGENTE', 'version': 'v3.4', 'effective_date': '17/08/2026'},
               'publication_gate': {
                   'passed': True,
                   'consent_verified': True,
@@ -110,7 +131,7 @@ jobs:
                   'placeholders_resolved': True,
               },
               'policy_evaluation': PASSING_POLICY,
-              'post_deployment_status': 'PASS',
+              'post_deployment_status': 'PENDENTE',
               'sections': {},
               'findings': [],
               'execution_manifest': {'status': 'VERIFICADO'},
