@@ -97,7 +97,7 @@ def main() -> int:
             },
             "gates": [{"gate": "FINAL_AUDIT_GATE", "state": "PENDING", "blocking": True}],
         },
-        "post_deployment_status": "PASS",
+        "post_deployment_status": "PENDENTE",
         "runtime_gate": runtime,
     }
     out = Path(args.output)
