@@ -1,4 +1,4 @@
-name: GENOMA v0.8 four-plane audit
+name: GENOMA v0.9 four-plane audit
 
 on:
   pull_request:
@@ -20,11 +20,12 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
-      - name: Repository and supply-chain contracts
+      - name: Repository, source-integrity and supply-chain contracts
         run: |
           python3 scripts/validate_repo.py
+          python3 scripts/source_integrity_audit.py --output source-integrity.json
           python3 scripts/verify_supply_chain_lock.py
-      - name: Unit tests for v0.8 architecture
+      - name: Unit tests for deterministic architecture
         run: |
           python3 -m unittest \
             tests.test_snp_array_qc \
@@ -33,7 +34,9 @@ jobs:
             tests.test_grch38_compute_strategy \
             tests.test_supply_chain_lock \
             tests.test_template_store \
-            tests.test_genoma_audit -v
+            tests.test_genoma_audit \
+            tests.test_workflow_contracts \
+            tests.test_pre_analysis_hardening -v
       - name: Four-plane audit
         run: python3 scripts/genoma_audit.py --allow-template-sealed-only --output audit.json
       - name: Explicitly surface template binary transport state
@@ -43,9 +46,10 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: genoma-v0.8-audit-${{ github.sha }}
+          name: genoma-v0.9-audit-${{ github.sha }}
           path: |
             audit.json
+            source-integrity.json
             template-store-verification.json
           retention-days: 365
           if-no-files-found: warn
