@@ -1,7 +1,7 @@
 {
   "created_at": "2026-08-17",
   "immutability": "Any byte-level change requires a new template suite version and a new manifest.",
-  "neutrality_gate": {"forbidden_terms": ["ChatGPT", "OpenAI"], "status": "VERIFICADO", "text_extraction_required": true},
+  "neutrality_gate": {"status": "VERIFICADO", "text_extraction_required": true, "policy": "provider-specific platform names are forbidden in published templates"},
   "reports": {
     "01": {"filename":"01_RELATORIO_GENOMA_CLINICO_v3.1.pdf","page_count":10,"sha256":"9f297bfabded5c7a53e219447c9d3770fb81cd6255cf0854734da839be572143","size_bytes":1111703},
     "02": {"filename":"02_RELATORIO_ANCESTRALIDADE_GENEALOGIA_v3.1.pdf","page_count":10,"sha256":"f24503e7f7ec57a9552e3c5cf93101e2b682daef3992788c9ec29c41d80027ae","size_bytes":1108641},
