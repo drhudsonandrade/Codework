@@ -1,91 +1,44 @@
-name: GENOMA materialize exact v3.0 PDFs
+name: GENOMA verify exact v3.1 template source
 
 on:
-  workflow_dispatch:
-  push:
-    branches: [main]
+  pull_request:
     paths:
-      - 'template_store/v3.0/MANIFEST.json'
-      - 'template_store/v3.0/sealed/**'
+      - 'template_store/v3.1/**'
       - 'scripts/verify_template_store.py'
       - '.github/workflows/materialize-template-pdfs.yml'
+  push:
+    paths:
+      - 'template_store/v3.1/**'
+      - 'scripts/verify_template_store.py'
+      - '.github/workflows/materialize-template-pdfs.yml'
+  workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: genoma-template-materialization-v3
-  cancel-in-progress: false
+  contents: read
 
 jobs:
-  materialize:
+  verify-templates:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
-
-      - name: Verify sealed source and reconstruct exact templates
-        shell: bash
+          cache: pip
+          cache-dependency-path: reporting/requirements.txt
+      - name: Install pinned verifier dependencies
+        run: python3 -m pip install --disable-pip-version-check -r reporting/requirements.txt
+      - name: Verify content-addressed v3.1 source
         run: |
           set -euo pipefail
-          python3 scripts/verify_template_store.py --materialize "$RUNNER_TEMP/genoma-templates" | tee "$RUNNER_TEMP/template-verification.json"
-          jq -e '.operational_status == "VERIFICADO" and .binary_materialization == "VERIFICADO" and .reports == 11' "$RUNNER_TEMP/template-verification.json" >/dev/null
-
-      - name: Install content-addressed paths and independent attestation
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import hashlib, json, os, shutil
-          from pathlib import Path
-
-          root = Path('template_store/v3.0')
-          source = Path(os.environ['RUNNER_TEMP']) / 'genoma-templates'
-          manifest = json.loads((root/'MANIFEST.json').read_text(encoding='utf-8'))
-          installed = []
-          for rid in sorted(manifest['reports']):
-              spec = manifest['reports'][rid]
-              src = source/spec['filename']
-              data = src.read_bytes()
-              digest = hashlib.sha256(data).hexdigest()
-              if digest != spec['sha256'] or len(data) != spec['size_bytes'] or not data.startswith(b'%PDF-'):
-                  raise SystemExit(f'identity mismatch for report {rid}')
-              dest = root/'sha256'/digest/spec['filename']
-              dest.parent.mkdir(parents=True, exist_ok=True)
-              if dest.exists() and dest.read_bytes() != data:
-                  raise SystemExit(f'content-addressed collision for report {rid}')
-              dest.write_bytes(data)
-              installed.append({'id': rid, 'path': str(dest), 'sha256': digest, 'size_bytes': len(data), 'status': 'VERIFICADO'})
-          attestation = {
-              'schema': 'genoma-template-materialization-attestation-v2',
-              'ruleset': {'status':'VIGENTE','version':'v3.3','formal_date':'14/08/2026'},
-              'template_version': 'v3.0',
-              'source_mode': manifest['storage']['mode'],
-              'source_archive_sha256': manifest['storage']['decoded_archive_sha256'],
-              'report_count': len(installed),
-              'reports': installed,
-              'materialization_status': 'VERIFICADO',
-              'traceability': {'workflow': '.github/workflows/materialize-template-pdfs.yml', 'run_id': os.environ['GITHUB_RUN_ID'], 'source_commit': os.environ['GITHUB_SHA']},
-          }
-          (root/'MATERIALIZATION_ATTESTATION.json').write_text(json.dumps(attestation, indent=2, ensure_ascii=False)+'\n', encoding='utf-8')
-          PY
-          test "$(find template_store/v3.0/sha256 -type f -name '*.pdf' | wc -l)" -eq 11
-
-      - name: Commit exact physical PDFs if absent
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'genoma-audit-bot'
-          git config user.email 'genoma-audit-bot@users.noreply.github.com'
-          git add template_store/v3.0/sha256 template_store/v3.0/MATERIALIZATION_ATTESTATION.json
-          if git diff --cached --quiet; then
-            echo 'Exact content-addressed PDFs are already materialized.'
-            exit 0
-          fi
-          git commit -m 'chore: materialize exact GENOMA v3.0 PDFs [skip ci]'
-          git push origin HEAD:main
+          python3 scripts/verify_template_store.py | tee template-verification.json
+          jq -e '.operational_status == "VERIFICADO" and .reports == 11' template-verification.json >/dev/null
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: template-v3-1-verification-${{ github.sha }}
+          path: template-verification.json
+          if-no-files-found: error
+          retention-days: 90
