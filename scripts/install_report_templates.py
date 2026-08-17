@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Install the externally held GENOMA v3.0 visual template pack after SHA verification.
-
-Coordinate inventories may be supplied as the previously approved external pack or rebuilt
-locally from the exact hash-pinned PDFs with the pinned deterministic compiler.  In either
-case, the resulting coordinate artifacts must match a pinned SHA-256 before installation.
-"""
+"""Install the hash-pinned GENOMA v3.1 visual template pack fail-closed."""
 from __future__ import annotations
 
 import argparse
@@ -20,103 +15,52 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from reporting.template_v3 import load_reference_manifest, verify_template_pack, TemplateV3Error
-from scripts.build_report_coordinate_pack import compile_pack, write_pack, COMPILER_ID
+from reporting.reference_v31 import INDEX_PATH, load_verified_reference
+from reporting.template_v3 import verify_template_pack
+from scripts.build_report_coordinate_pack import COMPILER_ID, encode_pack
 
 
-def _sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def _pair(root: Path, manifest: dict, prefix: str) -> tuple[dict, dict] | None:
-    manifest_meta = manifest.get(f"{prefix}_coordinate_manifest") or {}
-    detail_meta = manifest.get(f"{prefix}_coordinate_detail") or {}
-    mname = str(manifest_meta.get("filename") or "")
-    dname = str(detail_meta.get("filename") or "")
-    if not mname or not dname:
-        return None
-    mp = root / mname
-    dp = root / dname
-    if not mp.is_file() or not dp.is_file():
-        return None
-    ma = _sha256(mp)
-    da = _sha256(dp)
-    if ma != manifest_meta.get("sha256") or da != detail_meta.get("sha256"):
-        raise TemplateV3Error(f"checksum mismatch for {prefix} v3 coordinate artifacts")
-    return (
-        {"filename": mname, "sha256": ma, "status": "VERIFICADO"},
-        {"filename": dname, "sha256": da, "status": "VERIFICADO"},
-    )
-
-
-def _ensure_coordinates(root: Path, manifest: dict) -> dict:
-    # Prefer the historical approved external pair when explicitly supplied.
-    external = _pair(root, manifest, "external")
-    if external:
-        return {"mode": "external-pinned", "manifest": external[0], "detail": external[1]}
-
-    compiler = manifest.get("coordinate_compiler") or {}
-    if compiler.get("id") != COMPILER_ID:
-        raise TemplateV3Error("coordinate compiler identity does not match pinned reference index")
-    generated_meta = manifest.get("generated_coordinate_manifest") or {}
-    detail_meta = manifest.get("generated_coordinate_detail") or {}
-    if not generated_meta or not detail_meta:
-        raise TemplateV3Error("pinned generated v3 coordinate hashes are missing")
-
-    payload = compile_pack(root, ROOT / "reporting" / "reference_v3_manifest.json")
-    build = write_pack(payload, root)
-    generated = _pair(root, manifest, "generated")
-    if not generated:
-        raise TemplateV3Error("deterministic coordinate compilation did not produce required artifacts")
-    return {
-        "mode": "generated-from-pinned-pdfs",
-        "compiler": COMPILER_ID,
-        "manifest": generated[0],
-        "detail": generated[1],
-        "build": build,
-    }
+def _sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
 
 
 def install(source: Path, target: Path) -> dict:
-    manifest = load_reference_manifest()
-    source_verification = verify_template_pack(source, manifest)
-    source_coordinates = _ensure_coordinates(source, manifest)
+    index = json.loads(INDEX_PATH.read_text(encoding="utf-8"))
+    source_verification = verify_template_pack(source, index)
+    coordinate_manifest = load_verified_reference(source)
+    encoded_coordinates = encode_pack(coordinate_manifest)
+    coordinate_sha = _sha256_bytes(encoded_coordinates)
+    expected_coordinate_sha = str(index.get("compressed_detail_sha256") or "")
+    if coordinate_sha != expected_coordinate_sha:
+        raise RuntimeError("v3.1 coordinate pack identity mismatch before installation")
+
     target.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="genoma-v3-template-stage-", dir=str(target.parent)) as td:
+    with tempfile.TemporaryDirectory(prefix="genoma-v31-template-stage-", dir=str(target.parent)) as td:
         stage = Path(td) / "pack"
         stage.mkdir()
-        for rid in sorted(manifest["reports"]):
-            name = manifest["reports"][rid]["filename"]
+        for rid in sorted(index["reports"]):
+            name = index["reports"][rid]["filename"]
             shutil.copy2(source / name, stage / name)
-        pair = source_coordinates
-        for key in ("manifest", "detail"):
-            name = pair[key]["filename"]
-            shutil.copy2(source / name, stage / name)
-        staged = verify_template_pack(stage, manifest)
-        staged_coordinates = _ensure_coordinates(stage, manifest)
+        staged = verify_template_pack(stage, coordinate_manifest)
         target.mkdir(parents=True, exist_ok=True)
         for source_path in stage.iterdir():
             if source_path.is_file():
                 shutil.copy2(source_path, target / source_path.name)
-    final = verify_template_pack(target, manifest)
-    final_coordinates = _ensure_coordinates(target, manifest)
+
+    final = verify_template_pack(target, coordinate_manifest)
     return {
-        "schema": "genoma-editorial-v3-template-install-v3",
+        "schema": "genoma-editorial-v31-template-install-v1",
         "status": "VERIFICADO",
         "checked_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "source": str(source),
         "target": str(target),
         "source_verification": source_verification,
-        "source_coordinates": source_coordinates,
         "staged_verification": staged,
-        "staged_coordinates": staged_coordinates,
         "final_verification": final,
-        "final_coordinates": final_coordinates,
-        "note": "Coordinates are accepted only when either an approved external pair or deterministic recompilation from exact hash-pinned PDFs matches pinned SHA-256 identities.",
+        "coordinate_compiler": COMPILER_ID,
+        "coordinate_sha256": coordinate_sha,
+        "coordinate_expected_sha256": expected_coordinate_sha,
+        "note": "Installation is accepted only when all 11 PDF identities and the deterministically rebuilt coordinate pack match pinned v3.1 SHA-256 identities.",
     }
 
 
@@ -127,7 +71,7 @@ def main() -> int:
     p.add_argument("--evidence")
     args = p.parse_args()
     result = install(Path(args.source_dir), Path(args.target_dir))
-    payload = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
+    payload = json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     if args.evidence:
         path = Path(args.evidence)
         path.parent.mkdir(parents=True, exist_ok=True)
