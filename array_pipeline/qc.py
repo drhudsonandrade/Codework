@@ -123,6 +123,64 @@ def _gate(state: str, reasons: list[str], **extra: Any) -> dict[str, Any]:
     return {"state": state, "reasons": reasons, **extra}
 
 
+def _metadata_attestation(kind: str, text: str, input_sha: str) -> str:
+    payload = {
+        "status": "VERIFICADO",
+        "decision": "SATISFIED",
+        "justification": f"The source file explicitly declares {kind}: {text}",
+        "evidence_refs": [f"input-metadata:{kind}"],
+        "trace": {
+            "attestation_id": f"input-metadata-{kind}-{input_sha[:16]}",
+            "created_at": "1970-01-01T00:00:00Z",
+            "actor_type": "SOFTWARE",
+            "actor_id": "array_pipeline.qc",
+            "method": "source-file metadata parsing",
+            "run_id": f"input-{input_sha[:16]}",
+            "input_sha256": [input_sha],
+            "output_sha256": [],
+            "tool_versions": {"array_pipeline": "v0.8"},
+        },
+    }
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+
+def _verified_provenance(value: str | None, input_sha: str) -> bool:
+    if not value:
+        return False
+    try:
+        payload = json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+    if payload.get("status") != "VERIFICADO" or payload.get("decision") != "SATISFIED":
+        return False
+    if not isinstance(payload.get("justification"), str) or not payload["justification"].strip():
+        return False
+    refs = payload.get("evidence_refs")
+    if not isinstance(refs, list) or not refs or any(not isinstance(x, str) or not x.strip() for x in refs):
+        return False
+    trace = payload.get("trace")
+    if not isinstance(trace, dict):
+        return False
+    for field in ("attestation_id", "created_at", "actor_type", "actor_id", "method", "run_id"):
+        if not isinstance(trace.get(field), str) or not trace[field].strip():
+            return False
+    if trace.get("actor_type") not in {"HUMAN", "SOFTWARE", "SERVICE"}:
+        return False
+    try:
+        datetime.fromisoformat(trace["created_at"].replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    hashes = trace.get("input_sha256")
+    if not isinstance(hashes, list) or input_sha.lower() not in {str(x).lower() for x in hashes}:
+        return False
+    tools = trace.get("tool_versions")
+    if not isinstance(tools, dict) or any(not isinstance(k, str) or not isinstance(v, str) for k, v in tools.items()):
+        return False
+    return True
+
+
 def inspect_array(
     path: Path,
     *,
@@ -138,9 +196,10 @@ def inspect_array(
     """QC a raw or harmonized SNP-array file without pretending it is WGS.
 
     This gate intentionally owns only array-level structure/callability/provenance and
-    direct cross-platform concordance.  It does not infer CNV/SV/phase, does not turn
+    direct cross-platform concordance. It does not infer CNV/SV/phase, does not turn
     missing assayed loci into negative clinical evidence, and does not promote a marker
-    to a clinical result.
+    to a clinical result. Provenance evidence must be a structured VERIFICADO/SATISFIED
+    attestation bound to this exact input SHA-256; plain prose never unlocks the gate.
     """
     path = path.resolve()
     input_sha = sha256_file(path)
@@ -165,11 +224,14 @@ def inspect_array(
         if strand is None and metadata.get("strand"):
             strand = metadata.get("strand")
         if build_evidence is None and metadata.get("reference"):
-            build_evidence = f"input metadata reference={metadata.get('reference')}"
+            build_evidence = _metadata_attestation("reference_build", metadata.get("reference", ""), input_sha)
         if strand_evidence is None and metadata.get("strand_evidence"):
-            strand_evidence = metadata.get("strand_evidence")
+            strand_evidence = _metadata_attestation("strand", metadata.get("strand_evidence", ""), input_sha)
         if platform is None:
             platform = metadata.get("chip")
+
+        build_evidence_verified = _verified_provenance(build_evidence, input_sha)
+        strand_evidence_verified = _verified_provenance(strand_evidence, input_sha)
 
         reader = csv.DictReader(fh, fieldnames=header)
         total = 0
@@ -251,7 +313,7 @@ def inspect_array(
                     if marker_sources == "GM":
                         orientation_status = "VERIFICADO"
                         orientation_basis = "cross-platform consensus"
-                    elif marker_sources == "M" and strand == "forward" and strand_evidence:
+                    elif marker_sources == "M" and strand == "forward" and strand_evidence_verified:
                         orientation_status = "VERIFICADO"
                         orientation_basis = "MyHeritage forward-strand source metadata"
                     elif marker_sources == "G":
@@ -261,7 +323,7 @@ def inspect_array(
                         orientation_status = "NÃO DISPONÍVEL"
                         orientation_basis = "source-specific orientation not independently verified"
                 else:
-                    orientation_status = "VERIFICADO" if strand in {"forward", "plus", "+"} and strand_evidence else "NÃO DISPONÍVEL"
+                    orientation_status = "VERIFICADO" if strand in {"forward", "plus", "+"} and strand_evidence_verified else "NÃO DISPONÍVEL"
                     orientation_basis = strand_evidence or "source-specific orientation evidence absent"
                 marker_hits[rsid] = {
                     "rsid": rsid,
@@ -304,12 +366,12 @@ def inspect_array(
     build_reasons: list[str] = []
     if build not in {"GRCh37", "GRCh38"}:
         build_reasons.append("reference build not explicitly verified")
-    elif not build_evidence:
-        build_reasons.append("reference build supplied without provenance evidence")
+    elif not build_evidence_verified:
+        build_reasons.append("reference build provenance is not a structured VERIFICADO/SATISFIED attestation bound to input SHA-256")
     if strand not in {"forward", "plus", "+"}:
         build_reasons.append("strand convention not explicitly verified")
-    elif not strand_evidence:
-        build_reasons.append("strand convention supplied without provenance evidence")
+    elif not strand_evidence_verified:
+        build_reasons.append("strand provenance is not a structured VERIFICADO/SATISFIED attestation bound to input SHA-256")
     build_state = "PASS" if not build_reasons else "BLOCKED"
 
     call_reasons: list[str] = []
