@@ -16,7 +16,7 @@ class CoreGates:
             reasons.append(str(exc))
         declared = manifest.get("ruleset", {}) if isinstance(manifest.get("ruleset"), dict) else {}
         if declared:
-            if declared.get("version") not in (None, self.ruleset.version): reasons.append("manifest ruleset version differs from canonical v3.3")
+            if declared.get("version") not in (None, self.ruleset.version): reasons.append("manifest ruleset version differs from canonical v3.4")
             if declared.get("sha256") not in (None, self.ruleset.sha256): reasons.append("manifest ruleset SHA-256 differs from canonical ruleset")
         return _gate("RULESET_GATE", not reasons, reasons)
 
