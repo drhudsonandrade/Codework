@@ -1,0 +1,114 @@
+name: GENOMA materialize v3.0 PDF templates
+
+on:
+  push:
+    branches:
+      - feature/materialize-template-pdfs-v3
+    paths:
+      - template_store/v3.0/transport/READY
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: genoma-template-materialization-v3
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    name: Materialize exact v3.0 PDFs
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct and verify sealed archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from __future__ import annotations
+          import hashlib, json
+          from pathlib import Path
+
+          root = Path('.')
+          manifest = json.loads((root/'template_store/v3.0/MANIFEST.json').read_text())
+          parts_dir = root/'template_store/v3.0/transport'
+          parts = sorted(parts_dir.glob('tplpart-*'))
+          expected = manifest['parts']
+          if len(parts) != len(expected):
+              raise SystemExit(f'expected {len(expected)} transport parts, found {len(parts)}')
+          for path, spec in zip(parts, expected, strict=True):
+              data = path.read_bytes()
+              got = hashlib.sha256(data).hexdigest()
+              if path.name != spec['name'] or len(data) != spec['size_bytes'] or got != spec['sha256']:
+                  raise SystemExit(f'transport part mismatch: {path.name}')
+          joined = b''.join(p.read_bytes() for p in parts)
+          (Path('/tmp')/'templates.tar.xz.b64').write_bytes(joined)
+          if len(joined) != manifest['storage']['base64_size_bytes']:
+              raise SystemExit('base64 transport size mismatch')
+          PY
+          base64 --decode /tmp/templates.tar.xz.b64 > /tmp/GENOMA_V3_TEMPLATE_PACK.tar.xz
+          printf '%s  %s\n' "$(python3 - <<'PY'
+          import json
+          print(json.load(open('template_store/v3.0/MANIFEST.json'))['storage']['decoded_archive_sha256'])
+          PY
+          )" /tmp/GENOMA_V3_TEMPLATE_PACK.tar.xz | sha256sum --check --strict
+
+      - name: Extract exact PDFs and verify manifest identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf template_store/v3.0/materialized
+          mkdir -p template_store/v3.0/materialized
+          tar -xJf /tmp/GENOMA_V3_TEMPLATE_PACK.tar.xz -C template_store/v3.0/materialized
+          python3 - <<'PY'
+          from __future__ import annotations
+          import hashlib, json
+          from pathlib import Path
+
+          root = Path('template_store/v3.0')
+          manifest = json.loads((root/'MANIFEST.json').read_text())
+          materialized = root/'materialized'
+          expected_names = {v['filename'] for v in manifest['reports'].values()}
+          actual_names = {p.name for p in materialized.glob('*.pdf')}
+          if actual_names != expected_names:
+              raise SystemExit(f'PDF set mismatch: expected {len(expected_names)}, got {len(actual_names)}')
+          verified = []
+          for key in sorted(manifest['reports']):
+              spec = manifest['reports'][key]
+              p = materialized/spec['filename']
+              data = p.read_bytes()
+              if not data.startswith(b'%PDF-'):
+                  raise SystemExit(f'not a PDF: {p.name}')
+              sha = hashlib.sha256(data).hexdigest()
+              if sha != spec['sha256'] or len(data) != spec['size_bytes']:
+                  raise SystemExit(f'identity mismatch: {p.name}')
+              verified.append({'id': key, 'filename': p.name, 'sha256': sha, 'size_bytes': len(data), 'status': 'VERIFICADO'})
+          attestation = {
+              'schema': 'genoma-template-materialization-attestation-v1',
+              'ruleset': {'status': 'VIGENTE', 'version': 'v3.3', 'formal_date': '14/08/2026'},
+              'template_version': 'v3.0',
+              'source_archive_sha256': manifest['storage']['decoded_archive_sha256'],
+              'report_count': len(verified),
+              'reports': verified,
+              'materialization_status': 'VERIFICADO',
+              'note': 'Binary PDFs are committed physically in this private Git repository and hash-bound to MANIFEST.json.'
+          }
+          (root/'MATERIALIZATION_ATTESTATION.json').write_text(json.dumps(attestation, indent=2, ensure_ascii=False)+'\n', encoding='utf-8')
+          PY
+
+      - name: Replace transport with physically materialized PDFs
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf template_store/v3.0/transport
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add template_store/v3.0
+          git diff --cached --stat
+          git commit -m 'chore: materialize exact GENOMA v3.0 PDF templates'
+          git push origin HEAD:${GITHUB_REF_NAME}
