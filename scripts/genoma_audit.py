@@ -32,6 +32,9 @@ def audit(*, allow_template_sealed_only: bool = False) -> dict:
     rc, out = run(["python3", "scripts/validate_repo.py"])
     checks.append(check("REPOSITORY_CONTRACT", rc == 0, out))
 
+    rc, out = run(["python3", "scripts/source_integrity_audit.py"])
+    checks.append(check("SOURCE_INTEGRITY_AUDIT", rc == 0, out))
+
     rc, out = run(["python3", "scripts/verify_supply_chain_lock.py"])
     checks.append(check("SUPPLY_CHAIN_LOCK", rc == 0, out))
 
@@ -72,14 +75,14 @@ def audit(*, allow_template_sealed_only: bool = False) -> dict:
     checks.append(check("NO_PERSONAL_GENOTYPE_FIXTURES", not tracked_like, json.dumps(tracked_like)))
 
     planes = {
-        "policy_control": "PASS" if all(c["state"] == "PASS" for c in checks if c["id"] in {"REPOSITORY_CONTRACT", "SUPPLY_CHAIN_LOCK"}) else "BLOCKED",
+        "policy_control": "PASS" if all(c["state"] == "PASS" for c in checks if c["id"] in {"REPOSITORY_CONTRACT", "SOURCE_INTEGRITY_AUDIT", "SUPPLY_CHAIN_LOCK"}) else "BLOCKED",
         "scientific_data": "PASS" if next(c for c in checks if c["id"] == "SCIENTIFIC_DATA_PLANE_ARRAY")["state"] == "PASS" else "BLOCKED",
         "evidence": "PASS" if next(c for c in checks if c["id"] == "EVIDENCE_ANNOTATION_PLANE")["state"] == "PASS" else "BLOCKED",
         "audit": "PASS" if all(c["state"] == "PASS" for c in checks if c["blocking"]) else "BLOCKED",
     }
     blocking_failures = [c["id"] for c in checks if c["blocking"] and c["state"] != "PASS"]
     return {
-        "schema": "genoma-v0.8-four-plane-audit-v1",
+        "schema": "genoma-v0.9-four-plane-audit-v1",
         "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "ruleset": {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026", "sha256": RULESET_SHA},
         "operational_status": "VERIFICADO" if not blocking_failures else "NÃO DISPONÍVEL",
