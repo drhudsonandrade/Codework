@@ -1,119 +1,177 @@
+#!/usr/bin/env python3
+"""Editorial artifact layer for the GENOMA v3.1 report suite."""
 from __future__ import annotations
 
-import hashlib
 import json
-import threading
+import os
+import shutil
+import tempfile
+import zipfile
 from pathlib import Path
 from typing import Any
 
-from .editorial_v3_hifi import DESIGN, write_editorial_bundle as _programmatic_write_editorial_bundle
 from . import template_v3 as _template_v3
 
-_TEMPLATE_LOCK = threading.RLock()
-_ORIGINAL_LOADER = _template_v3.load_reference_manifest
+ROOT = Path(__file__).resolve().parents[1]
+TEMPLATE_STORE = ROOT / "template_store" / "v3.1"
+INBOX_ZIP = TEMPLATE_STORE / "inbox" / "GENOMA_REPORT_TEMPLATES_v3.1_DETERMINISTIC.zip"
 
 
-def _sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
+class EditorialRenderError(RuntimeError):
+    pass
 
 
-def _verified_coordinate_manifest(template_dir: Path) -> tuple[dict[str, Any], dict[str, str]]:
-    """Load coordinates only from a hash-pinned v3 coordinate pair.
+def _require_final_data(rendered: dict[str, Any]) -> None:
+    meta = rendered.get("metadata") if isinstance(rendered.get("metadata"), dict) else {}
+    if meta.get("mode") != "FINAL":
+        return
+    data = rendered.get("data") if isinstance(rendered.get("data"), dict) else {}
+    publication = data.get("publication_gate") if isinstance(data.get("publication_gate"), dict) else {}
+    if publication.get("passed") is not True:
+        raise EditorialRenderError("FINAL editorial render blocked: publication gate not passed")
 
-    Prefer the historical approved external pair when installed. Otherwise accept the v2
-    pair produced deterministically from the exact hash-pinned v3.0 PDFs, but only if both
-    generated artifacts match the SHA-256 identities carried by the repository index.
-    """
-    index = json.loads(_template_v3.MANIFEST_PATH.read_text(encoding="utf-8"))
-    pairs = (
-        ("external", index.get("external_coordinate_manifest") or {}, index.get("external_coordinate_detail") or {}),
-        ("generated", index.get("generated_coordinate_manifest") or {}, index.get("generated_coordinate_detail") or {}),
-    )
-    errors: list[str] = []
-    for mode, manifest_meta, detail_meta in pairs:
-        manifest_path = template_dir / str(manifest_meta.get("filename") or "")
-        detail_path = template_dir / str(detail_meta.get("filename") or "")
-        if not manifest_path.is_file() or not detail_path.is_file():
-            errors.append(f"{mode}:missing")
+
+def _document_title(rendered: dict[str, Any]) -> str:
+    meta = rendered.get("metadata") if isinstance(rendered.get("metadata"), dict) else {}
+    return str(meta.get("title") or "GENOMA")
+
+
+def _programmatic_docx(rendered: dict[str, Any], path: Path) -> None:
+    from docx import Document
+    from docx.shared import Pt
+    document = Document()
+    document.core_properties.title = _document_title(rendered)
+    style = document.styles["Normal"]
+    style.font.name = "Arial"
+    style.font.size = Pt(10)
+    for raw in str(rendered["markdown"]).splitlines():
+        if raw.startswith("# "):
+            document.add_heading(raw[2:], level=1)
+        elif raw.startswith("## "):
+            document.add_heading(raw[3:], level=2)
+        elif raw.startswith("### "):
+            document.add_heading(raw[4:], level=3)
+        elif raw.startswith("- "):
+            document.add_paragraph(raw[2:], style="List Bullet")
+        elif raw.strip() in {"```json", "```"}:
             continue
-        actual_manifest = _sha256(manifest_path)
-        actual_detail = _sha256(detail_path)
-        if actual_manifest != manifest_meta.get("sha256") or actual_detail != detail_meta.get("sha256"):
-            raise _template_v3.TemplateV3Error(f"{mode} v3 coordinate checksum mismatch")
-        if mode == "external":
-            detailed = _ORIGINAL_LOADER(manifest_path)
-        else:
-            detailed = json.loads(manifest_path.read_text(encoding="utf-8"))
-            if detailed.get("schema") != "genoma-editorial-v3-reference-manifest-v2":
-                raise _template_v3.TemplateV3Error("generated v3 coordinate schema mismatch")
-            if set(detailed.get("reports", {})) != {f"{i:02d}" for i in range(1, 12)}:
-                raise _template_v3.TemplateV3Error("generated v3 coordinate report set mismatch")
-            for rid, summary in index["reports"].items():
-                detail = detailed["reports"][rid]
-                for key in ("filename", "sha256", "page_count", "placeholder_count"):
-                    if detail.get(key) != summary.get(key):
-                        raise _template_v3.TemplateV3Error(f"generated coordinate/index mismatch: {rid}:{key}")
-        return detailed, {
-            "mode": mode,
-            "manifest": actual_manifest,
-            "detail": actual_detail,
+        elif raw.strip():
+            document.add_paragraph(raw)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    document.save(path)
+
+
+def _programmatic_pdf(rendered: dict[str, Any], path: Path) -> None:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet
+    styles = getSampleStyleSheet()
+    story = []
+    for raw in str(rendered["markdown"]).splitlines():
+        if raw.startswith("# "):
+            story.append(Paragraph(raw[2:], styles["Title"]))
+        elif raw.startswith("## "):
+            story.append(Paragraph(raw[3:], styles["Heading2"]))
+        elif raw.startswith("### "):
+            story.append(Paragraph(raw[4:], styles["Heading3"]))
+        elif raw.strip() in {"```json", "```"}:
+            continue
+        elif raw.strip():
+            story.append(Paragraph(raw.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"), styles["BodyText"]))
+        story.append(Spacer(1, 4))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    SimpleDocTemplate(str(path), pagesize=A4, title=_document_title(rendered)).build(story)
+
+
+def _use_template(rendered: dict[str, Any]) -> bool:
+    mode = str(os.environ.get("GENOMA_EDITORIAL_MODE") or "").lower()
+    if mode in {"programmatic", "plain"}:
+        return False
+    meta = rendered.get("metadata") if isinstance(rendered.get("metadata"), dict) else {}
+    return meta.get("mode") == "FINAL" or _template_v3.template_mode_requested(rendered)
+
+
+def _configure_v31_replacements() -> None:
+    _template_v3.SYSTEM_REPLACEMENTS.clear()
+    _template_v3.SYSTEM_REPLACEMENTS.update(
+        {
+            "MODELO REUTILIZÁVEL v3.1": "RESULTADO GENÔMICO v3.1",
+            "MODELO — NÃO É RESULTADO": "RESULTADO GENÔMICO — VERSÃO FINAL",
+            "MODELO — NÃO É RESULTADO GENÉTICO": "RESULTADO GENÔMICO — VERSÃO FINAL",
+            "GENOMA-RULESET-v3.4": "GENOMA-RULESET-v3.4",
         }
-    raise _template_v3.TemplateV3Error(
-        "no approved v3 coordinate pair is installed; run scripts/install_report_templates.py on the exact template pack (" + ",".join(errors) + ")"
     )
+
+
+def _extract_verified_template_zip() -> Path:
+    from scripts.verify_template_store import verify
+    result = verify(materialize=False)
+    if result.get("operational_status") != "VERIFICADO":
+        raise EditorialRenderError("v3.1 template source is not verified")
+    if not INBOX_ZIP.is_file():
+        raise EditorialRenderError("verified runtime-extractable template ZIP is not available")
+    temp = Path(tempfile.mkdtemp(prefix="genoma-v31-templates-"))
+    with zipfile.ZipFile(INBOX_ZIP) as archive:
+        archive.extractall(temp)
+    return temp
+
+
+def _template_dir() -> tuple[Path, Path | None]:
+    raw = os.environ.get("GENOMA_REPORT_TEMPLATE_DIR")
+    if raw:
+        path = Path(raw)
+        if not path.is_dir():
+            raise EditorialRenderError(f"GENOMA_REPORT_TEMPLATE_DIR not found: {path}")
+        return path, None
+    materialized = TEMPLATE_STORE / "materialized"
+    if materialized.is_dir():
+        return materialized, None
+    temp = _extract_verified_template_zip()
+    return temp, temp
+
+
+def _verified_reference(report_id: str, template_dir: Path) -> dict[str, Any]:
+    try:
+        manifest = _template_v3.load_reference_manifest()
+        verification = _template_v3.verify_template_pack(template_dir)
+    except Exception as exc:
+        raise EditorialRenderError(f"v3.1 editorial reference unavailable: {type(exc).__name__}: {exc}") from exc
+    if verification.get("status") != "VERIFICADO":
+        raise EditorialRenderError("v3.1 template verification did not return VERIFICADO")
+    reports = manifest.get("reports") if isinstance(manifest.get("reports"), dict) else {}
+    if report_id not in reports:
+        raise EditorialRenderError(f"report {report_id} absent from v3.1 reference manifest")
+    return manifest
 
 
 def write_editorial_bundle(rendered: dict[str, Any], output_dir: Path, *, stem: str | None = None) -> dict[str, Path]:
-    """Route final publishing through the exact v3 template engine when requested.
-
-    Programmatic rendering remains available for development fixtures. Final template-v3
-    publishing fails closed if the reference PDF or coordinate inventory differs from its
-    pinned identity.
-    """
-    if not _template_v3.template_mode_requested(rendered):
-        return _programmatic_write_editorial_bundle(rendered, output_dir, stem=stem)
-
+    _require_final_data(rendered)
+    meta = rendered.get("metadata") if isinstance(rendered.get("metadata"), dict) else {}
+    report_id = str(meta.get("report_id") or "")
+    if not report_id:
+        raise EditorialRenderError("missing report_id")
+    stem = stem or f"{report_id}-{meta.get('slug', 'report')}"
     output_dir.mkdir(parents=True, exist_ok=True)
-    metadata = rendered["metadata"]
-    stem = stem or f"{metadata['report_id']}-{metadata['slug']}"
-    pdf = output_dir / f"{stem}.pdf"
     docx = output_dir / f"{stem}.docx"
-    data = rendered.get("data", {}) if isinstance(rendered.get("data"), dict) else {}
-    strict = bool(data.get("template_fields_complete"))
-    template_dir = _template_v3.template_dir_from_environment()
-    detailed_manifest, coordinate_hashes = _verified_coordinate_manifest(template_dir)
+    pdf = output_dir / f"{stem}.pdf"
+    editorial_manifest = output_dir / f"{stem}.editorial.json"
 
-    # Internal template helpers call load_reference_manifest() without a path. Bind that call
-    # to the already hash-verified coordinate inventory for the duration of this render.
-    with _TEMPLATE_LOCK:
-        previous_loader = _template_v3.load_reference_manifest
-        _template_v3.load_reference_manifest = lambda *args, **kwargs: detailed_manifest
+    if not _use_template(rendered):
+        _programmatic_docx(rendered, docx)
+        _programmatic_pdf(rendered, pdf)
+        info = {"mode": "programmatic", "template_suite": "v3.1", "status": "EXECUTADO"}
+    else:
+        _configure_v31_replacements()
+        template_dir, cleanup = _template_dir()
         try:
-            pdf_runtime = _template_v3.render_pdf_from_template(rendered, pdf, template_dir, strict=strict)
-            docx_runtime = _template_v3.render_docx_from_template(rendered, docx, template_dir, strict=strict)
+            manifest = _verified_reference(report_id, template_dir)
+            strict = str(os.environ.get("GENOMA_TEMPLATE_STRICT") or "1").lower() not in {"0", "false", "no"}
+            pdf_info = _template_v3.render_pdf_from_template(report_id, rendered, template_dir, pdf, strict=strict, coordinate_manifest=manifest)
+            docx_info = _template_v3.render_docx_from_template(report_id, rendered, template_dir, docx, strict=strict, coordinate_manifest=manifest)
+            info = {"mode": "template-v3.1", "template_suite": "v3.1", "status": "EXECUTADO", "pdf": pdf_info, "docx": docx_info}
         finally:
-            _template_v3.load_reference_manifest = previous_loader
+            if cleanup is not None:
+                shutil.rmtree(cleanup, ignore_errors=True)
 
-    runtime = {
-        "schema": "genoma-editorial-runtime-v3",
-        "report_id": metadata["report_id"],
-        "code": metadata["code"],
-        "accent": metadata["accent"],
-        "mode": "template-v3",
-        "pdf": pdf_runtime,
-        "docx": docx_runtime,
-        "coordinate_manifest_sha256": coordinate_hashes,
-        "visual_reference": "GENOMA model suite v3.0",
-        "claim_rule": "PDF static-pixel parity and DOCX visual parity are reported separately; DOCX renderer-dependence is never promoted to pixel-identical without measured evidence.",
-    }
-    (output_dir / f"{stem}.editorial.json").write_text(
-        json.dumps(runtime, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
-    return {"pdf": pdf, "docx": docx}
-
-
-__all__ = ["DESIGN", "write_editorial_bundle"]
+    editorial_manifest.write_text(json.dumps(info, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return {"docx": docx, "pdf": pdf, "editorial_manifest": editorial_manifest}
