@@ -58,6 +58,7 @@ EXPECTED_ARTIFACTS = {
 }
 EXPECTED_EVIDENCE_ADAPTERS = {"clinvar", "clingen", "cpic", "clinpgx", "gnomad", "pgs_catalog"}
 FORBIDDEN_SUFFIXES = (".fastq", ".fq", ".bam", ".bai", ".cram", ".crai", ".vcf", ".tbi")
+FORBIDDEN_PROVIDER_TERMS = (("chat" + "gpt").lower(), ("open" + "ai").lower())
 SKIP_PARTS = {".git", "node_modules", "dist", "__pycache__", ".pytest_cache"}
 
 
@@ -121,21 +122,21 @@ def validate(root: Path) -> list[str]:
     main_nf = root / "main.nf"
     if main_nf.is_file():
         text = main_nf.read_text(encoding="utf-8")
-        for token in ("params.mode", "WGS_PRODUCTION", "ARRAY_PRODUCTION", "CANARY", "array_input", "array_build_evidence", "array_strand_evidence"):
+        for token in ("params.mode", "WGS_PRODUCTION", "ARRAY_PRODUCTION", "CANARY", "array_input", "array_build_evidence", "array_strand_evidence", "requireBoundedIdentifier", "requireSafePathParameter", "array_build_evidence_ch = Channel.fromPath", "array_strand_evidence_ch = Channel.fromPath"):
             if token not in text:
                 errors.append(f"main.nf missing dispatcher contract token: {token}")
 
     wgs_nf = root / "workflows/wgs.nf"
     if wgs_nf.is_file():
         text = wgs_nf.read_text(encoding="utf-8")
-        for token in ("VERIFY_RUNTIME_GATE", "REFRESH_FRESHNESS_GATE", "VERIFY_CONSENT_PROVENANCE", "ready_for_first_dna_read", "INGEST_AND_QC", "ALIGN_OR_STAGE", "RERUN_SAMPLE_RUNTIME_GATE", "CALL_SHORT_VARIANTS", "NORMALIZE_VARIANTS", "ANNOTATE_EVIDENCE", "BUILD_CURATED_MANIFEST", "POLICY_EVALUATE", "GENERATE_REPORTS", "unsupported_variant_classes", "NÃO DISPONÍVEL", "CYP2D6", "CNV", "SV"):
+        for token in ("VERIFY_RUNTIME_GATE", "REFRESH_FRESHNESS_GATE", "VERIFY_CONSENT_PROVENANCE", "ready_for_first_dna_read", "INGEST_AND_QC", "ALIGN_OR_STAGE", "RERUN_SAMPLE_RUNTIME_GATE", "CALL_SHORT_VARIANTS", "NORMALIZE_VARIANTS", "ANNOTATE_EVIDENCE", "BUILD_CURATED_MANIFEST", "POLICY_EVALUATE", "GENERATE_REPORTS", "--policy '${policy_evaluation}'", "unsupported_variant_classes", "NÃO DISPONÍVEL", "CYP2D6", "CNV", "SV"):
             if token not in text:
                 errors.append(f"WGS workflow missing fail-closed contract token: {token}")
 
     array_nf = root / "workflows/array.nf"
     if array_nf.is_file():
         text = array_nf.read_text(encoding="utf-8")
-        for token in ("ARRAY_QC", "ARRAY_ANNOTATE", "ARRAY_BUILD_MANIFEST", "ARRAY_POLICY_EVALUATE", "ARRAY_GENERATE_REPORTS", "LIMITED_INTERPRETATION_GATE", "plan-only", "live"):
+        for token in ("ARRAY_QC", "ARRAY_ANNOTATE", "ARRAY_BUILD_MANIFEST", "ARRAY_POLICY_EVALUATE", "ARRAY_GENERATE_REPORTS", "path build_evidence", "path strand_evidence", "LIMITED_INTERPRETATION_GATE", "plan-only", "live"):
             if token not in text:
                 errors.append(f"SNP-array workflow missing fail-closed contract token: {token}")
 
@@ -203,6 +204,14 @@ def validate(root: Path) -> list[str]:
             errors.append(f"genomic/reference payload must not be committed: {relative}")
         if name == "grch38.lock.sha256.approved":
             errors.append("externally approved GRCh38 lock must not be committed")
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            text = None
+        if text is not None:
+            low = text.lower()
+            if any(term in low for term in FORBIDDEN_PROVIDER_TERMS):
+                errors.append(f"provider-specific forbidden term remains in current source tree: {relative}")
         if path.suffix == ".json":
             try:
                 json.loads(path.read_text())
@@ -228,7 +237,7 @@ def main() -> None:
     print("PASS\tevidence_adapter_contract\tClinVar/ClinGen/CPIC/ClinPGx/gnomAD/PGS Catalog")
     print("PASS\tsupply_chain_contract\tworkflow/action/container lock paths present")
     print("PASS\treporting_contract\t11-model deterministic renderer and reference identities")
-    print("PASS\toptional_adapters\tcore has no Cloudflare/Temporal/Supabase/OpenAI runtime dependency")
+    print("PASS\tprovider_neutrality_contract\tcore and current source tree contain no removed provider references")
 
 
 if __name__ == "__main__":
