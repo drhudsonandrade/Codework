@@ -1,0 +1,33 @@
+{
+  "format": "genoma-sealed-normative-v1",
+  "canonical_filename": "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt",
+  "status": "VIGENTE",
+  "version": "v3.4",
+  "effective_date": "17/08/2026",
+  "raw_sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
+  "raw_size_bytes": 195733,
+  "transport_encoding": "base64(gzip(raw,mtime=0,level=9))",
+  "gzip_sha256": "583c1020414b87378dcc90c1756d959f10735524868dede54d2e09c9884229da",
+  "gzip_size_bytes": 72281,
+  "transport_sha256": "41de7b727aadc3de7df654d663c39218be691741fb5364f4b7e7efcb1398508d",
+  "transport_size_bytes": 96376,
+  "transport_sha256_scope": "ordered concatenation of compact base64 chunk payloads",
+  "transport_parts": [
+    {"file":"parts/part-000.b64","size_bytes":8000,"sha256":"8e64111dfc8ee7b033f7a35eb5e976761b5cfadf5b05e4cfccb710c0542db698"},
+    {"file":"parts/part-001.b64","size_bytes":8000,"sha256":"c5b2c0a258f118bba490dfe75f560bb422ab0e740950e8d61cec8c0f46ec010b"},
+    {"file":"parts/part-002.b64","size_bytes":8000,"sha256":"0ab514928987c1a9b43bb85a4c5ef7665af4bca26a0006da888dbd5c3d0fad0d"},
+    {"file":"parts/part-003.b64","size_bytes":8000,"sha256":"a1d81494cc7e3996fdfb10a51d642515d6efb9aff504e3382970ea9ce76b540a"},
+    {"file":"parts/part-004.b64","size_bytes":8000,"sha256":"fd1ff79e4bfa2e1b85d467e4333bb385bcffe46422f7cc630f5b2ecd04cd1c51"},
+    {"file":"parts/part-005.b64","size_bytes":8000,"sha256":"b68c0ca5c679ab1058862720c6e47c619c027e817878fb226c20b51dd48f238c"},
+    {"file":"parts/part-006.b64","size_bytes":8000,"sha256":"80e72733686272430eac30e50e0cd506d850de05030ce7c7ca72c7de06f804a6"},
+    {"file":"parts/part-007.b64","size_bytes":8000,"sha256":"e5f88b17786f8f40c626b7d633f8ebd5e0eaa485b9af08ac0b2c5c7f1311a081"},
+    {"file":"parts/part-008.b64","size_bytes":8000,"sha256":"b9879197433dc823bf18324da78c32e192c5a9c245897fa97bb59a88175d1e9a"},
+    {"file":"parts/part-009.b64","size_bytes":8000,"sha256":"9b430a56b0461da570980cb3fc1296dc810b9c55cf39354b1b011b24d1199e0b"},
+    {"file":"parts/part-010.b64","size_bytes":8000,"sha256":"6041409075d8cbdf0c60d8d65379b3358482ef44838f1c76119e1de60b4e7e1c"},
+    {"file":"parts/part-011.b64","size_bytes":8000,"sha256":"dba7898b3ddbf69acf66b43ae9a529616bdd35f6e81e411a4f410df07a201019"},
+    {"file":"parts/part-012.b64","size_bytes":376,"sha256":"e9921ea8a8b92d85b376bf134fd541c4761cc116adb01059052f5571ba004d12"}
+  ],
+  "section_count": 263,
+  "active_at_rest": false,
+  "activation_contract": "materialize byte-exact canonical TXT at runtime, verify identity+hash+0-262, chmod 0444, mount read-only; never commit active plaintext ruleset"
+}
