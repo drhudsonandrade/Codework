@@ -10,6 +10,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { Request, Response } from "express";
 import { z } from "zod";
 import {
+  acquireAuditLock,
   type AuditRecord,
   readAuditRecord,
   resolveDirectoryUnderRoot,
@@ -116,34 +117,47 @@ export async function runAudited<T>(
     throw new Error(prior.error);
   }
 
-  const startedAt = new Date().toISOString();
-  const started = Date.now();
+  const releaseLock = await acquireAuditLock(options.auditRoot, requestId);
   try {
-    const result = await operation();
-    const record: AuditRecord = {
-      requestId,
-      tool,
-      arguments: sanitizeToolArguments({ ...args, requestId }),
-      status: "PASS",
-      startedAt,
-      durationMs: Date.now() - started,
-      result,
-    };
-    await persistOutcome(options, record);
-    return result;
-  } catch (error) {
-    const sanitized = sanitizeError(error);
-    const record: AuditRecord = {
-      requestId,
-      tool,
-      arguments: sanitizeToolArguments({ ...args, requestId }),
-      status: "FAIL",
-      startedAt,
-      durationMs: Date.now() - started,
-      error: sanitized,
-    };
-    await persistOutcome(options, record);
-    throw new Error(sanitized);
+    const afterLock = decodePriorResult<T>(await loadAuditRecord(options.auditRoot, requestId), tool);
+    if (afterLock.kind === "pass") {
+      return afterLock.value;
+    }
+    if (afterLock.kind === "fail") {
+      throw new Error(afterLock.error);
+    }
+
+    const startedAt = new Date().toISOString();
+    const started = Date.now();
+    try {
+      const result = await operation();
+      const record: AuditRecord = {
+        requestId,
+        tool,
+        arguments: sanitizeToolArguments({ ...args, requestId }),
+        status: "PASS",
+        startedAt,
+        durationMs: Date.now() - started,
+        result,
+      };
+      await persistOutcome(options, record);
+      return result;
+    } catch (error) {
+      const sanitized = sanitizeError(error);
+      const record: AuditRecord = {
+        requestId,
+        tool,
+        arguments: sanitizeToolArguments({ ...args, requestId }),
+        status: "FAIL",
+        startedAt,
+        durationMs: Date.now() - started,
+        error: sanitized,
+      };
+      await persistOutcome(options, record);
+      throw new Error(sanitized);
+    }
+  } finally {
+    await releaseLock();
   }
 }
 
