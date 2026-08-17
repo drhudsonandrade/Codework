@@ -5,7 +5,7 @@ on:
     branches:
       - feature/materialize-template-pdfs-v3
     paths:
-      - 'template_store/v3.0/sealed/parts/tplpart-*'
+      - 'template_store/v3.0/sealed/parts/tplpart-047'
   workflow_dispatch:
 
 permissions:
