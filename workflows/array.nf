@@ -16,8 +16,8 @@ process ARRAY_QC {
     val case_id
     val build
     val strand
-    val build_evidence
-    val strand_evidence
+    path build_evidence
+    path strand_evidence
 
     output:
     path 'array-qc/array-qc.json', emit: qc_json
