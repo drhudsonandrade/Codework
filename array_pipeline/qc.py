@@ -131,7 +131,7 @@ def _metadata_attestation(kind: str, text: str, input_sha: str) -> str:
         "evidence_refs": [f"input-metadata:{kind}"],
         "trace": {
             "attestation_id": f"input-metadata-{kind}-{input_sha[:16]}",
-            "created_at": "1970-01-01T00:00:00Z",
+            "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "actor_type": "SOFTWARE",
             "actor_id": "array_pipeline.qc",
             "method": "source-file metadata parsing",
