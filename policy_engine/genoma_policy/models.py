@@ -51,7 +51,7 @@ class RulesetSection:
 
     @property
     def rule_id(self) -> str:
-        return f"GENOMA-V3.3-S{self.number:03d}"
+        return f"GENOMA-V3.4-S{self.number:03d}"
 
 
 @dataclass(frozen=True)
