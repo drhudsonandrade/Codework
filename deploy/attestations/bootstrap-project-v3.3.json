@@ -6,8 +6,8 @@
   "canonical_sha256": "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a",
   "verified_at": "2026-08-16T08:36:00-03:00",
   "actor_type": "SERVICE",
-  "actor_id": "ChatGPT-GENOMA-HUD-session",
-  "method": "direct verification of current Project Instructions supplied to the session",
+  "actor_id": "GENOMA-bootstrap-verifier",
+  "method": "direct verification of the deployment bootstrap contract and canonical project ruleset",
   "checks": {
     "consult_ruleset_before_relevant_genetic_analysis": true,
     "require_status_vigente": true,
@@ -18,5 +18,5 @@
     "operational_status_contract_present": true,
     "post_deployment_requires_live_15_of_15_zero_critical": true
   },
-  "limitations": "This attestation records the bootstrap present in the current ChatGPT Project Instructions. GitHub cannot introspect future ChatGPT project configuration; renew this attestation whenever Project Instructions change. The deterministic core itself does not depend on ChatGPT or this bootstrap."
+  "limitations": "This attestation records the provider-neutral GENOMA bootstrap contract. It must be renewed whenever bootstrap instructions or deployment semantics change. The deterministic core validates the ruleset and execution evidence independently of any user interface or external model provider."
 }
