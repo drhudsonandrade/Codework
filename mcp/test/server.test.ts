@@ -49,6 +49,37 @@ test("runAudited replays a successful request id without re-executing", async ()
   assert.equal(executions, 1);
 });
 
+test("runAudited fails closed instead of concurrently executing the same request id", async () => {
+  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-race-"));
+  const options = {
+    projectRoot: "/opt/codework",
+    referenceRoot: "/refs",
+    resultsRoot: "/results",
+    auditRoot,
+  };
+  let executions = 0;
+  let signalStarted!: () => void;
+  let releaseFirst!: () => void;
+  const started = new Promise<void>((resolve) => { signalStarted = resolve; });
+  const release = new Promise<void>((resolve) => { releaseFirst = resolve; });
+  const operation = async () => {
+    executions += 1;
+    signalStarted();
+    await release;
+    return { status: "PASS" };
+  };
+
+  const first = runAudited(options, "runtime_status", { requestId: "race-1" }, operation);
+  await started;
+  await assert.rejects(
+    runAudited(options, "runtime_status", { requestId: "race-1" }, operation),
+    /already in progress/,
+  );
+  assert.equal(executions, 1);
+  releaseFirst();
+  assert.deepEqual(await first, { status: "PASS" });
+});
+
 test("runAudited stores and replays a sanitized failure", async () => {
   const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-fail-"));
   const options = {
