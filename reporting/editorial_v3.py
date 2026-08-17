@@ -11,12 +11,12 @@ from pathlib import Path
 from typing import Any
 
 from . import template_v3 as _template_v3
+from .reference_v31 import load_verified_reference
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_STORE = ROOT / "template_store" / "v3.1"
 INBOX_ZIP = TEMPLATE_STORE / "inbox" / "GENOMA_REPORT_TEMPLATES_v3.1_DETERMINISTIC.zip"
 
-# Stable public design contract used by tests and downstream renderers.
 DESIGN = {
     "navy": "0B1F33",
     "teal": "0F766E",
@@ -117,11 +117,6 @@ def _use_template(rendered: dict[str, Any]) -> bool:
 
 
 def _configure_v31_replacements() -> None:
-    """Install the complete v3.1 final-state replacement set atomically in memory.
-
-    Keeping this list complete prevents template-only labels from leaking into FINAL
-    artifacts after SYSTEM_REPLACEMENTS is cleared.
-    """
     _template_v3.SYSTEM_REPLACEMENTS.clear()
     _template_v3.SYSTEM_REPLACEMENTS.update(V31_SYSTEM_REPLACEMENTS)
 
@@ -156,8 +151,8 @@ def _template_dir() -> tuple[Path, Path | None]:
 
 def _verified_reference(report_id: str, template_dir: Path) -> dict[str, Any]:
     try:
-        manifest = _template_v3.load_reference_manifest()
-        verification = _template_v3.verify_template_pack(template_dir)
+        manifest = load_verified_reference(template_dir)
+        verification = _template_v3.verify_template_pack(template_dir, manifest)
     except Exception as exc:
         raise EditorialRenderError(f"v3.1 editorial reference unavailable: {type(exc).__name__}: {exc}") from exc
     if verification.get("status") != "VERIFICADO":
