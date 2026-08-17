@@ -20,7 +20,7 @@ There must be exactly one active runtime copy of `REGRAS_PROJETO_GENOMA_VIGENTE_
 
 ## Execution modes
 
-- **Core-only:** Python CLI/HTTP. No external service, LLM, OpenAI key, database or edge provider required.
+- **Core-only:** Python CLI/HTTP. No external service, LLM, database or edge provider required.
 - **Policy container:** OCI/Docker with the canonical TXT mounted read-only.
 - **Scientific workflow:** Nextflow/container runtime with a fresh Runtime/Resource Gate before real calling.
 - **Optional interfaces:** MCP/ChatGPT, web UI, Cloudflare ingress, Temporal orchestration and Supabase evidence index.
