@@ -5,7 +5,7 @@ on:
     branches:
       - feature/materialize-template-pdfs-v3
     paths:
-      - template_store/v3.0/transport/READY
+      - template_store/v3.0/inbox/GENOMA_REPORT_TEMPLATES_v3.0_DETERMINISTIC.zip
   workflow_dispatch:
 
 permissions:
@@ -14,6 +14,10 @@ permissions:
 concurrency:
   group: genoma-template-materialization-v3
   cancel-in-progress: false
+
+env:
+  TEMPLATE_ZIP: template_store/v3.0/inbox/GENOMA_REPORT_TEMPLATES_v3.0_DETERMINISTIC.zip
+  TEMPLATE_ZIP_SHA256: 2350111fa0dc26dd23515e0e3550748592c62147f480c11e09b12bca3557020b
 
 jobs:
   materialize:
@@ -25,90 +29,124 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Reconstruct and verify sealed archive
+      - name: Verify one-time private transport ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$TEMPLATE_ZIP"
+          printf '%s  %s\n' "$TEMPLATE_ZIP_SHA256" "$TEMPLATE_ZIP" | sha256sum --check --strict
+
+      - name: Materialize and independently verify all 11 PDFs
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from __future__ import annotations
-          import hashlib, json
-          from pathlib import Path
-
-          root = Path('.')
-          manifest = json.loads((root/'template_store/v3.0/MANIFEST.json').read_text())
-          parts_dir = root/'template_store/v3.0/transport'
-          parts = sorted(parts_dir.glob('tplpart-*'))
-          expected = manifest['parts']
-          if len(parts) != len(expected):
-              raise SystemExit(f'expected {len(expected)} transport parts, found {len(parts)}')
-          for path, spec in zip(parts, expected, strict=True):
-              data = path.read_bytes()
-              got = hashlib.sha256(data).hexdigest()
-              if path.name != spec['name'] or len(data) != spec['size_bytes'] or got != spec['sha256']:
-                  raise SystemExit(f'transport part mismatch: {path.name}')
-          joined = b''.join(p.read_bytes() for p in parts)
-          (Path('/tmp')/'templates.tar.xz.b64').write_bytes(joined)
-          if len(joined) != manifest['storage']['base64_size_bytes']:
-              raise SystemExit('base64 transport size mismatch')
-          PY
-          base64 --decode /tmp/templates.tar.xz.b64 > /tmp/GENOMA_V3_TEMPLATE_PACK.tar.xz
-          printf '%s  %s\n' "$(python3 - <<'PY'
+          import hashlib
           import json
-          print(json.load(open('template_store/v3.0/MANIFEST.json'))['storage']['decoded_archive_sha256'])
-          PY
-          )" /tmp/GENOMA_V3_TEMPLATE_PACK.tar.xz | sha256sum --check --strict
-
-      - name: Extract exact PDFs and verify manifest identities
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm -rf template_store/v3.0/materialized
-          mkdir -p template_store/v3.0/materialized
-          tar -xJf /tmp/GENOMA_V3_TEMPLATE_PACK.tar.xz -C template_store/v3.0/materialized
-          python3 - <<'PY'
-          from __future__ import annotations
-          import hashlib, json
-          from pathlib import Path
+          import os
+          import shutil
+          import tempfile
+          import zipfile
+          from pathlib import Path, PurePosixPath
 
           root = Path('template_store/v3.0')
-          manifest = json.loads((root/'MANIFEST.json').read_text())
-          materialized = root/'materialized'
-          expected_names = {v['filename'] for v in manifest['reports'].values()}
-          actual_names = {p.name for p in materialized.glob('*.pdf')}
-          if actual_names != expected_names:
-              raise SystemExit(f'PDF set mismatch: expected {len(expected_names)}, got {len(actual_names)}')
-          verified = []
-          for key in sorted(manifest['reports']):
-              spec = manifest['reports'][key]
-              p = materialized/spec['filename']
-              data = p.read_bytes()
-              if not data.startswith(b'%PDF-'):
-                  raise SystemExit(f'not a PDF: {p.name}')
-              sha = hashlib.sha256(data).hexdigest()
-              if sha != spec['sha256'] or len(data) != spec['size_bytes']:
-                  raise SystemExit(f'identity mismatch: {p.name}')
-              verified.append({'id': key, 'filename': p.name, 'sha256': sha, 'size_bytes': len(data), 'status': 'VERIFICADO'})
+          zip_path = Path(os.environ['TEMPLATE_ZIP'])
+          expected_zip_sha = os.environ['TEMPLATE_ZIP_SHA256']
+          manifest_path = root / 'MANIFEST.json'
+          manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+          reports = manifest['reports']
+          expected_names = [reports[key]['filename'] for key in sorted(reports)]
+
+          zip_bytes = zip_path.read_bytes()
+          if hashlib.sha256(zip_bytes).hexdigest() != expected_zip_sha:
+              raise SystemExit('transport ZIP digest mismatch')
+
+          with zipfile.ZipFile(zip_path) as zf:
+              infos = [i for i in zf.infolist() if not i.is_dir()]
+              names = [i.filename for i in infos]
+              for name in names:
+                  p = PurePosixPath(name)
+                  if p.is_absolute() or '..' in p.parts or len(p.parts) != 1:
+                      raise SystemExit(f'unsafe/non-flat ZIP member: {name}')
+              if sorted(names) != sorted(expected_names) or len(names) != 11:
+                  raise SystemExit(f'ZIP member set mismatch: expected 11 exact PDFs, found {len(names)}')
+
+              tmp_parent = Path(tempfile.mkdtemp(prefix='genoma-template-materialize-'))
+              tmp_materialized = tmp_parent / 'materialized'
+              tmp_materialized.mkdir()
+              verified = []
+              for key in sorted(reports):
+                  spec = reports[key]
+                  data = zf.read(spec['filename'])
+                  sha = hashlib.sha256(data).hexdigest()
+                  if not data.startswith(b'%PDF-'):
+                      raise SystemExit(f'not a PDF: {spec["filename"]}')
+                  if sha != spec['sha256']:
+                      raise SystemExit(f'SHA-256 mismatch: {spec["filename"]}')
+                  if len(data) != spec['size_bytes']:
+                      raise SystemExit(f'size mismatch: {spec["filename"]}')
+                  (tmp_materialized / spec['filename']).write_bytes(data)
+                  verified.append({
+                      'id': key,
+                      'filename': spec['filename'],
+                      'sha256': sha,
+                      'size_bytes': len(data),
+                      'status': 'VERIFICADO',
+                  })
+
+          materialized = root / 'materialized'
+          if materialized.exists():
+              shutil.rmtree(materialized)
+          shutil.move(str(tmp_materialized), str(materialized))
+          shutil.rmtree(tmp_parent, ignore_errors=True)
+
+          previous_storage = dict(manifest.get('storage', {}))
+          manifest['storage'] = {
+              'mode': 'git-binary-materialized',
+              'materialized_dir': 'template_store/v3.0/materialized',
+              'report_count': 11,
+              'source_transport': 'one-time private deterministic ZIP',
+              'source_transport_sha256': expected_zip_sha,
+              'legacy_transport': previous_storage,
+          }
+          manifest.pop('parts', None)
+          manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+
           attestation = {
               'schema': 'genoma-template-materialization-attestation-v1',
-              'ruleset': {'status': 'VIGENTE', 'version': 'v3.3', 'formal_date': '14/08/2026'},
+              'ruleset': {
+                  'status': 'VIGENTE',
+                  'version': 'v3.3',
+                  'formal_date': '14/08/2026',
+              },
               'template_version': 'v3.0',
-              'source_archive_sha256': manifest['storage']['decoded_archive_sha256'],
+              'source_transport_sha256': expected_zip_sha,
               'report_count': len(verified),
               'reports': verified,
               'materialization_status': 'VERIFICADO',
-              'note': 'Binary PDFs are committed physically in this private Git repository and hash-bound to MANIFEST.json.'
+              'traceability': {
+                  'workflow': '.github/workflows/materialize-template-pdfs.yml',
+                  'run_id': os.environ.get('GITHUB_RUN_ID', ''),
+                  'source_commit': os.environ.get('GITHUB_SHA', ''),
+              },
+              'note': 'Exact PDF bytes were committed physically to this private repository after independent SHA-256 and size verification against MANIFEST.json.',
           }
-          (root/'MATERIALIZATION_ATTESTATION.json').write_text(json.dumps(attestation, indent=2, ensure_ascii=False)+'\n', encoding='utf-8')
+          (root / 'MATERIALIZATION_ATTESTATION.json').write_text(
+              json.dumps(attestation, indent=2, ensure_ascii=False) + '\n',
+              encoding='utf-8',
+          )
           PY
 
-      - name: Replace transport with physically materialized PDFs
+      - name: Remove one-time transport and commit physical PDFs
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf template_store/v3.0/transport
+          rm -rf template_store/v3.0/inbox
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add template_store/v3.0
+          git add -A template_store/v3.0
+          test "$(git diff --cached --name-only ':(glob)template_store/v3.0/materialized/*.pdf' | wc -l)" -eq 11
           git diff --cached --stat
-          git commit -m 'chore: materialize exact GENOMA v3.0 PDF templates'
+          git commit -m 'chore: physically materialize exact GENOMA v3.0 PDFs'
           git push origin HEAD:${GITHUB_REF_NAME}
