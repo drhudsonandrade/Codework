@@ -306,6 +306,7 @@ process GENERATE_REPORTS {
     test -s '${policy_evaluation}'
     python3 '${workflow.projectDir}/scripts/generate_all_reports.py' \
       --input '${curation_manifest}' \
+      --policy '${policy_evaluation}' \
       --output-dir reports
     """
 }
