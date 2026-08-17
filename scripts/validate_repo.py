@@ -10,7 +10,7 @@ SKIP={'.git','node_modules','dist','__pycache__','.pytest_cache','.mypy_cache'}
 GENOMIC=('.fastq','.fq','.bam','.bai','.cram','.crai','.vcf','.tbi','.fastq.gz','.fq.gz','.vcf.gz')
 REQUIRED=(
 'normative/sealed/v3.4/MANIFEST.json','manifests/RULESET_V3.4.sha256','template_store/v3.1/MANIFEST.json','template_store/v3.1/inbox/README.md',
-'reporting/reference_v3_manifest.json','reporting/reference_v3_manifest.json.gz.b64',
+'reporting/reference_v3_manifest.json','reporting/reference_v31.py','scripts/build_report_coordinate_pack.py',
 'scripts/sealed_ruleset.py','scripts/materialize_ruleset.py','scripts/source_integrity_audit.py','scripts/pre_analysis_master_gate.py','scripts/verify_template_store.py','scripts/verify_supply_chain_lock.py','scripts/generate_all_reports.py',
 'workflows/wgs.nf','workflows/array.nf','main.nf','policy_engine/genoma_policy/ruleset.py','policy_engine/genoma_policy/models.py','reporting/engine.py','locks/runtime-lock.json','locks/actions-lock.json',
 '.github/workflows/genoma-audit.yml','.github/workflows/genoma-policy-engine.yml','.github/workflows/genoma-production-witness.yml','.github/workflows/genoma-production-ceremony.yml','.github/workflows/materialize-template-pdfs.yml')
@@ -55,7 +55,8 @@ def validate(root:Path=ROOT)->list[str]:
   'workflows/array.nf':('ARRAY_PRE_ANALYSIS_MASTER_GATE','RULESET_V3.4.sha256','REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt','--strict','array-consent-provenance'),
   'main.nf':('array_consent_manifest','runtime_gate_manifest','freshness_state_manifest'),
   'reporting/engine.py':('"version": "v3.4"','EXPECTED_TEMPLATE_SUITE = "v3.1"'),
-  'reporting/editorial_v3.py':('template_store" / "v3.1"','GENOMA_REPORT_TEMPLATES_v3.1_DETERMINISTIC.zip')}
+  'reporting/editorial_v3.py':('template_store" / "v3.1"','GENOMA_REPORT_TEMPLATES_v3.1_DETERMINISTIC.zip','load_verified_reference'),
+  'array_pipeline/__init__.py':('"version": "v3.4"','ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580')}
  for r,need in tokens.items():
   p=root/r
   if p.is_file():
