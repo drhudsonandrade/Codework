@@ -10,7 +10,7 @@ SHA-256 canônico: `187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68
 
 ### Policy Control Plane — EXECUTADO / VERIFICADO
 
-- parser/engine determinístico permanece separado de ChatGPT e de qualquer fornecedor;
+- parser/engine determinístico permanece separado de qualquer fornecedor específico;
 - Actions críticas são identificadas por SHA de commit e verificadas por `locks/actions-lock.json`;
 - base OCI e Gitleaks são identificados por digest em `locks/runtime-lock.json`;
 - `scripts/verify_supply_chain_lock.py` falha fechado se uma Action retornar a tag mutável ou se os pins críticos divergirem;
