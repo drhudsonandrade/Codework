@@ -13,15 +13,14 @@ from typing import Any
 
 import fitz
 
-COMPILER_ID = "fitz-1.26.7-genoma-v2"
+COMPILER_ID = "fitz-1.26.7-genoma-v31"
 TOKEN_RE = re.compile(r"\[\[.*?\]\]", re.S)
 CONTROLLED = [
-    "MODELO REUTILIZÁVEL v3.0",
+    "MODELO REUTILIZÁVEL v3.1",
     "MODELO EDITÁVEL",
     "NÃO INSERIDOS",
     "MODELO — NÃO É RESULTADO GENÉTICO",
     "MODELO — NÃO É RESULTADO",
-    "GENOMA-HUDSON-RULESET-v3.3",
     "MODELO SEM DADOS PESSOAIS",
     "Campos em azul são placeholders obrigatórios ou condicionais; preencher com dado rastreável ou declarar NÃO DISPONÍVEL.",
 ]
@@ -149,12 +148,14 @@ def _controls(page: fitz.Page) -> list[tuple[str, fitz.Rect, dict[str, Any]]]:
 
 def compile_pack(template_dir: Path, reference_index: Path) -> dict[str, Any]:
     index = json.loads(reference_index.read_text(encoding="utf-8"))
+    if index.get("schema") != "genoma-editorial-v3-reference-manifest-v1":
+        raise RuntimeError("unexpected v3.1 reference index schema")
     reports: dict[str, Any] = {}
     for report_id in sorted(index["reports"]):
         expected = index["reports"][report_id]
         source = template_dir / expected["filename"]
         if not source.is_file():
-            raise RuntimeError(f"missing v3 reference PDF: {source}")
+            raise RuntimeError(f"missing v3.1 reference PDF: {source}")
         actual = _sha256(source)
         if actual != expected["sha256"]:
             raise RuntimeError(f"reference PDF SHA-256 mismatch for {report_id}: {actual}")
@@ -204,23 +205,28 @@ def compile_pack(template_dir: Path, reference_index: Path) -> dict[str, Any]:
             "controlled_spans": controls,
         }
     return {
-        "schema": "genoma-editorial-v3-reference-manifest-v2",
-        "reference_suite": "GENOMA v3.0",
+        "schema": "genoma-editorial-v3-reference-manifest-v1",
+        "reference_suite": "GENOMA v3.1",
         "coordinate_compiler": COMPILER_ID,
         "reports": reports,
     }
 
 
+def encode_pack(payload: dict[str, Any]) -> bytes:
+    raw = (json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+    compressed = gzip.compress(raw, mtime=0)
+    return (base64.b64encode(compressed).decode("ascii") + "\n").encode("ascii")
+
+
 def write_pack(payload: dict[str, Any], output_dir: Path) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
-    manifest = output_dir / "GENOMA_V3_TEMPLATE_MANIFEST.v2.json"
-    detail = output_dir / "reference_v3_manifest.v2.json.gz.b64"
+    manifest = output_dir / "GENOMA_V31_TEMPLATE_MANIFEST.json"
+    detail = output_dir / "reference_v3_manifest.json.gz.b64"
     raw = (json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
     manifest.write_bytes(raw)
-    compressed = gzip.compress(raw, mtime=0)
-    detail.write_text(base64.b64encode(compressed).decode("ascii") + "\n", encoding="ascii")
+    detail.write_bytes(encode_pack(payload))
     return {
-        "schema": "genoma-editorial-coordinate-build-v2",
+        "schema": "genoma-editorial-coordinate-build-v31",
         "status": "VERIFICADO",
         "compiler": COMPILER_ID,
         "manifest": {"path": str(manifest), "sha256": _sha256(manifest), "size_bytes": manifest.stat().st_size},
