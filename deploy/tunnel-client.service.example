@@ -1,5 +1,5 @@
 [Unit]
-Description=OpenAI Secure MCP Tunnel client for Codework genome MCP
+Description=Optional private tunnel client for GENOMA tool interface
 Wants=network-online.target genome-mcp.service
 After=network-online.target genome-mcp.service
 
