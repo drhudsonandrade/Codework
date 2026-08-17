@@ -15,5 +15,5 @@ class ServerTests(unittest.TestCase):
  def tearDownClass(cls): cls.httpd.shutdown(); cls.httpd.server_close(); cls.thread.join(timeout=2)
  def test_health_and_ruleset(self):
   with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/healthz",timeout=3) as r: self.assertEqual(r.status,200); self.assertEqual(json.load(r)["status"],"ok")
-  with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/v1/ruleset",timeout=3) as r: p=json.load(r); self.assertEqual(p["version"],"v3.3"); self.assertEqual(p["section_count"],263)
+  with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/v1/ruleset",timeout=3) as r: p=json.load(r); self.assertEqual(p["version"],"v3.4"); self.assertEqual(p["section_count"],263)
 if __name__=="__main__": unittest.main()
