@@ -1,0 +1,82 @@
+name: GENOMA materialize v3.0 PDFs from sealed transport
+
+on:
+  push:
+    branches: [feature/materialize-template-pdfs-v3]
+    paths:
+      - 'template_store/v3.0/sealed/transport.b64'
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Decode, verify and materialize exact PDFs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, hashlib, json, os, shutil, tarfile, tempfile
+          from pathlib import Path
+          root=Path('template_store/v3.0')
+          manifest_path=root/'MANIFEST.json'
+          manifest=json.loads(manifest_path.read_text(encoding='utf-8'))
+          encoded=(root/'sealed/transport.b64').read_bytes()
+          storage=manifest['storage']
+          if len(encoded)!=storage['base64_size_bytes']:
+              raise SystemExit('base64 size mismatch')
+          archive=base64.b64decode(encoded, validate=True)
+          if len(archive)!=storage['decoded_archive_size_bytes']:
+              raise SystemExit('archive size mismatch')
+          archive_sha=hashlib.sha256(archive).hexdigest()
+          if archive_sha!=storage['decoded_archive_sha256']:
+              raise SystemExit('archive SHA-256 mismatch')
+          tmp=Path(tempfile.mkdtemp(prefix='genoma-v3-'))
+          arc=tmp/'pack.tar.xz'; arc.write_bytes(archive)
+          out=tmp/'materialized'; out.mkdir()
+          with tarfile.open(arc,'r:xz') as tf:
+              for m in tf.getmembers():
+                  p=Path(m.name)
+                  if p.is_absolute() or '..' in p.parts or not m.isfile():
+                      raise SystemExit(f'unsafe archive member: {m.name}')
+              tf.extractall(out)
+          reports=manifest['reports']
+          expected={v['filename'] for v in reports.values()}
+          actual={p.name for p in out.glob('*.pdf')}
+          if actual!=expected or len(actual)!=11:
+              raise SystemExit('PDF set mismatch')
+          verified=[]
+          for key in sorted(reports):
+              spec=reports[key]; p=out/spec['filename']; data=p.read_bytes()
+              sha=hashlib.sha256(data).hexdigest()
+              if not data.startswith(b'%PDF-') or len(data)!=spec['size_bytes'] or sha!=spec['sha256']:
+                  raise SystemExit(f'PDF identity mismatch: {p.name}')
+              verified.append({'id':key,'filename':p.name,'sha256':sha,'size_bytes':len(data),'status':'VERIFICADO'})
+          dest=root/'materialized'
+          if dest.exists(): shutil.rmtree(dest)
+          shutil.move(str(out),str(dest))
+          old=dict(storage)
+          manifest['storage']={'mode':'git-binary-materialized','materialized_dir':'template_store/v3.0/materialized','report_count':11,'source_archive_sha256':archive_sha,'legacy_transport':old}
+          manifest.pop('parts',None)
+          manifest_path.write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
+          att={'schema':'genoma-template-materialization-attestation-v1','ruleset':{'status':'VIGENTE','version':'v3.3','formal_date':'14/08/2026'},'template_version':'v3.0','source_archive_sha256':archive_sha,'report_count':11,'reports':verified,'materialization_status':'VERIFICADO','traceability':{'workflow':'.github/workflows/materialize-template-pdfs-single.yml','run_id':os.environ.get('GITHUB_RUN_ID',''),'source_commit':os.environ.get('GITHUB_SHA','')}}
+          (root/'MATERIALIZATION_ATTESTATION.json').write_text(json.dumps(att,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
+          shutil.rmtree(tmp,ignore_errors=True)
+          print('11/11 PDFs VERIFICADO')
+          PY
+      - name: Commit physical PDFs and remove transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf template_store/v3.0/sealed template_store/v3.0/inbox
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A template_store/v3.0
+          test "$(git diff --cached --name-only ':(glob)template_store/v3.0/materialized/*.pdf' | wc -l)" -eq 11
+          git commit -m 'chore: physically materialize exact GENOMA v3.0 PDFs'
+          git push origin HEAD:${GITHUB_REF_NAME}
