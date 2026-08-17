@@ -13,6 +13,7 @@ params.array_build = params.array_build ?: null
 params.array_strand = params.array_strand ?: null
 params.array_build_evidence = params.array_build_evidence ?: null
 params.array_strand_evidence = params.array_strand_evidence ?: null
+params.array_consent_manifest = params.array_consent_manifest ?: null
 params.array_evidence_mode = params.array_evidence_mode ?: 'plan-only'
 params.array_target_manifest = params.array_target_manifest ?: 'config/partial_genome_annotation_targets.json'
 
@@ -42,16 +43,13 @@ process CANARY {
     cpus 2
     memory '6 GB'
     time '45m'
-
     publishDir params.outdir, mode: 'copy', overwrite: true
-
     output:
     path 'canary/report.json'
     path 'canary/bcftools.score.json'
     path 'canary/gatk.score.json'
     path 'canary/tool_versions.tsv'
     path 'canary/flagstat.txt'
-
     script:
     """
     bash '${workflow.projectDir}/scripts/run_canary.sh' canary
@@ -70,31 +68,20 @@ workflow {
         if (!params.ref_root) missing << 'ref_root'
         if (!params.case_id) missing << 'case_id'
         if (!params.sample_id) missing << 'sample_id'
-        if (missing) {
-            error "WGS_PRODUCTION blocked: missing required parameters: ${missing.join(', ')}"
-        }
+        if (missing) error "WGS_PRODUCTION blocked: missing required parameters: ${missing.join(', ')}"
         requireBoundedIdentifier('case_id', params.case_id)
         requireBoundedIdentifier('sample_id', params.sample_id)
         requireSafePathParameter('sample_dir', params.sample_dir)
         requireSafePathParameter('runtime_gate_manifest', params.runtime_gate_manifest)
         requireSafePathParameter('freshness_state_manifest', params.freshness_state_manifest)
         requireSafePathParameter('ref_root', params.ref_root)
-
         sample_dir_ch = Channel.fromPath(params.sample_dir, type: 'dir', checkIfExists: true)
         runtime_gate_ch = Channel.fromPath(params.runtime_gate_manifest, checkIfExists: true)
         freshness_state_ch = Channel.fromPath(params.freshness_state_manifest, checkIfExists: true)
         ref_root_ch = Channel.value(params.ref_root)
         case_id_ch = Channel.value(params.case_id)
         sample_id_ch = Channel.value(params.sample_id)
-
-        WGS_PRODUCTION(
-            sample_dir_ch,
-            runtime_gate_ch,
-            freshness_state_ch,
-            ref_root_ch,
-            case_id_ch,
-            sample_id_ch
-        )
+        WGS_PRODUCTION(sample_dir_ch, runtime_gate_ch, freshness_state_ch, ref_root_ch, case_id_ch, sample_id_ch)
     }
     else if (params.mode == 'array') {
         def missing = []
@@ -104,41 +91,29 @@ workflow {
         if (!params.array_strand) missing << 'array_strand'
         if (!params.array_build_evidence) missing << 'array_build_evidence'
         if (!params.array_strand_evidence) missing << 'array_strand_evidence'
+        if (!params.array_consent_manifest) missing << 'array_consent_manifest'
+        if (!params.runtime_gate_manifest) missing << 'runtime_gate_manifest'
+        if (!params.freshness_state_manifest) missing << 'freshness_state_manifest'
         if (!(params.array_evidence_mode in ['plan-only', 'live'])) missing << 'array_evidence_mode(plan-only|live)'
-        if (missing) {
-            error "ARRAY_PRODUCTION blocked: missing/invalid required parameters: ${missing.join(', ')}"
-        }
-        if (!(params.array_build in ['GRCh37', 'GRCh38'])) {
-            error "ARRAY_PRODUCTION blocked: array_build must be GRCh37 or GRCh38"
-        }
-        if (!(params.array_strand in ['forward', 'plus', '+'])) {
-            error "ARRAY_PRODUCTION blocked: array_strand must be forward/plus/+"
-        }
+        if (missing) error "ARRAY_PRODUCTION blocked: missing/invalid required parameters: ${missing.join(', ')}"
+        if (!(params.array_build in ['GRCh37', 'GRCh38'])) error "ARRAY_PRODUCTION blocked: array_build must be GRCh37 or GRCh38"
+        if (!(params.array_strand in ['forward', 'plus', '+'])) error "ARRAY_PRODUCTION blocked: array_strand must be forward/plus/+"
         requireBoundedIdentifier('case_id', params.case_id)
-        requireSafePathParameter('array_input', params.array_input)
-        requireSafePathParameter('array_build_evidence', params.array_build_evidence)
-        requireSafePathParameter('array_strand_evidence', params.array_strand_evidence)
-        requireSafePathParameter('array_target_manifest', params.array_target_manifest)
-
+        for (entry in ['array_input':params.array_input,'array_build_evidence':params.array_build_evidence,'array_strand_evidence':params.array_strand_evidence,'array_consent_manifest':params.array_consent_manifest,'array_target_manifest':params.array_target_manifest,'runtime_gate_manifest':params.runtime_gate_manifest,'freshness_state_manifest':params.freshness_state_manifest]) {
+            requireSafePathParameter(entry.key, entry.value)
+        }
         array_input_ch = Channel.fromPath(params.array_input, checkIfExists: true)
         target_manifest_ch = Channel.fromPath(params.array_target_manifest, checkIfExists: true)
         build_evidence_ch = Channel.fromPath(params.array_build_evidence, checkIfExists: true)
         strand_evidence_ch = Channel.fromPath(params.array_strand_evidence, checkIfExists: true)
+        consent_manifest_ch = Channel.fromPath(params.array_consent_manifest, checkIfExists: true)
+        runtime_gate_ch = Channel.fromPath(params.runtime_gate_manifest, checkIfExists: true)
+        freshness_state_ch = Channel.fromPath(params.freshness_state_manifest, checkIfExists: true)
         case_id_ch = Channel.value(params.case_id)
         build_ch = Channel.value(params.array_build)
         strand_ch = Channel.value(params.array_strand)
         evidence_mode_ch = Channel.value(params.array_evidence_mode)
-
-        ARRAY_PRODUCTION(
-            array_input_ch,
-            case_id_ch,
-            build_ch,
-            strand_ch,
-            build_evidence_ch,
-            strand_evidence_ch,
-            evidence_mode_ch,
-            target_manifest_ch
-        )
+        ARRAY_PRODUCTION(array_input_ch, case_id_ch, build_ch, strand_ch, build_evidence_ch, strand_evidence_ch, evidence_mode_ch, target_manifest_ch, runtime_gate_ch, freshness_state_ch, consent_manifest_ch)
     }
     else {
         error "Unknown --mode '${params.mode}'. Allowed: canary, wgs, array"
