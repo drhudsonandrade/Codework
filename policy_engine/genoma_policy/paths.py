@@ -3,8 +3,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-CANONICAL_RULESET_NAME = "REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt"
-CANONICAL_MANIFEST_RELATIVE = Path("manifests") / "RULESET_V3.3.sha256"
+CANONICAL_RULESET_NAME = "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
+CANONICAL_MANIFEST_RELATIVE = Path("manifests") / "RULESET_V3.4.sha256"
 
 
 class AssetResolutionError(RuntimeError):
