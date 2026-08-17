@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Materialize the canonical GENOMA v3.3 ruleset using the shared sealed contract."""
+"""Materialize the canonical GENOMA v3.4 ruleset using the shared sealed contract."""
 from __future__ import annotations
 
 import argparse
@@ -13,7 +13,7 @@ if str(ROOT) not in sys.path:
 
 from scripts.sealed_ruleset import materialize as materialize_from_sealed
 
-SEALED_DIR = ROOT / "normative" / "sealed"
+SEALED_DIR = ROOT / "normative" / "sealed" / "v3.4"
 
 
 def materialize(output_dir: Path):
