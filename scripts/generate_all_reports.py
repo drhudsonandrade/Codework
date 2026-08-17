@@ -10,8 +10,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from reporting.editorial_v3 import write_editorial_bundle
+from reporting.editorial_v3 import EditorialRenderError, write_editorial_bundle
 from reporting.engine import ReportReleaseError, load_catalog, render_document, write_bundle
+from reporting.template_v3 import TemplateV3Error
 from scripts.prepare_report_release import assemble_release
 
 
@@ -53,8 +54,16 @@ def main() -> int:
             paths = write_bundle(rendered, out)
             paths.update(write_editorial_bundle(rendered, out))
             generated[report_id] = {key: str(value) for key, value in paths.items()}
-    except ReportReleaseError as exc:
-        print(f"REPORT BLOCKED: {exc}", file=sys.stderr)
+    except (ReportReleaseError, EditorialRenderError, TemplateV3Error) as exc:
+        blocked = {
+            "schema": "genoma-report-render-block-v1",
+            "status": "NÃO DISPONÍVEL",
+            "reason": f"{type(exc).__name__}: {exc}",
+            "strict_mode": args.strict,
+            "generated_before_block": sorted(generated),
+        }
+        (out / "REPORTS_BLOCKED.json").write_text(json.dumps(blocked, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print(json.dumps(blocked, ensure_ascii=False, indent=2), file=sys.stderr)
         return 2
 
     manifest = {
