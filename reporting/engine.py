@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Vendor-neutral deterministic report renderer for the GENOMA v3.0 model suite.
+"""Vendor-neutral deterministic report renderer for the GENOMA v3.1 model suite.
 
 The renderer never interprets DNA. It only turns already-curated, provenance-bearing
 structured data into publication artifacts. Scientific interpretation remains upstream
@@ -17,7 +17,8 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent
 CATALOG_PATH = ROOT / "catalog.json"
-EXPECTED_RULESET = {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026"}
+EXPECTED_RULESET = {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026"}
+EXPECTED_TEMPLATE_SUITE = "v3.1"
 REQUIRED_PLANES = ("policy_control", "scientific_data", "evidence", "audit")
 
 
@@ -32,7 +33,7 @@ def load_catalog() -> dict[str, dict[str, Any]]:
     required = {"code", "accent", "slug", "title", "tagline", "purpose", "audience", "sections"}
     for report_id, model in catalog.items():
         if not isinstance(model, dict) or not required.issubset(model):
-            raise ReportReleaseError(f"report model {report_id} missing v3 editorial metadata")
+            raise ReportReleaseError(f"report model {report_id} missing v3.1 editorial metadata")
     return catalog
 
 
@@ -80,7 +81,7 @@ def _model_markdown(report_id: str, model: dict[str, Any]) -> str:
         "",
         "**MODELO — NÃO É RESULTADO GENÉTICO**",
         "",
-        f"Modelo GENOMA v3.0 / {model['code']}. Ruleset exigido: v3.3 / VIGENTE / 14/08/2026.",
+        f"Modelo GENOMA {EXPECTED_TEMPLATE_SUITE} / {model['code']}. Ruleset exigido: v3.4 / VIGENTE / 17/08/2026.",
         "",
         f"Finalidade: {model['purpose']}",
         f"Público: {model['audience']}",
@@ -108,8 +109,8 @@ def _final_markdown(report_id: str, model: dict[str, Any], data: dict[str, Any])
         "**RESULTADO GENÔMICO — SAÍDA DETERMINÍSTICA DO PIPELINE DE RELATÓRIO**",
         "",
         f"Caso: {_safe(data.get('case_id'))}",
-        f"Versão do modelo: v3.0/{model['code']}",
-        "Ruleset: v3.3 / VIGENTE / 14/08/2026",
+        f"Versão do modelo: {EXPECTED_TEMPLATE_SUITE}/{model['code']}",
+        "Ruleset: v3.4 / VIGENTE / 17/08/2026",
         f"POST-DEPLOYMENT: {_safe(data.get('post_deployment_status'), 'PENDENTE')}",
         "",
         "## Finalidade",
@@ -236,6 +237,7 @@ def render_document(report_id: str, data: dict[str, Any], *, mode: str = "MODEL"
         "purpose": model["purpose"],
         "audience": model["audience"],
         "mode": mode,
+        "template_suite": EXPECTED_TEMPLATE_SUITE,
         "generated_at": generated_at,
         "ruleset_required": deepcopy(EXPECTED_RULESET),
         "publication_blockers": blockers,
