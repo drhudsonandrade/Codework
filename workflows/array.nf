@@ -2,15 +2,67 @@ nextflow.enable.dsl = 2
 
 /*
  * GENOMA Scientific Data Plane for partial SNP-array genomes.
- *
  * This workflow is intentionally separate from WGS calling. It never converts
  * non-assayed loci into negative evidence and never promotes CNV/SV/repeats/HLA/
  * CYP2D6-structural claims from a consumer SNP chip.
  */
 
+process ARRAY_VERIFY_RUNTIME_GATE {
+    tag 'array-environment-runtime-gate'
+    input: path runtime_gate_manifest
+    output: path 'gate/runtime-entry.json', emit: verified_runtime
+    script:
+    """
+    mkdir -p gate
+    python3 '${workflow.projectDir}/scripts/verify_runtime_gate_manifest.py' \
+      --input '${runtime_gate_manifest}' --scope environment --output gate/runtime-entry.json
+    """
+}
+
+process ARRAY_REFRESH_FRESHNESS_GATE {
+    tag 'array-freshness-before-first-dna-read'
+    input: path freshness_state_manifest
+    output: path 'freshness/current-gate.json', emit: current_freshness
+    script:
+    """
+    mkdir -p freshness
+    python3 '${workflow.projectDir}/scripts/freshness_gate.py' --input '${freshness_state_manifest}' --output freshness/current-gate.json
+    jq -e '.ready_for_dna == true' freshness/current-gate.json >/dev/null
+    """
+}
+
+process ARRAY_VERIFY_CONSENT_PROVENANCE {
+    tag 'array-consent-provenance-before-first-dna-read'
+    input: path consent_manifest
+    output: path 'consent/gate.json', emit: consent_gate
+    script:
+    """
+    mkdir -p consent
+    python3 '${workflow.projectDir}/scripts/wgs_consent_gate.py' \
+      --manifest '${consent_manifest}' --purpose genomic_analysis --output consent/gate.json
+    jq -e '.ready_for_first_dna_read == true and .status == "VERIFICADO"' consent/gate.json >/dev/null
+    """
+}
+
+process ARRAY_PRE_ANALYSIS_MASTER_GATE {
+    tag 'array-pre-analysis-master-gate-before-first-dna-read'
+    input:
+    path verified_runtime
+    path current_freshness
+    path consent_gate
+    output: path 'gate/pre-analysis-master.json', emit: master_gate
+    script:
+    """
+    mkdir -p gate
+    python3 '${workflow.projectDir}/scripts/pre_analysis_master_gate.py' \
+      --runtime-verified '${verified_runtime}' --freshness '${current_freshness}' --consent '${consent_gate}' \
+      --output gate/pre-analysis-master.json
+    jq -e '.ready_for_first_dna_read == true and .status == "VERIFICADO"' gate/pre-analysis-master.json >/dev/null
+    """
+}
+
 process ARRAY_QC {
     tag "array-qc:${case_id}"
-
     input:
     path array_input
     val case_id
@@ -18,48 +70,36 @@ process ARRAY_QC {
     val strand
     path build_evidence
     path strand_evidence
-
+    path master_gate
     output:
     path 'array-qc/array-qc.json', emit: qc_json
     path 'array-qc/baseline-marker-observations.tsv', emit: baseline_observations
     path 'array-qc/SHA256SUMS', emit: qc_hashes
-
     script:
     """
+    jq -e '.ready_for_first_dna_read == true and .status == "VERIFICADO"' '${master_gate}' >/dev/null
     mkdir -p array-qc
     python3 '${workflow.projectDir}/scripts/run_snp_array.py' \
-      --input '${array_input}' \
-      --case-id '${case_id}' \
-      --build '${build}' \
-      --strand '${strand}' \
-      --build-evidence '${build_evidence}' \
-      --strand-evidence '${strand_evidence}' \
-      --output-dir array-qc
+      --input '${array_input}' --case-id '${case_id}' --build '${build}' --strand '${strand}' \
+      --build-evidence '${build_evidence}' --strand-evidence '${strand_evidence}' --output-dir array-qc
     jq -e '.operational_status == "VERIFICADO" and .gates.LIMITED_INTERPRETATION_GATE.state == "PASS"' array-qc/array-qc.json >/dev/null
     """
 }
 
 process ARRAY_ANNOTATE {
     tag "array-evidence:${case_id}"
-
     input:
     path array_input
     path qc_json
     path target_manifest
     val case_id
     val evidence_mode
-
-    output:
-    path 'annotation/partial-genome-annotation.json', emit: annotation_json
-
+    output: path 'annotation/partial-genome-annotation.json', emit: annotation_json
     script:
     """
     mkdir -p annotation
     python3 '${workflow.projectDir}/scripts/annotate_partial_genome.py' \
-      --input '${array_input}' \
-      --qc '${qc_json}' \
-      --targets '${target_manifest}' \
-      --mode '${evidence_mode}' \
+      --input '${array_input}' --qc '${qc_json}' --targets '${target_manifest}' --mode '${evidence_mode}' \
       --output annotation/partial-genome-annotation.json
     if [ '${evidence_mode}' = 'live' ]; then
       jq -e '.operational_status == "VERIFICADO" and .evidence_gate.state == "PASS"' annotation/partial-genome-annotation.json >/dev/null
@@ -71,73 +111,56 @@ process ARRAY_ANNOTATE {
 
 process ARRAY_BUILD_MANIFEST {
     tag "array-manifest:${case_id}"
-
     input:
     path qc_json
     path annotation_json
     val case_id
-
-    output:
-    path 'curation/analysis-manifest.json', emit: curation_manifest
-
+    output: path 'curation/analysis-manifest.json', emit: curation_manifest
     script:
     """
     mkdir -p curation
-    python3 '${workflow.projectDir}/scripts/build_array_case_manifest.py' \
-      --qc '${qc_json}' \
-      --annotation '${annotation_json}' \
-      --output curation/analysis-manifest.json
+    python3 '${workflow.projectDir}/scripts/build_array_case_manifest.py' --qc '${qc_json}' --annotation '${annotation_json}' --output curation/analysis-manifest.json
     jq -e '.schema == "genoma-array-curation-manifest-v1" and .case_id == "${case_id}" and .publication_gate.passed == false' curation/analysis-manifest.json >/dev/null
     """
 }
 
 process ARRAY_POLICY_EVALUATE {
     tag "array-policy:${case_id}"
-
     input:
     path curation_manifest
     val case_id
-
-    output:
-    path 'policy/evaluation.json', emit: policy_evaluation
-
+    output: path 'policy/evaluation.json', emit: policy_evaluation
     script:
     """
     mkdir -p policy/normative
-    python3 '${workflow.projectDir}/scripts/materialize_ruleset.py' \
-      --output-dir policy/normative \
-      --evidence policy/ruleset-materialization.json
-    canonical='policy/normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt'
+    python3 '${workflow.projectDir}/scripts/materialize_ruleset.py' --output-dir policy/normative --evidence policy/ruleset-materialization.json
+    canonical='policy/normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt'
     set +e
     GENOMA_RULESET_PATH="\$canonical" \
-    GENOMA_RULESET_SHA_MANIFEST='${workflow.projectDir}/manifests/RULESET_V3.3.sha256' \
+    GENOMA_RULESET_SHA_MANIFEST='${workflow.projectDir}/manifests/RULESET_V3.4.sha256' \
     PYTHONPATH='${workflow.projectDir}/policy_engine' \
       python3 -m genoma_policy evaluate '${curation_manifest}' --output policy/evaluation.json
     code=\$?
     set -e
     test -s policy/evaluation.json
     printf '%s\n' "\$code" > policy/evaluation.exit-code
+    test "\$code" -eq 0
+    jq -e '.ready_for_requested_operation == true' policy/evaluation.json >/dev/null
     """
 }
 
 process ARRAY_GENERATE_REPORTS {
     tag "array-report-gate:${case_id}"
-
     input:
     path curation_manifest
     path policy_evaluation
     val case_id
-
-    output:
-    path 'reports', emit: reports
-
+    output: path 'reports', emit: reports
     script:
     """
     mkdir -p reports
     python3 '${workflow.projectDir}/scripts/generate_all_reports.py' \
-      --input '${curation_manifest}' \
-      --policy '${policy_evaluation}' \
-      --output-dir reports
+      --input '${curation_manifest}' --policy '${policy_evaluation}' --output-dir reports --strict
     """
 }
 
@@ -151,14 +174,19 @@ workflow ARRAY_PRODUCTION {
     strand_evidence
     evidence_mode
     target_manifest
-
+    runtime_gate_manifest
+    freshness_state_manifest
+    consent_manifest
     main:
-    ARRAY_QC(array_input, case_id, build, strand, build_evidence, strand_evidence)
+    ARRAY_VERIFY_RUNTIME_GATE(runtime_gate_manifest)
+    ARRAY_REFRESH_FRESHNESS_GATE(freshness_state_manifest)
+    ARRAY_VERIFY_CONSENT_PROVENANCE(consent_manifest)
+    ARRAY_PRE_ANALYSIS_MASTER_GATE(ARRAY_VERIFY_RUNTIME_GATE.out.verified_runtime, ARRAY_REFRESH_FRESHNESS_GATE.out.current_freshness, ARRAY_VERIFY_CONSENT_PROVENANCE.out.consent_gate)
+    ARRAY_QC(array_input, case_id, build, strand, build_evidence, strand_evidence, ARRAY_PRE_ANALYSIS_MASTER_GATE.out.master_gate)
     ARRAY_ANNOTATE(array_input, ARRAY_QC.out.qc_json, target_manifest, case_id, evidence_mode)
     ARRAY_BUILD_MANIFEST(ARRAY_QC.out.qc_json, ARRAY_ANNOTATE.out.annotation_json, case_id)
     ARRAY_POLICY_EVALUATE(ARRAY_BUILD_MANIFEST.out.curation_manifest, case_id)
     ARRAY_GENERATE_REPORTS(ARRAY_BUILD_MANIFEST.out.curation_manifest, ARRAY_POLICY_EVALUATE.out.policy_evaluation, case_id)
-
     emit:
     qc = ARRAY_QC.out.qc_json
     annotation = ARRAY_ANNOTATE.out.annotation_json
