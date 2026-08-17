@@ -13,30 +13,43 @@ library=$(jq -r '.read_group.library' "$manifest")
 platform=$(jq -r '.read_group.platform' "$manifest")
 platform_unit=$(jq -r '.read_group.platform_unit // "GENOMA"' "$manifest")
 
+resolve_sample_path() {
+  python3 - "$sample_dir" "$1" <<'PY'
+from pathlib import Path
+import sys
+root = Path(sys.argv[1]).resolve()
+raw = Path(sys.argv[2])
+if raw.is_absolute():
+    raise SystemExit("NÃO DISPONÍVEL: absolute sample input paths are forbidden")
+candidate = (root / raw).resolve()
+try:
+    candidate.relative_to(root)
+except ValueError:
+    raise SystemExit("NÃO DISPONÍVEL: sample input path escapes sample directory")
+print(candidate)
+PY
+}
+
 [[ -s "$ref" ]] || { echo "NÃO DISPONÍVEL: reference FASTA missing" >&2; exit 2; }
 [[ -n "$sample" && "$sample" != null ]] || { echo "NÃO DISPONÍVEL: sample_id missing" >&2; exit 2; }
 mkdir -p "$(dirname "$out")"
 
 case "$input_type" in
   FASTQ)
-    r1=$(jq -r '.r1' "$manifest")
-    r2=$(jq -r '.r2' "$manifest")
-    [[ "$r1" = /* ]] || r1="$sample_dir/$r1"
-    [[ "$r2" = /* ]] || r2="$sample_dir/$r2"
+    r1=$(resolve_sample_path "$(jq -r '.r1' "$manifest")")
+    r2=$(resolve_sample_path "$(jq -r '.r2' "$manifest")")
     [[ -s "$r1" && -s "$r2" ]] || { echo "NÃO DISPONÍVEL: paired FASTQ missing" >&2; exit 3; }
     rg=$(printf '@RG\tID:%s\tSM:%s\tLB:%s\tPL:%s\tPU:%s' "$rgid" "$sample" "$library" "$platform" "$platform_unit")
     bwa-mem2 mem -R "$rg" -t "${WGS_THREADS:-8}" "$ref" "$r1" "$r2" \
       | samtools sort -@ "${WGS_SORT_THREADS:-4}" -o "$out" -
     ;;
   BAM)
-    source=$(jq -r '.alignment' "$manifest")
-    [[ "$source" = /* ]] || source="$sample_dir/$source"
+    source=$(resolve_sample_path "$(jq -r '.alignment' "$manifest")")
     samtools quickcheck -v "$source"
     samtools sort -@ "${WGS_SORT_THREADS:-4}" -o "$out" "$source"
     ;;
   CRAM)
-    source=$(jq -r '.alignment' "$manifest")
-    [[ "$source" = /* ]] || source="$sample_dir/$source"
+    source=$(resolve_sample_path "$(jq -r '.alignment' "$manifest")")
     samtools quickcheck -v "$source"
     samtools view -T "$ref" -b "$source" | samtools sort -@ "${WGS_SORT_THREADS:-4}" -o "$out" -
     ;;
