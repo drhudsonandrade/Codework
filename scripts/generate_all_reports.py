@@ -20,6 +20,7 @@ def main() -> int:
     parser.add_argument("--input", required=True)
     parser.add_argument("--policy", help="actual policy evaluation JSON; if omitted, a staged evaluation.json is used when present")
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--strict", action="store_true", help="exit non-zero when publication is blocked; required in production workflows")
     args = parser.parse_args()
     data = json.loads(Path(args.input).read_text(encoding="utf-8"))
     policy_path = Path(args.policy) if args.policy else Path("evaluation.json")
@@ -34,15 +35,16 @@ def main() -> int:
     publication = data.get("publication_gate") if isinstance(data.get("publication_gate"), dict) else {}
     if publication.get("passed") is not True:
         blocked = {
-            "schema": "genoma-report-release-block-v1",
+            "schema": "genoma-report-release-block-v2",
             "status": "NÃO DISPONÍVEL",
             "reason": "publication gate not released by verified prerequisites plus the actual policy evaluation",
             "blockers": data.get("report_release_blockers", []),
             "required_next_step": "complete scientific curation, evidence retrieval, consent/QC attestations and FINAL_AUDIT_GATE; rerun policy evaluation",
+            "strict_mode": args.strict,
         }
         (out / "REPORTS_BLOCKED.json").write_text(json.dumps(blocked, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         print(json.dumps(blocked, ensure_ascii=False, indent=2))
-        return 0
+        return 2 if args.strict else 0
 
     generated: dict[str, dict[str, str]] = {}
     try:
@@ -56,7 +58,7 @@ def main() -> int:
         return 2
 
     manifest = {
-        "schema": "genoma-eleven-report-release-v1",
+        "schema": "genoma-eleven-report-release-v2",
         "status": "EXECUTADO",
         "report_count": len(generated),
         "reports": generated,
