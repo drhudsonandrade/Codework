@@ -32,6 +32,7 @@ if str(ROOT) not in sys.path:
 
 from reporting.editorial_v3 import _verified_coordinate_manifest
 from reporting.engine import render_document
+from reporting.provenance import fixture_payload
 from reporting.template_v3 import render_pdf_from_template, verify_template_pack
 
 DEFAULT_DPI = 200
@@ -50,42 +51,28 @@ def sha256_file(path: Path) -> str:
 
 
 def _fixture_payload(report_id: str, detailed: dict[str, Any]) -> dict[str, Any]:
-    """A fully-resolved, non-clinical payload: QA measures layout, never interpretation."""
+    """A fully-resolved, non-clinical payload: QA measures layout, never interpretation.
+
+    Every value is anchored as `fixture`, so this passes PROVENANCE_GATE without being
+    exempt from it, and its status floor stays NÃO DISPONÍVEL.
+    """
     meta = detailed["reports"][report_id]
     fields = {
         item["field_id"]: "NÃO DISPONÍVEL"
         for item in meta["fields"]
         if not item.get("guidance_only")
     }
-    return {
-        "case_id": "CASE-PIXEL-QA-NO-PERSONAL-DATA",
-        "summary": "Fixture de QA visual; não representa paciente e não contém interpretação.",
-        "ruleset": {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026"},
-        "publication_gate": {
-            "passed": True,
-            "consent_verified": True,
-            "qc_verified": True,
-            "evidence_verified": True,
-            "placeholders_resolved": True,
+    return fixture_payload(
+        case_id="CASE-PIXEL-QA-NO-PERSONAL-DATA",
+        report_id=report_id,
+        summary="Fixture de QA visual; não representa paciente e não contém interpretação.",
+        basis="fixture de QA visual",
+        extra={
+            "editorial_mode": "template-v3",
+            "template_fields_complete": True,
+            "template_fields": fields,
         },
-        "policy_evaluation": {
-            "ready_for_requested_operation": True,
-            "planes": {
-                k: {"state": "PASS"}
-                for k in ("policy_control", "scientific_data", "evidence", "audit")
-            },
-            "gates": [{"gate": "FINAL_AUDIT_GATE", "state": "PASS", "blocking": True}],
-        },
-        "post_deployment_status": "PENDENTE",
-        "sections": {},
-        "findings": [],
-        "execution_manifest": {"status": "VERIFICADO"},
-        "sources": ["fixture:pixel-qa"],
-        "limitations": "Fixture de QA visual.",
-        "editorial_mode": "template-v3",
-        "template_fields_complete": True,
-        "template_fields": fields,
-    }
+    )
 
 
 def _mask_rects(meta: dict[str, Any], page_number: int) -> list[fitz.Rect]:

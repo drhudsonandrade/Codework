@@ -23,6 +23,8 @@ if str(ROOT.parent) not in sys.path:
 
 import normative
 
+from reporting.provenance import provenance_blockers
+
 CATALOG_PATH = ROOT / "catalog.json"
 EXPECTED_RULESET = normative.ruleset_block(include_sha256=False)
 REQUIRED_PLANES = ("policy_control", "scientific_data", "evidence", "audit")
@@ -68,6 +70,12 @@ def _publication_blockers(data: dict[str, Any]) -> list[str]:
     final_audit = next((g for g in gates if isinstance(g, dict) and g.get("gate") == "FINAL_AUDIT_GATE"), None)
     if not isinstance(final_audit, dict) or final_audit.get("state") != "PASS":
         blockers.append("policy_evaluation:FINAL_AUDIT_GATE")
+
+    # PROVENANCE_GATE. The gates above establish that the run was authorized; none of them
+    # establishes that the printed sentences came from the data. Without this check the
+    # payload is free text, and a hand-typed genotype is indistinguishable from a measured
+    # one at every later stage.
+    blockers.extend(provenance_blockers(data))
     return blockers
 
 

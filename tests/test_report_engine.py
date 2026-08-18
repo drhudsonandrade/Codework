@@ -69,21 +69,14 @@ class ReportEngineTest(unittest.TestCase):
 
     def test_final_mode_writes_json_markdown_and_html_when_gate_passes(self):
         from reporting.engine import render_document, write_bundle
+        from reporting.provenance import fixture_payload
 
-        data = {
-            "case_id": "CASE-001",
-            "summary": "Nenhum achado fictício é inserido pelo motor.",
-            "ruleset": {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026"},
-            "publication_gate": {
-                "passed": True,
-                "consent_verified": True,
-                "qc_verified": True,
-                "evidence_verified": True,
-                "placeholders_resolved": True,
-            },
-            "policy_evaluation": passing_policy_evaluation(),
-            "post_deployment_status": "PENDENTE",
-        }
+        data = fixture_payload(
+            case_id="CASE-001",
+            report_id="01",
+            summary="Nenhum achado fictício é inserido pelo motor.",
+            basis="fixture de motor",
+        )
         rendered = render_document("01", data, mode="FINAL")
         with tempfile.TemporaryDirectory() as td:
             paths = write_bundle(rendered, Path(td), stem="case-001-genoma-clinico")
@@ -100,32 +93,21 @@ class ReportEngineTest(unittest.TestCase):
         sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
         import normative
         from reporting.engine import render_document
+        from reporting.provenance import fixture_payload
 
-        data = {
-            "case_id": "CASE-001",
-            "summary": "fixture",
-            "ruleset": {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026"},
-            "publication_gate": {
-                "passed": True,
-                "consent_verified": True,
-                "qc_verified": True,
-                "evidence_verified": True,
-                "placeholders_resolved": True,
-            },
-            "policy_evaluation": passing_policy_evaluation(),
-            "post_deployment_status": "PENDENTE",
-            "execution_manifest": {"status": "VERIFICADO"},
-        }
+        data = fixture_payload(
+            case_id="CASE-001", report_id="01", summary="fixture", basis="fixture de motor"
+        )
+        original_manifest = dict(data["execution_manifest"])
         rendered = render_document("01", data, mode="FINAL")
         manifest = rendered["data"]["execution_manifest"]
         self.assertEqual(manifest["RULESET"], "VERIFICADO")
         self.assertEqual(manifest["VERSÃO"], normative.VERSION)
         self.assertEqual(manifest["VIGÊNCIA"], normative.EFFECTIVE_DATE)
         self.assertEqual(manifest["RULESET_SHA256"], normative.RAW_SHA256)
-        self.assertEqual(manifest["status"], "VERIFICADO")
         self.assertIn(normative.VERSION, rendered["markdown"])
         # The caller's payload must not be mutated by rendering.
-        self.assertEqual(data["execution_manifest"], {"status": "VERIFICADO"})
+        self.assertEqual(data["execution_manifest"], original_manifest)
 
 
 if __name__ == "__main__":

@@ -17,28 +17,23 @@ PASSING_POLICY = {
 
 
 def final_data():
-    return {
-        "case_id": "CASE-VISUAL-001",
-        "summary": "Conteúdo rastreável para teste editorial.",
-        "ruleset": {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026"},
-        "publication_gate": {
-            "passed": True,
-            "consent_verified": True,
-            "qc_verified": True,
-            "evidence_verified": True,
-            "placeholders_resolved": True,
+    """A layout fixture, anchored as such: it renders but can never claim a result."""
+    from reporting.provenance import fixture_payload
+
+    data = fixture_payload(
+        case_id="CASE-VISUAL-001",
+        report_id="01",
+        summary="Conteúdo rastreável para teste editorial.",
+        sections={"Resumo clínico executivo": "Teste de conteúdo sem interpretação genética nova."},
+        basis="fixture editorial; não representa paciente",
+        extra={
+            "post_deployment_status": "PASS",
+            # No approved v3.0 template pack is mounted in CI, so this fixture renders
+            # through the programmatic fallback. That has to be acknowledged explicitly.
+            "allow_programmatic_final": True,
         },
-        "policy_evaluation": PASSING_POLICY,
-        "post_deployment_status": "PASS",
-        "sections": {"Resumo clínico executivo": "Teste de conteúdo sem interpretação genética nova."},
-        "findings": [],
-        "execution_manifest": {"status": "VERIFICADO"},
-        "sources": ["fixture:test"],
-        "limitations": "Fixture editorial; não representa paciente.",
-        # No approved v3.0 template pack is mounted in CI, so this fixture renders through
-        # the programmatic fallback. That has to be acknowledged explicitly.
-        "allow_programmatic_final": True,
-    }
+    )
+    return data
 
 
 class EditorialRendererTest(unittest.TestCase):

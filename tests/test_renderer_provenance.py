@@ -29,25 +29,14 @@ PASSING_POLICY = {
 
 
 def _data(**overrides):
-    payload = {
-        "case_id": "CASE-PROVENANCE",
-        "summary": "fixture",
-        "ruleset": {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026"},
-        "publication_gate": {
-            "passed": True,
-            "consent_verified": True,
-            "qc_verified": True,
-            "evidence_verified": True,
-            "placeholders_resolved": True,
-        },
-        "policy_evaluation": PASSING_POLICY,
-        "post_deployment_status": "PENDENTE",
-        "sections": {},
-        "findings": [],
-        "execution_manifest": {"status": "VERIFICADO"},
-        "sources": ["fixture"],
-        "limitations": "Fixture editorial.",
-    }
+    from reporting.provenance import fixture_payload
+
+    payload = fixture_payload(
+        case_id="CASE-PROVENANCE",
+        report_id="01",
+        summary="fixture",
+        basis="fixture editorial",
+    )
     payload.update(overrides)
     return payload
 
@@ -90,12 +79,13 @@ class RendererProvenanceTest(unittest.TestCase):
 
     def test_disclosure_does_not_mutate_the_caller_payload(self):
         data = _data(allow_programmatic_final=True)
+        caller_limitations = data["limitations"]
         rendered = render_document("01", data, mode="FINAL")
         original_limitations = rendered["data"]["limitations"]
         with tempfile.TemporaryDirectory() as td:
             write_editorial_bundle(rendered, Path(td), stem="n")
         self.assertEqual(rendered["data"]["limitations"], original_limitations)
-        self.assertEqual(data["limitations"], "Fixture editorial.")
+        self.assertEqual(data["limitations"], caller_limitations)
 
 
 if __name__ == "__main__":

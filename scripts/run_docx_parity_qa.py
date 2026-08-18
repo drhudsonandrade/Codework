@@ -42,6 +42,7 @@ if str(ROOT) not in sys.path:
 
 from reporting.editorial_v3 import _verified_coordinate_manifest
 from reporting.engine import render_document
+from reporting.provenance import fixture_payload
 from reporting.template_v3 import render_docx_from_template, verify_template_pack
 
 DEFAULT_DPI = 150
@@ -158,40 +159,23 @@ def _compare(reference: fitz.Document, rendered: fitz.Document, dpi: int) -> dic
 
 
 def _fixture(report_id: str, detailed: dict[str, Any]) -> dict[str, Any]:
+    """Anchored as `fixture`: parity QA renders a document without claiming a result."""
     meta = detailed["reports"][report_id]
-    return {
-        "case_id": "CASE-DOCX-PARITY-NO-PERSONAL-DATA",
-        "summary": "Fixture de paridade DOCX; não representa paciente.",
-        "ruleset": {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026"},
-        "publication_gate": {
-            "passed": True,
-            "consent_verified": True,
-            "qc_verified": True,
-            "evidence_verified": True,
-            "placeholders_resolved": True,
-        },
-        "policy_evaluation": {
-            "ready_for_requested_operation": True,
-            "planes": {
-                k: {"state": "PASS"}
-                for k in ("policy_control", "scientific_data", "evidence", "audit")
+    return fixture_payload(
+        case_id="CASE-DOCX-PARITY-NO-PERSONAL-DATA",
+        report_id=report_id,
+        summary="Fixture de paridade DOCX; não representa paciente.",
+        basis="fixture de paridade DOCX",
+        extra={
+            "editorial_mode": "template-v3",
+            "template_fields_complete": True,
+            "template_fields": {
+                item["field_id"]: "NÃO DISPONÍVEL"
+                for item in meta["fields"]
+                if not item.get("guidance_only")
             },
-            "gates": [{"gate": "FINAL_AUDIT_GATE", "state": "PASS", "blocking": True}],
         },
-        "post_deployment_status": "PENDENTE",
-        "sections": {},
-        "findings": [],
-        "execution_manifest": {"status": "VERIFICADO"},
-        "sources": ["fixture:docx-parity"],
-        "limitations": "Fixture de paridade DOCX.",
-        "editorial_mode": "template-v3",
-        "template_fields_complete": True,
-        "template_fields": {
-            item["field_id"]: "NÃO DISPONÍVEL"
-            for item in meta["fields"]
-            if not item.get("guidance_only")
-        },
-    }
+    )
 
 
 def run(template_dir: Path, *, dpi: int = DEFAULT_DPI) -> dict[str, Any]:
