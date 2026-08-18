@@ -51,6 +51,46 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def verify_coordinate_detail(detail_path: Path, detail_meta: dict[str, Any], manifest_bytes: bytes) -> dict[str, Any]:
+    """Verify the compressed coordinate detail by its content, not its container bytes.
+
+    DEFLATE does not guarantee bit-for-bit reproducible output: the same input compressed
+    by a different zlib/zlib-ng build yields different bytes (zlib-ng#2216). Pinning the
+    SHA-256 of the .gz.b64 container therefore made the check unsatisfiable on any machine
+    whose zlib differed from the one that minted the pin, even though the coordinates were
+    identical. The portable contract is the decoded payload.
+
+    `content_sha256` selects content verification; entries carrying only the legacy
+    container `sha256` keep byte comparison so an externally approved pair still verifies
+    exactly as before.
+    """
+    raw = detail_path.read_bytes()
+    container_sha = hashlib.sha256(raw).hexdigest()
+    expected_content = detail_meta.get("content_sha256")
+    if not expected_content:
+        if container_sha != detail_meta.get("sha256"):
+            raise TemplateV3Error("coordinate detail container SHA-256 mismatch")
+        return {"mode": "container", "container_sha256": container_sha, "status": "VERIFICADO"}
+
+    try:
+        # The artifact is written with a trailing newline; strip surrounding whitespace
+        # before strict base64 validation.
+        payload = gzip.decompress(base64.b64decode(b"".join(raw.split()), validate=True))
+    except (ValueError, OSError, gzip.BadGzipFile) as exc:
+        raise TemplateV3Error(f"coordinate detail is not decodable: {type(exc).__name__}: {exc}") from exc
+    content_sha = hashlib.sha256(payload).hexdigest()
+    if content_sha != expected_content:
+        raise TemplateV3Error("coordinate detail content SHA-256 mismatch")
+    if payload != manifest_bytes:
+        raise TemplateV3Error("coordinate detail content differs from the coordinate manifest")
+    return {
+        "mode": "content",
+        "content_sha256": content_sha,
+        "container_sha256": container_sha,
+        "status": "VERIFICADO",
+    }
+
+
 def load_reference_manifest(path: Path = MANIFEST_PATH) -> dict[str, Any]:
     index = json.loads(path.read_text(encoding="utf-8"))
     if index.get("schema") != "genoma-editorial-v3-reference-manifest-v1":
@@ -475,4 +515,4 @@ def template_dir_from_environment() -> Path:
     return Path(raw)
 
 
-__all__=["TemplateV3Error","load_reference_manifest","verify_template_pack","render_pdf_from_template","render_docx_from_template","template_mode_requested","template_dir_from_environment"]
+__all__=["TemplateV3Error","load_reference_manifest","verify_coordinate_detail","verify_template_pack","render_pdf_from_template","render_docx_from_template","template_mode_requested","template_dir_from_environment"]

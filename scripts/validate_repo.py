@@ -29,6 +29,8 @@ REQUIRED_PATHS = (
     "normative/__init__.py", "normative/sealed/MANIFEST.json", "normative/sealed/README.md",
     "manifests/COMPANION_SOURCES.sha256",
     "scripts/__init__.py", "scripts/sealed_ruleset.py", "scripts/seal_ruleset.py",
+    "scripts/seal_template_store.py", "scripts/run_editorial_pixel_qa.py",
+    "docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_2026-08-18.json",
     "scripts/check_versions.sh", "scripts/fetch_grch38.sh",
     "scripts/build_bwa_mem2_index.sh", "scripts/validate_grch38.sh", "scripts/validate_bwa_mem2_functional.sh",
     "scripts/generate_canary.py", "scripts/score_variants.py", "scripts/run_canary.sh", "scripts/verify_ruleset.sh",

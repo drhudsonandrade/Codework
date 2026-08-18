@@ -92,6 +92,30 @@ arquivo ausente, hash divergente ou nome não registrado. Nenhum gate toma ident
 normativa dessa tabela — `scripts/validate_repo.py` recusa qualquer entrada que não esteja
 declarada como não normativa.
 
+## Pacote de modelos v3.0 — instalado e verificado
+
+Os 11 modelos aprovados estão selados em `template_store/v3.0/sealed/`, com SHA-256 de cada
+PDF conferido contra `template_store/v3.0/MANIFEST.json` **e**
+`reporting/reference_v3_manifest.json` (11/11). `scripts/seal_template_store.py` é o único
+escritor e recusa qualquer pacote que não bata byte a byte; `scripts/verify_template_store.py`
+é o único leitor.
+
+Fluxo para publicar pelo caminho aprovado:
+
+```bash
+python3 scripts/verify_template_store.py --materialize /srv/genoma/templates/raw
+python3 scripts/install_report_templates.py \
+  --source-dir /srv/genoma/templates/raw --target-dir /srv/genoma/templates/v3.0
+export GENOMA_REPORT_TEMPLATE_DIR=/srv/genoma/templates/v3.0
+```
+
+Depois disso, um payload com `editorial_mode: "template-v3"` publica a partir do modelo
+oficial. Sem isso, a publicação FINAL exige reconhecimento explícito e sai marcada como
+aproximação programática.
+
+Requer `poppler-utils` na sessão (`pdftocairo`, `pdftoppm`) para o DOCX — já declarado em
+`environment.yml`.
+
 ## Como o sistema evita passar ou mentir
 
 Quatro barreiras existem exatamente para impedir que um resultado pareça melhor do que é:
@@ -104,6 +128,10 @@ Quatro barreiras existem exatamente para impedir que um resultado pareça melhor
   exige `allow_programmatic_final=True`, e o artefato resultante carrega
   `RENDERIZAÇÃO PROGRAMÁTICA` / `PARIDADE_VISUAL: NÃO DISPONÍVEL` na própria página e no
   registro de proveniência.
+- **QA de pixel executável** — `scripts/run_editorial_pixel_qa.py` mede a preservação
+  estática contra os modelos aprovados a cada corrida, em vez de reler um PASS armazenado;
+  `tests/test_editorial_pixel_qa.py` prova que a comparação detecta diferença fora das
+  máscaras, inclusive menor que um glifo, para que o "0 pixels alterados" signifique algo.
 - **Cobertura obrigatória no freshness gate** — ausência de dado não é aprovação: todos os
   pacotes gerenciados e as seis fontes de evidência precisam estar presentes.
 - **Conflito nunca vira consenso** — registros de sobreposição não resolvidos no SNP-array

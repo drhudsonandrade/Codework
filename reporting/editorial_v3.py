@@ -42,9 +42,14 @@ def _verified_coordinate_manifest(template_dir: Path) -> tuple[dict[str, Any], d
             errors.append(f"{mode}:missing")
             continue
         actual_manifest = _sha256(manifest_path)
-        actual_detail = _sha256(detail_path)
-        if actual_manifest != manifest_meta.get("sha256") or actual_detail != detail_meta.get("sha256"):
-            raise _template_v3.TemplateV3Error(f"{mode} v3 coordinate checksum mismatch")
+        if actual_manifest != manifest_meta.get("sha256"):
+            raise _template_v3.TemplateV3Error(f"{mode} v3 coordinate manifest checksum mismatch")
+        # Shared with the installer: the detail is verified by decoded content, because
+        # DEFLATE bytes are not reproducible across zlib builds.
+        detail_result = _template_v3.verify_coordinate_detail(
+            detail_path, detail_meta, manifest_path.read_bytes()
+        )
+        actual_detail = detail_result.get("content_sha256") or detail_result["container_sha256"]
         if mode == "external":
             detailed = _ORIGINAL_LOADER(manifest_path)
         else:

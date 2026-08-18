@@ -26,34 +26,56 @@ Comparar o PDF de referência com o resultado inteiro e exigir zero pixels alter
 
 A região dinâmica inclui a caixa do placeholder e a área limitada destinada ao valor substituto. A região controlada inclui somente textos que precisam mudar de MODELO para RESULTADO ou corrigir identidade normativa. Todo o restante da página é o próprio PDF de referência e deve permanecer visualmente invariável.
 
-QA executado em 16/08/2026, com artefato versionado:
+## Produtor e evidência
 
-- comparação estática a 200 DPI: `VERIFICADO`, 11 relatórios, 100 páginas de referência,
-  **0 pixels alterados** fora das regiões dinâmicas/controladas declaradas;
-- page counts: 10,10,10,10,11,9,9,9,9,1,12 — exatamente os modelos.
+`scripts/run_editorial_pixel_qa.py` é o **produtor** da evidência: ele instala o pacote
+aprovado, renderiza cada relatório pelo caminho template-v3 real e compara o raster contra
+o PDF de referência, contando apenas pixels fora das máscaras compiladas.
 
-Evidência versionada — a única:
+Antes existia o arquivo de evidência mas nenhum código capaz de gerá-lo — o PASS não podia
+ser reproduzido nem contestado. Agora pode:
 
-- `docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_2026-08-16.json`
+```bash
+python3 scripts/verify_template_store.py --materialize /srv/genoma/templates/raw
+python3 scripts/install_report_templates.py \
+  --source-dir /srv/genoma/templates/raw --target-dir /srv/genoma/templates/v3.0
+python3 scripts/run_editorial_pixel_qa.py \
+  --template-dir /srv/genoma/templates/v3.0 \
+  --output docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI.json
+```
 
-Cada execução verificada nesse arquivo é reconferida no CI por
-`.github/workflows/genoma-visual-qa-candidates.yml`, que liga os SHA-256 dos PDFs de
-referência, as contagens de página e de placeholders ao `reporting/reference_v3_manifest.json`.
+Execução medida em 18/08/2026 — `docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_2026-08-18.json`:
 
-### Controles sem artefato — NÃO DISPONÍVEL
+- `VERIFICADO`, 11 relatórios, 100 páginas, **0 pixels alterados** fora das máscaras;
+- page counts 10,10,10,10,11,9,9,9,9,1,12 — exatamente os modelos;
+- reproduz o agregado registrado em 16/08/2026, agora por medição própria.
 
-Não existe evidência versionada para os itens abaixo. Pelo Capability Gate, eles não podem
-ser declarados executados até que o artefato correspondente seja produzido e commitado:
+O `.github/workflows/genoma-visual-qa-candidates.yml` **executa** o QA a cada corrida, em
+vez de apenas reler evidência armazenada.
+
+### Por que o PASS não é vazio
+
+`tests/test_editorial_pixel_qa.py` fixa a sensibilidade da comparação: diferença dentro de
+máscara é ignorada, diferença fora é detectada — inclusive uma alteração menor que um glifo
+— e rasters de tamanhos distintos nunca são reportados como aprovados. Sem isso, um "0
+pixels alterados" poderia significar apenas que a comparação não olha nada.
+
+As máscaras são dilatadas em `mask_padding_pt` (1,0 pt) para absorver antialiasing na borda;
+o valor é declarado na evidência e coberto por teste para não crescer a ponto de esconder
+deriva real.
+
+### Controles ainda sem artefato — NÃO DISPONÍVEL
 
 | ITEM | STATUS | MOTIVO | PRÓXIMO PASSO |
 |---|---|---|---|
-| Rasterização independente Poppler/pdftoppm | NÃO DISPONÍVEL | nenhum artefato de execução no repositório | rodar o smoke e commitar a evidência em `docs/evidence/` |
-| QA visual de renderização DOCX | NÃO DISPONÍVEL | nenhum artefato de execução no repositório | re-renderizar via LibreOffice e commitar a evidência |
-| Relatório 10 sem colisão visual (DATA/VERSÃO peer-bounded) | NÃO DISPONÍVEL | inspeção não registrada em artefato | registrar a verificação no JSON de QA |
+| QA visual de renderização DOCX | NÃO DISPONÍVEL | paridade DOCX depende do engine (Word/LibreOffice); nenhuma medição registrada | re-renderizar via LibreOffice e commitar a evidência |
+| Relatório 10 sem colisão visual (DATA/VERSÃO peer-bounded) | NÃO DISPONÍVEL | inspeção visual não registrada em artefato | registrar a verificação no JSON de QA |
 
 ## DOCX
 
-O DOCX usa a página de referência convertida para SVG como placa visual estática, com PNG fallback, e valores do caso em textboxes VML editáveis. A re-renderização via LibreOffice para todas as páginas dos 11 relatórios está `NÃO DISPONÍVEL`: não há artefato dessa execução no repositório. `tests/test_editorial_renderers.py` cobre apenas a estrutura do DOCX (é um pacote OOXML válido, editável, com os campos e o SVG esperados), o que não é o mesmo que QA de renderização.
+O DOCX usa a página de referência convertida para SVG como placa visual estática, com PNG fallback, e valores do caso em textboxes VML editáveis. A geração pelo caminho template-v3 está exercitada e coberta (`tests/test_template_v3_contract.py` produz o relatório 10 em modo strict e confirma um pacote OOXML editável com campos `GENOMA_FIELD_` e `svgBlip`), o que exige `poppler-utils` na sessão.
+
+A **paridade visual de renderização** do DOCX continua `NÃO DISPONÍVEL`: Word, LibreOffice e outros engines rasterizam de forma diferente, e não há medição registrada. Estrutura verificada não é o mesmo que paridade medida.
 
 **Não declarar DOCX como pixel-idêntico de forma renderer-independent.** Word, LibreOffice e outros engines fazem rasterização/antialiasing diferentes. O contrato correto é:
 

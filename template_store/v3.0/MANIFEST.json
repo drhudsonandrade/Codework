@@ -8,72 +8,322 @@
     "parts_dir": "template_store/v3.0/sealed/parts",
     "part_count": 48,
     "decoded_archive": "GENOMA_V3_TEMPLATE_PACK.tar.xz",
-    "decoded_archive_size_bytes": 1726200,
-    "decoded_archive_sha256": "3717f35b6eb0b82fc24f275cb216595c9d3281dc96558103ae791bc9bcf7174a",
-    "base64_size_bytes": 2301600,
-    "materialized_dir": "template_store/v3.0/materialized"
+    "decoded_archive_size_bytes": 1724228,
+    "decoded_archive_sha256": "f0d77bc1f1077cfbb5b01e5cbfa1096454443a3c6f07d88a82b90972c32cc9da",
+    "base64_size_bytes": 2298972,
+    "materialized_dir": "template_store/v3.0/materialized",
+    "transport_encoding": "base64(xz(tar(USTAR, sorted, mtime=0, uid/gid=0), preset=9e, check=CRC64))",
+    "transport_writer": "scripts/seal_template_store.py",
+    "transport_reader": "scripts/verify_template_store.py"
   },
   "reports": {
-    "01": {"filename":"01_RELATORIO_GENOMA_CLINICO_v3.0.pdf","sha256":"812a7e9ff15a1f6b368d924e78dd0456145d0f22e0d24af5ea0a9faa9d458797","size_bytes":334619,"page_count":10},
-    "02": {"filename":"02_RELATORIO_ANCESTRALIDADE_GENEALOGIA_v3.0.pdf","sha256":"2ede76a59e74a6425f22be31f7b96fa6bc1b0ce3fb74b03fa15775e0e6dbe496","size_bytes":331223,"page_count":10},
-    "03": {"filename":"03_RELATORIO_REPRODUTIVO_INDIVIDUAL_CASAL_v3.0.pdf","sha256":"945007f2a9db1e6252e9fa0352e211ef6957383970913e7c7cb3f604955ab2dd","size_bytes":315998,"page_count":10},
-    "04": {"filename":"04_RELATORIO_NUTRIGENETICO_NUTRICAO_PRECISAO_v3.0.pdf","sha256":"32687216782de91619249b3fd9aef7975fcb69544c74cbbf3a54b58cb716a394","size_bytes":319321,"page_count":10},
-    "05": {"filename":"05_RELATORIO_TECNICO_METODOS_QC_LIMITACOES_v3.0.pdf","sha256":"fd9a2fbfd90534af2fc78b8a0a85c8b89262568d78b21f711dc66b0f0bf00f41","size_bytes":371193,"page_count":11},
-    "06": {"filename":"06_RELATORIO_FARMACOGENOMICA_CARTAO_ANESTESIA_v3.0.pdf","sha256":"eeff08f634b3f40f3a280b6e7eeb7c3e09e8f0a4ca080a2da2882d2c9ec58fbe","size_bytes":287794,"page_count":9},
-    "07": {"filename":"07_RELATORIO_LONGEVIDADE_PROTECAO_PREVENCAO_v3.0.pdf","sha256":"60a3b80cf47e40b5405c567586800d03b0e0d882118c06775119dcc22ebf4a0a","size_bytes":286645,"page_count":9},
-    "08": {"filename":"08_ATLAS_TRACOS_CURIOSIDADES_v3.0.pdf","sha256":"3ebc0a412f587b08823baaae9553f88f33f5a0b53d6b74c2710ea647d3c93dd5","size_bytes":274255,"page_count":9},
-    "09": {"filename":"09_GENOME_COMPLETENESS_BLIND_SPOTS_v3.0.pdf","sha256":"f1b706a0b8948f27dddbee825779d7c89c44e90ca9468813c76b647164d9dfdd","size_bytes":277988,"page_count":9},
-    "10": {"filename":"10_RESUMO_CLINICO_UMA_PAGINA_v3.0.pdf","sha256":"d0781af71f8855167311f9e7884c5e2d420ebe0b7da6d75f5a9cfed5b004ad59","size_bytes":107426,"page_count":1},
-    "11": {"filename":"11_GUIA_EDITORIAL_MATRIZ_PREENCHIMENTO_v3.0.pdf","sha256":"d68fce73aeb7fd7bb6e0eb27679b167a3899cce92eb20b64ad5bb15352031fea","size_bytes":327388,"page_count":12}
+    "01": {
+      "filename": "01_RELATORIO_GENOMA_CLINICO_v3.0.pdf",
+      "sha256": "812a7e9ff15a1f6b368d924e78dd0456145d0f22e0d24af5ea0a9faa9d458797",
+      "size_bytes": 334619,
+      "page_count": 10
+    },
+    "02": {
+      "filename": "02_RELATORIO_ANCESTRALIDADE_GENEALOGIA_v3.0.pdf",
+      "sha256": "2ede76a59e74a6425f22be31f7b96fa6bc1b0ce3fb74b03fa15775e0e6dbe496",
+      "size_bytes": 331223,
+      "page_count": 10
+    },
+    "03": {
+      "filename": "03_RELATORIO_REPRODUTIVO_INDIVIDUAL_CASAL_v3.0.pdf",
+      "sha256": "945007f2a9db1e6252e9fa0352e211ef6957383970913e7c7cb3f604955ab2dd",
+      "size_bytes": 315998,
+      "page_count": 10
+    },
+    "04": {
+      "filename": "04_RELATORIO_NUTRIGENETICO_NUTRICAO_PRECISAO_v3.0.pdf",
+      "sha256": "32687216782de91619249b3fd9aef7975fcb69544c74cbbf3a54b58cb716a394",
+      "size_bytes": 319321,
+      "page_count": 10
+    },
+    "05": {
+      "filename": "05_RELATORIO_TECNICO_METODOS_QC_LIMITACOES_v3.0.pdf",
+      "sha256": "fd9a2fbfd90534af2fc78b8a0a85c8b89262568d78b21f711dc66b0f0bf00f41",
+      "size_bytes": 371193,
+      "page_count": 11
+    },
+    "06": {
+      "filename": "06_RELATORIO_FARMACOGENOMICA_CARTAO_ANESTESIA_v3.0.pdf",
+      "sha256": "eeff08f634b3f40f3a280b6e7eeb7c3e09e8f0a4ca080a2da2882d2c9ec58fbe",
+      "size_bytes": 287794,
+      "page_count": 9
+    },
+    "07": {
+      "filename": "07_RELATORIO_LONGEVIDADE_PROTECAO_PREVENCAO_v3.0.pdf",
+      "sha256": "60a3b80cf47e40b5405c567586800d03b0e0d882118c06775119dcc22ebf4a0a",
+      "size_bytes": 286645,
+      "page_count": 9
+    },
+    "08": {
+      "filename": "08_ATLAS_TRACOS_CURIOSIDADES_v3.0.pdf",
+      "sha256": "3ebc0a412f587b08823baaae9553f88f33f5a0b53d6b74c2710ea647d3c93dd5",
+      "size_bytes": 274255,
+      "page_count": 9
+    },
+    "09": {
+      "filename": "09_GENOME_COMPLETENESS_BLIND_SPOTS_v3.0.pdf",
+      "sha256": "f1b706a0b8948f27dddbee825779d7c89c44e90ca9468813c76b647164d9dfdd",
+      "size_bytes": 277988,
+      "page_count": 9
+    },
+    "10": {
+      "filename": "10_RESUMO_CLINICO_UMA_PAGINA_v3.0.pdf",
+      "sha256": "d0781af71f8855167311f9e7884c5e2d420ebe0b7da6d75f5a9cfed5b004ad59",
+      "size_bytes": 107426,
+      "page_count": 1
+    },
+    "11": {
+      "filename": "11_GUIA_EDITORIAL_MATRIZ_PREENCHIMENTO_v3.0.pdf",
+      "sha256": "d68fce73aeb7fd7bb6e0eb27679b167a3899cce92eb20b64ad5bb15352031fea",
+      "size_bytes": 327388,
+      "page_count": 12
+    }
   },
   "parts": [
-    {"name":"tplpart-000","size_bytes":48000,"sha256":"0b04b161c2d7105cb28f88e28cd8187b3c82603eff37fce0f65c930f03379ba0"},
-    {"name":"tplpart-001","size_bytes":48000,"sha256":"655327edf910cd7760dd5c6a2a7b85de693b4b4f4bbdaed2930aad4a758f7813"},
-    {"name":"tplpart-002","size_bytes":48000,"sha256":"9166662725ac3dfd976c3708ad7e2049e6aa5637ae3e115db3714f85ec1e8782"},
-    {"name":"tplpart-003","size_bytes":48000,"sha256":"37527d844f7ae94d943835fc2e4f8426040cb7d31003a674d4aa228a6cde420d"},
-    {"name":"tplpart-004","size_bytes":48000,"sha256":"dc382c78807f4b8a5bb14a3b01d27564d65ba6b13ebfee042fdf6c6e514999f3"},
-    {"name":"tplpart-005","size_bytes":48000,"sha256":"2edfdaa8d45e874776ad7689c380c247f469822121a86dc1e5636ea876e3c3b0"},
-    {"name":"tplpart-006","size_bytes":48000,"sha256":"60f7c6cb98961c4b2303ee3205f34726a635915d09e67d40191a37b81a940f29"},
-    {"name":"tplpart-007","size_bytes":48000,"sha256":"7e91fb7e1a2abf0c9163930da2f9c3b5a8ea1efe5ab0e2da3120a8fe6bfd90cf"},
-    {"name":"tplpart-008","size_bytes":48000,"sha256":"fe4735ec0f2d7e5dbcaeaf989cacb387e109abd9716ac79e99b5e608167e0541"},
-    {"name":"tplpart-009","size_bytes":48000,"sha256":"07b91de05643dc0f2b9baf2663abd15f9e267caf1fa2bfd7060a0c7a0c550e3b"},
-    {"name":"tplpart-010","size_bytes":48000,"sha256":"0d8c89e89da1a401dfd7c1e2c6ab6405ed4575f257ea46fa88611a87955e7cbf"},
-    {"name":"tplpart-011","size_bytes":48000,"sha256":"de098b2ea6fa24dc70cb2eda0f2b6c50b79d704cb47602fd49018f3a5dde3735"},
-    {"name":"tplpart-012","size_bytes":48000,"sha256":"1255f34d70354257cc0a396a6d0b0879c76cc1ddb0f62c527cb2d9fb64d9ef09"},
-    {"name":"tplpart-013","size_bytes":48000,"sha256":"4f189761622a74ce7cf8b87c3115b5818e06788205bd777ed016987e5a16ae19"},
-    {"name":"tplpart-014","size_bytes":48000,"sha256":"e1d9c908145aa9ecce88282dbb0ddf765ce03aecd6a3ee0f5b65299b0f6fc701"},
-    {"name":"tplpart-015","size_bytes":48000,"sha256":"ac60f69ea68020c230965142091f988e2e8d6c237de09ba4f971252d7594bd75"},
-    {"name":"tplpart-016","size_bytes":48000,"sha256":"a87b5a96edcbcf924a23d623f1884a365bc5dca05eece36b945df83ce004991f"},
-    {"name":"tplpart-017","size_bytes":48000,"sha256":"f67966800cba2bee1114841e41047e78b2526b329f5401641bb72a0df4b4c9e3"},
-    {"name":"tplpart-018","size_bytes":48000,"sha256":"b223a3b193cf9cb2d19fd05d1dcc36e6392d58582f61b2442118c986564523ed"},
-    {"name":"tplpart-019","size_bytes":48000,"sha256":"8eefe1cd5906ca4b16f7e2d8aa06369d0c288e84a33a06266ec05eb13d589a43"},
-    {"name":"tplpart-020","size_bytes":48000,"sha256":"06e44f0cdd7f850cb0536d60898007526739e861224300659ca600f5f5e6c312"},
-    {"name":"tplpart-021","size_bytes":48000,"sha256":"a3a9eae1b42f7659ba1e2657a706397f3f159b197f93b1d39a4591ad4c8eab7e"},
-    {"name":"tplpart-022","size_bytes":48000,"sha256":"9f2b60713295b33f5ac3b700517966081de517857e18bb97ffafcce168bb1906"},
-    {"name":"tplpart-023","size_bytes":48000,"sha256":"7a5062406d1fc3debafe4e4c1a5c8ee929c2c9da0d7d1811d672eaebf97b68db"},
-    {"name":"tplpart-024","size_bytes":48000,"sha256":"65ab9dcfd621d0ed6d750f378a2acc6ed29938ed6c9384f049915c5db334f508"},
-    {"name":"tplpart-025","size_bytes":48000,"sha256":"57cc8854c1b8a6ebada90fee4fec1ffb1ffcfb0b8b72bcd205c3a975e954e1c3"},
-    {"name":"tplpart-026","size_bytes":48000,"sha256":"28fc37dde704cc0fb1f0640347816335cf5feb7784002138531970bb2f37f5ab"},
-    {"name":"tplpart-027","size_bytes":48000,"sha256":"50692f93fbeb796c47ff4d0ad93e5f1fa51734e9e323dd786cd966ca51b84e28"},
-    {"name":"tplpart-028","size_bytes":48000,"sha256":"d4ae8d46c30639f9dd00b6d99adb5a202095c99ef8bdbd3bda7a49c614be5137"},
-    {"name":"tplpart-029","size_bytes":48000,"sha256":"7875aaba0d9ae47bb9fee360b4a3f36f9471c052f81be75047bf88b507733159"},
-    {"name":"tplpart-030","size_bytes":48000,"sha256":"cfec7e5ae6d1048b5076c8b2e5debf969107fcdbb9aa67dc34486343bf6c7b1c"},
-    {"name":"tplpart-031","size_bytes":48000,"sha256":"65c46106460a61b58b88188c2d63a01145bb1b39fc7deb08ddca8b8d0d185978"},
-    {"name":"tplpart-032","size_bytes":48000,"sha256":"f5bc92e0aa429cad2d354173f6d3b90ea5044309183f84dfedc3e2db2cde6ed7"},
-    {"name":"tplpart-033","size_bytes":48000,"sha256":"7458088de46caedd506a9a61a3ae6828da4b3103733ce5b4af21139596cca8b7"},
-    {"name":"tplpart-034","size_bytes":48000,"sha256":"90559a0f865e02673f7e8fbc3452f739cac6dc62b019dc3e340c479b6fae2dfc"},
-    {"name":"tplpart-035","size_bytes":48000,"sha256":"d5c4d1f2c71e547f3fd6d0efd3e087b153fa2b9f84d590931127c9cbe3fc32dd"},
-    {"name":"tplpart-036","size_bytes":48000,"sha256":"128491bb71899439ebe61aad4112889dfdfe453ede8090201b2439cb9dffd804"},
-    {"name":"tplpart-037","size_bytes":48000,"sha256":"1394240bb818e7fa28e621d17a31ecbb1a74a39708c6ad32e0df35f58d03d119"},
-    {"name":"tplpart-038","size_bytes":48000,"sha256":"e1ef6b32916b83a8a5fe6e52b0a15e706f06fa522465d1198fee8379f94cc783"},
-    {"name":"tplpart-039","size_bytes":48000,"sha256":"d835526617303a2ae6ee1d7aa5519b7adac5fe416303dd07cc25b2846c961d5f"},
-    {"name":"tplpart-040","size_bytes":48000,"sha256":"a83a0b05610a8f0672c20e403353f33edcf9b3e9771c23cf2a005cf0cb0016b2"},
-    {"name":"tplpart-041","size_bytes":48000,"sha256":"b2549893dcfb21f4b1c7e495022d117f9927aba4b9f16aff3006725ae9bc44e6"},
-    {"name":"tplpart-042","size_bytes":48000,"sha256":"f887a2d794783a1d34399404aa8f6869f5c454ec4322d3ec1afd17b1ce9c918b"},
-    {"name":"tplpart-043","size_bytes":48000,"sha256":"50d6b97ce83a3b5b3fec2b2378bc4b7aa537ebfff36b0f236cec1ca9aad702de"},
-    {"name":"tplpart-044","size_bytes":48000,"sha256":"883d9a2393e0ba4006add6c63371d92644835a27f1cf0054655adfb77f9f2b83"},
-    {"name":"tplpart-045","size_bytes":48000,"sha256":"6a320bcac4684eef7c9f0e4df2812f403f428efcad6c99d942c24c3971f6d3c1"},
-    {"name":"tplpart-046","size_bytes":48000,"sha256":"08828edb4f9c51ab7d6953dc7588d6d8837ff5fdba641541240d77622df75505"},
-    {"name":"tplpart-047","size_bytes":45600,"sha256":"89e415c1aacc2459541cbf1b14ec1da9589bfcf7594f769c4332b110a3df1e15"}
+    {
+      "name": "tplpart-000",
+      "size_bytes": 48000,
+      "sha256": "34b41d5bdad5d01e1c7029016b36ed1b944bb658f688e3f387ac20474faf41a0"
+    },
+    {
+      "name": "tplpart-001",
+      "size_bytes": 48000,
+      "sha256": "3af26a1fa70a9b1c1886c5a0ce1fead46ef7cb6c20f017038ea7c43de38c1b81"
+    },
+    {
+      "name": "tplpart-002",
+      "size_bytes": 48000,
+      "sha256": "bc4ae5963e16005e68cee6f7ba92f446ff77d3003d4f50e63234d16c04c03aee"
+    },
+    {
+      "name": "tplpart-003",
+      "size_bytes": 48000,
+      "sha256": "5791df236879cdc859dde4af8fcb32f20a0adf2ac7ab5875aafaf9b4cc237bc2"
+    },
+    {
+      "name": "tplpart-004",
+      "size_bytes": 48000,
+      "sha256": "67bc2b65d198cd0ca492b980defcec38761f14222a5d084338ae05fe09ba9774"
+    },
+    {
+      "name": "tplpart-005",
+      "size_bytes": 48000,
+      "sha256": "fa248d6a4ed74bc2c4d8582a5b6130ce7ac481f86af0f1aeef0c669114e12324"
+    },
+    {
+      "name": "tplpart-006",
+      "size_bytes": 48000,
+      "sha256": "03e927520f23e99d024c01f2e8afc5f9ada304a3875f7a581bff720fdc2c12da"
+    },
+    {
+      "name": "tplpart-007",
+      "size_bytes": 48000,
+      "sha256": "88a340e7b36ebefd115e70ef53d77cb978adb7c45cc93b1df8d2557fefd43ef0"
+    },
+    {
+      "name": "tplpart-008",
+      "size_bytes": 48000,
+      "sha256": "b35c0aea965444458a093adc94a203240fec5607457a6c8956ffb7c306366359"
+    },
+    {
+      "name": "tplpart-009",
+      "size_bytes": 48000,
+      "sha256": "d92b73e01f6f86503073fd4c203b70dfbb47cc29e0fb304e3c1cb344f4e23137"
+    },
+    {
+      "name": "tplpart-010",
+      "size_bytes": 48000,
+      "sha256": "7901eef5209d03658292249e651ac0660012ef1098fb48e891a40d891880bacf"
+    },
+    {
+      "name": "tplpart-011",
+      "size_bytes": 48000,
+      "sha256": "f351466abcf76dd53d83a707d4a702e43b1ee9058ba04281b0a05b03541f2e55"
+    },
+    {
+      "name": "tplpart-012",
+      "size_bytes": 48000,
+      "sha256": "959ba556aea93ebb65c4789494187829a4017bb62dcb7702d66aa31222e907a4"
+    },
+    {
+      "name": "tplpart-013",
+      "size_bytes": 48000,
+      "sha256": "11ec9415d74d3caf85bd10e0422feafb5dd6a4f7d8a9043ef50c5eaa9410efe2"
+    },
+    {
+      "name": "tplpart-014",
+      "size_bytes": 48000,
+      "sha256": "ec02c7d965533a6733936f6e73d321a2a62db6f5f2cb5b264b48ac9a173bc24a"
+    },
+    {
+      "name": "tplpart-015",
+      "size_bytes": 48000,
+      "sha256": "1b8edcf4895252dba040e8b6b688a55bb9d52816df50d605b0b499338e413b77"
+    },
+    {
+      "name": "tplpart-016",
+      "size_bytes": 48000,
+      "sha256": "4b3f3d3291110f655ec5cb2d5be74455c35998f001ffc7510ad7400051526a66"
+    },
+    {
+      "name": "tplpart-017",
+      "size_bytes": 48000,
+      "sha256": "292165e9f0f769742dafd7338bb2f5cfdad56c9030a27f637ebe461fe0e0afa7"
+    },
+    {
+      "name": "tplpart-018",
+      "size_bytes": 48000,
+      "sha256": "2f850ca2375056582cfe4d59a500e6103b6dc36c4241f282bfb16af461cec293"
+    },
+    {
+      "name": "tplpart-019",
+      "size_bytes": 48000,
+      "sha256": "f93bab9caef14012283870754547648e5faad24c01afc3f8f7cb9aa9bea1cee7"
+    },
+    {
+      "name": "tplpart-020",
+      "size_bytes": 48000,
+      "sha256": "e1585137191d7c8a840cd0538e9a0fde646000d8ca5abd4922f1b5d037e020f4"
+    },
+    {
+      "name": "tplpart-021",
+      "size_bytes": 48000,
+      "sha256": "db7fd8584fe6b3c03ecd8ce1969c74b0dd56d8518ac407c71038c7e5c3a9618e"
+    },
+    {
+      "name": "tplpart-022",
+      "size_bytes": 48000,
+      "sha256": "126a46cfb343840ec9a93f861b4c8925e8ae252bf6a57da8fe5692b93226ec16"
+    },
+    {
+      "name": "tplpart-023",
+      "size_bytes": 48000,
+      "sha256": "f729a5decdd0778cc0492351b0ec9ec445161f3c5079f9a96e62b23f02da618a"
+    },
+    {
+      "name": "tplpart-024",
+      "size_bytes": 48000,
+      "sha256": "d2dddcc7116fecdd1284f73d0c8f31191d7fbf9d50267b7590060c314193356c"
+    },
+    {
+      "name": "tplpart-025",
+      "size_bytes": 48000,
+      "sha256": "90b377313c920a2a4697828f9acbae782902bbdd22bea92d5bde1211d3d7c156"
+    },
+    {
+      "name": "tplpart-026",
+      "size_bytes": 48000,
+      "sha256": "7bc816eca61f569af74fa749fc36f8e9def6b4da0259320c22b318f5d5559b89"
+    },
+    {
+      "name": "tplpart-027",
+      "size_bytes": 48000,
+      "sha256": "cf9cb256660220a08da444fe86d39224e3dc907566e7c2d657758260f910f228"
+    },
+    {
+      "name": "tplpart-028",
+      "size_bytes": 48000,
+      "sha256": "2e135542f11a520f80b63f812c9da87dbb834178750d3871f309357d7061e77c"
+    },
+    {
+      "name": "tplpart-029",
+      "size_bytes": 48000,
+      "sha256": "724fa36d6646eb1dcca5347efe43e4ede38afb3c79f0901d377476b76a6d8e4e"
+    },
+    {
+      "name": "tplpart-030",
+      "size_bytes": 48000,
+      "sha256": "185fe415829f92164be5e499ee6ace56b25517a2d58140164d18ae3d0d2c3528"
+    },
+    {
+      "name": "tplpart-031",
+      "size_bytes": 48000,
+      "sha256": "25495cb7cc9bb7d89d85116581ad9dedd9ea1378431117809074f2b6dc7a0175"
+    },
+    {
+      "name": "tplpart-032",
+      "size_bytes": 48000,
+      "sha256": "dbb808638ab5ed69506619357d18dda5d07e341f254ab4d9ff6b6373d872e87f"
+    },
+    {
+      "name": "tplpart-033",
+      "size_bytes": 48000,
+      "sha256": "22a13f7d10a38786fc0a1fc35d6a1f3e17594de71bba8d9bd59c870564871a3c"
+    },
+    {
+      "name": "tplpart-034",
+      "size_bytes": 48000,
+      "sha256": "538d44103b8ae0c71e359cbb329ebf28ea829b40f7a891a79ad9038b18dd1948"
+    },
+    {
+      "name": "tplpart-035",
+      "size_bytes": 48000,
+      "sha256": "12846cd3189c14e8958e8c5873cc6cf6a1e98d2843fa23ba077547a7468089f8"
+    },
+    {
+      "name": "tplpart-036",
+      "size_bytes": 48000,
+      "sha256": "28698b6b0863ca1c7b6744264080853dfcd6d31087cbacbd7c3e692f6481ac64"
+    },
+    {
+      "name": "tplpart-037",
+      "size_bytes": 48000,
+      "sha256": "3c28ba2d93b20ce4043ccb01987840e2fe0009102c7f0fe6a777dd65abf5e5b9"
+    },
+    {
+      "name": "tplpart-038",
+      "size_bytes": 48000,
+      "sha256": "6f2bfc3ded517bec07510c36c915863e7964b6aaaa4994446cdff0cf2d513953"
+    },
+    {
+      "name": "tplpart-039",
+      "size_bytes": 48000,
+      "sha256": "bfb6ebcf5efb6f2a84431df55d4879136d23a53af53cadbec27d105ac40e64c0"
+    },
+    {
+      "name": "tplpart-040",
+      "size_bytes": 48000,
+      "sha256": "76ddc3de573751b2df0d96c2bf79ec5f2907eea645762c3a9b7e218e924b8732"
+    },
+    {
+      "name": "tplpart-041",
+      "size_bytes": 48000,
+      "sha256": "f34bf32f53076fa2cf5a33aacdc24639b5d8ed6008810ff01887b9307d5fc227"
+    },
+    {
+      "name": "tplpart-042",
+      "size_bytes": 48000,
+      "sha256": "5f2a91c41e445a697d5c703a665379dfb8d203c1a275eefd041d2fa32b755c09"
+    },
+    {
+      "name": "tplpart-043",
+      "size_bytes": 48000,
+      "sha256": "0a57f8d4b6029c4b4e6ce6b646e40d30536476e85ba1dfe7e00821c7f68b6135"
+    },
+    {
+      "name": "tplpart-044",
+      "size_bytes": 48000,
+      "sha256": "887dbe8c6d84d827567218fb62a9c087f49fccc3457dc5b65ffc31188ee28bb0"
+    },
+    {
+      "name": "tplpart-045",
+      "size_bytes": 48000,
+      "sha256": "603e2a3e171d30064b4fe160956c657e0dbbbfd0a9067df8e3bcdaa216455faf"
+    },
+    {
+      "name": "tplpart-046",
+      "size_bytes": 48000,
+      "sha256": "1bf20c6d648a5b0d07537e4de72abed3af6edc0c9487e46febf4e5572eb8cc09"
+    },
+    {
+      "name": "tplpart-047",
+      "size_bytes": 42972,
+      "sha256": "74943a7c1a4b8e93ecccceb848228aabf54b14b2592a1f2824fa826b8b534781"
+    }
   ]
 }

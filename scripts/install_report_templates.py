@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from reporting.template_v3 import load_reference_manifest, verify_template_pack, TemplateV3Error
+from reporting.template_v3 import load_reference_manifest, verify_coordinate_detail, verify_template_pack, TemplateV3Error
 from scripts.build_report_coordinate_pack import compile_pack, write_pack, COMPILER_ID
 
 
@@ -44,12 +44,12 @@ def _pair(root: Path, manifest: dict, prefix: str) -> tuple[dict, dict] | None:
     if not mp.is_file() or not dp.is_file():
         return None
     ma = _sha256(mp)
-    da = _sha256(dp)
-    if ma != manifest_meta.get("sha256") or da != detail_meta.get("sha256"):
-        raise TemplateV3Error(f"checksum mismatch for {prefix} v3 coordinate artifacts")
+    if ma != manifest_meta.get("sha256"):
+        raise TemplateV3Error(f"checksum mismatch for {prefix} v3 coordinate manifest")
+    detail_result = verify_coordinate_detail(dp, detail_meta, mp.read_bytes())
     return (
         {"filename": mname, "sha256": ma, "status": "VERIFICADO"},
-        {"filename": dname, "sha256": da, "status": "VERIFICADO"},
+        {"filename": dname, **detail_result},
     )
 
 

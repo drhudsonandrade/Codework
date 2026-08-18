@@ -10,7 +10,7 @@ on:
       - 'scripts/install_report_templates.py'
       - 'scripts/verify_template_store.py'
       - 'tests/**'
-      - 'docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_2026-08-16.json'
+      - 'docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_2026-08-18.json'
       - '.github/workflows/genoma-visual-qa-candidates.yml'
   pull_request:
     paths:
@@ -20,7 +20,7 @@ on:
       - 'scripts/install_report_templates.py'
       - 'scripts/verify_template_store.py'
       - 'tests/**'
-      - 'docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_2026-08-16.json'
+      - 'docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_2026-08-18.json'
       - '.github/workflows/genoma-visual-qa-candidates.yml'
   workflow_dispatch:
 
@@ -37,20 +37,48 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install pinned renderer dependencies
-        run: pip install -r reporting/requirements.txt
+        run: |
+          pip install -r reporting/requirements.txt
+          # template-v3 DOCX rendering shells out to poppler.
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils
+
+      # The sealed template pack lives in this private repository, so the approved
+      # template-v3 path can be exercised for real instead of only reading stored evidence.
+      - name: Materialize and install the approved v3.0 template pack
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_template_store.py --materialize "$RUNNER_TEMP/genoma-templates"
+          python3 scripts/install_report_templates.py \
+            --source-dir "$RUNNER_TEMP/genoma-templates" \
+            --target-dir "$RUNNER_TEMP/genoma-templates-installed" \
+            --evidence "$RUNNER_TEMP/template-install.json"
+
+      - name: Execute static pixel QA against the approved templates
+        run: |
+          set -euo pipefail
+          mkdir -p visual-qa
+          python3 scripts/run_editorial_pixel_qa.py \
+            --template-dir "$RUNNER_TEMP/genoma-templates-installed" \
+            --output visual-qa/static-pixel-qa.json
+          jq -e '.status == "VERIFICADO" and .aggregate.result == "PASS" and .aggregate.outside_changed_pixels == 0 and .aggregate.reports == 11' \
+            visual-qa/static-pixel-qa.json >/dev/null
+          echo 'measured static pixel QA: PASS'
       - name: Validate pinned v3 reference identities and static pixel QA evidence
         run: |
           python3 - <<'PY'
           import json
           from pathlib import Path
           index=json.loads(Path('reporting/reference_v3_manifest.json').read_text())
-          qa=json.loads(Path('docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_2026-08-16.json').read_text())
+          qa=json.loads(Path('docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_2026-08-18.json').read_text())
           assert set(index['reports']) == {f'{i:02d}' for i in range(1,12)}
           assert index['coordinate_compiler']['id'] == 'fitz-1.26.7-genoma-v2'
           assert qa['status'] == 'VERIFICADO'
           assert qa['aggregate'] == {'outside_changed_pixels': 0, 'reference_pages': 100, 'reports': 11, 'result': 'PASS'}
           assert qa['coordinate_compiler']['manifest_sha256'] == index['generated_coordinate_manifest']['sha256']
-          assert qa['coordinate_compiler']['compressed_detail_sha256'] == index['generated_coordinate_detail']['sha256']
+          # Compare the decoded coordinate payload, not the .gz container: DEFLATE bytes are
+          # not reproducible across zlib builds (zlib-ng#2216), so the container hash is
+          # environment-specific and can never be a portable contract.
+          assert qa['coordinate_compiler']['compressed_detail_sha256'] == index['generated_coordinate_detail']['content_sha256']
           for rid, meta in index['reports'].items():
               assert qa['reports'][rid]['sha256'] == meta['sha256']
               assert qa['reports'][rid]['pages'] == meta['page_count']
@@ -116,9 +144,10 @@ jobs:
               'execution_manifest': {'status': 'VERIFICADO'},
               'sources': ['fixture:visual-reference'],
               'limitations': 'Fixture editorial; não representa paciente.',
-              # No approved v3.0 template pack is mounted here, so these candidates come
-              # from the programmatic fallback. Acknowledged explicitly; the renderer
-              # stamps the same disclosure into every artifact it produces.
+              # This step deliberately exercises the programmatic fallback (the approved
+              # pack is installed in an earlier step but not selected here), so the
+              # disclosure path stays covered. Acknowledged explicitly; the renderer stamps
+              # RENDERIZAÇÃO PROGRAMÁTICA into every artifact it produces.
               'allow_programmatic_final': True,
           }
           out = Path('visual-qa/candidates')
@@ -135,6 +164,8 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: genoma-v3-visual-candidates-${{ github.sha }}
-          path: visual-qa/candidates
+          path: |
+            visual-qa/candidates
+            visual-qa/static-pixel-qa.json
           retention-days: 30
           if-no-files-found: error

@@ -30,11 +30,14 @@ class TemplateV3ContractTest(unittest.TestCase):
     def test_external_template_pack_verifies_and_report10_strict_docx_is_editable(self):
         from reporting.engine import render_document
         from reporting.editorial_v3 import write_editorial_bundle
-        from reporting.template_v3 import load_reference_manifest, verify_template_pack
+        from reporting.template_v3 import verify_template_pack
+        from reporting.editorial_v3 import _verified_coordinate_manifest
         template_dir=Path(os.environ['GENOMA_REPORT_TEMPLATE_DIR'])
         verification=verify_template_pack(template_dir)
         self.assertEqual(verification['verified_reports'],11)
-        detailed=load_reference_manifest(template_dir/'GENOMA_V3_TEMPLATE_MANIFEST.json')
+        # Resolve whichever hash-verified coordinate pair is installed (external or the
+        # deterministically generated v2 pair) instead of assuming one filename.
+        detailed,_=_verified_coordinate_manifest(template_dir)
         meta=detailed['reports']['10']
         fields={item['field_id']:'NÃO DISP.' for item in meta['fields'] if not item.get('guidance_only')}
         data={
