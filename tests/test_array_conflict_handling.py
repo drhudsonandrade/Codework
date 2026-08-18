@@ -23,7 +23,23 @@ if str(ROOT) not in sys.path:
 from array_pipeline.annotation import _orientation
 from array_pipeline.qc import UNRESOLVED_OVERLAP_STATUSES, inspect_array
 
-QC_CONTEXT = {"input": {"strand": "forward", "strand_evidence": "declared"}}
+QC_CONTEXT = {
+    "input": {
+        "strand": "forward",
+        "strand_evidence": "declared",
+        "strand_evidence_verified": True,
+    }
+}
+
+#: A real harmonized export declares no build/strand metadata at all. Consensus alone must
+#: not be promoted to verified orientation in that case.
+QC_NO_STRAND_EVIDENCE = {
+    "input": {
+        "strand": "NÃO DISPONÍVEL",
+        "strand_evidence": "NÃO DISPONÍVEL",
+        "strand_evidence_verified": False,
+    }
+}
 
 
 def _attestation(input_sha: str) -> str:
@@ -62,10 +78,55 @@ def _fixture(rows: list[str]):
 
 
 class OrientationTest(unittest.TestCase):
-    def test_consensus_record_is_verified(self):
+    def test_consensus_with_documented_strand_provenance_is_verified(self):
         status, basis = _orientation({"SOURCES": "GM", "STATUS": "consensus"}, "harmonized_v1", QC_CONTEXT)
         self.assertEqual(status, "VERIFICADO")
-        self.assertEqual(basis, "cross-platform consensus")
+        self.assertIn("cross-platform consensus", basis)
+        self.assertIn("forward-strand provenance", basis)
+
+    def test_consensus_without_strand_evidence_is_only_inferido(self):
+        """Agreement proves the vendors matched each other, not which strand they used.
+
+        If both reported the reverse strand, an AG call reads TC in both files: they agree
+        perfectly while both are flipped. A real harmonized export declares no strand
+        metadata at all, and 9 of its 14 baseline markers were being marked VERIFICADO on
+        the strength of consensus alone.
+        """
+        status, basis = _orientation(
+            {"SOURCES": "GM", "STATUS": "consensus"}, "harmonized_v1", QC_NO_STRAND_EVIDENCE
+        )
+        self.assertEqual(status, "INFERIDO")
+        self.assertIn("mutual consistency", basis)
+        self.assertIn("not absolute strand orientation", basis)
+
+    def test_unverified_strand_evidence_does_not_count_as_evidence(self):
+        """The old proxy accepted any non-empty string as strand evidence."""
+        context = {
+            "input": {
+                "strand": "forward",
+                "strand_evidence": "o laboratório disse que é forward",
+                "strand_evidence_verified": False,
+            }
+        }
+        status, _ = _orientation({"SOURCES": "GM", "STATUS": "consensus"}, "harmonized_v1", context)
+        self.assertEqual(status, "INFERIDO")
+
+    def test_an_unrecognised_harmonizer_status_is_refused_not_assumed_clean(self):
+        """A denylist fails open; a status neither list anticipated was treated as clean."""
+        status, basis = _orientation(
+            {"SOURCES": "GM", "STATUS": "some_future_harmonizer_state"}, "harmonized_v1", QC_CONTEXT
+        )
+        self.assertEqual(status, "NÃO DISPONÍVEL")
+        self.assertIn("unrecognised", basis)
+
+    def test_the_ambiguous_duplicate_status_emitted_by_real_data_is_unresolved(self):
+        """Found in a real export: the same rsid twice in one vendor file with `II|DD`."""
+        self.assertIn("genera_ambiguous_duplicate", UNRESOLVED_OVERLAP_STATUSES)
+        status, basis = _orientation(
+            {"SOURCES": "G", "STATUS": "genera_ambiguous_duplicate"}, "harmonized_v1", QC_CONTEXT
+        )
+        self.assertEqual(status, "NÃO DISPONÍVEL")
+        self.assertNotIn("consensus", basis)
 
     def test_unresolved_records_are_never_reported_as_consensus(self):
         for unresolved in sorted(UNRESOLVED_OVERLAP_STATUSES):

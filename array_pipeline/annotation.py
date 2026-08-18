@@ -9,6 +9,7 @@ from typing import Any
 
 from array_pipeline.qc import (
     HARMONIZED_COLUMNS,
+    INTERPRETABLE_OVERLAP_STATUSES,
     RAW_COLUMNS,
     UNRESOLVED_OVERLAP_STATUSES,
     _canonical_gt,
@@ -40,8 +41,17 @@ def _stable_json(value: Any) -> bytes:
 
 
 def _orientation(row: dict[str, str], schema: str, qc: dict[str, Any]) -> tuple[str, str]:
-    strand = qc.get("input", {}).get("strand")
-    strand_evidence = qc.get("input", {}).get("strand_evidence")
+    inputs = qc.get("input", {})
+    strand = inputs.get("strand")
+    strand_evidence = inputs.get("strand_evidence")
+    # Prefer the verdict the QC published. The old proxy — "the evidence string is not the
+    # literal 'NÃO DISPONÍVEL'" — is satisfied by any non-empty text, including an
+    # attestation that failed structural verification.
+    verified = inputs.get("strand_evidence_verified")
+    if verified is None:
+        verified = strand_evidence not in {None, "", "NÃO DISPONÍVEL"}
+    forward = strand in {"forward", "plus", "+"} and bool(verified)
+
     if schema.startswith("harmonized"):
         sources = (row.get("SOURCES") or "").strip()
         status = (row.get("STATUS") or "").strip().lower()
@@ -50,14 +60,28 @@ def _orientation(row: dict[str, str], schema: str, qc: dict[str, Any]) -> tuple[
         # resolve the conflict by assertion, which sections 4 and 7 forbid.
         if status in UNRESOLVED_OVERLAP_STATUSES:
             return "NÃO DISPONÍVEL", f"unresolved cross-platform record ({status}); not auto-resolved"
+        # An allowlist, so a status this module has never seen is refused rather than
+        # assumed clean. A real harmonized export emitted ten distinct STATUS values and one
+        # of them was unknown here.
+        if status not in INTERPRETABLE_OVERLAP_STATUSES:
+            return "NÃO DISPONÍVEL", f"unrecognised harmonizer status ({status}); not assumed interpretable"
         if sources == "GM":
-            return "VERIFICADO", "cross-platform consensus"
-        if sources == "M" and strand == "forward" and strand_evidence not in {None, "NÃO DISPONÍVEL"}:
+            # Agreement proves both vendors used the same strand convention, not which one:
+            # if both reported the reverse strand an AG call would read TC in both files and
+            # they would agree perfectly while both were flipped.
+            if forward:
+                return "VERIFICADO", "cross-platform consensus with documented forward-strand provenance"
+            return (
+                "INFERIDO",
+                "cross-platform consensus establishes mutual consistency between vendors, "
+                "not absolute strand orientation",
+            )
+        if sources == "M" and forward:
             return "VERIFICADO", "MyHeritage forward-strand source metadata"
         if sources == "G":
             return "INFERIDO", "Genera-only locus; orientation is not independently verified"
         return "NÃO DISPONÍVEL", "source-specific orientation evidence unavailable"
-    if strand in {"forward", "plus", "+"} and strand_evidence not in {None, "NÃO DISPONÍVEL"}:
+    if forward:
         return "VERIFICADO", str(strand_evidence)
     return "NÃO DISPONÍVEL", "source-specific orientation evidence unavailable"
 

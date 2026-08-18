@@ -1,0 +1,103 @@
+{
+  "schema": "genoma-array-provenance-markers-v1",
+  "id": "GENOMA-PROVENANCE-MARKERS",
+  "version": "2026-08-18.1",
+  "source": "dbSNP b156 / Ensembl GRCh37 e GRCh38. NECESSITA VERIFICAÇÃO INDEPENDENTE contra dbSNP antes de uso clínico: esta tabela foi curada manualmente e um erro nela produziria uma atestação de proveniência incorreta.",
+  "verification_status": "PROPOSTO",
+  "notes": [
+    "Coordenadas são 1-based, conforme dbSNP/Ensembl.",
+    "plus_alleles lista os dois alelos do SNP na fita plus (forward) do genoma de referência.",
+    "Marcadores palindrômicos (A/T ou C/G) são inúteis para determinar fita e estão marcados palindromic=true; eles são excluídos do teste de fita automaticamente.",
+    "A determinação de build usa apenas coordenadas; a de fita usa apenas conjuntos de alelos."
+  ],
+  "markers": [
+    {
+      "rsid": "rs429358",
+      "gene": "APOE",
+      "grch37": {"chromosome": "19", "position": 45411941},
+      "grch38": {"chromosome": "19", "position": 44908684},
+      "plus_alleles": ["T", "C"],
+      "palindromic": false
+    },
+    {
+      "rsid": "rs7412",
+      "gene": "APOE",
+      "grch37": {"chromosome": "19", "position": 45412079},
+      "grch38": {"chromosome": "19", "position": 44908822},
+      "plus_alleles": ["C", "T"],
+      "palindromic": false
+    },
+    {
+      "rsid": "rs6025",
+      "gene": "F5",
+      "grch37": {"chromosome": "1", "position": 169519049},
+      "grch38": {"chromosome": "1", "position": 169549811},
+      "plus_alleles": ["C", "T"],
+      "palindromic": false
+    },
+    {
+      "rsid": "rs1799963",
+      "gene": "F2",
+      "grch37": {"chromosome": "11", "position": 46761055},
+      "grch38": {"chromosome": "11", "position": 46739505},
+      "plus_alleles": ["G", "A"],
+      "palindromic": false
+    },
+    {
+      "rsid": "rs9923231",
+      "gene": "VKORC1",
+      "grch37": {"chromosome": "16", "position": 31107689},
+      "grch38": {"chromosome": "16", "position": 31096368},
+      "plus_alleles": ["C", "T"],
+      "palindromic": false
+    },
+    {
+      "rsid": "rs4149056",
+      "gene": "SLCO1B1",
+      "grch37": {"chromosome": "12", "position": 21331549},
+      "grch38": {"chromosome": "12", "position": 21178615},
+      "plus_alleles": ["T", "C"],
+      "palindromic": false
+    },
+    {
+      "rsid": "rs1799853",
+      "gene": "CYP2C9",
+      "grch37": {"chromosome": "10", "position": 96702047},
+      "grch38": {"chromosome": "10", "position": 94942290},
+      "plus_alleles": ["C", "T"],
+      "palindromic": false
+    },
+    {
+      "rsid": "rs1057910",
+      "gene": "CYP2C9",
+      "grch37": {"chromosome": "10", "position": 96741053},
+      "grch38": {"chromosome": "10", "position": 94981296},
+      "plus_alleles": ["A", "C"],
+      "palindromic": false
+    },
+    {
+      "rsid": "rs4244285",
+      "gene": "CYP2C19",
+      "grch37": {"chromosome": "10", "position": 96541616},
+      "grch38": {"chromosome": "10", "position": 94781859},
+      "plus_alleles": ["G", "A"],
+      "palindromic": false
+    },
+    {
+      "rsid": "rs738409",
+      "gene": "PNPLA3",
+      "grch37": {"chromosome": "22", "position": 44324727},
+      "grch38": {"chromosome": "22", "position": 43928847},
+      "plus_alleles": ["C", "G"],
+      "palindromic": true
+    },
+    {
+      "rsid": "rs17580",
+      "gene": "SERPINA1",
+      "grch37": {"chromosome": "14", "position": 94847262},
+      "grch38": {"chromosome": "14", "position": 94380925},
+      "plus_alleles": ["A", "T"],
+      "palindromic": true
+    }
+  ]
+}

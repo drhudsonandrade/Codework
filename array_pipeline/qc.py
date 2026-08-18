@@ -32,7 +32,31 @@ INDEL = re.compile(r"^(?:II|DD|ID|DI)$")
 # requires conflicts to stay recorded and never be arbitrarily resolved, and section 7
 # forbids assuming either platform is correct, so these loci must never be presented as
 # consensus. They are excluded from interpretation rather than blocking the whole array.
-UNRESOLVED_OVERLAP_STATUSES = frozenset({"coordinate_conflict", "ambiguous_overlap", "genotype_conflict"})
+#
+# `genera_ambiguous_duplicate` was added after a real harmonized export was found to emit
+# it 261 times: the same rsid appearing twice in one vendor's file with different values
+# (`II|DD`). It is an unresolved ambiguity exactly like the others.
+UNRESOLVED_OVERLAP_STATUSES = frozenset({
+    "coordinate_conflict",
+    "ambiguous_overlap",
+    "genotype_conflict",
+    "genera_ambiguous_duplicate",
+})
+
+# Statuses under which a harmonized record may be interpreted. This is an allowlist, not
+# the complement of the denylist above, because a denylist fails *open*: a harmonizer
+# emitting a status neither list anticipated would have been treated as clean. Real data
+# proved that risk is not theoretical — this file carries ten distinct STATUS values, and
+# one of them was unknown to this module.
+INTERPRETABLE_OVERLAP_STATUSES = frozenset({
+    "consensus",
+    "genera_only",
+    "myheritage_only",
+    "genera_only_call",
+    "myheritage_only_call",
+    "observed",
+    "",
+})
 
 BASELINE_RSIDS = [
     "rs1799807", "rs1803274", "rs17580", "rs28929474", "rs738409",
@@ -314,8 +338,21 @@ def inspect_array(
                 if schema.startswith("harmonized"):
                     marker_sources = (row.get("SOURCES") or "").strip()
                     if marker_sources == "GM":
-                        orientation_status = "VERIFICADO"
-                        orientation_basis = "cross-platform consensus"
+                        # Cross-platform agreement proves the two vendors used the SAME
+                        # strand convention; it does not prove which one. If both reported
+                        # the reverse strand, an AG call would read TC in both files and
+                        # they would agree perfectly while both being flipped. Consensus is
+                        # therefore mutual consistency (INFERIDO), and only documented
+                        # strand provenance can raise it to VERIFICADO.
+                        if strand in {"forward", "plus", "+"} and strand_evidence_verified:
+                            orientation_status = "VERIFICADO"
+                            orientation_basis = "cross-platform consensus with documented forward-strand provenance"
+                        else:
+                            orientation_status = "INFERIDO"
+                            orientation_basis = (
+                                "cross-platform consensus establishes mutual consistency between "
+                                "vendors, not absolute strand orientation"
+                            )
                     elif marker_sources == "M" and strand == "forward" and strand_evidence_verified:
                         orientation_status = "VERIFICADO"
                         orientation_basis = "MyHeritage forward-strand source metadata"
@@ -423,8 +460,14 @@ def inspect_array(
             "metadata": metadata,
             "build": build or "NÃO DISPONÍVEL",
             "build_evidence": build_evidence or "NÃO DISPONÍVEL",
+            # The verification verdict is published, not left for each consumer to
+            # re-derive. Downstream code was testing `strand_evidence != "NÃO DISPONÍVEL"`,
+            # which is true for any non-empty string — including one that failed
+            # `_verified_provenance`.
+            "build_evidence_verified": build_evidence_verified,
             "strand": strand or "NÃO DISPONÍVEL",
             "strand_evidence": strand_evidence or "NÃO DISPONÍVEL",
+            "strand_evidence_verified": strand_evidence_verified,
             "platform": platform or "NÃO DISPONÍVEL",
         },
         "metrics": {
