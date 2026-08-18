@@ -20,7 +20,7 @@ def final_data():
     return {
         "case_id": "CASE-VISUAL-001",
         "summary": "Conteúdo rastreável para teste editorial.",
-        "ruleset": {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026"},
+        "ruleset": {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026"},
         "publication_gate": {
             "passed": True,
             "consent_verified": True,

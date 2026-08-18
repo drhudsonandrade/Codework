@@ -1,5 +1,9 @@
 # Pre-deployment validation — 2026-08-15 UTC
 
+> **HISTÓRICO — SUPERSEDED.** Evidence gathered against ruleset **v3.3 (14/08/2026)**. The repository
+> is now governed by **v3.4 (17/08/2026)** and these checks were **not** re-executed under v3.4.
+> Preserved unaltered as provenance; no PASS below is a current claim.
+
 ## Result
 
 `PRE-DEPLOYMENT VALIDATION PASS / POST-DEPLOYMENT PENDENTE`

@@ -4,11 +4,16 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-RULESET_SHA = "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import normative
+from scripts.sealed_ruleset import SealedRulesetError, verify_transport
 
 
 def run(cmd: list[str]) -> tuple[int, str]:
@@ -26,8 +31,65 @@ def check(name: str, ok: bool, evidence: str, *, blocking: bool = True, status_i
     }
 
 
+def verify_ruleset_identity() -> tuple[bool, dict, str]:
+    """Prove the normative identity instead of asserting it.
+
+    The audit used to emit a literal `status: VIGENTE` block, so it kept attesting to a
+    superseded ruleset with nothing able to notice. Here the identity is decoded from the
+    sealed transport and checked byte-for-byte against the declared canonical artifact; if
+    that fails, the audit reports RULESET NÃO DISPONÍVEL/CONFLITANTE and blocks.
+    """
+    try:
+        evidence = verify_transport(ROOT / "normative" / "sealed")
+    except (OSError, UnicodeError, ValueError, SealedRulesetError) as exc:
+        return False, {"status": "NÃO DISPONÍVEL", "reason": f"{type(exc).__name__}: {exc}"}, (
+            f"RULESET NÃO DISPONÍVEL/CONFLITANTE: {type(exc).__name__}: {exc}"
+        )
+
+    expected = {
+        "status": normative.STATUS,
+        "version": normative.VERSION,
+        "effective_date": normative.EFFECTIVE_DATE,
+        "canonical_filename": normative.CANONICAL_FILENAME,
+        "normative_identifier": normative.NORMATIVE_IDENTIFIER,
+        "raw_sha256": normative.RAW_SHA256,
+        "section_count": normative.SECTION_COUNT,
+    }
+    mismatches = {k: {"expected": v, "observed": evidence.get(k)} for k, v in expected.items() if evidence.get(k) != v}
+
+    manifest_path = ROOT / normative.SHA_MANIFEST_RELATIVE
+    if not manifest_path.is_file():
+        mismatches["external_sha_manifest"] = {"expected": normative.SHA_MANIFEST_RELATIVE, "observed": None}
+    elif manifest_path.read_text(encoding="ascii").split() != [normative.RAW_SHA256, normative.CANONICAL_FILENAME]:
+        mismatches["external_sha_manifest"] = {"expected": "matching digest and filename", "observed": "mismatch"}
+
+    # REGRA DE UNICIDADE: exactly one source may be marked VIGENTE.
+    active = sorted(p.name for p in (ROOT / "manifests").glob("RULESET_V*.sha256"))
+    if active != [manifest_path.name]:
+        mismatches["unique_active_manifest"] = {"expected": [manifest_path.name], "observed": active}
+
+    ok = not mismatches
+    block = {
+        "status": evidence["status"] if ok else "NÃO DISPONÍVEL",
+        "version": evidence["version"],
+        "effective_date": evidence["effective_date"],
+        "normative_identifier": evidence["normative_identifier"],
+        "canonical_filename": evidence["canonical_filename"],
+        "sha256": evidence["raw_sha256"],
+        "section_count": evidence["section_count"],
+        "verification": "sealed transport decoded and hashed in this run",
+    }
+    detail = json.dumps(
+        {"verified": ok, "identity": block, "mismatches": mismatches}, ensure_ascii=False, indent=2, sort_keys=True
+    )
+    return ok, block, detail
+
+
 def audit(*, allow_template_sealed_only: bool = False) -> dict:
     checks: list[dict] = []
+
+    ruleset_ok, ruleset_block, ruleset_evidence = verify_ruleset_identity()
+    checks.append(check("RULESET_GATE", ruleset_ok, ruleset_evidence))
 
     rc, out = run(["python3", "scripts/validate_repo.py"])
     checks.append(check("REPOSITORY_CONTRACT", rc == 0, out))
@@ -72,7 +134,7 @@ def audit(*, allow_template_sealed_only: bool = False) -> dict:
     checks.append(check("NO_PERSONAL_GENOTYPE_FIXTURES", not tracked_like, json.dumps(tracked_like)))
 
     planes = {
-        "policy_control": "PASS" if all(c["state"] == "PASS" for c in checks if c["id"] in {"REPOSITORY_CONTRACT", "SUPPLY_CHAIN_LOCK"}) else "BLOCKED",
+        "policy_control": "PASS" if all(c["state"] == "PASS" for c in checks if c["id"] in {"RULESET_GATE", "REPOSITORY_CONTRACT", "SUPPLY_CHAIN_LOCK"}) else "BLOCKED",
         "scientific_data": "PASS" if next(c for c in checks if c["id"] == "SCIENTIFIC_DATA_PLANE_ARRAY")["state"] == "PASS" else "BLOCKED",
         "evidence": "PASS" if next(c for c in checks if c["id"] == "EVIDENCE_ANNOTATION_PLANE")["state"] == "PASS" else "BLOCKED",
         "audit": "PASS" if all(c["state"] == "PASS" for c in checks if c["blocking"]) else "BLOCKED",
@@ -81,7 +143,7 @@ def audit(*, allow_template_sealed_only: bool = False) -> dict:
     return {
         "schema": "genoma-v0.8-four-plane-audit-v1",
         "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "ruleset": {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026", "sha256": RULESET_SHA},
+        "ruleset": ruleset_block,
         "operational_status": "VERIFICADO" if not blocking_failures else "NÃO DISPONÍVEL",
         "four_planes": planes,
         "checks": checks,

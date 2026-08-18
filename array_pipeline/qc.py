@@ -13,12 +13,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TextIO
 
-RULESET = {
-    "status": "VIGENTE",
-    "version": "v3.3",
-    "effective_date": "14/08/2026",
-    "sha256": "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a",
-}
+import normative
+
+RULESET = normative.ruleset_block()
 
 HARMONIZED_COLUMNS = [
     "RSID", "CHROMOSOME", "POSITION", "CONSENSUS_RESULT", "STATUS",
@@ -406,7 +403,7 @@ def inspect_array(
         "schema": "genoma-snp-array-qc-v1",
         "operational_status": "VERIFICADO" if ready_for_limited_interpretation else "NÃO DISPONÍVEL",
         "evaluated_at": now,
-        "ruleset": RULESET,
+        "ruleset": normative.attested_ruleset_block(),
         "case_id": case_id,
         "input": {
             "path_name": path.name,

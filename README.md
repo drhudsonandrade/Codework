@@ -1,6 +1,6 @@
 # GENOMA deterministic runtime
 
-Private, reproducible genomics execution repository governed by the canonical GENOMA v3.3 ruleset.
+Private, reproducible genomics execution repository governed by the canonical GENOMA v3.4 ruleset.
 
 ## Architecture
 
@@ -8,7 +8,7 @@ Private, reproducible genomics execution repository governed by the canonical GE
 
 - `policy_engine/` — deterministic policy engine, structured attestations, HTTP/CLI interface and tamper-evident audit ledger.
 - `main.nf`, `nextflow.config`, `Dockerfile` — scientific data/runtime scaffold.
-- `normative/sealed/` — inactive byte-exact transport of the canonical v3.3 TXT; plaintext is materialized only at runtime and mounted read-only.
+- `normative/sealed/` — inactive byte-exact transport of the canonical v3.4 TXT; plaintext is materialized only at runtime and mounted read-only.
 - `mcp/` — optional interface only; not a source of truth and not required by the policy engine.
 - `adapters/` — optional Cloudflare/Temporal/Supabase/Vercel/microfn/OpenAI integration contracts.
 - `manifests/` — integrity/reference manifests.
@@ -16,7 +16,7 @@ Private, reproducible genomics execution repository governed by the canonical GE
 
 ## Normative source model
 
-There must be exactly one active runtime copy of `REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt`. Git stores only the expected raw SHA-256 and a sealed inactive transport. CI verifies the transport decodes byte-for-byte to SHA-256 `187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a`, then materializes it into an ephemeral runtime directory as mode `0444`.
+There must be exactly one active runtime copy of `REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt`. Git stores only the expected raw SHA-256 and a sealed inactive transport. CI verifies the transport decodes byte-for-byte to SHA-256 `ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580`, then materializes it into an ephemeral runtime directory as mode `0444`.
 
 ## Execution modes
 

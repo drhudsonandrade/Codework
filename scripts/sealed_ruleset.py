@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Single implementation of the GENOMA v3.3 sealed normative transport contract.
+"""Single implementation of the GENOMA sealed normative transport contract.
 
 The repository keeps the normative TXT inactive at rest as content-addressed Base64
 chunks. This module is the ONLY implementation allowed to decode, verify, and
 materialize that transport. Repository validation and production activation both call
 this code so their contracts cannot drift independently.
+
+The canonical identity it enforces comes from `normative/__init__.py`; the writer that
+produces the transport is `scripts/seal_ruleset.py`.
 """
 from __future__ import annotations
 
@@ -15,17 +18,25 @@ import json
 import os
 import re
 import socket
+import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-EXPECTED_SHA = "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a"
-EXPECTED_NAME = "REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt"
-EXPECTED_STATUS = "VIGENTE"
-EXPECTED_VERSION = "v3.3"
-EXPECTED_DATE = "14/08/2026"
-EXPECTED_SECTIONS = 263
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+import normative
+
+EXPECTED_SHA = normative.RAW_SHA256
+EXPECTED_NAME = normative.CANONICAL_FILENAME
+EXPECTED_STATUS = normative.STATUS
+EXPECTED_VERSION = normative.VERSION
+EXPECTED_DATE = normative.EFFECTIVE_DATE
+EXPECTED_IDENTIFIER = normative.NORMATIVE_IDENTIFIER
+EXPECTED_SECTIONS = normative.SECTION_COUNT
 MANIFEST_NAME = "MANIFEST.json"
 
 
@@ -141,14 +152,8 @@ def _verify_identity(raw: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
         text = raw.decode("utf-8")
     except UnicodeError as exc:
         raise SealedRulesetError("canonical normative payload is not UTF-8") from exc
-    required_lines = {
-        f"STATUS NORMATIVO: {EXPECTED_STATUS}",
-        f"VERSÃO NORMATIVA: {EXPECTED_VERSION}",
-        f"DATA FORMAL DE EMISSÃO E VIGÊNCIA: {EXPECTED_DATE}",
-        f"ARQUIVO CANÔNICO: {EXPECTED_NAME}",
-    }
     header = set(text.splitlines()[:20])
-    missing = sorted(required_lines - header)
+    missing = sorted(set(normative.REQUIRED_HEADER_LINES) - header)
     if missing:
         raise SealedRulesetError(f"canonical normative identity missing: {missing}")
     sections = sequential_sections(text)
@@ -160,11 +165,12 @@ def _verify_identity(raw: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
         "status": EXPECTED_STATUS,
         "version": EXPECTED_VERSION,
         "effective_date": EXPECTED_DATE,
+        "normative_identifier": EXPECTED_IDENTIFIER,
         "canonical_filename": EXPECTED_NAME,
         "raw_sha256": digest,
         "raw_size_bytes": len(raw),
         "section_count": len(sections),
-        "section_range": [0, 262],
+        "section_range": [0, normative.LAST_SECTION],
     }
 
 

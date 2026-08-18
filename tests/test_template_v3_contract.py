@@ -40,7 +40,7 @@ class TemplateV3ContractTest(unittest.TestCase):
         data={
             'case_id':'CASE-TEMPLATE-10',
             'summary':'fixture',
-            'ruleset':{'status':'VIGENTE','version':'v3.3','effective_date':'14/08/2026'},
+            'ruleset':{'status':'VIGENTE','version':'v3.4','effective_date':'17/08/2026'},
             'publication_gate':{'passed':True,'consent_verified':True,'qc_verified':True,'evidence_verified':True,'placeholders_resolved':True},
             'policy_evaluation':{'ready_for_requested_operation':True,'planes':{'policy_control':{'state':'PASS'},'scientific_data':{'state':'PASS'},'evidence':{'state':'PASS'},'audit':{'state':'PASS'}},'gates':[{'gate':'FINAL_AUDIT_GATE','state':'PASS','blocking':True}]},
             'post_deployment_status':'PASS','sections':{},'findings':[],'execution_manifest':{'status':'VERIFICADO'},'sources':['fixture'],'limitations':'fixture',

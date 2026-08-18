@@ -46,7 +46,7 @@ class ReportEngineTest(unittest.TestCase):
 
         data = {
             "case_id": "CASE-001",
-            "ruleset": {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026"},
+            "ruleset": {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026"},
             "publication_gate": {"passed": True, "consent_verified": True, "qc_verified": True, "evidence_verified": True, "placeholders_resolved": True},
             "policy_evaluation": {"ready_for_requested_operation": False, "planes": {}, "gates": []},
         }
@@ -60,7 +60,7 @@ class ReportEngineTest(unittest.TestCase):
         policy["gates"] = [{"gate": "FINAL_AUDIT_GATE", "state": "FAIL", "blocking": True}]
         data = {
             "case_id": "CASE-001",
-            "ruleset": {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026"},
+            "ruleset": {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026"},
             "publication_gate": {"passed": True, "consent_verified": True, "qc_verified": True, "evidence_verified": True, "placeholders_resolved": True},
             "policy_evaluation": policy,
         }
@@ -73,7 +73,7 @@ class ReportEngineTest(unittest.TestCase):
         data = {
             "case_id": "CASE-001",
             "summary": "Nenhum achado fictício é inserido pelo motor.",
-            "ruleset": {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026"},
+            "ruleset": {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026"},
             "publication_gate": {
                 "passed": True,
                 "consent_verified": True,
@@ -91,6 +91,41 @@ class ReportEngineTest(unittest.TestCase):
             self.assertTrue(all(path.is_file() for path in paths.values()))
             self.assertNotIn("[[", paths["markdown"].read_text(encoding="utf-8"))
             self.assertIn("POST-DEPLOYMENT: PENDENTE", paths["markdown"].read_text(encoding="utf-8"))
+
+    def test_final_report_records_the_governing_ruleset_in_its_execution_manifest(self):
+        """A published report must be auditable without CI logs (prompt-fonte 2.4)."""
+        import sys
+        from pathlib import Path as _Path
+
+        sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+        import normative
+        from reporting.engine import render_document
+
+        data = {
+            "case_id": "CASE-001",
+            "summary": "fixture",
+            "ruleset": {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026"},
+            "publication_gate": {
+                "passed": True,
+                "consent_verified": True,
+                "qc_verified": True,
+                "evidence_verified": True,
+                "placeholders_resolved": True,
+            },
+            "policy_evaluation": passing_policy_evaluation(),
+            "post_deployment_status": "PENDENTE",
+            "execution_manifest": {"status": "VERIFICADO"},
+        }
+        rendered = render_document("01", data, mode="FINAL")
+        manifest = rendered["data"]["execution_manifest"]
+        self.assertEqual(manifest["RULESET"], "VERIFICADO")
+        self.assertEqual(manifest["VERSÃO"], normative.VERSION)
+        self.assertEqual(manifest["VIGÊNCIA"], normative.EFFECTIVE_DATE)
+        self.assertEqual(manifest["RULESET_SHA256"], normative.RAW_SHA256)
+        self.assertEqual(manifest["status"], "VERIFICADO")
+        self.assertIn(normative.VERSION, rendered["markdown"])
+        # The caller's payload must not be mutated by rendering.
+        self.assertEqual(data["execution_manifest"], {"status": "VERIFICADO"})
 
 
 if __name__ == "__main__":

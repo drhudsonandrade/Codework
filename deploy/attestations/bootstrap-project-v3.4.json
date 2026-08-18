@@ -1,0 +1,35 @@
+{
+  "attestation_type": "GENOMA_PROJECT_BOOTSTRAP",
+  "status": "PROPOSTO",
+  "ruleset_identity": "v3.4/VIGENTE/17/08/2026",
+  "canonical_filename": "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt",
+  "canonical_sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
+  "verified_at": null,
+  "actor_type": null,
+  "actor_id": null,
+  "method": "not yet performed; requires direct inspection of the live project instructions after the v3.4 BOOTSTRAP CURTO is installed",
+  "checks": {
+    "consult_ruleset_before_relevant_genetic_analysis": false,
+    "require_status_vigente": false,
+    "require_version_v3_4": false,
+    "require_effective_date_2026_08_17": false,
+    "fail_closed_on_missing_or_conflicting_ruleset": false,
+    "runtime_resource_gate_before_real_calling": false,
+    "operational_status_contract_present": false,
+    "post_deployment_requires_live_15_of_15_zero_critical": false
+  },
+  "superseded_attestation": {
+    "ruleset_identity": "v3.3/VIGENTE/14/08/2026",
+    "canonical_sha256": "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a",
+    "status": "OBSOLETA",
+    "verified_at": "2026-08-16T08:36:00-03:00",
+    "note": "Retained as provenance only. A v3.3 bootstrap verification does not carry over to v3.4."
+  },
+  "renewal_instructions": [
+    "Remove or archive the v3.3 source so exactly one VIGENTE normative source remains.",
+    "Install the v3.4 BOOTSTRAP CURTO verbatim in the project operational instructions.",
+    "Inspect the live instructions directly, then set every check to true, set status to VERIFICADO and record verified_at, actor_type, actor_id and method.",
+    "Only then run the section-260 live smoke; it requires 15/15 with zero critical failures."
+  ],
+  "limitations": "Ruleset v3.4 section 258 keeps POST-DEPLOYMENT PROPOSTO/PENDENTE until the source is really replaced and the v3.4 BOOTSTRAP CURTO is really installed. Delivering the artifact is not deployment, so this attestation must stay PROPOSTO until a human verifies the live instructions. GitHub cannot introspect that configuration. The deterministic core does not depend on this bootstrap."
+}

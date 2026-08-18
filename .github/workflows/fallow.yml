@@ -23,10 +23,16 @@ jobs:
           cache-dependency-path: mcp/package-lock.json
       - name: Install pinned MCP dependencies
         run: npm ci --prefix mcp --ignore-scripts
+      # `root: mcp` is load-bearing, not cosmetic. All TypeScript in this repository is
+      # owned by mcp/package.json. Auditing from the repository root leaves fallow with no
+      # package manifest and no node_modules, so unused-dependencies and unlisted-dependency
+      # detection silently report nothing and the gate passes without having evaluated the
+      # rules it declares as errors.
       - name: Audit changed TypeScript/JavaScript
         uses: fallow-rs/fallow@45fd28766199acb1f939f6862274a37aad12770b # v3.16.0
         with:
           command: audit
+          root: mcp
           version: 3.16.0
           fail-on-issues: true
       - name: Surface security candidates for reviewer verification

@@ -15,9 +15,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import sys
+
 ROOT = Path(__file__).resolve().parent
+if str(ROOT.parent) not in sys.path:
+    sys.path.insert(0, str(ROOT.parent))
+
+import normative
+
 CATALOG_PATH = ROOT / "catalog.json"
-EXPECTED_RULESET = {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026"}
+EXPECTED_RULESET = normative.ruleset_block(include_sha256=False)
 REQUIRED_PLANES = ("policy_control", "scientific_data", "evidence", "audit")
 
 
@@ -80,7 +87,7 @@ def _model_markdown(report_id: str, model: dict[str, Any]) -> str:
         "",
         "**MODELO — NÃO É RESULTADO GENÉTICO**",
         "",
-        f"Modelo GENOMA v3.0 / {model['code']}. Ruleset exigido: v3.3 / VIGENTE / 14/08/2026.",
+        f"Modelo GENOMA v3.0 / {model['code']}. Ruleset exigido: v3.4 / VIGENTE / 17/08/2026.",
         "",
         f"Finalidade: {model['purpose']}",
         f"Público: {model['audience']}",
@@ -109,7 +116,7 @@ def _final_markdown(report_id: str, model: dict[str, Any], data: dict[str, Any])
         "",
         f"Caso: {_safe(data.get('case_id'))}",
         f"Versão do modelo: v3.0/{model['code']}",
-        "Ruleset: v3.3 / VIGENTE / 14/08/2026",
+        "Ruleset: v3.4 / VIGENTE / 17/08/2026",
         f"POST-DEPLOYMENT: {_safe(data.get('post_deployment_status'), 'PENDENTE')}",
         "",
         "## Finalidade",
@@ -208,6 +215,30 @@ def _to_html(markdown: str, title: str) -> str:
     return f"<!doctype html><html lang='pt-BR'><head><meta charset='utf-8'><title>{html.escape(title)}</title><style>{css}</style></head><body>{''.join(body)}</body></html>"
 
 
+def _stamp_ruleset_into_manifest(data: dict[str, Any]) -> dict[str, Any]:
+    """Record the governing ruleset inside the report's own Execution Manifest.
+
+    A published report has to be auditable on its own, away from CI logs, so the reader
+    can tell which normative version produced it. The identity is attested here rather
+    than copied from the caller's payload, so the printed line reflects what was actually
+    verified at render time.
+    """
+    stamped = deepcopy(data)
+    manifest = stamped.get("execution_manifest")
+    if not isinstance(manifest, dict):
+        manifest = {"status": _safe(manifest, "NÃO DISPONÍVEL")}
+    attested = normative.attested_ruleset_block()
+    manifest["RULESET"] = attested["attestation"]
+    manifest["VERSÃO"] = attested["version"]
+    manifest["VIGÊNCIA"] = attested["effective_date"]
+    if attested["attestation"] == "VERIFICADO":
+        manifest["RULESET_SHA256"] = attested["sha256"]
+    else:
+        manifest["RULESET_MOTIVO"] = attested["reason"]
+    stamped["execution_manifest"] = manifest
+    return stamped
+
+
 def render_document(report_id: str, data: dict[str, Any], *, mode: str = "MODEL") -> dict[str, Any]:
     catalog = load_catalog()
     if report_id not in catalog:
@@ -221,6 +252,7 @@ def render_document(report_id: str, data: dict[str, Any], *, mode: str = "MODEL"
         blockers = _publication_blockers(data)
         if blockers:
             raise ReportReleaseError("publication gate failed: " + ", ".join(blockers))
+        data = _stamp_ruleset_into_manifest(data)
         markdown = _final_markdown(report_id, model, data)
     else:
         markdown = _model_markdown(report_id, model)

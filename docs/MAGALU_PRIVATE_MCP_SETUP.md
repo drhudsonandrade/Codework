@@ -6,13 +6,13 @@
 
 Repository creation, CI success and a synthetic canary do not establish post-deployment status. Promotion requires deployment on the target VM, current runtime/resource gates, a live MCP canary, and the section 260 suite at 15/15 with no critical failure.
 
-The external ruleset manifest is `manifests/RULESET_V3.3.sha256`. Its SHA-256 was calculated from the supplied canonical v3.3 file; the ruleset text itself is intentionally not committed to the repository. Verify the secure copy before use:
+The external ruleset manifest is `manifests/RULESET_V3.4.sha256`. Its SHA-256 was calculated from the supplied canonical v3.4 file; the ruleset text itself is intentionally not committed to the repository. Verify the secure copy before use:
 
 ```bash
-scripts/verify_ruleset.sh /secure/project-sources/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt
+scripts/verify_ruleset.sh /secure/project-sources/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt
 ```
 
-This confirms the hash and the `VIGENTE`/`v3.3`/`14/08/2026` header but deliberately leaves deployment pending. In the ChatGPT Project, manually remove or mark older active rulesets obsolete, retain only the canonical v3.3 source, copy its **BOOTSTRAP CURTO** into Project Instructions, and only then run the 15 live prompts in section 260.
+This confirms the hash and the `VIGENTE`/`v3.4`/`17/08/2026` header but deliberately leaves deployment pending. In the ChatGPT Project, manually remove or mark older active rulesets obsolete, retain only the canonical v3.4 source, copy its **BOOTSTRAP CURTO** into Project Instructions, and only then run the 15 live prompts in section 260.
 
 ## 1. GitHub access
 

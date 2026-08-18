@@ -31,7 +31,7 @@ keeping at least two independent copies and retaining the manifests needed to ve
 - npm dependency graph pinned in `mcp/package-lock.json`.
 - Fallow action and CLI pinned to 3.16.0.
 - GRCh38 acquisition targets declared in `manifests/GRCh38.sources.tsv`.
-- External ruleset identity pinned in `manifests/RULESET_V3.3.sha256`.
+- External ruleset identity pinned in `manifests/RULESET_V3.4.sha256`.
 - Synthetic FASTQ, BAM and dual-caller VCF generation is deterministic.
 - GitHub main pushes build a SHA-tagged GHCR image and record its immutable digest.
 - A successful canary includes an explicit Conda package lock generated from the built image.

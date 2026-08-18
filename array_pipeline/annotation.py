@@ -18,12 +18,9 @@ from array_pipeline.qc import (
 from array_pipeline.targets import build_query_plan, load_target_manifest, sha256_json
 from evidence_adapters import get_adapter
 
-RULESET = {
-    "status": "VIGENTE",
-    "version": "v3.3",
-    "effective_date": "14/08/2026",
-    "sha256": "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a",
-}
+import normative
+
+RULESET = normative.ruleset_block()
 
 UNSUPPORTED_ARRAY_CLAIMS = [
     "genome-wide negative/exclusion claims",
@@ -225,7 +222,7 @@ def annotate_partial_genome(
         "operational_status": operational_status,
         "mode": mode,
         "evaluated_at": now,
-        "ruleset": RULESET,
+        "ruleset": normative.attested_ruleset_block(),
         "case_id": qc.get("case_id"),
         "input_sha256": qc.get("input", {}).get("sha256"),
         "target_manifest": {

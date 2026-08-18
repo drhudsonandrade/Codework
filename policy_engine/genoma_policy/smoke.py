@@ -50,4 +50,4 @@ def run_smoke(engine: PolicyEngine) -> dict[str, Any]:
     for case_id, expected_gate, manifest in smoke_cases(engine.ruleset):
         report=engine.evaluate(deepcopy(manifest)); matched=[g for g in report.gates if g.gate==expected_gate and g.state.value=="FAIL"]; ok=bool(matched); passed+=int(ok)
         results.append({"case":case_id,"expected_blocking_gate":expected_gate,"pass":ok,"observed":[g.to_dict() for g in report.gates if g.gate==expected_gate]})
-    return {"suite":"GENOMA v3.3 independent deterministic safety smoke","passed":passed,"total":len(results),"all_pass":passed==len(results),"post_deployment_claim":"NOT_GRANTED_BY_THIS_SUITE","results":results}
+    return {"suite":"GENOMA v3.4 independent deterministic safety smoke","passed":passed,"total":len(results),"all_pass":passed==len(results),"post_deployment_claim":"NOT_GRANTED_BY_THIS_SUITE","results":results}

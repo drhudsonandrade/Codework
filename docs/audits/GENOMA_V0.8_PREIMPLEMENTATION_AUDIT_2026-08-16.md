@@ -1,5 +1,8 @@
 # GENOMA v0.8 - Auditoria pré-implementação
 
+> **HISTÓRICO — SUPERSEDED.** Auditoria executada sob o ruleset **v3.3 (14/08/2026)**. O repositório passou a ser governado pela **v3.4 (17/08/2026)** e estes controles **não** foram reexecutados sob a v3.4. Preservada sem alteração como proveniência; nenhum PASS abaixo é uma afirmação atual.
+
+
 Data da auditoria: 2026-08-16
 
 ## Identidade normativa

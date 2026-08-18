@@ -73,7 +73,7 @@ class AuditGates:
             "bootstrap_installed": pd.get("bootstrap_installed") is True,
             "live_smoke_15_of_15": pd.get("live_smoke_passed") is True and pd.get("live_smoke_count") == 15,
             "no_critical_failure": pd.get("critical_failures") == 0,
-            "identity_recovered": pd.get("identity_recovered") == "v3.3/VIGENTE/14/08/2026",
+            "identity_recovered": pd.get("identity_recovered") == "v3.4/VIGENTE/17/08/2026",
         }
         if all(criteria.values()): return _gate("POST_DEPLOYMENT_GATE", True, blocking=False)
         missing = [name for name, ok in criteria.items() if not ok]

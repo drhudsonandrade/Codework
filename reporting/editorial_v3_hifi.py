@@ -437,7 +437,7 @@ def _docx(rendered: dict[str, Any], path: Path) -> dict[str, Any]:
 
     doc.core_properties.title = metadata["title"]
     doc.core_properties.subject = f"GENOMA v3.0 / {code} / deterministic genomic report"
-    doc.core_properties.keywords = f"GENOMA,{code},v3.3,genomics,report"
+    doc.core_properties.keywords = f"GENOMA,{code},v3.4,genomics,report"
     doc.save(path)
     return {"docx_font": "DejaVu Sans", "accent": accent, "a4": True}
 

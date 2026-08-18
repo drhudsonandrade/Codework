@@ -4,10 +4,15 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
-RULESET = {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026", "sha256": "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a"}
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import normative
 
 
 def sha256_file(path: Path) -> str:
@@ -30,7 +35,7 @@ def build_manifest(qc: dict[str, Any], annotation: dict[str, Any], qc_path: Path
     payload: dict[str, Any] = {
         "schema": "genoma-array-curation-manifest-v1",
         "case_id": qc.get("case_id"),
-        "ruleset": RULESET,
+        "ruleset": normative.attested_ruleset_block(),
         "summary": "SNP-array Scientific Data Plane executed for interrogated target loci only. Clinical interpretation remains bounded by assay coverage, current evidence and confirmation requirements.",
         "array_artifacts": {
             "input_sha256": qc.get("input", {}).get("sha256"),

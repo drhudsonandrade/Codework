@@ -12,21 +12,24 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import normative
 from scripts.sealed_ruleset import EXPECTED_NAME, EXPECTED_SHA, SealedRulesetError, verify_transport
 
 CANONICAL_RULESET = EXPECTED_NAME
 CANONICAL_RULESET_SHA256 = EXPECTED_SHA
 FALLOW_ACTION_SHA = "45fd28766199acb1f939f6862274a37aad12770b"
 REQUIRED_PATHS = (
-    ".fallowrc.json", ".github/workflows/fallow.yml", ".github/workflows/scaffold-validation.yml",
+    "mcp/.fallowrc.json", ".github/workflows/fallow.yml", ".github/workflows/scaffold-validation.yml",
     ".github/workflows/genoma-policy-engine.yml", ".github/workflows/genoma-production-ceremony.yml",
     ".github/workflows/genoma-production-witness.yml", ".github/workflows/genoma-ngs-runtime-gate.yml",
     ".github/workflows/genoma-snp-array.yml", ".gitignore", "Dockerfile", "environment.yml", "main.nf",
     "nextflow.config", "workflows/wgs.nf", "workflows/array.nf", "array_pipeline/qc.py",
     "array_pipeline/annotation.py", "array_pipeline/targets.py", "config/partial_genome_annotation_targets.json",
-    "manifests/GRCh38.sources.tsv", "manifests/GRCh38.lock.sha256.example", "manifests/RULESET_V3.3.sha256",
-    "normative/sealed/MANIFEST.json", "normative/sealed/README.md",
-    "scripts/__init__.py", "scripts/sealed_ruleset.py", "scripts/check_versions.sh", "scripts/fetch_grch38.sh",
+    "manifests/GRCh38.sources.tsv", "manifests/GRCh38.lock.sha256.example", "manifests/RULESET_V3.4.sha256",
+    "normative/__init__.py", "normative/sealed/MANIFEST.json", "normative/sealed/README.md",
+    "manifests/archive/RULESET_V3.3.sha256.obsolete",
+    "scripts/__init__.py", "scripts/sealed_ruleset.py", "scripts/seal_ruleset.py",
+    "scripts/check_versions.sh", "scripts/fetch_grch38.sh",
     "scripts/build_bwa_mem2_index.sh", "scripts/validate_grch38.sh", "scripts/validate_bwa_mem2_functional.sh",
     "scripts/generate_canary.py", "scripts/score_variants.py", "scripts/run_canary.sh", "scripts/verify_ruleset.sh",
     "scripts/materialize_ruleset.py", "scripts/run_live_post_deployment_smoke.py", "scripts/runtime_resource_gate.py",
@@ -43,7 +46,7 @@ REQUIRED_PATHS = (
     "policy_engine/genoma_policy/engine.py", "policy_engine/genoma_policy/attestation.py",
     "policy_engine/genoma_policy/ledger.py", "policy_engine/policy/schema/execution-manifest.schema.json",
     "policy_engine/Dockerfile", "mcp/package.json", "mcp/package-lock.json", "mcp/tsconfig.json", "mcp/src/server.ts",
-    "deploy/docker-compose.yml", "deploy/attestations/bootstrap-project-v3.3.json", "adapters/README.md",
+    "deploy/docker-compose.yml", "deploy/attestations/bootstrap-project-v3.4.json", "adapters/README.md",
     "adapters/config.example.json", "docs/FALLOW_SECURITY_REVIEW.md", "docs/GITHUB_MOBILE_IMPORT.md",
     "docs/MAGALU_PRIVATE_MCP_SETUP.md", "docs/PRE_DEPLOYMENT_VALIDATION_2026-08-15.md",
     "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md", "docs/PR_BODY.md", "docs/DETERMINISTIC_ENGINE.md",
@@ -61,15 +64,24 @@ FORBIDDEN_SUFFIXES = (".fastq", ".fq", ".bam", ".bai", ".cram", ".crai", ".vcf",
 SKIP_PARTS = {".git", "node_modules", "dist", "__pycache__", ".pytest_cache"}
 
 
-def validate_sealed_ruleset(root: Path, errors: list[str]) -> None:
+def validate_sealed_ruleset(root: Path, errors: list[str], observed: dict[str, str]) -> None:
     sealed_dir = root / "normative" / "sealed"
     try:
-        verify_transport(sealed_dir)
+        evidence = verify_transport(sealed_dir)
     except (OSError, UnicodeError, ValueError, SealedRulesetError) as exc:
         errors.append(f"sealed normative transport invalid: {type(exc).__name__}: {exc}")
+        return
+    observed["sealed_transport"] = (
+        f"{evidence['version']}/{evidence['status']}/{evidence['effective_date']} "
+        f"sections={evidence['section_count']}"
+    )
 
 
-def validate(root: Path) -> list[str]:
+def validate(root: Path, facts: dict[str, str] | None = None) -> list[str]:
+    """Collect contract violations. `facts` receives observed values so the caller can
+    report what was actually measured instead of restating a hard-coded claim."""
+
+    observed = facts if facts is not None else {}
     errors: list[str] = []
     for relative in REQUIRED_PATHS:
         if not (root / relative).is_file():
@@ -87,8 +99,9 @@ def validate(root: Path) -> list[str]:
             active.append(candidate.relative_to(root))
     if active:
         errors.append(f"active normative ruleset must be materialized at runtime, not duplicated in repo; found {active}")
+    observed["active_rulesets"] = str(len(active))
 
-    validate_sealed_ruleset(root, errors)
+    validate_sealed_ruleset(root, errors, observed)
 
     manifest = root / "manifests/GRCh38.sources.tsv"
     if manifest.is_file():
@@ -99,20 +112,51 @@ def validate(root: Path) -> list[str]:
             errors.append(f"GRCh38 manifest must contain exactly the required 9 artifacts; found {len(rows)}")
         if any(not r.get("url", "").startswith(("https://", "generated-from:")) for r in rows):
             errors.append("GRCh38 manifest contains a non-HTTPS/non-generated source")
+        observed["grch38_artifacts"] = f"{len(targets & EXPECTED_ARTIFACTS)}/{len(EXPECTED_ARTIFACTS)}"
+    else:
+        errors.append("GRCh38 manifest not readable")
 
     package = root / "mcp/package.json"
     if package.is_file() and json.loads(package.read_text()).get("devDependencies", {}).get("fallow") != "3.16.0":
         errors.append("mcp/package.json must pin fallow 3.16.0 exactly")
 
-    ruleset_manifest = root / "manifests/RULESET_V3.3.sha256"
-    if ruleset_manifest.is_file() and ruleset_manifest.read_text(encoding="ascii").strip().split() != [CANONICAL_RULESET_SHA256, CANONICAL_RULESET]:
-        errors.append("ruleset external manifest does not match the verified v3.3 artifact")
+    ruleset_manifest = root / normative.SHA_MANIFEST_RELATIVE
+    if not ruleset_manifest.is_file():
+        errors.append(f"external ruleset SHA manifest missing: {normative.SHA_MANIFEST_RELATIVE}")
+    elif ruleset_manifest.read_text(encoding="ascii").strip().split() != [CANONICAL_RULESET_SHA256, CANONICAL_RULESET]:
+        errors.append(f"ruleset external manifest does not match the verified {normative.VERSION} artifact")
+    else:
+        observed["ruleset_manifest"] = f"{normative.VERSION} raw SHA-256 pinned"
+
+    # REGRA DE UNICIDADE: a superseded version may survive only as archived provenance.
+    for stale in (root / "manifests").glob("RULESET_V*.sha256"):
+        if stale.name != Path(normative.SHA_MANIFEST_RELATIVE).name:
+            errors.append(f"superseded ruleset manifest must be archived as OBSOLETA, not left active: {stale.name}")
 
     fw = root / ".github/workflows/fallow.yml"
     if fw.is_file():
         text = fw.read_text(encoding="utf-8")
         if f"fallow-rs/fallow@{FALLOW_ACTION_SHA}" not in text or "version: 3.16.0" not in text:
             errors.append("Fallow workflow must pin wrapper SHA and CLI 3.16.0")
+        # A fallow run rooted where there is no package.json cannot evaluate
+        # unused-dependencies or unlisted-dependency at all, and reports a silent PASS.
+        # Match the YAML key itself; prose mentioning "root: mcp" must not satisfy this.
+        if not re.search(r"(?m)^[ \t]+root:[ \t]*mcp[ \t]*$", text):
+            errors.append("Fallow audit must be rooted at the package that owns the TypeScript (root: mcp)")
+
+    # Every fallow config must sit beside the package manifest whose dependencies it claims
+    # to police, otherwise its dependency rules are declared but unenforceable.
+    for config in root.rglob(".fallowrc.json"):
+        if any(part in SKIP_PARTS for part in config.parts):
+            continue
+        relative = config.relative_to(root)
+        if not (config.parent / "package.json").is_file():
+            errors.append(f"fallow config has no adjacent package.json; dependency rules cannot be enforced: {relative}")
+            continue
+        declared = json.loads(config.read_text(encoding="utf-8")).get("rules", {})
+        for rule in ("unused-files", "unused-exports", "unused-dependencies", "circular-dependencies"):
+            if declared.get(rule) != "error":
+                errors.append(f"{relative} must declare {rule} as error")
 
     runbook = root / "docs/MAGALU_PRIVATE_MCP_SETUP.md"
     if runbook.is_file() and "--entrypoint /bin/bash" in runbook.read_text(encoding="utf-8"):
@@ -212,16 +256,17 @@ def validate(root: Path) -> list[str]:
 
 
 def main() -> None:
-    errors = validate(ROOT)
+    facts: dict[str, str] = {}
+    errors = validate(ROOT, facts)
     if errors:
         for error in errors:
             print(f"FAIL\t{error}")
         raise SystemExit(1)
     print("PASS\trepository_contract")
-    print("PASS\truleset_manifest_contract\tv3.3 raw SHA-256 pinned")
-    print("PASS\trepository_active_rulesets\t0")
-    print("PASS\tsealed_normative_transport\tshared decoder")
-    print("PASS\tgrch38_manifest\t9/9")
+    print(f"PASS\truleset_manifest_contract\t{facts['ruleset_manifest']}")
+    print(f"PASS\trepository_active_rulesets\t{facts['active_rulesets']}")
+    print(f"PASS\tsealed_normative_transport\t{facts['sealed_transport']}")
+    print(f"PASS\tgrch38_manifest\t{facts['grch38_artifacts']}")
     print("PASS\tpre_dna_readiness_contract\tlatest-tested candidate + canaries + freshness + runtime/resource gate")
     print("PASS\twgs_scientific_data_plane_contract\treal SNV/indel path + explicit unsupported classes")
     print("PASS\tarray_scientific_data_plane_contract\tQC + target-first evidence + policy/report handoff")

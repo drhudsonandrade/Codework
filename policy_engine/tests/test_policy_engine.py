@@ -6,10 +6,10 @@ from genoma_policy.paths import resolve_manifest_path, resolve_ruleset_path
 from genoma_policy.ruleset import RulesetError, enforce_unique_active_ruleset, load_ruleset, verify_external_manifest
 from genoma_policy.scaffold import scaffold_manifest
 from genoma_policy.smoke import run_smoke
-ROOT=Path(__file__).resolve().parents[1]; RULESET=resolve_ruleset_path(ROOT); HASH_MANIFEST=resolve_manifest_path(RULESET,ROOT); EXPECTED_SHA256="187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a"
+ROOT=Path(__file__).resolve().parents[1]; RULESET=resolve_ruleset_path(ROOT); HASH_MANIFEST=resolve_manifest_path(RULESET,ROOT); EXPECTED_SHA256="ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
 class RulesetTests(unittest.TestCase):
  def test_normative_identity_hash_and_263_sections(self):
-  r=load_ruleset(RULESET); self.assertEqual(r.status,"VIGENTE"); self.assertEqual(r.version,"v3.3"); self.assertEqual(r.effective_date,"14/08/2026");
+  r=load_ruleset(RULESET); self.assertEqual(r.status,"VIGENTE"); self.assertEqual(r.version,"v3.4"); self.assertEqual(r.effective_date,"17/08/2026");
   if os.environ.get("GENOMA_EXPECT_CANONICAL_SHA")=="1": self.assertEqual(r.sha256,EXPECTED_SHA256)
   self.assertEqual([s.number for s in r.sections],list(range(263))); verify_external_manifest(r,HASH_MANIFEST)
  def test_duplicate_vigente_fails_closed(self):

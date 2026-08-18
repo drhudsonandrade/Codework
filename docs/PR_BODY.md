@@ -1,5 +1,10 @@
 # Prepare private genomic analysis runtime and MCP
 
+> **HISTÓRICO — SUPERSEDED.** This records evidence gathered against ruleset **v3.3 (14/08/2026)**.
+> The repository is now governed by **v3.4 (17/08/2026)**. The measurements below are preserved
+> unaltered as provenance and were **not** re-executed under v3.4; do not read any PASS here as
+> current. See `normative/sealed/MANIFEST.json` for the VIGENTE source.
+
 ## Summary
 
 - pin samtools 1.24, bcftools 1.24, bwa-mem2 2.3, GATK 4.6.2.0, Nextflow 26.04.6 and Snakemake 7.32.4 in a container;

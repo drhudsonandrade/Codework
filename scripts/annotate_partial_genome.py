@@ -14,7 +14,7 @@ from array_pipeline.annotation import annotate_partial_genome, write_annotation
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="GENOMA v3.3 bounded Evidence/Annotation Plane for partial SNP-array genomes")
+    p = argparse.ArgumentParser(description="GENOMA v3.4 bounded Evidence/Annotation Plane for partial SNP-array genomes")
     p.add_argument("--input", required=True)
     p.add_argument("--qc", required=True)
     p.add_argument("--targets", default=str(ROOT / "config" / "partial_genome_annotation_targets.json"))

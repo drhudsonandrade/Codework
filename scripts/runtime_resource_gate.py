@@ -51,6 +51,35 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def read_boot_id() -> str | None:
+    """Kernel boot identity for the machine this process runs on.
+
+    Ruleset v3.4 section 259 forbids inheriting another session's PASS, but a JSON file
+    saying `inherited_from_previous_session: false` proves nothing once it has been copied
+    somewhere else. The boot id is the cheap primitive that actually distinguishes runs: it
+    is shared by every container on a host (they share the kernel), so a gate produced and
+    consumed in the same pipeline still matches, and it changes on reboot or on a different
+    machine, so a stale or foreign artifact stops matching.
+    """
+    try:
+        value = Path("/proc/sys/kernel/random/boot_id").read_text(encoding="ascii").strip()
+    except (OSError, UnicodeError):
+        return None
+    return value or None
+
+
+def session_binding(session_id: str) -> dict[str, Any]:
+    """Bind this attestation to the environment that produced it."""
+
+    return {
+        "session_id": session_id,
+        "boot_id": read_boot_id(),
+        "hostname": socket.gethostname(),
+        "platform": platform.platform(),
+        "created_at": now(),
+    }
+
+
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
@@ -292,11 +321,13 @@ def main() -> int:
     }
     unavailable = [k for k, v in checks.items() if v["status"] != "EXECUTADO"]
     status = "EXECUTADO" if not unavailable else "NÃO DISPONÍVEL"
+    binding = session_binding(session_id)
     payload = {
         "gate": "RUNTIME_RESOURCE_GATE",
         "status": status,
         "session_id": session_id,
         "inherited_from_previous_session": False,
+        "session_binding": binding,
         "started_at": now(),
         "host": {"hostname": socket.gethostname(), "platform": platform.platform(), "python": sys.version.split()[0]},
         "caller_profile": args.caller,

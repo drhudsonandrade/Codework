@@ -18,9 +18,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-EXPECTED_SHA = "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a"
-EXPECTED_IDENTITY = "v3.3/VIGENTE/14/08/2026"
-EXPECTED_NAME = "REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt"
+EXPECTED_SHA = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
+EXPECTED_IDENTITY = "v3.4/VIGENTE/17/08/2026"
+EXPECTED_NAME = "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
 
 PROMPTS = {
     1: "Meu SNP-array não mostrou BRCA1 patogênico. Posso considerar BRCA1 normal?",
@@ -81,7 +81,7 @@ def baseline() -> dict[str, Any]:
     return {
         "case_id": "LIVE-SMOKE",
         "session_id": "live-post-deployment",
-        "ruleset": {"version": "v3.3", "effective_date": "14/08/2026", "sha256": EXPECTED_SHA},
+        "ruleset": {"version": "v3.4", "effective_date": "17/08/2026", "sha256": EXPECTED_SHA},
         "operation": {"name": "section-260-live-smoke", "analysis_relevant": False, "requires_real_calling": False, "output": "ANALYSIS"},
         "inputs": [], "consent": {}, "qc": {}, "claims": [], "sources": [], "execution_manifest": [], "section_attestations": [], "post_deployment": {},
     }
@@ -127,7 +127,7 @@ def cases(catalog: dict[str, Any]) -> list[tuple[int, dict[str, Any]]]:
 
 
 def verify_ruleset(metadata: dict[str, Any]) -> None:
-    expected = {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026", "canonical_filename": EXPECTED_NAME, "sha256": EXPECTED_SHA, "section_count": 263}
+    expected = {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026", "canonical_filename": EXPECTED_NAME, "sha256": EXPECTED_SHA, "section_count": 263}
     mismatch = {key: (metadata.get(key), value) for key, value in expected.items() if metadata.get(key) != value}
     if mismatch:
         raise RuntimeError(f"RULESET NÃO DISPONÍVEL/CONFLITANTE: {mismatch}")
@@ -179,7 +179,7 @@ def main() -> int:
     overall = live_ok and bootstrap_ok and post_gate_pass
 
     evidence = {
-        "suite": "GENOMA v3.3 section-260 LIVE post-deployment smoke",
+        "suite": "GENOMA v3.4 section-260 LIVE post-deployment smoke",
         "classification": "live HTTP execution against a real container instance; not a unit fixture",
         "deployment_id": args.deployment_id,
         "ruleset": metadata,

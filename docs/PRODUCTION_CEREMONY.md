@@ -1,10 +1,10 @@
-# GENOMA v3.3 production ceremony
+# GENOMA v3.4 production ceremony
 
 This ceremony converts an inactive, content-addressed normative transport into a real runtime instance without committing a second active plaintext `VIGENTE` source.
 
 ## 1. Normative activation
 
-`scripts/materialize_ruleset.py` decodes the sealed transport entirely under a controlled runtime path, verifies the transport SHA-256, gzip SHA-256, raw canonical SHA-256 `187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a`, exact normative identity and sequential sections 0–262. It atomically writes exactly `REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt` as mode `0444`.
+`scripts/materialize_ruleset.py` decodes the sealed transport entirely under a controlled runtime path, verifies the transport SHA-256, gzip SHA-256, raw canonical SHA-256 `ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580`, exact normative identity and sequential sections 0–262. It atomically writes exactly `REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt` as mode `0444`.
 
 The repository continues to contain zero active plaintext rulesets. `scripts/validate_repo.py` decodes the transport **in memory** during CI and verifies that it is byte-exact before any activation.
 
@@ -31,7 +31,7 @@ The independent `genoma-policy smoke` suite remains separate and can never grant
 
 ## 4. Bootstrap attestation
 
-`deploy/attestations/bootstrap-project-v3.3.json` is a structured record of the v3.3 bootstrap verified in the current ChatGPT Project Instructions. It is intentionally explicit that GitHub cannot introspect future ChatGPT configuration. The core does not depend on ChatGPT; this attestation only closes the project-specific bootstrap criterion and must be renewed when Project Instructions change.
+`deploy/attestations/bootstrap-project-v3.4.json` is a structured record of the v3.4 bootstrap verified in the current ChatGPT Project Instructions. It is intentionally explicit that GitHub cannot introspect future ChatGPT configuration. The core does not depend on ChatGPT; this attestation only closes the project-specific bootstrap criterion and must be renewed when Project Instructions change.
 
 ## 5. Evidence package
 

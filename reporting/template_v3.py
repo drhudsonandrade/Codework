@@ -26,7 +26,7 @@ SYSTEM_REPLACEMENTS = {
     "NÃO INSERIDOS": "CONTROLADOS",
     "MODELO — NÃO É RESULTADO GENÉTICO": "PUBLICAÇÃO CONTROLADA — RESULTADO GENÔMICO",
     "MODELO — NÃO É RESULTADO": "PUBLICAÇÃO CONTROLADA",
-    "GENOMA-HUDSON-RULESET-v3.3": "GENOMA--RULESET-v3.3",
+    "GENOMA-HUDSON-RULESET-v3.3": "GENOMA-RULESET-v3.4",
     "MODELO SEM DADOS PESSOAIS": "RESULTADO GENÔMICO",
     "Campos em azul são placeholders obrigatórios ou condicionais; preencher com dado rastreável ou declarar NÃO DISPONÍVEL.":
         "Dados ausentes permanecem NÃO DISPONÍVEL; consulte limitações, fontes e status operacional.",
