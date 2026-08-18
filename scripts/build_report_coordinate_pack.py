@@ -14,7 +14,13 @@ from typing import Any
 import fitz
 
 COMPILER_ID = "fitz-1.26.7-genoma-v2"
-TOKEN_RE = re.compile(r"\[\[.*?\]\]", re.S)
+# PDF text extraction splits a placeholder across spans wherever the typesetter broke it,
+# and the compiler joins spans with a newline. A token whose closing bracket pair lands on
+# the split (`...ANCESTRALIDADE]` + newline + `]`) then never closes, so a non-greedy
+# `\[\[.*?\]\]` runs on to the NEXT token's `]]` and swallows every line in between into one
+# enormous bogus placeholder. Allowing whitespace between the bracket characters closes the
+# token where it really ends.
+TOKEN_RE = re.compile(r"\[\s*\[.*?\]\s*\]", re.S)
 # Literal strings printed inside the sealed v3.0 reference PDFs, located with
 # `page.search_for` so the renderer can overwrite them. These are template content, not
 # project version pins; the ruleset identity they are replaced with lives in
@@ -127,6 +133,16 @@ def _tokens(page: fitz.Page) -> list[tuple[str, fitz.Rect, dict[str, Any]]]:
     found: list[tuple[str, fitz.Rect, dict[str, Any]]] = []
     for match in TOKEN_RE.finditer(text):
         token = re.sub(r"\s+", "", match.group(0))
+        # A well-formed placeholder never contains another bracket pair. If one does, the
+        # match swallowed body text between two real tokens and its rectangle would cover
+        # legitimate template content — which strict rendering would then paint over.
+        # Fail loudly: a silently oversized mask is invisible to the pixel QA, because the
+        # QA excludes masked regions by construction.
+        inner = token[2:-2]
+        if "[[" in inner or "]]" in inner:
+            raise ValueError(
+                f"malformed placeholder swallowed template text on this page: {token[:80]!r}..."
+            )
         indices = sorted(
             {
                 owners[pos]

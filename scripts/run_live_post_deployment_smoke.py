@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -18,9 +19,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-EXPECTED_SHA = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
-EXPECTED_IDENTITY = "v3.4/VIGENTE/17/08/2026"
-EXPECTED_NAME = "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+import normative
+
+# Taken from the single source of truth rather than restated: a duplicated identity here
+# would let the live ceremony verify against a version the rest of the repository no longer
+# uses.
+EXPECTED_SHA = normative.RAW_SHA256
+EXPECTED_IDENTITY = normative.IDENTITY_STRING
+EXPECTED_NAME = normative.CANONICAL_FILENAME
 
 # Every bootstrap criterion that must be individually true before POST-DEPLOYMENT can pass.
 # Named explicitly because `all(checks.values())` is True for an empty or truncated dict, so

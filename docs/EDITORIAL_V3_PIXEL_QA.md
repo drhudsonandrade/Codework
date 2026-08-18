@@ -64,23 +64,59 @@ As máscaras são dilatadas em `mask_padding_pt` (1,0 pt) para absorver antialia
 o valor é declarado na evidência e coberto por teste para não crescer a ponto de esconder
 deriva real.
 
+### Defeito encontrado ao exercitar o caminho real
+
+Com o pacote instalado, o compilador de coordenadas revelou um defeito sério. A extração de
+texto do PDF parte um placeholder onde o tipógrafo quebrou a linha, e o compilador junta os
+spans com `\n`. Quando o par de fechamento caía nessa quebra (`...ANCESTRALIDADE]` + `\n` +
+`]`), a regex não fechava ali e **corria até o `]]` do próximo token**, produzindo um
+placeholder falso de 470×106 pt sobre o corpo da página.
+
+Duas consequências, ambas piores que cosméticas:
+
+- os tokens engolidos sumiam do inventário — **18 placeholders em 6 relatórios** nunca
+  seriam preenchidos;
+- o retângulo falso virava **máscara**, e o QA de pixel exclui regiões mascaradas por
+  construção. O QA jamais poderia ter detectado o estrago que ele mesmo escondia.
+
+Corrigido tolerando espaço entre os colchetes (`\[\s*\[.*?\]\s*\]`) e recusando, com erro,
+qualquer token que contenha outro par de colchetes. As contagens fixadas eram sintoma e
+foram recorrigidas: 1131 → **1149** placeholders. Colisões de bbox caíram de 12 para **0** e
+a maior máscara de 49.700 para 4.387 pt². O QA de pixel continua em 0 pixels alterados —
+agora medindo uma área bem maior.
+
+### Paridade DOCX — medida
+
+`scripts/run_docx_parity_qa.py` converte cada DOCX via LibreOffice Writer headless e separa
+duas coisas que não podem ser confundidas:
+
+- **Paridade estrutural (gate):** contagem de páginas e geometria devem bater com o modelo.
+  Medido: 11 relatórios, 100 páginas, geometria preservada em todas.
+- **Similaridade visual (observada, não gated em igualdade):** fração de pixels diferentes e
+  RMSE. Medido: pior caso 11,1% e RMSE 32,8.
+
+O envelope (25% / RMSE 60) foi **derivado da medição**, não escolhido a priori, e existe só
+para pegar regressão catastrófica — plate perdido, página em branco. Ele **não** é alegação
+de paridade de pixel: DOCX é dependente de engine, e Word renderizará diferente.
+
+Evidência: `docs/evidence/EDITORIAL_V3_DOCX_PARITY_150DPI_2026-08-18.json`.
+
 ### Controles ainda sem artefato — NÃO DISPONÍVEL
 
 | ITEM | STATUS | MOTIVO | PRÓXIMO PASSO |
 |---|---|---|---|
-| QA visual de renderização DOCX | NÃO DISPONÍVEL | paridade DOCX depende do engine (Word/LibreOffice); nenhuma medição registrada | re-renderizar via LibreOffice e commitar a evidência |
-| Relatório 10 sem colisão visual (DATA/VERSÃO peer-bounded) | NÃO DISPONÍVEL | inspeção visual não registrada em artefato | registrar a verificação no JSON de QA |
+| Paridade DOCX em Microsoft Word | NÃO DISPONÍVEL | medido apenas em LibreOffice Writer; Word não está disponível nesta sessão | medir em Word e commitar a evidência |
 
 ## DOCX
 
 O DOCX usa a página de referência convertida para SVG como placa visual estática, com PNG fallback, e valores do caso em textboxes VML editáveis. A geração pelo caminho template-v3 está exercitada e coberta (`tests/test_template_v3_contract.py` produz o relatório 10 em modo strict e confirma um pacote OOXML editável com campos `GENOMA_FIELD_` e `svgBlip`), o que exige `poppler-utils` na sessão.
 
-A **paridade visual de renderização** do DOCX continua `NÃO DISPONÍVEL`: Word, LibreOffice e outros engines rasterizam de forma diferente, e não há medição registrada. Estrutura verificada não é o mesmo que paridade medida.
+A **paridade estrutural** está medida (páginas e geometria idênticas em 100 páginas). A **paridade de pixel** continua fora do escopo do que este projeto pode alegar para DOCX: o resultado depende do engine, e a diferença residual medida em LibreOffice (até 11,1% dos pixels) é esperada, não é defeito.
 
 **Não declarar DOCX como pixel-idêntico de forma renderer-independent.** Word, LibreOffice e outros engines fazem rasterização/antialiasing diferentes. O contrato correto é:
 
 - PDF: paridade estática pixel-a-pixel `VERIFICADO` fora das regiões dinâmicas/controladas;
-- DOCX: alta fidelidade visual + campos editáveis; QA de renderização `NÃO DISPONÍVEL`;
+- DOCX: paridade estrutural `VERIFICADO` (páginas + geometria) e similaridade visual medida e registrada; paridade de pixel nunca é alegada;
 - PDF continua sendo o artefato final autoritativo para publicação.
 
 ## Fail closed

@@ -14,7 +14,7 @@
         595.303955,
         841.889771
       ],
-      "placeholder_count": 129
+      "placeholder_count": 130
     },
     "02": {
       "filename": "02_RELATORIO_ANCESTRALIDADE_GENEALOGIA_v3.0.pdf",
@@ -25,7 +25,7 @@
         595.303955,
         841.889771
       ],
-      "placeholder_count": 113
+      "placeholder_count": 117
     },
     "03": {
       "filename": "03_RELATORIO_REPRODUTIVO_INDIVIDUAL_CASAL_v3.0.pdf",
@@ -47,7 +47,7 @@
         595.303955,
         841.889771
       ],
-      "placeholder_count": 109
+      "placeholder_count": 113
     },
     "05": {
       "filename": "05_RELATORIO_TECNICO_METODOS_QC_LIMITACOES_v3.0.pdf",
@@ -58,7 +58,7 @@
         595.303955,
         841.889771
       ],
-      "placeholder_count": 194
+      "placeholder_count": 201
     },
     "06": {
       "filename": "06_RELATORIO_FARMACOGENOMICA_CARTAO_ANESTESIA_v3.0.pdf",
@@ -69,7 +69,7 @@
         595.303955,
         841.889771
       ],
-      "placeholder_count": 91
+      "placeholder_count": 92
     },
     "07": {
       "filename": "07_RELATORIO_LONGEVIDADE_PROTECAO_PREVENCAO_v3.0.pdf",
@@ -80,7 +80,7 @@
         595.303955,
         841.889771
       ],
-      "placeholder_count": 90
+      "placeholder_count": 91
     },
     "08": {
       "filename": "08_ATLAS_TRACOS_CURIOSIDADES_v3.0.pdf",
@@ -102,7 +102,7 @@
         595.303955,
         841.889771
       ],
-      "placeholder_count": 83
+      "placeholder_count": 84
     },
     "10": {
       "filename": "10_RESUMO_CLINICO_UMA_PAGINA_v3.0.pdf",
@@ -137,12 +137,12 @@
   },
   "generated_coordinate_manifest": {
     "filename": "GENOMA_V3_TEMPLATE_MANIFEST.v2.json",
-    "sha256": "1d2e6b745b338b18530d5dc0e42cb542a01947a81a0515bece4882b4e09539a5"
+    "sha256": "36075872c6b5f625fa45c54b01277a07e5b2ae579e59112279ef0e6be7e0b6df"
   },
   "generated_coordinate_detail": {
     "filename": "reference_v3_manifest.v2.json.gz.b64",
-    "sha256": "3054564a0a67bb950cc4941c685dcffb17979d831205d5a53e9799be4815766a",
-    "content_sha256": "1d2e6b745b338b18530d5dc0e42cb542a01947a81a0515bece4882b4e09539a5",
+    "sha256": "01825d1c50c036b82aa4be544284abe71cee11932284914a4ce64da400394c16",
+    "content_sha256": "36075872c6b5f625fa45c54b01277a07e5b2ae579e59112279ef0e6be7e0b6df",
     "verification": "content",
     "note": "DEFLATE output is not bit-reproducible across zlib builds (zlib-ng#2216); the legacy sha256 is the container produced by the minting environment and is informational. content_sha256 is the portable contract."
   },

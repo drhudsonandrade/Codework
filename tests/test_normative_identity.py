@@ -137,6 +137,35 @@ class NormativeIdentityTest(unittest.TestCase):
             self.assertEqual(unknown["status"], "NÃO DISPONÍVEL")
             self.assertIs(unknown["normative"], False)
 
+    def test_execution_manifest_schema_pins_the_current_identity(self):
+        """The schema restates the identity; unchecked, it could pin a superseded version."""
+        schema = json.loads(
+            (ROOT / "policy_engine/policy/schema/execution-manifest.schema.json").read_text(encoding="utf-8")
+        )
+        ruleset = schema["properties"]["ruleset"]["properties"]
+        self.assertEqual(ruleset["version"]["const"], normative.VERSION)
+        self.assertEqual(ruleset["effective_date"]["const"], normative.EFFECTIVE_DATE)
+        self.assertEqual(ruleset["sha256"]["const"], normative.RAW_SHA256)
+        self.assertIn(normative.VERSION, schema["title"])
+        self.assertIn(normative.VERSION, schema["$id"])
+
+    def test_rego_policy_pins_the_current_identity(self):
+        rego = (ROOT / "policy_engine/policy/rego/genoma.rego").read_text(encoding="utf-8")
+        self.assertIn(f'input.ruleset.version != "{normative.VERSION}"', rego)
+        self.assertIn(f'input.ruleset.effective_date != "{normative.EFFECTIVE_DATE}"', rego)
+        self.assertIn(f'input.ruleset.sha256 != "{normative.RAW_SHA256}"', rego)
+
+    def test_live_smoke_takes_its_identity_from_the_shared_source(self):
+        from scripts.run_live_post_deployment_smoke import (
+            EXPECTED_IDENTITY,
+            EXPECTED_NAME,
+            EXPECTED_SHA,
+        )
+
+        self.assertEqual(EXPECTED_SHA, normative.RAW_SHA256)
+        self.assertEqual(EXPECTED_IDENTITY, normative.IDENTITY_STRING)
+        self.assertEqual(EXPECTED_NAME, normative.CANONICAL_FILENAME)
+
     def test_rule_ids_are_bound_to_the_current_version(self):
         self.assertEqual(normative.rule_id(0), "GENOMA-V3.4-S000")
         self.assertEqual(normative.rule_id(normative.LAST_SECTION), "GENOMA-V3.4-S262")

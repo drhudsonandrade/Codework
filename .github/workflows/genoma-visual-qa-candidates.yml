@@ -63,6 +63,19 @@ jobs:
           jq -e '.status == "VERIFICADO" and .aggregate.result == "PASS" and .aggregate.outside_changed_pixels == 0 and .aggregate.reports == 11' \
             visual-qa/static-pixel-qa.json >/dev/null
           echo 'measured static pixel QA: PASS'
+      - name: Measure DOCX render parity (structural gate, similarity reported)
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y --no-install-recommends libreoffice-writer
+          python3 scripts/run_docx_parity_qa.py \
+            --template-dir "$RUNNER_TEMP/genoma-templates-installed" \
+            --output visual-qa/docx-parity.json
+          # Structural parity is the gate; visual similarity is recorded, never asserted as
+          # pixel parity, because DOCX rasterisation is renderer-dependent.
+          jq -e '.aggregate.structural_parity == "PASS" and .aggregate.within_envelope == true and .aggregate.reports == 11' \
+            visual-qa/docx-parity.json >/dev/null
+          echo 'measured DOCX structural parity: PASS'
+
       - name: Validate pinned v3 reference identities and static pixel QA evidence
         run: |
           python3 - <<'PY'
@@ -167,5 +180,6 @@ jobs:
           path: |
             visual-qa/candidates
             visual-qa/static-pixel-qa.json
+            visual-qa/docx-parity.json
           retention-days: 30
           if-no-files-found: error
