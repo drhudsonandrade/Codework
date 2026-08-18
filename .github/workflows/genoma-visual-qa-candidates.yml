@@ -116,6 +116,10 @@ jobs:
               'execution_manifest': {'status': 'VERIFICADO'},
               'sources': ['fixture:visual-reference'],
               'limitations': 'Fixture editorial; não representa paciente.',
+              # No approved v3.0 template pack is mounted here, so these candidates come
+              # from the programmatic fallback. Acknowledged explicitly; the renderer
+              # stamps the same disclosure into every artifact it produces.
+              'allow_programmatic_final': True,
           }
           out = Path('visual-qa/candidates')
           for i in range(1, 12):

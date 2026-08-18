@@ -1,0 +1,4 @@
+# Companion sources distributed with the GENOMA norm — integrity pins only.
+# NÃO NORMATIVAS. A norma vigente (manifests/RULESET_V3.4.sha256) prevalece integralmente;
+# em conflito, a geração deve parar. Nenhum gate pode tomar identidade normativa daqui.
+1b8a199ce9a94213aa22dedb0476284c2e72f163ab8db0eefc2beb45ab3515e1  PROMPT_FONTE_GERACAO_RELATORIOS_GENOMICOS_v1.2.txt

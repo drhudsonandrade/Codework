@@ -35,6 +35,9 @@ def final_data():
         "execution_manifest": {"status": "VERIFICADO"},
         "sources": ["fixture:test"],
         "limitations": "Fixture editorial; não representa paciente.",
+        # No approved v3.0 template pack is mounted in CI, so this fixture renders through
+        # the programmatic fallback. That has to be acknowledged explicitly.
+        "allow_programmatic_final": True,
     }
 
 

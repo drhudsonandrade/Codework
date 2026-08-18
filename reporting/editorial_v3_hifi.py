@@ -456,7 +456,14 @@ def write_editorial_bundle(rendered: dict[str, Any], output_dir: Path, *, stem: 
         "accent": metadata["accent"],
         "pdf": pdf_runtime,
         "docx": docx_runtime,
-        "visual_reference": "GENOMA model suite v3.0",
+        # This renderer never opens an approved template. Claiming the v3.0 suite as the
+        # visual reference here would make a fallback artifact indistinguishable from a
+        # template render in its own provenance record.
+        "renderer": "programmatic-approximation",
+        "template_pack_v3": "NÃO DISPONÍVEL",
+        "visual_reference": "aproxima o sistema visual da suíte GENOMA v3.0; não é o modelo aprovado",
+        "visual_parity": "NÃO DISPONÍVEL",
+        "claim_rule": "Programmatic output must never be reported as template-v3 parity.",
     }
     (output_dir / f"{stem}.editorial.json").write_text(json.dumps(runtime, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return {"pdf": pdf, "docx": docx}

@@ -2,10 +2,43 @@ from __future__ import annotations
 
 from typing import Any
 
-from .gates_common import (ALLOWED_DOMAIN, ALLOWED_NATURE, ALLOWED_OPERATIONAL, ALLOWED_PRIORITY, RUNTIME_REQUIRED_KEYS, _as_bool, _gate, _get_list)
+from .gates_common import (ALLOWED_DOMAIN, ALLOWED_NATURE, ALLOWED_OPERATIONAL, ALLOWED_OUTPUT, ALLOWED_PRIORITY, RUNTIME_REQUIRED_KEYS, _as_bool, _gate, _get_list)
 from .ruleset import RulesetError, enforce_unique_active_ruleset, verify_external_manifest
 
 class CoreGates:
+    def _manifest_structure_gate(self, manifest: dict[str, Any]):
+        """Refuse a manifest that cannot be honestly evaluated.
+
+        `analysis_relevant` and `requires_real_calling` switch the provenance, consent, QC
+        and runtime gates off when false. A manifest that omits `operation`, or supplies a
+        non-boolean, therefore silences those gates while still reporting PASS. The
+        execution-manifest schema already declares these fields required; this enforces the
+        same contract at evaluation time so a malformed manifest fails closed instead of
+        quietly disabling the control plane.
+        """
+        reasons: list[str] = []
+        for key in ("case_id", "session_id"):
+            value = manifest.get(key)
+            if not isinstance(value, str) or not value.strip():
+                reasons.append(f"{key} is missing or not a non-empty string")
+        if not isinstance(manifest.get("ruleset"), dict):
+            reasons.append("ruleset block is missing or not an object")
+        if not isinstance(manifest.get("section_attestations"), list):
+            reasons.append("section_attestations is missing or not a list")
+
+        operation = manifest.get("operation")
+        if not isinstance(operation, dict):
+            reasons.append("operation block is missing or not an object")
+        else:
+            if not isinstance(operation.get("name"), str) or not operation["name"].strip():
+                reasons.append("operation.name is missing or not a non-empty string")
+            for key in ("analysis_relevant", "requires_real_calling"):
+                if not isinstance(operation.get(key), bool):
+                    reasons.append(f"operation.{key} must be declared explicitly as a boolean")
+            if operation.get("output") not in ALLOWED_OUTPUT:
+                reasons.append(f"operation.output must be one of {sorted(ALLOWED_OUTPUT)}")
+        return _gate("MANIFEST_STRUCTURE_GATE", not reasons, reasons)
+
     def _ruleset_gate(self, manifest: dict[str, Any]):
         reasons: list[str] = []
         try:

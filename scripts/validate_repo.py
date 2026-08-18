@@ -27,6 +27,7 @@ REQUIRED_PATHS = (
     "array_pipeline/annotation.py", "array_pipeline/targets.py", "config/partial_genome_annotation_targets.json",
     "manifests/GRCh38.sources.tsv", "manifests/GRCh38.lock.sha256.example", "manifests/RULESET_V3.4.sha256",
     "normative/__init__.py", "normative/sealed/MANIFEST.json", "normative/sealed/README.md",
+    "manifests/COMPANION_SOURCES.sha256",
     "scripts/__init__.py", "scripts/sealed_ruleset.py", "scripts/seal_ruleset.py",
     "scripts/check_versions.sh", "scripts/fetch_grch38.sh",
     "scripts/build_bwa_mem2_index.sh", "scripts/validate_grch38.sh", "scripts/validate_bwa_mem2_functional.sh",
@@ -130,6 +131,29 @@ def validate(root: Path, facts: dict[str, str] | None = None) -> list[str]:
     for stale in (root / "manifests").glob("RULESET_V*.sha256"):
         if stale.name != Path(normative.SHA_MANIFEST_RELATIVE).name:
             errors.append(f"superseded ruleset manifest must be archived as OBSOLETA, not left active: {stale.name}")
+
+    # Companion sources are integrity-pinned but must never become a normative source.
+    companion = root / normative.COMPANION_MANIFEST_RELATIVE
+    if not companion.is_file():
+        errors.append(f"companion source manifest missing: {normative.COMPANION_MANIFEST_RELATIVE}")
+    else:
+        text = companion.read_text(encoding="utf-8")
+        if "NÃO NORMATIVAS" not in text:
+            errors.append("companion manifest must state that its entries are not normative")
+        pinned = {
+            fields[1]: fields[0]
+            for line in text.splitlines()
+            if not line.startswith("#") and len(fields := line.split()) == 2
+        }
+        for name, spec in normative.COMPANION_SOURCES.items():
+            if spec.get("normative") is not False:
+                errors.append(f"companion source must be declared non-normative: {name}")
+            if pinned.get(name) != spec["sha256"]:
+                errors.append(f"companion manifest digest differs from the pinned identity: {name}")
+        for name in pinned:
+            if name not in normative.COMPANION_SOURCES:
+                errors.append(f"companion manifest pins an unregistered source: {name}")
+        observed["companion_sources"] = str(len(normative.COMPANION_SOURCES))
 
     fw = root / ".github/workflows/fallow.yml"
     if fw.is_file():
@@ -265,6 +289,7 @@ def main() -> None:
     print(f"PASS\trepository_active_rulesets\t{facts['active_rulesets']}")
     print(f"PASS\tsealed_normative_transport\t{facts['sealed_transport']}")
     print(f"PASS\tgrch38_manifest\t{facts['grch38_artifacts']}")
+    print(f"PASS\tcompanion_sources\t{facts['companion_sources']} pinned, non-normative")
     print("PASS\tpre_dna_readiness_contract\tlatest-tested candidate + canaries + freshness + runtime/resource gate")
     print("PASS\twgs_scientific_data_plane_contract\treal SNV/indel path + explicit unsupported classes")
     print("PASS\tarray_scientific_data_plane_contract\tQC + target-first evidence + policy/report handoff")

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import threading
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -67,15 +68,62 @@ def _verified_coordinate_manifest(template_dir: Path) -> tuple[dict[str, Any], d
     )
 
 
+class UnapprovedRendererError(RuntimeError):
+    """A FINAL report was about to be produced without the approved v3.0 template pack."""
+
+
+def _disclose_programmatic_render(rendered: dict[str, Any]) -> dict[str, Any]:
+    """Make the fallback renderer visible in the document it produces.
+
+    The programmatic renderer never opens an approved v3.0 template; it reconstructs a
+    similar layout. Emitting that output with the same provenance as a template render
+    would leave a reader unable to tell which one they are holding, so the distinction is
+    written into the Execution Manifest that the page itself prints. A FINAL report must
+    additionally opt in, because a fallback layout is a development affordance, not an
+    approved publication path.
+    """
+    disclosed = deepcopy(rendered)
+    metadata = disclosed.get("metadata") if isinstance(disclosed.get("metadata"), dict) else {}
+    data = disclosed.setdefault("data", {})
+    if not isinstance(data, dict):
+        data = {}
+        disclosed["data"] = data
+
+    if str(metadata.get("mode", "")).upper() == "FINAL" and data.get("allow_programmatic_final") is not True:
+        raise UnapprovedRendererError(
+            "FINAL publishing requires the approved v3.0 template pack. Install it and set "
+            "editorial_mode='template-v3' with GENOMA_REPORT_TEMPLATE_DIR, or set "
+            "allow_programmatic_final=True to acknowledge a non-approved programmatic render."
+        )
+
+    manifest = data.get("execution_manifest")
+    if not isinstance(manifest, dict):
+        manifest = {"status": str(manifest) if manifest else "NÃO DISPONÍVEL"}
+    manifest["RENDERER"] = "aproximação programática (fora do pacote de modelos aprovado)"
+    manifest["TEMPLATE_PACK_V3"] = "NÃO DISPONÍVEL"
+    manifest["PARIDADE_VISUAL"] = "NÃO DISPONÍVEL"
+    data["execution_manifest"] = manifest
+
+    notice = (
+        "RENDERIZAÇÃO PROGRAMÁTICA — este documento NÃO foi gerado a partir do pacote de "
+        "modelos v3.0 aprovado; a paridade visual com o modelo oficial é NÃO DISPONÍVEL."
+    )
+    existing = data.get("limitations")
+    data["limitations"] = f"{notice} {existing}".strip() if existing else notice
+    return disclosed
+
+
 def write_editorial_bundle(rendered: dict[str, Any], output_dir: Path, *, stem: str | None = None) -> dict[str, Path]:
     """Route final publishing through the exact v3 template engine when requested.
 
-    Programmatic rendering remains available for development fixtures. Final template-v3
-    publishing fails closed if the reference PDF or coordinate inventory differs from its
-    pinned identity.
+    Programmatic rendering remains available for development fixtures and is disclosed in
+    the artifact it produces. Final template-v3 publishing fails closed if the reference
+    PDF or coordinate inventory differs from its pinned identity.
     """
     if not _template_v3.template_mode_requested(rendered):
-        return _programmatic_write_editorial_bundle(rendered, output_dir, stem=stem)
+        return _programmatic_write_editorial_bundle(
+            _disclose_programmatic_render(rendered), output_dir, stem=stem
+        )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     metadata = rendered["metadata"]

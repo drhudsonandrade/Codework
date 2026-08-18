@@ -9,6 +9,7 @@ ALLOWED_OPERATIONAL = {s.value for s in OperationalStatus}
 ALLOWED_NATURE = {"FATO CONFIRMADO", "INFERÊNCIA", "ASSOCIAÇÃO", "HIPÓTESE", "DESCONHECIDO"}
 ALLOWED_DOMAIN = {"CLÍNICO", "PREDISPOSIÇÃO", "PESQUISA", "CURIOSIDADE"}
 ALLOWED_PRIORITY = {"P1", "P2", "P3", "P4", "P5"}
+ALLOWED_OUTPUT = {"ANALYSIS", "FINAL_AUDITED_REPORT", "MODEL", "QC_ONLY", "RESEARCH"}
 
 CRITICAL_FINAL_AUDIT_KEYS = (
     "numbering_integrity", "no_accidental_empty_sections", "critical_sources_versioned",

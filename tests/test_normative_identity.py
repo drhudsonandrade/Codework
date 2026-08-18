@@ -97,6 +97,46 @@ class NormativeIdentityTest(unittest.TestCase):
                 stale.append(f"{rel}:{token}")
         self.assertEqual(stale, [], f"superseded ruleset identity still present: {stale}")
 
+    def test_companion_sources_are_pinned_but_never_normative(self):
+        """The prompt-fonte is integrity-pinned; it must not become a second norm."""
+        self.assertTrue(normative.COMPANION_SOURCES)
+        for name, spec in normative.COMPANION_SOURCES.items():
+            self.assertIs(spec["normative"], False, f"{name} must not be normative")
+            self.assertRegex(spec["sha256"], r"^[0-9a-f]{64}$")
+            self.assertNotEqual(spec["sha256"], normative.RAW_SHA256)
+            self.assertIn("NÃO NORMATIVA", spec["nature"])
+
+    def test_companion_manifest_matches_the_pinned_identities(self):
+        text = (ROOT / normative.COMPANION_MANIFEST_RELATIVE).read_text(encoding="utf-8")
+        self.assertIn("NÃO NORMATIVAS", text)
+        pinned = {
+            parts[1]: parts[0]
+            for line in text.splitlines()
+            if not line.startswith("#") and len(parts := line.split()) == 2
+        }
+        self.assertEqual(
+            pinned, {name: spec["sha256"] for name, spec in normative.COMPANION_SOURCES.items()}
+        )
+
+    def test_companion_verification_fails_closed_on_swap_or_unknown(self):
+        import tempfile
+
+        name = "PROMPT_FONTE_GERACAO_RELATORIOS_GENOMICOS_v1.2.txt"
+        with tempfile.TemporaryDirectory() as td:
+            good = Path(td) / name
+            good.write_bytes(b"not the real companion")
+            swapped = normative.verify_companion(name, good)
+            self.assertEqual(swapped["status"], "NÃO DISPONÍVEL")
+            self.assertEqual(swapped["reason"], "SHA-256 mismatch")
+            self.assertIs(swapped["normative"], False)
+
+            missing = normative.verify_companion(name, Path(td) / "absent.txt")
+            self.assertEqual(missing["status"], "NÃO DISPONÍVEL")
+
+            unknown = normative.verify_companion("UNREGISTERED.txt", good)
+            self.assertEqual(unknown["status"], "NÃO DISPONÍVEL")
+            self.assertIs(unknown["normative"], False)
+
     def test_rule_ids_are_bound_to_the_current_version(self):
         self.assertEqual(normative.rule_id(0), "GENOMA-V3.4-S000")
         self.assertEqual(normative.rule_id(normative.LAST_SECTION), "GENOMA-V3.4-S262")

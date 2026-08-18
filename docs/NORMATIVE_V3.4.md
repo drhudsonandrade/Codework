@@ -80,6 +80,35 @@ A regra termina com **"Não herdar o PASS de outra sessão."** Um artefato que a
 flag incondicionalmente. Por isso a atestação é vinculada ao `boot_id` do kernel e
 reverificada no consumo — ver `docs/DETERMINISTIC_ENGINE.md`.
 
+## Fontes complementares (não normativas)
+
+O manifesto de integridade distribui, junto da norma, o **PROMPT-FONTE v1.2**
+(`1b8a199c…`, 17/08/2026). Ele é **COMPLEMENTAR E NÃO NORMATIVO**: em conflito, a norma
+vigente prevalece integralmente e a geração deve parar.
+
+O repositório fixa seu SHA-256 em `manifests/COMPANION_SOURCES.sha256` para que uma cópia
+trocada seja detectável, e `normative.verify_companion()` devolve `NÃO DISPONÍVEL` para
+arquivo ausente, hash divergente ou nome não registrado. Nenhum gate toma identidade
+normativa dessa tabela — `scripts/validate_repo.py` recusa qualquer entrada que não esteja
+declarada como não normativa.
+
+## Como o sistema evita passar ou mentir
+
+Quatro barreiras existem exatamente para impedir que um resultado pareça melhor do que é:
+
+- **MANIFEST_STRUCTURE_GATE** — `analysis_relevant` e `requires_real_calling` desligam os
+  gates de proveniência, consentimento, QC e runtime quando `false`. Um manifesto sem o
+  bloco `operation`, ou com esses campos não booleanos, silenciaria o plano de controle
+  inteiro; o gate estrutural recusa o manifesto em vez de avaliá-lo desarmado.
+- **Divulgação do renderizador** — publicação FINAL fora do pacote de modelos aprovado
+  exige `allow_programmatic_final=True`, e o artefato resultante carrega
+  `RENDERIZAÇÃO PROGRAMÁTICA` / `PARIDADE_VISUAL: NÃO DISPONÍVEL` na própria página e no
+  registro de proveniência.
+- **Cobertura obrigatória no freshness gate** — ausência de dado não é aprovação: todos os
+  pacotes gerenciados e as seis fontes de evidência precisam estar presentes.
+- **Conflito nunca vira consenso** — registros de sobreposição não resolvidos no SNP-array
+  são `NÃO DISPONÍVEL` e ficam fora da interpretação.
+
 ## Contrato de status operacional (seção 261)
 
 `EXECUTADO` (feito nesta sessão) · `VERIFICADO` (conferido em fonte acessível) · `INFERIDO`

@@ -6,6 +6,7 @@ import base64
 import hashlib
 import json
 import lzma
+import re
 import tarfile
 import tempfile
 from pathlib import Path
@@ -14,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 STORE = ROOT / "template_store" / "v3.0"
 MANIFEST = STORE / "MANIFEST.json"
 REFERENCE = ROOT / "reporting" / "reference_v3_manifest.json"
+PART_NAME = re.compile(r"tplpart-\d{3}")
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -52,14 +54,26 @@ def verify(*, materialize: Path | None = None, allow_sealed_only: bool = False) 
     missing: list[str] = []
     bad: list[str] = []
     payload_parts: list[bytes] = []
+    seen: set[str] = set()
+    resolved_parts_dir = parts_dir.resolve()
     for part in parts:
-        p = parts_dir / part["name"]
+        name = part.get("name")
+        # Same containment rule the sealed normative transport enforces: a part name is an
+        # identifier, never a path, and never repeats.
+        if not isinstance(name, str) or not PART_NAME.fullmatch(name):
+            raise ValueError(f"invalid sealed template part name: {name!r}")
+        if name in seen:
+            raise ValueError(f"sealed template part duplicated: {name}")
+        seen.add(name)
+        p = parts_dir / name
+        if p.resolve().parent != resolved_parts_dir:
+            raise ValueError(f"sealed template part escapes parts directory: {name}")
         if not p.is_file():
-            missing.append(part["name"])
+            missing.append(name)
             continue
         data = p.read_bytes()
         if len(data) != part["size_bytes"] or sha256_bytes(data) != part["sha256"]:
-            bad.append(part["name"])
+            bad.append(name)
         payload_parts.append(data)
 
     if bad:
@@ -72,6 +86,12 @@ def verify(*, materialize: Path | None = None, allow_sealed_only: bool = False) 
                 "manifest_identity": "VERIFICADO",
                 "binary_materialization": "NÃO DISPONÍVEL",
                 "reports": 11,
+                # Stated numerically so this result cannot be read as "the templates were
+                # checked". Two JSON manifests agreeing with each other proves only that;
+                # no PDF was opened or hashed.
+                "declared_reports": 11,
+                "templates_hashed": 0,
+                "manifest_identity_scope": "cross-check of template_store and reporting manifests only; no template binary was read",
                 "missing_parts": missing,
                 "reason": "GitHub source identities are sealed, but binary source parts are not materialized in this checkout.",
             }
@@ -114,6 +134,9 @@ def verify(*, materialize: Path | None = None, allow_sealed_only: bool = False) 
         "manifest_identity": "VERIFICADO",
         "binary_materialization": "VERIFICADO",
         "reports": 11,
+        "declared_reports": 11,
+        "templates_hashed": len(reports),
+        "manifest_identity_scope": "manifests cross-checked and every template binary decoded and hashed",
         "archive_sha256": storage["decoded_archive_sha256"],
         "parts": len(parts),
     }

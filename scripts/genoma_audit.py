@@ -103,7 +103,21 @@ def audit(*, allow_template_sealed_only: bool = False) -> dict:
     rc, out = run(cmd)
     template_binary_verified = rc == 0 and '"binary_materialization": "VERIFICADO"' in out
     manifest_verified = rc == 0 and '"manifest_identity": "VERIFICADO"' in out
-    checks.append(check("TEMPLATE_IDENTITY_CONTRACT", manifest_verified, out))
+    # A passing manifest cross-check proves the two JSON manifests agree, not that any
+    # template was read. Carry the count so the audit cannot be read as template assurance.
+    templates_hashed = 0
+    try:
+        templates_hashed = int(json.loads(out).get("templates_hashed", 0))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        templates_hashed = 0
+    checks.append(
+        check(
+            "TEMPLATE_IDENTITY_CONTRACT",
+            manifest_verified,
+            out,
+            status_if_ok="VERIFICADO" if templates_hashed else "INFERIDO",
+        )
+    )
     checks.append(check("TEMPLATE_BINARY_SOURCE_STORE", template_binary_verified, out, blocking=not allow_template_sealed_only))
 
     required_array = [

@@ -27,6 +27,23 @@ SHA_MANIFEST_RELATIVE = "manifests/RULESET_V3.4.sha256"
 
 IDENTITY_STRING = f"{VERSION}/{STATUS}/{EFFECTIVE_DATE}"
 
+COMPANION_MANIFEST_RELATIVE = "manifests/COMPANION_SOURCES.sha256"
+
+# Companion documents distributed alongside the norm. They are integrity-pinned so a
+# swapped copy is detectable, and explicitly NOT normative: the prompt-fonte states that
+# in a conflict the vigent norm prevails and generation must stop. Nothing here may be
+# consulted in place of the ruleset, and no gate may take its identity from this table.
+COMPANION_SOURCES = {
+    "PROMPT_FONTE_GERACAO_RELATORIOS_GENOMICOS_v1.2.txt": {
+        "sha256": "1b8a199ce9a94213aa22dedb0476284c2e72f163ab8db0eefc2beb45ab3515e1",
+        "version": "1.2",
+        "date": "17/08/2026",
+        "nature": "COMPLEMENTAR E NÃO NORMATIVA",
+        "normative": False,
+        "precedence": "a norma vigente prevalece integralmente; em conflito, a geração deve parar",
+    },
+}
+
 # Header lines that must appear verbatim in the canonical artifact.
 REQUIRED_HEADER_LINES = (
     f"STATUS NORMATIVO: {STATUS}",
@@ -87,6 +104,43 @@ def attested_ruleset_block(sealed_dir: Any = None) -> dict[str, Any]:
         "section_count": evidence["section_count"],
         "attestation": "VERIFICADO",
         "verification": "sealed transport decoded and hashed in this run",
+    }
+
+
+def verify_companion(filename: str, path: Any) -> dict[str, Any]:
+    """Check a companion document against its pinned digest.
+
+    Returns a status block; never raises into a caller and never promotes the companion to
+    a normative source. An unknown or mismatched file is NÃO DISPONÍVEL, not a fallback
+    ruleset.
+    """
+    import hashlib
+    from pathlib import Path
+
+    spec = COMPANION_SOURCES.get(filename)
+    if spec is None:
+        return {"file": filename, "status": "NÃO DISPONÍVEL", "reason": "not a registered companion source", "normative": False}
+    candidate = Path(path)
+    if not candidate.is_file():
+        return {"file": filename, "status": "NÃO DISPONÍVEL", "reason": "file not present", "normative": False}
+    digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
+    if digest != spec["sha256"]:
+        return {
+            "file": filename,
+            "status": "NÃO DISPONÍVEL",
+            "reason": "SHA-256 mismatch",
+            "expected": spec["sha256"],
+            "observed": digest,
+            "normative": False,
+        }
+    return {
+        "file": filename,
+        "status": "VERIFICADO",
+        "sha256": digest,
+        "version": spec["version"],
+        "nature": spec["nature"],
+        "normative": False,
+        "precedence": spec["precedence"],
     }
 
 

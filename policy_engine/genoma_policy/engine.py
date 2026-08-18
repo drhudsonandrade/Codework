@@ -26,6 +26,7 @@ class PolicyEngine(CoreGates, EvidenceGates, AuditGates):
     def evaluate(self, manifest: dict[str, Any]) -> EvaluationReport:
         report = EvaluationReport(ruleset=self.ruleset.metadata())
         report.gates.extend([
+            self._manifest_structure_gate(manifest),
             self._ruleset_gate(manifest), self._taxonomy_gate(manifest), self._provenance_gate(manifest),
             self._consent_gate(manifest), self._qc_gate(manifest), self._runtime_resource_gate(manifest),
             self._evidence_gate(manifest), self._capability_honesty_gate(manifest), self._clinical_safety_gate(manifest),
