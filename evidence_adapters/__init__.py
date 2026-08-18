@@ -10,9 +10,17 @@ from typing import Any, Callable
 Transport = Callable[[urllib.request.Request], tuple[bytes, dict[str, str]]]
 
 
+# These probes run before every real DNA analysis, so an oversized or hanging response
+# must degrade the source to NÃO DISPONÍVEL rather than exhaust the runner.
+MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+
+
 def _default_transport(request: urllib.request.Request) -> tuple[bytes, dict[str, str]]:
     with urllib.request.urlopen(request, timeout=30) as response:
-        return response.read(), {str(k).lower(): str(v) for k, v in response.headers.items()}
+        payload = response.read(MAX_RESPONSE_BYTES + 1)
+        if len(payload) > MAX_RESPONSE_BYTES:
+            raise ValueError(f"provider response exceeds {MAX_RESPONSE_BYTES} bytes")
+        return payload, {str(k).lower(): str(v) for k, v in response.headers.items()}
 
 
 def _qs(params: dict[str, Any]) -> str:

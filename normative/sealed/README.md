@@ -12,6 +12,9 @@ This mechanism is about integrity and single-source activation, not secrecy. The
 - Both take the expected identity from `normative/__init__.py`, so a version migration is a single edit there followed by a re-seal.
 - Sealing refuses to run unless the supplied TXT matches that declared identity byte for byte.
 
-## Version history
+## Single VIGENTE source
 
-v3.4 (17/08/2026) supersedes v3.3 (14/08/2026, SHA-256 `187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a`). Per the REGRA DE UNICIDADE only one source may remain `VIGENTE`; the v3.3 integrity manifest is retained as archived provenance under `manifests/archive/` and marked `OBSOLETA`.
+The REGRA DE UNICIDADE allows exactly one source marked `VIGENTE`. The repository therefore
+carries one sealed transport and one integrity manifest, `manifests/RULESET_V3.4.sha256`.
+`scripts/validate_repo.py` and the four-plane `RULESET_GATE` both fail closed if a second
+active `RULESET_V*.sha256` ever appears alongside it.

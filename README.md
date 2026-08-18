@@ -12,6 +12,7 @@ Private, reproducible genomics execution repository governed by the canonical GE
 - `mcp/` — optional interface only; not a source of truth and not required by the policy engine.
 - `adapters/` — optional Cloudflare/Temporal/Supabase/Vercel/microfn/OpenAI integration contracts.
 - `manifests/` — integrity/reference manifests.
+- `docs/NORMATIVE_V3.4.md` — the vigent norm: identity, uniqueness rule, section-258 gates and the POST-DEPLOYMENT criterion.
 - `docs/PRODUCTION_CEREMONY.md` — exact live-deployment and section-260 evidence procedure.
 
 ## Normative source model

@@ -26,6 +26,10 @@ SYSTEM_REPLACEMENTS = {
     "NÃO INSERIDOS": "CONTROLADOS",
     "MODELO — NÃO É RESULTADO GENÉTICO": "PUBLICAÇÃO CONTROLADA — RESULTADO GENÔMICO",
     "MODELO — NÃO É RESULTADO": "PUBLICAÇÃO CONTROLADA",
+    # LEFT SIDE IS TEMPLATE CONTENT, NOT A VERSION PIN. This exact string is printed inside
+    # the sealed v3.0 reference PDFs; it is the search key that lets the renderer overwrite
+    # it with the current normative identity. Editing it would stop the match and leave the
+    # old identity visible in published reports. Only the right side tracks the norm.
     "GENOMA-HUDSON-RULESET-v3.3": "GENOMA-RULESET-v3.4",
     "MODELO SEM DADOS PESSOAIS": "RESULTADO GENÔMICO",
     "Campos em azul são placeholders obrigatórios ou condicionais; preencher com dado rastreável ou declarar NÃO DISPONÍVEL.":

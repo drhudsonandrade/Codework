@@ -27,16 +27,6 @@ SHA_MANIFEST_RELATIVE = "manifests/RULESET_V3.4.sha256"
 
 IDENTITY_STRING = f"{VERSION}/{STATUS}/{EFFECTIVE_DATE}"
 
-# Retained so provenance of the superseded source is never erased (principles 2 and 10).
-SUPERSEDED = {
-    "version": "v3.3",
-    "effective_date": "14/08/2026",
-    "canonical_filename": "REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt",
-    "raw_sha256": "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a",
-    "status": "OBSOLETA",
-    "archived_manifest": "manifests/archive/RULESET_V3.3.sha256.obsolete",
-}
-
 # Header lines that must appear verbatim in the canonical artifact.
 REQUIRED_HEADER_LINES = (
     f"STATUS NORMATIVO: {STATUS}",

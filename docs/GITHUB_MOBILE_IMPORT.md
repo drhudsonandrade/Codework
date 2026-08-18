@@ -36,7 +36,7 @@ git push -u origin codex/genome-runtime-mcp
 ```
 
 7. Open the compare page for the current private repository and compare `main...codex/genome-runtime-mcp`.
-8. Use the title and text in `docs/PR_BODY.md`, select **Create draft pull request**, and wait for both workflows to finish.
+8. Describe the change in the pull request body, select **Create draft pull request**, and wait for both workflows to finish.
 9. Do not merge if Fallow, the repository contract, MCP tests, container build, or synthetic GATK/bcftools canary fails.
 
 ## GitHub App access

@@ -6,7 +6,6 @@ import base64
 import hashlib
 import json
 import lzma
-import shutil
 import tarfile
 import tempfile
 from pathlib import Path

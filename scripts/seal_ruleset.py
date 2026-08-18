@@ -101,7 +101,6 @@ def build_manifest(raw: bytes) -> tuple[dict, list[bytes]]:
         "transport_sha256_scope": "ordered concatenation of compact base64 chunk payloads",
         "transport_parts": parts,
         "section_count": normative.SECTION_COUNT,
-        "supersedes": dict(normative.SUPERSEDED),
         "active_at_rest": False,
         "activation_contract": (
             "materialize byte-exact canonical TXT at runtime, verify identity+hash+0-262, "

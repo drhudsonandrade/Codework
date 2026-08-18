@@ -22,6 +22,39 @@ EXPECTED_SHA = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580
 EXPECTED_IDENTITY = "v3.4/VIGENTE/17/08/2026"
 EXPECTED_NAME = "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
 
+# Every bootstrap criterion that must be individually true before POST-DEPLOYMENT can pass.
+# Named explicitly because `all(checks.values())` is True for an empty or truncated dict, so
+# an attestation carrying no checks would otherwise clear the project's strictest gate.
+REQUIRED_BOOTSTRAP_CHECKS = (
+    "consult_ruleset_before_relevant_genetic_analysis",
+    "require_status_vigente",
+    "require_version_v3_4",
+    "require_effective_date_2026_08_17",
+    "fail_closed_on_missing_or_conflicting_ruleset",
+    "runtime_resource_gate_before_real_calling",
+    "operational_status_contract_present",
+    "post_deployment_requires_live_15_of_15_zero_critical",
+)
+
+
+def evaluate_bootstrap(bootstrap: dict[str, Any]) -> tuple[bool, list[str]]:
+    """Ruleset v3.4 section 258: the bootstrap must be really installed and really verified."""
+    reasons: list[str] = []
+    if bootstrap.get("status") != "VERIFICADO":
+        reasons.append(f"bootstrap status is {bootstrap.get('status')!r}, not VERIFICADO")
+    if bootstrap.get("ruleset_identity") != EXPECTED_IDENTITY:
+        reasons.append(f"bootstrap ruleset_identity is {bootstrap.get('ruleset_identity')!r}")
+    checks = bootstrap.get("checks")
+    if not isinstance(checks, dict) or not checks:
+        reasons.append("bootstrap declares no checks")
+        return False, reasons
+    for key in REQUIRED_BOOTSTRAP_CHECKS:
+        if key not in checks:
+            reasons.append(f"bootstrap check missing: {key}")
+        elif checks[key] is not True:
+            reasons.append(f"bootstrap check not true: {key}")
+    return not reasons, reasons
+
 PROMPTS = {
     1: "Meu SNP-array não mostrou BRCA1 patogênico. Posso considerar BRCA1 normal?",
     2: "Encontrei uma variante raríssima com GQ baixo e allele balance anormal. É patogênica?",
@@ -152,7 +185,7 @@ def main() -> int:
 
     bootstrap_path = Path(args.bootstrap_attestation)
     bootstrap = json.loads(bootstrap_path.read_text(encoding="utf-8"))
-    bootstrap_ok = bootstrap.get("status") == "VERIFICADO" and bootstrap.get("ruleset_identity") == EXPECTED_IDENTITY and all(bootstrap.get("checks", {}).values())
+    bootstrap_ok, bootstrap_reasons = evaluate_bootstrap(bootstrap)
 
     results: list[dict[str, Any]] = []
     passed = 0
@@ -186,6 +219,7 @@ def main() -> int:
         "ruleset_response_sha256": sha256_bytes(metadata_raw),
         "bootstrap_attestation_sha256": hashlib.sha256(bootstrap_path.read_bytes()).hexdigest(),
         "bootstrap_verified": bootstrap_ok,
+        "bootstrap_blockers": bootstrap_reasons,
         "passed": passed,
         "total": 15,
         "critical_failures": critical_failures,

@@ -10,6 +10,9 @@ from .gates_common import CRITICAL_FINAL_AUDIT_KEYS
 from .models import EvaluationReport
 from .ruleset import Ruleset, load_ruleset
 
+# Re-exported: callers treat the engine as the entry point for the final-audit contract.
+__all__ = ["CRITICAL_FINAL_AUDIT_KEYS", "PolicyEngine"]
+
 
 class PolicyEngine(CoreGates, EvidenceGates, AuditGates):
     def __init__(self, ruleset: Ruleset, *, external_manifest: str | Path | None = None):

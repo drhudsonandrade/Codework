@@ -15,6 +15,10 @@ import fitz
 
 COMPILER_ID = "fitz-1.26.7-genoma-v2"
 TOKEN_RE = re.compile(r"\[\[.*?\]\]", re.S)
+# Literal strings printed inside the sealed v3.0 reference PDFs, located with
+# `page.search_for` so the renderer can overwrite them. These are template content, not
+# project version pins; the ruleset identity they are replaced with lives in
+# `reporting/template_v3.SYSTEM_REPLACEMENTS`.
 CONTROLLED = [
     "MODELO REUTILIZÁVEL v3.0",
     "MODELO EDITÁVEL",

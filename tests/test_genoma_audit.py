@@ -71,8 +71,8 @@ class GenomaAuditTest(unittest.TestCase):
             shutil.copytree(ROOT / "normative", fake_root / "normative")
             shutil.copytree(ROOT / "manifests", fake_root / "manifests")
             # REGRA DE UNICIDADE: a second active manifest may not coexist.
-            (fake_root / "manifests" / "RULESET_V3.3.sha256").write_text(
-                f"{normative.SUPERSEDED['raw_sha256']}  {normative.SUPERSEDED['canonical_filename']}\n",
+            (fake_root / "manifests" / "RULESET_V9.9.sha256").write_text(
+                f"{'0' * 64}  REGRAS_PROJETO_GENOMA_VIGENTE_v9.9_2026-12-31.txt\n",
                 encoding="ascii",
             )
             original = genoma_audit.ROOT

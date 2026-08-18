@@ -27,7 +27,6 @@ REQUIRED_PATHS = (
     "array_pipeline/annotation.py", "array_pipeline/targets.py", "config/partial_genome_annotation_targets.json",
     "manifests/GRCh38.sources.tsv", "manifests/GRCh38.lock.sha256.example", "manifests/RULESET_V3.4.sha256",
     "normative/__init__.py", "normative/sealed/MANIFEST.json", "normative/sealed/README.md",
-    "manifests/archive/RULESET_V3.3.sha256.obsolete",
     "scripts/__init__.py", "scripts/sealed_ruleset.py", "scripts/seal_ruleset.py",
     "scripts/check_versions.sh", "scripts/fetch_grch38.sh",
     "scripts/build_bwa_mem2_index.sh", "scripts/validate_grch38.sh", "scripts/validate_bwa_mem2_functional.sh",
@@ -48,10 +47,9 @@ REQUIRED_PATHS = (
     "policy_engine/Dockerfile", "mcp/package.json", "mcp/package-lock.json", "mcp/tsconfig.json", "mcp/src/server.ts",
     "deploy/docker-compose.yml", "deploy/attestations/bootstrap-project-v3.4.json", "adapters/README.md",
     "adapters/config.example.json", "docs/FALLOW_SECURITY_REVIEW.md", "docs/GITHUB_MOBILE_IMPORT.md",
-    "docs/MAGALU_PRIVATE_MCP_SETUP.md", "docs/PRE_DEPLOYMENT_VALIDATION_2026-08-15.md",
-    "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md", "docs/PR_BODY.md", "docs/DETERMINISTIC_ENGINE.md",
+    "docs/MAGALU_PRIVATE_MCP_SETUP.md", "docs/NORMATIVE_V3.4.md",
+    "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md", "docs/DETERMINISTIC_ENGINE.md",
     "docs/PRODUCTION_CEREMONY.md", "docs/PORTABILITY_MATRIX.md", "docs/GRCH38_COMPUTE_STRATEGY.md",
-    "docs/audits/GENOMA_V0.8_PREIMPLEMENTATION_AUDIT_2026-08-16.md",
 )
 EXPECTED_ARTIFACTS = {
     "Homo_sapiens_assembly38.fasta", "Homo_sapiens_assembly38.fasta.fai", "Homo_sapiens_assembly38.dict",

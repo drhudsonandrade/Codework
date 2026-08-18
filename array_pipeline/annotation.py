@@ -10,6 +10,7 @@ from typing import Any
 from array_pipeline.qc import (
     HARMONIZED_COLUMNS,
     RAW_COLUMNS,
+    UNRESOLVED_OVERLAP_STATUSES,
     _canonical_gt,
     _read_header_and_metadata,
     _text_stream,
@@ -43,6 +44,12 @@ def _orientation(row: dict[str, str], schema: str, qc: dict[str, Any]) -> tuple[
     strand_evidence = qc.get("input", {}).get("strand_evidence")
     if schema.startswith("harmonized"):
         sources = (row.get("SOURCES") or "").strip()
+        status = (row.get("STATUS") or "").strip().lower()
+        # Presence in both platforms is not agreement between them. Reporting a record the
+        # harmonizer flagged as conflicting or ambiguous as "cross-platform consensus" would
+        # resolve the conflict by assertion, which sections 4 and 7 forbid.
+        if status in UNRESOLVED_OVERLAP_STATUSES:
+            return "NÃO DISPONÍVEL", f"unresolved cross-platform record ({status}); not auto-resolved"
         if sources == "GM":
             return "VERIFICADO", "cross-platform consensus"
         if sources == "M" and strand == "forward" and strand_evidence not in {None, "NÃO DISPONÍVEL"}:

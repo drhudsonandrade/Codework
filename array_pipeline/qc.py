@@ -28,6 +28,12 @@ DIPLOID_SNP = re.compile(r"^[ACGT]{2}$")
 HAPLOID_SNP = re.compile(r"^[ACGT]$")
 INDEL = re.compile(r"^(?:II|DD|ID|DI)$")
 
+# Harmonized records whose cross-platform overlap was never resolved. Ruleset section 4
+# requires conflicts to stay recorded and never be arbitrarily resolved, and section 7
+# forbids assuming either platform is correct, so these loci must never be presented as
+# consensus. They are excluded from interpretation rather than blocking the whole array.
+UNRESOLVED_OVERLAP_STATUSES = frozenset({"coordinate_conflict", "ambiguous_overlap", "genotype_conflict"})
+
 BASELINE_RSIDS = [
     "rs1799807", "rs1803274", "rs17580", "rs28929474", "rs738409",
     "rs1799853", "rs1057910", "rs9923231", "rs4149056", "rs776746",
@@ -387,12 +393,14 @@ def inspect_array(
                 f"overlap conflict rate {overlap_conflict_rate:.6f} > operational threshold {max_overlap_conflict_rate:.6f}"
             )
             cross_state = "FAIL"
-        coordinate_conflicts = status_counts.get("coordinate_conflict", 0)
-        ambiguous = status_counts.get("ambiguous_overlap", 0)
-        if coordinate_conflicts or ambiguous:
-            cross_reasons.append(
-                f"retained unresolved overlap records: coordinate_conflict={coordinate_conflicts}, ambiguous_overlap={ambiguous}"
-            )
+    # Unresolved records are reported in their own field, never as gate `reasons`: a gate
+    # that answers PASS while listing failure reasons is self-contradictory. They do not
+    # block the array — they are excluded from interpretation downstream instead.
+    unresolved_records = {
+        status: status_counts.get(status, 0)
+        for status in sorted(UNRESOLVED_OVERLAP_STATUSES)
+        if status_counts.get(status, 0)
+    }
 
     ready_for_limited_interpretation = all(
         x == "PASS" for x in (structure_state, build_state, call_state)
@@ -449,7 +457,13 @@ def inspect_array(
             "STRUCTURE_GATE": _gate(structure_state, structure_reasons, notes=structure_notes),
             "BUILD_STRAND_GATE": _gate(build_state, build_reasons),
             "CALLABILITY_GATE": _gate(call_state, call_reasons, threshold=min_call_rate),
-            "CROSS_PLATFORM_GATE": _gate(cross_state, cross_reasons, max_conflict_rate=max_overlap_conflict_rate),
+            "CROSS_PLATFORM_GATE": _gate(
+                cross_state,
+                cross_reasons,
+                max_conflict_rate=max_overlap_conflict_rate,
+                unresolved_records=unresolved_records,
+                unresolved_record_policy="excluded from interpretation; conflicts are never auto-resolved",
+            ),
             "LIMITED_INTERPRETATION_GATE": _gate(
                 "PASS" if ready_for_limited_interpretation else "BLOCKED",
                 [] if ready_for_limited_interpretation else ["one or more prerequisite gates are not PASS"],

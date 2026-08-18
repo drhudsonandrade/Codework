@@ -55,17 +55,47 @@ class NormativeIdentityTest(unittest.TestCase):
         fields = (ROOT / normative.SHA_MANIFEST_RELATIVE).read_text(encoding="ascii").split()
         self.assertEqual(fields, [normative.RAW_SHA256, normative.CANONICAL_FILENAME])
 
-    def test_superseded_version_is_archived_not_active(self):
-        superseded = normative.SUPERSEDED
-        self.assertEqual(superseded["status"], "OBSOLETA")
-        self.assertNotEqual(superseded["version"], normative.VERSION)
-        self.assertNotEqual(superseded["raw_sha256"], normative.RAW_SHA256)
-        archived = ROOT / superseded["archived_manifest"]
-        self.assertTrue(archived.is_file(), "superseded manifest must survive as provenance")
-        self.assertIn(superseded["raw_sha256"], archived.read_text(encoding="utf-8"))
-        # REGRA DE UNICIDADE: only the current manifest may sit in the active directory.
+    def test_exactly_one_active_ruleset_manifest(self):
+        """REGRA DE UNICIDADE: only one source may be marked VIGENTE."""
         active = sorted(p.name for p in (ROOT / "manifests").glob("RULESET_V*.sha256"))
         self.assertEqual(active, [Path(normative.SHA_MANIFEST_RELATIVE).name])
+
+    def test_no_superseded_ruleset_identity_survives_in_the_tree(self):
+        """The project is governed by one version; stale identities must not linger."""
+        import subprocess
+
+        # Include untracked-but-present files: a new file would otherwise slip past this
+        # guard until the moment it was staged.
+        tracked = subprocess.run(
+            ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout.split()
+        stale = []
+        for rel in tracked:
+            if rel.startswith("normative/sealed/parts/") or rel == "tests/test_normative_identity.py":
+                continue
+            path = ROOT / rel
+            if not path.is_file():
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, OSError):
+                continue
+            for token in ("v3.3", "V3.3", "14/08/2026", "2026-08-14"):
+                if token not in text:
+                    continue
+                # The only legitimate survivor is the literal printed inside the sealed v3.0
+                # template PDFs: it is the search key used to REPLACE that text with the
+                # current identity, so removing it would leave the old string visible.
+                if token == "v3.3" and "GENOMA-HUDSON-RULESET-v3.3" in text:
+                    residual = text.replace("GENOMA-HUDSON-RULESET-v3.3", "")
+                    if token not in residual:
+                        continue
+                stale.append(f"{rel}:{token}")
+        self.assertEqual(stale, [], f"superseded ruleset identity still present: {stale}")
 
     def test_rule_ids_are_bound_to_the_current_version(self):
         self.assertEqual(normative.rule_id(0), "GENOMA-V3.4-S000")

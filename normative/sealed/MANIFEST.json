@@ -81,14 +81,6 @@
     }
   ],
   "section_count": 263,
-  "supersedes": {
-    "version": "v3.3",
-    "effective_date": "14/08/2026",
-    "canonical_filename": "REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt",
-    "raw_sha256": "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a",
-    "status": "OBSOLETA",
-    "archived_manifest": "manifests/archive/RULESET_V3.3.sha256.obsolete"
-  },
   "active_at_rest": false,
   "activation_contract": "materialize byte-exact canonical TXT at runtime, verify identity+hash+0-262, chmod 0444, mount read-only; never commit active plaintext ruleset"
 }

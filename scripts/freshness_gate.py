@@ -9,9 +9,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from evidence_adapters import ADAPTERS
+from scripts.runtime_stack import MANAGED_RUNTIME_PACKAGES
+
+REQUIRED_COMPONENTS = frozenset(MANAGED_RUNTIME_PACKAGES)
+REQUIRED_EVIDENCE_SOURCES = frozenset(ADAPTERS)
 
 
 def _parse_time(value: str | None) -> datetime | None:
@@ -41,8 +52,23 @@ def evaluate_readiness(state: dict[str, Any], *, now: datetime | None = None) ->
     if _is_stale(state.get("checked_at"), max_age_hours, now):
         blockers.append("freshness_state:stale")
 
+    # An absence of complaints is not readiness. A truncated state carrying nothing but a
+    # fresh timestamp used to satisfy every loop below vacuously and report ready_for_dna,
+    # so coverage of the required sets is asserted explicitly before anything else.
+    observed_components = {
+        str(x.get("name")) for x in state.get("components", []) or [] if isinstance(x, dict) and x.get("name")
+    }
+    for missing in sorted(REQUIRED_COMPONENTS - observed_components):
+        blockers.append(f"{missing}:component_absent")
+
+    observed_sources = {
+        str(x.get("name")) for x in state.get("evidence_sources", []) or [] if isinstance(x, dict) and x.get("name")
+    }
+    for missing in sorted(REQUIRED_EVIDENCE_SOURCES - observed_sources):
+        blockers.append(f"{missing}:evidence_source_absent")
+
     component_results: list[dict[str, Any]] = []
-    for raw in state.get("components", []):
+    for raw in state.get("components", []) or []:
         if not isinstance(raw, dict):
             blockers.append("component:malformed")
             continue
@@ -75,7 +101,7 @@ def evaluate_readiness(state: dict[str, Any], *, now: datetime | None = None) ->
         )
 
     source_results: list[dict[str, Any]] = []
-    for raw in state.get("evidence_sources", []):
+    for raw in state.get("evidence_sources", []) or []:
         if not isinstance(raw, dict):
             blockers.append("evidence_source:malformed")
             continue
@@ -108,7 +134,9 @@ def evaluate_readiness(state: dict[str, Any], *, now: datetime | None = None) ->
         "blockers": blockers,
         "components": component_results,
         "evidence_sources": source_results,
-        "rule": "latest discovered candidate must equal validated/promoted version and have PASS canary before real DNA",
+        "required_components": sorted(REQUIRED_COMPONENTS),
+        "required_evidence_sources": sorted(REQUIRED_EVIDENCE_SOURCES),
+        "rule": "every required component and evidence source must be present, promoted and fresh; latest discovered candidate must equal the validated/promoted version and have a PASS canary before real DNA",
     }
 
 

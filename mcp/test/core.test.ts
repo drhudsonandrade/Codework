@@ -49,7 +49,7 @@ test("audit records are written once with restrictive permissions", async () => 
     tool: "run_synthetic_canary",
     arguments: { requestId: "canary-1" },
     status: "PASS" as const,
-    startedAt: "2026-08-14T00:00:00.000Z",
+    startedAt: "2026-08-17T00:00:00.000Z",
     durationMs: 10,
     result: { status: "PASS" },
   };
