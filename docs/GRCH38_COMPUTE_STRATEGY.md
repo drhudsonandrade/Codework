@@ -14,7 +14,54 @@ Primary references:
 - GitHub Packages billing documentation;
 - Broad/GATK public GRCh38 resource bundle documentation.
 
-## Recommended architecture: no permanent high-memory machine
+## Path 0 — do not align at all (the cheapest correct answer)
+
+**Status: EXECUTADO em código.** This is the first thing to check, because for a
+lab-delivered WGS it removes the constraint entirely rather than working around it.
+
+The ~80 GiB build and the large resident index exist for **one** step: aligning FASTQ.
+Ruleset section 3 lists the primary WGS source as `BAM + BAI ou CRAM + CRAI` alongside
+FASTQ — that is, the laboratory usually delivers data **already aligned**.
+
+`scripts/wgs_align_or_stage.sh` has three branches, and only one of them touches the
+aligner:
+
+| `input_type` | what runs | aligner index |
+|---|---|---|
+| `FASTQ` | `bwa-mem2 mem` + `samtools sort` | **required** |
+| `BAM` | `samtools sort` | never read |
+| `CRAM` | `samtools view -T ref` + `samtools sort` | never read |
+
+The Runtime/Resource Gate used to demand `aligner_indexes` unconditionally, so a staged
+run was blocked on a resource nothing opened. The gate now binds that requirement to the
+real input mode:
+
+```bash
+# lab-delivered BAM/CRAM: no aligner index, no high-memory event
+python3 scripts/runtime_resource_gate.py --alignment-mode stage --ref-root /refs --output gate.json
+```
+
+The exemption is narrow and self-checking, so it cannot be used to dodge the index:
+
+- supplying `--fastq-r1/--fastq-r2` forces `align` regardless of the declared mode;
+- the verifier rejects an attestation that declares `stage` while carrying FASTQ integrity
+  evidence, or that declares `stage` while still asserting the index is required;
+- an unknown mode is rejected outright.
+
+What a staged run still requires, unchanged: FASTA, FAI, dictionary, contig/build
+agreement, known-sites and annotation checksums, sample/read-group identity, BAM/CRAM
+integrity and caller–reference compatibility. **Nothing about QC or evidence is relaxed.**
+
+Residual limitation: staging trusts the laboratory's alignment. If you need an independent
+alignment — a different aligner, a different reference, or a truth-set comparison under
+ruleset section 55 — you are back to a real alignment and to Paths A–D below.
+
+> The exact download sizes of the Broad bundle could not be measured from this session:
+> the agent proxy returns 403 for `storage.googleapis.com`. The claim above is structural
+> (which code path reads which resource), verified in the repository, and does not depend
+> on those numbers.
+
+## Recommended architecture when alignment is genuinely required
 
 ### Path A — prebuilt BWA-MEM2, content-addressed and verified
 
@@ -60,6 +107,8 @@ Swap may allow an under-RAM machine to complete indexing, but it is dramatically
 ## What is and is not solved
 
 **Solved architecturally / EXECUTADO in code:**
+- a lab-delivered BAM/CRAM needs no aligner index at all (Path 0), so the high-memory event
+  disappears entirely for that lane rather than being relocated;
 - high-memory is no longer required to be permanent;
 - prebuilt BWA-MEM2 indices are accepted only via exact FASTA/index checksum lock and functional validation;
 - the full-grch38 gate remains separate from partial SNP-array readiness;

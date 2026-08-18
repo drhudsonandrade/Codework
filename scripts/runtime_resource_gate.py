@@ -300,26 +300,57 @@ def main() -> int:
     p.add_argument("--caller", default="gatk-haplotypecaller", choices=["gatk-haplotypecaller", "bcftools", "deepvariant"])
     p.add_argument("--model")
     p.add_argument("--session-id")
+    p.add_argument(
+        "--alignment-mode",
+        choices=["align", "stage"],
+        default="align",
+        help=(
+            "align: FASTQ will be aligned in this session, so the aligner index is required. "
+            "stage: an already-aligned BAM/CRAM is ingested and no alignment happens, so the "
+            "index is NÃO APLICÁVEL. Supplying FASTQ forces align regardless of this flag."
+        ),
+    )
     p.add_argument("--require-real-calling", action="store_true")
     p.add_argument("--output", required=True)
     args = p.parse_args()
     session_id = args.session_id or str(uuid.uuid4())
 
+    # `wgs_align_or_stage.sh` only invokes bwa-mem2 for FASTQ input; BAM/CRAM are sorted and
+    # indexed with samtools against the FASTA. Demanding the aligner index for a run that
+    # provably never aligns forces an ~80 GiB one-time build and a ~30 GiB resident index
+    # that nothing reads. The requirement is therefore bound to the real input mode — and
+    # supplying FASTQ overrides the declaration, so "stage" can never be used to skip the
+    # index and then align anyway.
+    alignment_mode = "align" if (args.fastq_r1 or args.fastq_r2) else args.alignment_mode
+    aligner_required = alignment_mode == "align"
+
     tools = check_tools()
     refs = check_reference(Path(args.ref_root))
     sample = check_sample(args)
     compatibility = compatibility_check(tools, refs, args)
+
+    aligner = dict(refs["aligner_indexes"])
+    if not aligner_required:
+        aligner = item(
+            "NÃO APLICÁVEL",
+            "runtime:bwa-indexes",
+            reason="alignment_mode=stage: pre-aligned BAM/CRAM is ingested, no aligner index is read",
+            observed=refs["aligner_indexes"]["status"],
+            **refs["aligner_indexes"]["details"],
+        )
+
     checks = {
         "executables_and_versions": tools,
         "reference_build_and_contigs": refs["reference_build_and_contigs"],
         "fasta_fai_dictionary": refs["fasta_fai_dictionary"],
-        "aligner_indexes": refs["aligner_indexes"],
+        "aligner_indexes": aligner,
         "required_resources_checksums": refs["required_resources_checksums"],
         "sample_read_group_integrity": sample["sample_read_group_integrity"],
         "fastq_bam_cram_integrity": sample["fastq_bam_cram_integrity"],
         "caller_model_reference_compatibility": compatibility,
     }
-    unavailable = [k for k, v in checks.items() if v["status"] != "EXECUTADO"]
+    # NÃO APLICÁVEL is a reasoned exclusion carrying its justification, not a missing check.
+    unavailable = [k for k, v in checks.items() if v["status"] not in {"EXECUTADO", "NÃO APLICÁVEL"}]
     status = "EXECUTADO" if not unavailable else "NÃO DISPONÍVEL"
     binding = session_binding(session_id)
     payload = {
@@ -331,6 +362,8 @@ def main() -> int:
         "started_at": now(),
         "host": {"hostname": socket.gethostname(), "platform": platform.platform(), "python": sys.version.split()[0]},
         "caller_profile": args.caller,
+        "alignment_mode": alignment_mode,
+        "aligner_index_required": aligner_required,
         "checks": checks,
         "unavailable_checks": unavailable,
         "ready_for_real_calling": not unavailable,

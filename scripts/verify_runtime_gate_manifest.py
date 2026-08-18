@@ -122,7 +122,30 @@ def verify(
     )
 
     checks = payload.get("checks") if isinstance(payload.get("checks"), dict) else {}
-    required = ENVIRONMENT_REQUIRED + (SAMPLE_REQUIRED if scope == "full" else ())
+    required = list(ENVIRONMENT_REQUIRED + (SAMPLE_REQUIRED if scope == "full" else ()))
+
+    # An aligner index is only meaningful when this session will actually align. A staged
+    # BAM/CRAM run never reads it, so demanding it would force an ~80 GiB index build for a
+    # resource nothing opens. The exemption is narrow and self-checking: it applies only when
+    # the attestation declares stage mode AND carries no FASTQ integrity evidence, so a
+    # manifest cannot claim stage and then hand the pipeline FASTQ.
+    alignment_mode = payload.get("alignment_mode", "align")
+    integrity = checks.get("fastq_bam_cram_integrity") if isinstance(checks.get("fastq_bam_cram_integrity"), dict) else {}
+    details = integrity.get("details") if isinstance(integrity.get("details"), dict) else {}
+    declared_fastq = any(key.startswith("fastq") for key in details)
+    if alignment_mode == "stage":
+        if declared_fastq:
+            errors.append("alignment_mode=stage contradicts FASTQ input evidence; aligner index is required")
+        elif payload.get("aligner_index_required") is not False:
+            errors.append("alignment_mode=stage but the attestation still declares the aligner index required")
+        else:
+            required.remove("aligner_indexes")
+            aligner = checks.get("aligner_indexes") if isinstance(checks.get("aligner_indexes"), dict) else {}
+            if aligner.get("status") not in {"NÃO APLICÁVEL", "EXECUTADO"}:
+                errors.append("aligner_indexes must be NÃO APLICÁVEL or EXECUTADO under stage mode")
+    elif alignment_mode != "align":
+        errors.append(f"unknown alignment_mode: {alignment_mode!r}")
+
     for key in required:
         check = checks.get(key) if isinstance(checks.get(key), dict) else {}
         if check.get("status") != "EXECUTADO":
