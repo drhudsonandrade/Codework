@@ -1,0 +1,89 @@
+{
+  "blocking_failures": [],
+  "checks": [
+    {
+      "blocking": true,
+      "evidence": "{\n  \"identity\": {\n    \"canonical_filename\": \"REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt\",\n    \"effective_date\": \"17/08/2026\",\n    \"normative_identifier\": \"GENOMA-RULESET-v3.4\",\n    \"section_count\": 263,\n    \"sha256\": \"ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580\",\n    \"status\": \"VIGENTE\",\n    \"verification\": \"sealed transport decoded and hashed in this run\",\n    \"version\": \"v3.4\"\n  },\n  \"mismatches\": {},\n  \"verified\": true\n}",
+      "id": "RULESET_GATE",
+      "operational_status": "VERIFICADO",
+      "state": "PASS"
+    },
+    {
+      "blocking": true,
+      "evidence": "PASS\trepository_contract\nPASS\truleset_manifest_contract\tv3.4 raw SHA-256 pinned\nPASS\trepository_active_rulesets\t0\nPASS\tsealed_normative_transport\tv3.4/VIGENTE/17/08/2026 sections=263\nPASS\tgrch38_manifest\t9/9\nPASS\tcompanion_sources\t1 pinned, non-normative\nPASS\tpre_dna_readiness_contract\tlatest-tested candidate + canaries + freshness + runtime/resource gate\nPASS\twgs_scientific_data_plane_contract\treal SNV/indel path + explicit unsupported classes\nPASS\tarray_scientific_data_plane_contract\tQC + target-first evidence + policy/report handoff\nPASS\tevidence_adapter_contract\tClinVar/ClinGen/CPIC/ClinPGx/gnomAD/PGS Catalog\nPASS\tsupply_chain_contract\tworkflow/action/container lock paths present\nPASS\treporting_contract\t11-model deterministic renderer and reference identities\nPASS\toptional_adapters\tcore has no Cloudflare/Temporal/Supabase/OpenAI runtime dependency\n",
+      "id": "REPOSITORY_CONTRACT",
+      "operational_status": "VERIFICADO",
+      "state": "PASS"
+    },
+    {
+      "blocking": true,
+      "evidence": "PASS\tactions_immutable\t10 action identities observed\nPASS\tcontainer_digests\tbase image + Gitleaks\nPASS\truntime_versions\texact critical conda pins\n",
+      "id": "SUPPLY_CHAIN_LOCK",
+      "operational_status": "VERIFICADO",
+      "state": "PASS"
+    },
+    {
+      "blocking": true,
+      "evidence": "{\n  \"archive_sha256\": \"f0d77bc1f1077cfbb5b01e5cbfa1096454443a3c6f07d88a82b90972c32cc9da\",\n  \"binary_materialization\": \"VERIFICADO\",\n  \"declared_reports\": 11,\n  \"manifest_identity\": \"VERIFICADO\",\n  \"manifest_identity_scope\": \"manifests cross-checked and every template binary decoded and hashed\",\n  \"operational_status\": \"VERIFICADO\",\n  \"parts\": 48,\n  \"reports\": 11,\n  \"schema\": \"genoma-template-store-verification-v1\",\n  \"templates_hashed\": 11\n}\n",
+      "id": "TEMPLATE_IDENTITY_CONTRACT",
+      "operational_status": "VERIFICADO",
+      "state": "PASS"
+    },
+    {
+      "blocking": true,
+      "evidence": "{\n  \"archive_sha256\": \"f0d77bc1f1077cfbb5b01e5cbfa1096454443a3c6f07d88a82b90972c32cc9da\",\n  \"binary_materialization\": \"VERIFICADO\",\n  \"declared_reports\": 11,\n  \"manifest_identity\": \"VERIFICADO\",\n  \"manifest_identity_scope\": \"manifests cross-checked and every template binary decoded and hashed\",\n  \"operational_status\": \"VERIFICADO\",\n  \"parts\": 48,\n  \"reports\": 11,\n  \"schema\": \"genoma-template-store-verification-v1\",\n  \"templates_hashed\": 11\n}\n",
+      "id": "TEMPLATE_BINARY_SOURCE_STORE",
+      "operational_status": "VERIFICADO",
+      "state": "PASS"
+    },
+    {
+      "blocking": true,
+      "evidence": "workflows/array.nf, array_pipeline/qc.py, array_pipeline/annotation.py, array_pipeline/targets.py, config/partial_genome_annotation_targets.json, .github/workflows/genoma-snp-array.yml",
+      "id": "SCIENTIFIC_DATA_PLANE_ARRAY",
+      "operational_status": "VERIFICADO",
+      "state": "PASS"
+    },
+    {
+      "blocking": true,
+      "evidence": "official/primary adapter registry: clinvar, clingen, cpic, clinpgx, gnomad, pgs_catalog",
+      "id": "EVIDENCE_ANNOTATION_PLANE",
+      "operational_status": "VERIFICADO",
+      "state": "PASS"
+    },
+    {
+      "blocking": false,
+      "evidence": "prebuilt checksum-locked index verifier + explicit ephemeral/self-hosted fallback",
+      "id": "GRCH38_NO_PERMANENT_HIGHMEM_STRATEGY",
+      "operational_status": "VERIFICADO",
+      "state": "PASS"
+    },
+    {
+      "blocking": true,
+      "evidence": "[]",
+      "id": "NO_PERSONAL_GENOTYPE_FIXTURES",
+      "operational_status": "VERIFICADO",
+      "state": "PASS"
+    }
+  ],
+  "created_at": "2026-08-18T19:10:14.888024Z",
+  "four_planes": {
+    "audit": "PASS",
+    "evidence": "PASS",
+    "policy_control": "PASS",
+    "scientific_data": "PASS"
+  },
+  "operational_status": "VERIFICADO",
+  "post_deployment_note": "This audit never grants POST-DEPLOYMENT PASS. Only the independent live Production Witness on the exact merged main SHA may do so.",
+  "post_deployment_status": "PENDENTE",
+  "ruleset": {
+    "canonical_filename": "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt",
+    "effective_date": "17/08/2026",
+    "normative_identifier": "GENOMA-RULESET-v3.4",
+    "section_count": 263,
+    "sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
+    "status": "VIGENTE",
+    "verification": "sealed transport decoded and hashed in this run",
+    "version": "v3.4"
+  },
+  "schema": "genoma-v0.8-four-plane-audit-v1"
+}
