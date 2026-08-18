@@ -37,15 +37,21 @@ pharmacogenomic, and stays out.
 | gene is not structurally unresolved | CYP2D6: variação estrutural não resolvida por array |
 | a curated allele registry was supplied | registro curado não foi fornecido |
 | the registry declares `complete_panel` for the gene | alelos não definidos permaneceriam indistinguíveis do haplótipo de referência |
+| the registry names `reference_allele` | sem ele um portador heterozigoto não tem segundo elemento |
 | every defining position is interpretable | posições definidoras não interpretáveis: … |
 | at most one heterozygous position in the gene | fase não resolvida: N posições heterozigotas |
+| at most one defined allele detected | genótipo composto: atribuição a cada cromossomo exige fase |
 
 Even when all of them hold, the diplotype is `INFERIDO` — never `EXECUTADO`, because the
-inference comes from genotypes rather than observed haplotypes.
+inference comes from genotypes rather than observed haplotypes. It always has exactly two
+elements: a homozygous carrier gets `allele/allele`, a heterozygous carrier gets
+`allele/reference`, and a non-carrier gets `reference/reference`. The reference haplotype is
+whatever the registry *names* — this module will not coin `*1` on its own.
 
 A phenotype is a function of a diplotype, so without one there is nothing to translate and
-"normal metabolizer" would be an invented default. `genes_with_phenotype` is `0` and the
-report says so on its face.
+"normal metabolizer" would be an invented default. `genes_with_phenotype` is **counted** from
+the gene records rather than asserted as a constant — hardcoding `0` would have stayed true
+only until something emitted a phenotype, and then gone quietly wrong.
 
 ## What *is* reportable
 

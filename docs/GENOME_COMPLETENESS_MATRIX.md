@@ -52,6 +52,23 @@ Orientation is now derived per row via `array_pipeline.annotation._orientation` 
 targets. `VERIFICADO` and `INFERIDO` remain interpretable; anything else is
 `NÃO REPORTÁVEL`.
 
+## A non-interpretable locus does not carry its genotype
+
+A conflicting or unoriented record still *has* a called value. Keeping it in the entry meant
+every consumer that printed `genotype or classification` displayed it exactly like a usable
+call — the arbitration the `NÃO REPORTÁVEL` class exists to refuse. The genotype is now
+withheld (`genotype: null`, `genotype_withheld: true`) unless the locus is interpretable, and
+the report printers decide independently as well, so a regression here degrades a line to its
+classification rather than publishing an arbitrated call.
+
+## Duplicate rows are not arbitrated
+
+`qc.inspect_array` deliberately allows a raw vendor export to carry duplicate RSID rows,
+retained as provenance for the harmonizer. Keeping only the first row silently picked a
+winner whenever two rows disagreed. All rows for a target are now collected; if their
+canonical genotypes differ the locus is `NÃO REPORTÁVEL` and the basis names the competing
+values. Duplicates that agree are not penalised.
+
 ## Structural blind spots
 
 Some variant classes are invisible to an array at *every* locus — CNV, SV, repeat

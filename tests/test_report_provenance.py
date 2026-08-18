@@ -91,6 +91,16 @@ class CompileTimeBindingTest(unittest.TestCase):
                 status="VERIFICADO", basis="invented",
             )
 
+    def test_an_empty_locator_cannot_anchor_the_whole_artifact(self):
+        """An empty path resolved to the entire artifact, naming no measurement at all."""
+        for locator in ("", "   "):
+            with self.subTest(locator=locator), self.assertRaises(ProvenanceError) as ctx:
+                _compiler().derive(
+                    "summary", artifact="array-qc", locator=locator,
+                    status="VERIFICADO", basis="whole artifact",
+                )
+            self.assertIn("must name a path", str(ctx.exception))
+
     def test_an_unregistered_artifact_cannot_be_anchored_to(self):
         with self.assertRaises(ProvenanceError):
             _compiler().derive(

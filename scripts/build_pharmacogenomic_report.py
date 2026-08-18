@@ -41,12 +41,23 @@ def _percent(value: float) -> str:
     return f"{value * 100:.1f}%"
 
 
+def _locus_text(locus: dict) -> str:
+    """Print a genotype only for an interpretable locus.
+
+    The matrix already withholds the genotype for a NÃO REPORTÁVEL record, but printing
+    `genotype or classification` made every consumer depend on that upstream guard being
+    right. Deciding here as well means a regression upstream degrades the line to the
+    classification rather than publishing an arbitrated call.
+    """
+    if locus.get("interpretable") and locus.get("genotype"):
+        return f"{locus['rsid']}={locus['genotype']}"
+    return f"{locus['rsid']}={locus.get('classification') or UNAVAILABLE}"
+
+
 def _gene_layer(genes: list) -> str:
     parts = []
     for record in genes:
-        loci = ", ".join(
-            f"{x['rsid']}={x['genotype'] or x['classification']}" for x in record["loci"]
-        )
+        loci = ", ".join(_locus_text(x) for x in record["loci"])
         parts.append(
             f"{record['gene']} ({record['interrogated_loci']}/{record['total_loci']} interpretáveis): {loci}"
             f" | diplótipo: {record['diplotype']['status']}"
@@ -59,8 +70,7 @@ def _anesthesia_text(card: dict) -> str:
     if card.get("status") == UNAVAILABLE and not card.get("observations"):
         return f"{UNAVAILABLE} — {card.get('reason', 'cartão não emitido')}. {card.get('clearance_policy', '')}".strip()
     observations = "; ".join(
-        f"{o['gene']} {o['rsid']}: {o['genotype'] or o['classification']}"
-        for o in card.get("observations", [])
+        f"{o['gene']} {_locus_text(o)}" for o in card.get("observations", [])
     )
     return f"Observações: {observations}. {card.get('clearance_policy', '')}".strip()
 
@@ -192,9 +202,7 @@ def build_payload(passport_path: Path, matrix_path: Path) -> dict:
         builder.derived(
             "observed_data", artifact="pgx-passport", locator=f"genes[{index}].loci",
             status=status, basis="genótipos observados neste gene", kind="computed",
-            transform=lambda loci: ", ".join(
-                f"{x['rsid']}={x['genotype'] or x['classification']}" for x in loci
-            ) or UNAVAILABLE,
+            transform=lambda loci: ", ".join(_locus_text(x) for x in loci) or UNAVAILABLE,
         )
         builder.derived(
             "qc", artifact="pgx-passport", locator=f"genes[{index}].interrogated_loci",

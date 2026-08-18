@@ -184,6 +184,48 @@ class CompletenessMatrixTest(unittest.TestCase):
         entry = next(e for e in matrix["entries"] if e["rsid"] == "rs1799807")
         self.assertEqual(entry["classification"], OBSERVADO)
 
+    def test_a_non_interpretable_locus_does_not_carry_its_genotype(self):
+        """A conflicting record still has a called value; carrying it invited arbitration.
+
+        Consumers printed `genotype or classification`, so an unreliable call was displayed
+        exactly like a usable one.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            matrix = self._build(self._rows(), Path(td))
+        for entry in matrix["entries"]:
+            with self.subTest(rsid=entry["rsid"]):
+                if not entry["interpretable"]:
+                    self.assertIsNone(entry["genotype"])
+        conflicted = next(e for e in matrix["entries"] if e["rsid"] == "rs1800562")
+        self.assertTrue(conflicted["genotype_withheld"])
+        observed = next(e for e in matrix["entries"] if e["rsid"] == "rs1799807")
+        self.assertEqual(observed["genotype"], "CT")
+        self.assertFalse(observed["genotype_withheld"])
+
+    def test_duplicate_rows_with_conflicting_genotypes_are_not_arbitrated(self):
+        """Keeping only the first row silently picked a winner between disagreeing rows."""
+        rows = (
+            "rs1799807,3,165548529,CT,consensus,CT,CT,GM\n"
+            "rs1799807,3,165548529,GG,consensus,GG,GG,GM\n"
+        ) + self._rows().replace("rs1799807,3,165548529,CT,consensus,CT,CT,GM\n", "")
+        with tempfile.TemporaryDirectory() as td:
+            matrix = self._build(rows, Path(td))
+        entry = next(e for e in matrix["entries"] if e["rsid"] == "rs1799807")
+        self.assertEqual(entry["classification"], NAO_REPORTAVEL)
+        self.assertIsNone(entry["genotype"])
+        self.assertIn("duplicadas", entry["basis"])
+
+    def test_duplicate_rows_that_agree_are_not_penalised(self):
+        rows = (
+            "rs1799807,3,165548529,CT,consensus,CT,CT,GM\n"
+            "rs1799807,3,165548529,CT,consensus,CT,CT,GM\n"
+        ) + self._rows().replace("rs1799807,3,165548529,CT,consensus,CT,CT,GM\n", "")
+        with tempfile.TemporaryDirectory() as td:
+            matrix = self._build(rows, Path(td))
+        entry = next(e for e in matrix["entries"] if e["rsid"] == "rs1799807")
+        self.assertEqual(entry["classification"], OBSERVADO)
+        self.assertEqual(entry["genotype"], "CT")
+
     def test_totals_agree_with_the_entries(self):
         with tempfile.TemporaryDirectory() as td:
             matrix = self._build(self._rows(), Path(td))

@@ -97,6 +97,14 @@ def _classify(
         raw_gt = row.get("RESULT")
         status = "observed"
 
+    duplicate = row.get("__duplicate_conflict")
+    if duplicate:
+        return (
+            NAO_REPORTAVEL,
+            f"o arquivo traz linhas duplicadas com genótipos divergentes para este rsid ({duplicate}); "
+            "escolher uma delas seria arbitrar um conflito",
+        )
+
     if status in UNRESOLVED_OVERLAP_STATUSES:
         return (
             NAO_REPORTAVEL,
@@ -147,19 +155,40 @@ def build_completeness_matrix(
     manifest = load_target_manifest(target_manifest_path)
     targets = {str(t["rsid"]).lower(): t for t in manifest["targets"]}
 
-    seen: dict[str, tuple[str, dict[str, str]]] = {}
+    # Every row for a target is collected, not just the first. `qc.inspect_array` allows a
+    # raw vendor export to carry duplicate RSID rows, so keeping only the first silently
+    # picked a winner whenever two rows disagreed — resolving a conflict by arbitration,
+    # which sections 4 and 7 forbid.
+    collected: dict[str, list[tuple[str, dict[str, str]]]] = {}
     for schema, row in _row_reader(Path(input_path)):
         rsid = (row.get("RSID") or "").strip().lower()
-        if rsid in targets and rsid not in seen:
-            enriched = dict(row)
-            # Orientation is derived per row for every target, not read back from the QC
-            # baseline-marker list. That list covers only the 14 baseline rsids, so keying
-            # off it silently exempted every other target from the strand check and let an
-            # unoriented locus be classified OBSERVADO.
-            status, basis = _orientation(row, schema, qc)
-            enriched["__orientation_status"] = status
-            enriched["__orientation_basis"] = basis
-            seen[rsid] = (schema, enriched)
+        if rsid not in targets:
+            continue
+        enriched = dict(row)
+        # Orientation is derived per row for every target, not read back from the QC
+        # baseline-marker list. That list covers only the 14 baseline rsids, so keying
+        # off it silently exempted every other target from the strand check and let an
+        # unoriented locus be classified OBSERVADO.
+        status, basis = _orientation(row, schema, qc)
+        enriched["__orientation_status"] = status
+        enriched["__orientation_basis"] = basis
+        collected.setdefault(rsid, []).append((schema, enriched))
+
+    seen: dict[str, tuple[str, dict[str, str]]] = {}
+    for rsid, rows in collected.items():
+        schema, first = rows[0]
+        if len(rows) > 1:
+            genotypes = {
+                _canonical_gt(r.get("CONSENSUS_RESULT") or r.get("RESULT")) for _s, r in rows
+            }
+            if len(genotypes) > 1:
+                marked = dict(first)
+                marked["__duplicate_conflict"] = ", ".join(
+                    sorted(str(g) for g in genotypes if g is not None)
+                ) or "sem genótipo válido"
+                seen[rsid] = (schema, marked)
+                continue
+        seen[rsid] = (schema, first)
 
     entries: list[dict[str, Any]] = []
     for rsid in sorted(targets):
@@ -175,11 +204,17 @@ def build_completeness_matrix(
                 "classification": classification,
                 "basis": basis,
                 "interpretable": classification in INTERPRETABLE,
-                "genotype": _canonical_gt(
-                    (row or {}).get("CONSENSUS_RESULT") or (row or {}).get("RESULT")
-                )
-                if row is not None
-                else None,
+                # The genotype is withheld unless the locus is interpretable. A conflicting
+                # or unoriented record still *has* a called value, and carrying it in the
+                # entry meant every consumer that printed `genotype or classification`
+                # displayed it as though it were usable — which is precisely the arbitration
+                # the NÃO REPORTÁVEL class exists to refuse.
+                "genotype": (
+                    _canonical_gt((row or {}).get("CONSENSUS_RESULT") or (row or {}).get("RESULT"))
+                    if row is not None and classification in INTERPRETABLE
+                    else None
+                ),
+                "genotype_withheld": row is not None and classification not in INTERPRETABLE,
                 "assessed_allele": target.get("assessed_allele"),
             }
         )

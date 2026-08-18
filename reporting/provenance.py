@@ -99,6 +99,10 @@ def _resolve(artifact: Any, locator: str) -> Any:
 
     Mapping keys are tried before list indices, so a numeric dictionary key still resolves.
     """
+    if not str(locator).strip():
+        # An empty locator resolves to the whole artifact, so the anchor would name no
+        # particular measurement while still reading as a derived value.
+        raise ProvenanceError("a locator must name a path inside the artifact")
     current = artifact
     for match in _LOCATOR_STEP.finditer(locator):
         key = match.group(1) if match.group(1) is not None else match.group(2)

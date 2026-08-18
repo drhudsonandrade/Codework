@@ -203,13 +203,87 @@ class DiplotypeRefusalTest(unittest.TestCase):
         self.assertEqual(cyp["diplotype"]["status"], "NÃO DISPONÍVEL")
         self.assertTrue(any("fase não resolvida" in r for r in cyp["diplotype"]["reasons"]))
 
-    def test_a_diplotype_on_a_complete_unambiguous_panel_is_inferido_never_executado(self):
+    def test_a_complete_panel_must_also_name_the_reference_haplotype(self):
+        """A heterozygous carrier needs a second element, and this module will not coin *1."""
         registry = json.loads(json.dumps(REGISTRY))
         registry["genes"]["CYP2C19"]["complete_panel"] = True
         with tempfile.TemporaryDirectory() as td:
             _matrix, passport, _root = _artifacts(Path(td), CLEAN_ROWS, registry=registry)
         cyp = next(g for g in passport["genes"] if g["gene"] == "CYP2C19")
+        self.assertEqual(cyp["diplotype"]["status"], "NÃO DISPONÍVEL")
+        self.assertTrue(any("reference_allele" in r for r in cyp["diplotype"]["reasons"]))
+
+    def _complete_registry(self):
+        registry = json.loads(json.dumps(REGISTRY))
+        registry["genes"]["CYP2C19"]["complete_panel"] = True
+        registry["genes"]["CYP2C19"]["reference_allele"] = "CYP2C19*1"
+        return registry
+
+    def test_a_diplotype_on_a_complete_unambiguous_panel_is_inferido_never_executado(self):
+        with tempfile.TemporaryDirectory() as td:
+            _matrix, passport, _root = _artifacts(
+                Path(td), CLEAN_ROWS, registry=self._complete_registry()
+            )
+        cyp = next(g for g in passport["genes"] if g["gene"] == "CYP2C19")
         self.assertEqual(cyp["diplotype"]["status"], "INFERIDO")
+        self.assertEqual(cyp["diplotype"]["value"], "CYP2C19*1/CYP2C19*1")
+
+    def test_a_heterozygous_carrier_gets_two_elements_not_one(self):
+        """The diplotype used to be "/".join(detected), which emits a single allele."""
+        rows = CLEAN_ROWS.replace(
+            "rs4244285,10,96541616,GG,consensus,GG,GG,GM\n",
+            "rs4244285,10,96541616,AG,consensus,AG,AG,GM\n",
+        )
+        with tempfile.TemporaryDirectory() as td:
+            _matrix, passport, _root = _artifacts(Path(td), rows, registry=self._complete_registry())
+        cyp = next(g for g in passport["genes"] if g["gene"] == "CYP2C19")
+        self.assertEqual(cyp["diplotype"]["status"], "INFERIDO")
+        value = cyp["diplotype"]["value"]
+        self.assertEqual(len(value.split("/")), 2, value)
+        self.assertEqual(value, "CYP2C19*1/CYP2C19*2")
+        finding = next(f for f in cyp["allele_findings"] if f["allele"] == "CYP2C19*2")
+        self.assertEqual(finding["zygosity"], "HETEROZIGOTO")
+
+    def test_a_homozygous_carrier_gets_the_allele_on_both_chromosomes(self):
+        rows = CLEAN_ROWS.replace(
+            "rs4244285,10,96541616,GG,consensus,GG,GG,GM\n",
+            "rs4244285,10,96541616,AA,consensus,AA,AA,GM\n",
+        )
+        with tempfile.TemporaryDirectory() as td:
+            _matrix, passport, _root = _artifacts(Path(td), rows, registry=self._complete_registry())
+        cyp = next(g for g in passport["genes"] if g["gene"] == "CYP2C19")
+        self.assertEqual(cyp["diplotype"]["value"], "CYP2C19*2/CYP2C19*2")
+        finding = next(f for f in cyp["allele_findings"] if f["allele"] == "CYP2C19*2")
+        self.assertEqual(finding["zygosity"], "HOMOZIGOTO")
+
+    def test_a_compound_genotype_needs_phase_and_is_withheld(self):
+        """Two defined alleles homozygous at different loci cannot be assigned to strands."""
+        rows = CLEAN_ROWS.replace(
+            "rs4244285,10,96541616,GG,consensus,GG,GG,GM\n"
+            "rs4986893,10,96540410,GG,consensus,GG,GG,GM\n",
+            "rs4244285,10,96541616,AA,consensus,AA,AA,GM\n"
+            "rs4986893,10,96540410,AA,consensus,AA,AA,GM\n",
+        )
+        with tempfile.TemporaryDirectory() as td:
+            _matrix, passport, _root = _artifacts(Path(td), rows, registry=self._complete_registry())
+        cyp = next(g for g in passport["genes"] if g["gene"] == "CYP2C19")
+        self.assertEqual(cyp["diplotype"]["status"], "NÃO DISPONÍVEL")
+        self.assertTrue(any("composto" in r for r in cyp["diplotype"]["reasons"]))
+
+    def test_the_phenotype_count_is_computed_not_asserted(self):
+        """Hardcoding 0 stays true only until something emits a phenotype."""
+        with tempfile.TemporaryDirectory() as td:
+            _matrix, passport, _root = _artifacts(
+                Path(td), CLEAN_ROWS, registry=self._complete_registry()
+            )
+        expected = sum(
+            1 for g in passport["genes"] if g["phenotype"]["status"] != "NÃO DISPONÍVEL"
+        )
+        self.assertEqual(passport["totals"]["genes_with_phenotype"], expected)
+        self.assertEqual(
+            passport["totals"]["genes_with_diplotype"],
+            sum(1 for g in passport["genes"] if g["diplotype"]["status"] != "NÃO DISPONÍVEL"),
+        )
 
     def test_a_phenotype_is_never_emitted(self):
         registry = json.loads(json.dumps(REGISTRY))
@@ -368,6 +442,34 @@ class ReportIntegrationTest(unittest.TestCase):
             with self.assertRaises(ReportReleaseError) as ctx:
                 render_document("06", payload, mode="FINAL")
         self.assertIn("provenance:mismatch", str(ctx.exception))
+
+    def test_the_printer_withholds_a_genotype_from_a_non_interpretable_locus(self):
+        """Defence in depth: the printer decides too, not only the upstream matrix."""
+        from scripts.build_pharmacogenomic_report import _anesthesia_text, _gene_layer
+
+        genes = [{
+            "gene": "HFE", "interrogated_loci": 0, "total_loci": 1,
+            "loci": [{
+                "rsid": "rs1800562", "genotype": "AG",
+                "classification": "NÃO REPORTÁVEL", "interpretable": False, "evidence": [],
+            }],
+            "diplotype": {"status": "NÃO DISPONÍVEL"},
+            "phenotype": {"status": "NÃO DISPONÍVEL"},
+        }]
+        layer = _gene_layer(genes)
+        self.assertIn("rs1800562=NÃO REPORTÁVEL", layer)
+        self.assertNotIn("rs1800562=AG", layer)
+
+        card = {
+            "status": "VERIFICADO", "clearance_policy": "P.",
+            "observations": [{
+                "gene": "HFE", "rsid": "rs1800562", "genotype": "AG",
+                "classification": "NÃO REPORTÁVEL", "interpretable": False,
+            }],
+        }
+        text = _anesthesia_text(card)
+        self.assertIn("rs1800562=NÃO REPORTÁVEL", text)
+        self.assertNotIn("AG", text)
 
     def test_the_sections_match_the_catalogue_for_report_06(self):
         from reporting.engine import load_catalog

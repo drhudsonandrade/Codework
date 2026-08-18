@@ -159,6 +159,15 @@ def _allele_findings(
                     "allele_present": present if usable else None,
                 }
             )
+        # Zygosity decides whether a detected allele occupies one chromosome or both, which
+        # is what turns a list of detected alleles into a two-element diplotype.
+        zygosity = None
+        if interrogable and detected:
+            homozygous = all(
+                len(set(str(p["genotype"] or "").upper())) == 1 for p in positions
+            )
+            zygosity = "HOMOZIGOTO" if homozygous else "HETEROZIGOTO"
+
         if interrogable:
             status = "DETECTADO" if detected else NAO_DETECTADO
             basis = (
@@ -175,6 +184,7 @@ def _allele_findings(
                 "gene": gene,
                 "status": status,
                 "basis": basis,
+                "zygosity": zygosity,
                 "positions": positions,
             }
         )
@@ -203,8 +213,26 @@ def _diplotype_for(
                 "o registro não declara o painel completo para este gene; alelos não definidos "
                 "permaneceriam indistinguíveis do haplótipo de referência"
             )
+        elif not str(spec.get("reference_allele") or "").strip():
+            # A diplotype has two elements. A heterozygous carrier of one defined allele
+            # occupies the other chromosome with the reference haplotype, which has to be
+            # *named* by the registry — this module will not coin "*1" on its own.
+            reasons.append(
+                "o registro declara painel completo mas não nomeia o haplótipo de referência "
+                "(reference_allele); sem ele um portador heterozigoto não tem segundo elemento"
+            )
         if gaps:
             reasons.append(f"posições definidoras não interpretáveis: {', '.join(gaps)}")
+
+    detected_findings = [f for f in allele_findings if f["status"] == "DETECTADO"]
+    if len(detected_findings) > 1:
+        # Two defined alleles in one gene are a compound genotype; which chromosome carries
+        # which is a phase question an array cannot answer.
+        reasons.append(
+            "genótipo composto: mais de um alelo definido foi detectado "
+            f"({', '.join(sorted(f['allele'] for f in detected_findings))}) e a atribuição "
+            "a cada cromossomo exige fase"
+        )
 
     heterozygous = [
         locus["rsid"]
@@ -222,10 +250,19 @@ def _diplotype_for(
     if reasons:
         return {"status": UNAVAILABLE, "value": None, "reasons": reasons}
 
-    detected = [f["allele"] for f in allele_findings if f["status"] == "DETECTADO"]
+    # Exactly two elements, always. The registry named the reference haplotype, so a
+    # heterozygous carrier gets allele/reference and a non-carrier gets reference/reference.
+    reference = str(spec["reference_allele"]).strip()
+    if not detected_findings:
+        value = f"{reference}/{reference}"
+    else:
+        finding = detected_findings[0]
+        other = finding["allele"] if finding["zygosity"] == "HOMOZIGOTO" else reference
+        value = "/".join(sorted([finding["allele"], other]))
+
     return {
         "status": "INFERIDO",
-        "value": "/".join(detected) if detected else None,
+        "value": value,
         "reasons": [
             "painel declarado completo, todas as posições definidoras interpretáveis e sem "
             "ambiguidade de fase; ainda assim INFERIDO, nunca EXECUTADO, porque a inferência "
@@ -344,7 +381,12 @@ def build_pharmacogenomic_passport(
             "interrogated_loci": interrogated,
             "interrogated_fraction": (interrogated / total) if total else 0.0,
             "genes_with_diplotype": sum(1 for g in gene_records if g["diplotype"]["status"] != UNAVAILABLE),
-            "genes_with_phenotype": 0,
+            # Counted, not asserted. Hardcoding 0 here would have stayed "true" only for as
+            # long as nothing emitted a phenotype, and would have gone quietly wrong the
+            # moment something did — the vacuous-constant pattern this project keeps finding.
+            "genes_with_phenotype": sum(
+                1 for g in gene_records if g["phenotype"]["status"] != UNAVAILABLE
+            ),
         },
         "genes": gene_records,
         "anesthesia_card": anesthesia,
