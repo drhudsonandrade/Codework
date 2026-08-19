@@ -45,6 +45,35 @@ UNAVAILABLE = "NÃO DISPONÍVEL"
 #: framing sentence it opens with. Scopes come from `config/partial_genome_annotation_targets
 #: .json`, where they are curated by hand; this table is the only report-specific content in
 #: the module, and it selects loci — never traits.
+#: What each middle section carries. Keys are catalogue titles, checked against the
+#: catalogue at build time, and the values name a producer rather than a position. An
+#: earlier version mapped sections by index, which put report 08's trait matrix under
+#: "Sentidos, fisiologia e preferências" and its refusal under "Cartões de traços" — the
+#: three reports simply do not order their sections alike, and nothing errored.
+SECTION_ROLES: dict[str, dict[str, str]] = {
+    "04": {
+        "Resumo nutricional acionável": "summary",
+        "Contexto clínico e nutricional": "operator_record",
+        "Matriz gene–nutriente–fenótipo": "associations",
+        "Módulos de interpretação": "effect_direction",
+        "Experimentos e monitorização": "conduct",
+    },
+    "07": {
+        "Mapa preventivo": "summary",
+        "Linha de base": "operator_record",
+        "Matriz de predisposição": "associations",
+        "Variantes e fatores protetores": "effect_direction",
+        "Plano preventivo longitudinal": "conduct",
+    },
+    "08": {
+        "Visão geral": "summary",
+        "Cartões de traços": "associations",
+        "Sentidos, fisiologia e preferências": "effect_direction",
+        "Evidência e reprodutibilidade": "evidence_tier",
+        "Salvaguardas éticas": "conduct",
+    },
+}
+
 REPORT_SCOPES: dict[str, dict[str, Any]] = {
     "04": {
         "scopes": ("PREDISPOSICAO", "PESQUISA"),
@@ -161,6 +190,28 @@ def _protective_line(loci: list[dict[str, Any]]) -> str:
     )
 
 
+def _evidence_tier(loci: list[dict[str, Any]]) -> str:
+    """How much of what the catalogue lists actually reaches genome-wide significance."""
+    if not loci:
+        return "nenhum locus neste escopo; não há evidência a graduar"
+    total = sum(len((f.get("gwas") or {}).get("traits", [])) for f in loci)
+    significant = sum(len(_significant_traits(f)) for f in loci)
+    with_ancestry = sum(
+        1
+        for f in loci
+        for t in _significant_traits(f)
+        if (t.get("ancestry") or {}).get("status") == "VERIFICADO"
+    )
+    return (
+        f"{significant} de {total} traços detalhados atingem significância genômica "
+        f"(p ≤ 5e-8); {with_ancestry} deles têm a ancestralidade da coorte de descoberta "
+        "recuperada do registro do estudo. Um traço abaixo do limiar é reportado como "
+        "recuperado, nunca como associação estabelecida. Replicação independente não é "
+        "verificável por este pipeline: o GWAS Catalog lista estudos, e contá-los não "
+        "substitui avaliar se replicaram."
+    )
+
+
 def _summary(report_id: str, loci: list[dict[str, Any]], findings: dict[str, Any]) -> str:
     spec = REPORT_SCOPES[report_id]
     if not loci:
@@ -221,17 +272,27 @@ def build_payload(report_id: str, findings_path: Path, matrix_path: Path) -> dic
         ),
     )
 
-    #: Which middle section carries which content. Titles are looked up positionally against
-    #: the catalogue, so the mapping cannot name a section the catalogue does not have.
+    roles = SECTION_ROLES[report_id]
     middle = titles[1:-1]
-    for index, title in enumerate(middle):
-        if index == 0:
+    # A role naming a section the catalogue does not have would silently produce nothing, so
+    # the mapping is checked against the catalogue before anything is written.
+    unknown = sorted(set(roles) - set(middle))
+    unmapped = sorted(set(middle) - set(roles))
+    if unknown or unmapped:
+        raise ValueError(
+            f"report {report_id}: SECTION_ROLES does not match the catalogue — "
+            f"unknown sections {unknown}, unmapped sections {unmapped}"
+        )
+
+    for title in middle:
+        role = roles[title]
+        if role == "summary":
             compiler.section_derived(
                 title, artifact="clinical-findings", locator="findings", status=status,
                 basis="resumo do escopo e recusa declarada", kind="computed",
                 transform=lambda _f: _summary(report_id, loci, findings.payload),
             )
-        elif index == 1:
+        elif role == "operator_record":
             # Clinical/nutritional context and baseline are the operator's record.
             compiler.section_unavailable(
                 title,
@@ -241,7 +302,7 @@ def build_payload(report_id: str, findings_path: Path, matrix_path: Path) -> dic
                     "deriváveis de um arquivo de genótipos"
                 ),
             )
-        elif index == 2:
+        elif role == "associations":
             compiler.section_derived(
                 title, artifact="clinical-findings", locator="findings", status=status,
                 basis=(
@@ -252,19 +313,26 @@ def build_payload(report_id: str, findings_path: Path, matrix_path: Path) -> dic
                 transform=lambda _f: _trait_matrix(loci)
                 or "nenhum locus neste escopo carrega associação recuperável",
             )
-        elif index == 3:
+        elif role == "effect_direction":
             compiler.section_derived(
                 title, artifact="clinical-findings", locator="findings", status=status,
                 basis="direção do efeito registrada pelo catálogo, incluindo direção protetora",
                 kind="evidence_retrieval", transform=lambda _f: _protective_line(loci),
+            )
+        elif role == "evidence_tier":
+            compiler.section_derived(
+                title, artifact="clinical-findings", locator="findings", status=status,
+                basis="quantas associações atingem significância genômica e quantas não",
+                kind="computed", transform=lambda _f: _evidence_tier(loci),
             )
         else:
             # Plans, experiments and safeguards are conduct, not measurement.
             compiler.section_unavailable(
                 title,
                 basis=(
-                    "plano, experimento N-of-1 e conduta preventiva são decisões clínicas; este "
-                    "pipeline mede genótipo e recupera evidência, e não prescreve"
+                    "plano, experimento N-of-1, conduta preventiva e salvaguarda editorial são "
+                    "decisões humanas; este pipeline mede genótipo e recupera evidência, e não "
+                    "prescreve"
                 ),
             )
 

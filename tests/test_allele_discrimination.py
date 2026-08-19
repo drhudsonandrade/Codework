@@ -434,3 +434,21 @@ class AnalysisShapeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class VacuousResidualTest(unittest.TestCase):
+    """A residual of zero must never come from an empty catalogue."""
+
+    def test_a_gene_with_no_catalogued_alleles_is_not_a_zero_residual(self):
+        residual = residual_risk(partition_alleles({"alleles": {}}, {}))
+        self.assertFalse(residual["computable"])
+        self.assertIsNone(residual["worst_altered"])
+        self.assertIn("ausência de catálogo", residual["basis"])
+
+    def test_a_gene_with_every_allele_discriminable_is_a_measured_zero(self):
+        residual = residual_risk(
+            partition_alleles(SPEC, {"rs1": "OBSERVADO", "rs2": "OBSERVADO", "rs3": "OBSERVADO"})
+        )
+        self.assertTrue(residual["computable"])
+        self.assertEqual(residual["worst_altered"], 0.0)
+        self.assertIn("por medição", residual["basis"])

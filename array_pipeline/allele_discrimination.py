@@ -245,6 +245,28 @@ def residual_risk(partition: dict[str, Any]) -> dict[str, Any]:
             "bounded": not missing_here,
         }
 
+    if not partition["alleles"]:
+        # Vacuous truth: with no catalogued alleles at all, "nothing left to exclude" is
+        # arithmetically true and clinically the opposite of what it sounds like. A gene
+        # whose catalogue is empty has a residual nobody has measured, not a residual of zero.
+        return {
+            "computable": False,
+            "bounded": False,
+            "populations": {},
+            "worst_population": None,
+            "worst_altered": None,
+            "worst_uncertain": None,
+            "unpriced_altered": [],
+            "unpriced_uncertain": [],
+            "unpriced_normal": [],
+            "inferred_frequency_alleles": [],
+            "basis": (
+                "o registro não cataloga nenhum alelo para este gene; não há conjunto sobre o "
+                "qual medir exclusão, e um residual zero aqui significaria ausência de "
+                "catálogo, não ausência de risco"
+            ),
+        }
+
     if not indiscriminable:
         return {
             "computable": True,

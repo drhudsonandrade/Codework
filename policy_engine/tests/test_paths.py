@@ -6,8 +6,13 @@ ROOT=Path(__file__).resolve().parents[1]; RULESET=resolve_ruleset_path(ROOT)
 class PathResolutionTests(unittest.TestCase):
  def setUp(self): self._r=os.environ.pop("GENOMA_RULESET_PATH",None); self._m=os.environ.pop("GENOMA_RULESET_SHA_MANIFEST",None)
  def tearDown(self):
-  if self._r is not None: os.environ["GENOMA_RULESET_PATH"]=self._r
-  if self._m is not None: os.environ["GENOMA_RULESET_SHA_MANIFEST"]=self._m
+  # Restore means restore, including to "unset". A test that sets the variable to a path
+  # inside a TemporaryDirectory leaves it pointing at a deleted file once the directory is
+  # cleaned up, and the next module to resolve assets at import time fails closed on an
+  # environment this suite created. Only removing when the prior value was None does that.
+  for name, prior in (("GENOMA_RULESET_PATH", self._r), ("GENOMA_RULESET_SHA_MANIFEST", self._m)):
+   if prior is None: os.environ.pop(name, None)
+   else: os.environ[name]=prior
  def test_nested_engine_resolves_single_parent_ruleset(self):
   with tempfile.TemporaryDirectory() as td:
    repo=Path(td); engine=repo/"policy_engine"; engine.mkdir(); shutil.copyfile(RULESET,repo/RULESET.name); self.assertEqual(resolve_ruleset_path(engine),repo/RULESET.name)

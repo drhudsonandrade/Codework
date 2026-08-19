@@ -1,6 +1,6 @@
 {
   "clingen_file_created": "2026-08-19",
-  "curated_at": "2026-08-19T16:01:08.797903Z",
+  "curated_at": "2026-08-19T16:17:36.959693Z",
   "established_validity_classifications": [
     "Definitive",
     "Strong"
@@ -23,17 +23,23 @@
         "status": "VERIFICADO",
         "total": 303
       },
+      "conflicting_diseases": [
+        "hyperlipoproteinemia type 3"
+      ],
       "diseases": [
         "hyperlipoproteinemia type 3",
         "lipoprotein glomerulopathy"
       ],
-      "established": false,
-      "established_by": [],
+      "established": true,
+      "established_by": [
+        "GenCC"
+      ],
       "gencc": {
         "diseases": [
           "hyperlipoproteinemia type 3",
           "lipoprotein glomerulopathy"
         ],
+        "established": true,
         "established_groups": [
           {
             "classifications": [
@@ -46,7 +52,8 @@
               "Genomics England PanelApp",
               "Labcorp Genetics (formerly Invitae)"
             ],
-            "mode_of_inheritance": "Autosomal dominant",
+            "mode_of_inheritance": "AD",
+            "mode_of_inheritance_reported": "Autosomal dominant",
             "pmids": [
               " 22949395",
               " 24267230",
@@ -70,7 +77,8 @@
               "Genomics England PanelApp",
               "Labcorp Genetics (formerly Invitae)"
             ],
-            "mode_of_inheritance": "Autosomal recessive",
+            "mode_of_inheritance": "AR",
+            "mode_of_inheritance_reported": "Autosomal recessive",
             "pmids": [
               " 15989726",
               " 7175379",
@@ -98,7 +106,8 @@
               "Genomics England PanelApp",
               "Labcorp Genetics (formerly Invitae)"
             ],
-            "mode_of_inheritance": "Autosomal dominant",
+            "mode_of_inheritance": "AD",
+            "mode_of_inheritance_reported": "Autosomal dominant",
             "pmids": [
               " 10529625",
               " 18077821",
@@ -128,7 +137,8 @@
               "Genomics England PanelApp",
               "Labcorp Genetics (formerly Invitae)"
             ],
-            "mode_of_inheritance": "Autosomal dominant",
+            "mode_of_inheritance": "AD",
+            "mode_of_inheritance_reported": "Autosomal dominant",
             "pmids": [
               " 22949395",
               " 24267230",
@@ -152,7 +162,8 @@
               "Genomics England PanelApp",
               "Labcorp Genetics (formerly Invitae)"
             ],
-            "mode_of_inheritance": "Autosomal recessive",
+            "mode_of_inheritance": "AR",
+            "mode_of_inheritance_reported": "Autosomal recessive",
             "pmids": [
               " 15989726",
               " 7175379",
@@ -180,7 +191,8 @@
               "Genomics England PanelApp",
               "Labcorp Genetics (formerly Invitae)"
             ],
-            "mode_of_inheritance": "Autosomal dominant",
+            "mode_of_inheritance": "AD",
+            "mode_of_inheritance_reported": "Autosomal dominant",
             "pmids": [
               " 10529625",
               " 18077821",
@@ -207,7 +219,8 @@
             "established_submitters": [
               "Ambry Genetics"
             ],
-            "mode_of_inheritance": "Autosomal dominant",
+            "mode_of_inheritance": "AD",
+            "mode_of_inheritance_reported": "Autosomal dominant",
             "pmids": [],
             "submitters": [
               "Ambry Genetics"
@@ -221,7 +234,8 @@
             "disease_curie": "MONDO:0007089",
             "established": false,
             "established_submitters": [],
-            "mode_of_inheritance": "Unknown",
+            "mode_of_inheritance": "DESCONHECIDO",
+            "mode_of_inheritance_reported": "Unknown",
             "pmids": [
               " 23022896",
               "18549781"
@@ -238,7 +252,8 @@
             "disease_curie": "MONDO:0010017",
             "established": false,
             "established_submitters": [],
-            "mode_of_inheritance": "Autosomal dominant",
+            "mode_of_inheritance": "AD",
+            "mode_of_inheritance_reported": "Autosomal dominant",
             "pmids": [
               " 11095479",
               " 16094309",
@@ -256,14 +271,14 @@
           {
             "disease": "hyperlipoproteinemia type 3",
             "modes": [
-              "Autosomal dominant",
-              "Autosomal recessive"
+              "AD",
+              "AR"
             ]
           }
         ],
         "modes_of_inheritance": [
-          "Autosomal dominant",
-          "Autosomal recessive"
+          "AD",
+          "AR"
         ],
         "source": "GenCC submissions export (2+ submetentes independentes para 'established')",
         "status": "VERIFICADO",
@@ -275,12 +290,20 @@
         ]
       },
       "mode_of_inheritance_conflict": true,
+      "modes_by_disease": {
+        "hyperlipoproteinemia type 3": [
+          "AD",
+          "AR"
+        ],
+        "lipoprotein glomerulopathy": [
+          "AD"
+        ]
+      },
       "modes_of_inheritance": [
-        "Autosomal dominant",
-        "Autosomal recessive"
+        "AD",
+        "AR"
       ],
-      "reason": "nem o ClinGen nem o GenCC estabelecem relação gene-doença para APOE em nível Definitivo ou Forte com submetentes independentes suficientes; sem isso este sistema não converte variante em achado clínico",
-      "status": "NÃO DISPONÍVEL"
+      "status": "VERIFICADO"
     },
     "BCHE": {
       "clingen": {
@@ -298,15 +321,19 @@
         "status": "VERIFICADO",
         "total": 258
       },
+      "conflicting_diseases": [],
       "diseases": [
         "butyrylcholinesterase deficiency"
       ],
-      "established": false,
-      "established_by": [],
+      "established": true,
+      "established_by": [
+        "GenCC"
+      ],
       "gencc": {
         "diseases": [
           "butyrylcholinesterase deficiency"
         ],
+        "established": true,
         "established_groups": [
           {
             "classifications": [
@@ -323,7 +350,8 @@
               "Laboratory for Molecular Medicine",
               "PanelApp Australia"
             ],
-            "mode_of_inheritance": "Autosomal recessive",
+            "mode_of_inheritance": "AR",
+            "mode_of_inheritance_reported": "Autosomal recessive",
             "pmids": [
               " 12881446",
               " 18075469",
@@ -360,7 +388,8 @@
               "Laboratory for Molecular Medicine",
               "PanelApp Australia"
             ],
-            "mode_of_inheritance": "Autosomal recessive",
+            "mode_of_inheritance": "AR",
+            "mode_of_inheritance_reported": "Autosomal recessive",
             "pmids": [
               " 12881446",
               " 18075469",
@@ -390,7 +419,8 @@
             "established_submitters": [
               "Ambry Genetics"
             ],
-            "mode_of_inheritance": "Unknown",
+            "mode_of_inheritance": "DESCONHECIDO",
+            "mode_of_inheritance_reported": "Unknown",
             "pmids": [],
             "submitters": [
               "Ambry Genetics"
@@ -399,7 +429,7 @@
         ],
         "mode_of_inheritance_conflicts": [],
         "modes_of_inheritance": [
-          "Autosomal recessive"
+          "AR"
         ],
         "source": "GenCC submissions export (2+ submetentes independentes para 'established')",
         "status": "VERIFICADO",
@@ -412,11 +442,15 @@
         ]
       },
       "mode_of_inheritance_conflict": false,
+      "modes_by_disease": {
+        "butyrylcholinesterase deficiency": [
+          "AR"
+        ]
+      },
       "modes_of_inheritance": [
-        "Autosomal recessive"
+        "AR"
       ],
-      "reason": "nem o ClinGen nem o GenCC estabelecem relação gene-doença para BCHE em nível Definitivo ou Forte com submetentes independentes suficientes; sem isso este sistema não converte variante em achado clínico",
-      "status": "NÃO DISPONÍVEL"
+      "status": "VERIFICADO"
     },
     "CYP2C19": {
       "clingen": {
@@ -434,11 +468,13 @@
         "status": "VERIFICADO",
         "total": 702
       },
+      "conflicting_diseases": [],
       "diseases": [],
       "established": false,
       "established_by": [],
       "gencc": {
         "diseases": [],
+        "established": false,
         "established_groups": [],
         "groups": [],
         "mode_of_inheritance_conflicts": [],
@@ -449,6 +485,7 @@
         "submitters": []
       },
       "mode_of_inheritance_conflict": false,
+      "modes_by_disease": {},
       "modes_of_inheritance": [],
       "reason": "nem o ClinGen nem o GenCC estabelecem relação gene-doença para CYP2C19 em nível Definitivo ou Forte com submetentes independentes suficientes; sem isso este sistema não converte variante em achado clínico",
       "status": "NÃO DISPONÍVEL"
@@ -469,11 +506,13 @@
         "status": "VERIFICADO",
         "total": 97
       },
+      "conflicting_diseases": [],
       "diseases": [],
       "established": false,
       "established_by": [],
       "gencc": {
         "diseases": [],
+        "established": false,
         "established_groups": [],
         "groups": [],
         "mode_of_inheritance_conflicts": [],
@@ -484,6 +523,7 @@
         "submitters": []
       },
       "mode_of_inheritance_conflict": false,
+      "modes_by_disease": {},
       "modes_of_inheritance": [],
       "reason": "nem o ClinGen nem o GenCC estabelecem relação gene-doença para CYP2C9 em nível Definitivo ou Forte com submetentes independentes suficientes; sem isso este sistema não converte variante em achado clínico",
       "status": "NÃO DISPONÍVEL"
@@ -504,11 +544,13 @@
         "status": "VERIFICADO",
         "total": 104
       },
+      "conflicting_diseases": [],
       "diseases": [],
       "established": false,
       "established_by": [],
       "gencc": {
         "diseases": [],
+        "established": false,
         "established_groups": [],
         "groups": [],
         "mode_of_inheritance_conflicts": [],
@@ -519,6 +561,7 @@
         "submitters": []
       },
       "mode_of_inheritance_conflict": false,
+      "modes_by_disease": {},
       "modes_of_inheritance": [],
       "reason": "nem o ClinGen nem o GenCC estabelecem relação gene-doença para CYP3A5 em nível Definitivo ou Forte com submetentes independentes suficientes; sem isso este sistema não converte variante em achado clínico",
       "status": "NÃO DISPONÍVEL"
@@ -539,15 +582,19 @@
         "status": "VERIFICADO",
         "total": 678
       },
+      "conflicting_diseases": [],
       "diseases": [
         "dihydropyrimidine dehydrogenase deficiency"
       ],
-      "established": false,
-      "established_by": [],
+      "established": true,
+      "established_by": [
+        "GenCC"
+      ],
       "gencc": {
         "diseases": [
           "dihydropyrimidine dehydrogenase deficiency"
         ],
+        "established": true,
         "established_groups": [
           {
             "classifications": [
@@ -561,7 +608,8 @@
               "G2P",
               "PanelApp Australia"
             ],
-            "mode_of_inheritance": "Autosomal recessive",
+            "mode_of_inheritance": "AR",
+            "mode_of_inheritance_reported": "Autosomal recessive",
             "pmids": [
               "29152729"
             ],
@@ -584,7 +632,8 @@
               "G2P",
               "PanelApp Australia"
             ],
-            "mode_of_inheritance": "Autosomal recessive",
+            "mode_of_inheritance": "AR",
+            "mode_of_inheritance_reported": "Autosomal recessive",
             "pmids": [
               "29152729"
             ],
@@ -596,7 +645,7 @@
         ],
         "mode_of_inheritance_conflicts": [],
         "modes_of_inheritance": [
-          "Autosomal recessive"
+          "AR"
         ],
         "source": "GenCC submissions export (2+ submetentes independentes para 'established')",
         "status": "VERIFICADO",
@@ -606,11 +655,15 @@
         ]
       },
       "mode_of_inheritance_conflict": false,
+      "modes_by_disease": {
+        "dihydropyrimidine dehydrogenase deficiency": [
+          "AR"
+        ]
+      },
       "modes_of_inheritance": [
-        "Autosomal recessive"
+        "AR"
       ],
-      "reason": "nem o ClinGen nem o GenCC estabelecem relação gene-doença para DPYD em nível Definitivo ou Forte com submetentes independentes suficientes; sem isso este sistema não converte variante em achado clínico",
-      "status": "NÃO DISPONÍVEL"
+      "status": "VERIFICADO"
     },
     "F2": {
       "clingen": {
@@ -653,19 +706,22 @@
         "status": "VERIFICADO",
         "total": 498
       },
+      "conflicting_diseases": [],
       "diseases": [
         "congenital prothrombin deficiency",
         "thrombophilia due to thrombin defect"
       ],
       "established": true,
       "established_by": [
-        "ClinGen"
+        "ClinGen",
+        "GenCC"
       ],
       "gencc": {
         "diseases": [
           "congenital prothrombin deficiency",
           "thrombophilia due to thrombin defect"
         ],
+        "established": true,
         "established_groups": [
           {
             "classifications": [
@@ -682,7 +738,8 @@
               "Laboratory for Molecular Medicine",
               "PanelApp Australia"
             ],
-            "mode_of_inheritance": "Autosomal recessive",
+            "mode_of_inheritance": "AR",
+            "mode_of_inheritance_reported": "Autosomal recessive",
             "pmids": [
               " 12149217",
               " 12492590",
@@ -726,7 +783,8 @@
               "Labcorp Genetics (formerly Invitae)",
               "PanelApp Australia"
             ],
-            "mode_of_inheritance": "Autosomal dominant",
+            "mode_of_inheritance": "AD",
+            "mode_of_inheritance_reported": "Autosomal dominant",
             "pmids": [
               " 10027711",
               " 11372696",
@@ -771,7 +829,8 @@
               "Laboratory for Molecular Medicine",
               "PanelApp Australia"
             ],
-            "mode_of_inheritance": "Autosomal recessive",
+            "mode_of_inheritance": "AR",
+            "mode_of_inheritance_reported": "Autosomal recessive",
             "pmids": [
               " 12149217",
               " 12492590",
@@ -815,7 +874,8 @@
               "Labcorp Genetics (formerly Invitae)",
               "PanelApp Australia"
             ],
-            "mode_of_inheritance": "Autosomal dominant",
+            "mode_of_inheritance": "AD",
+            "mode_of_inheritance_reported": "Autosomal dominant",
             "pmids": [
               " 10027711",
               " 11372696",
@@ -846,8 +906,8 @@
         ],
         "mode_of_inheritance_conflicts": [],
         "modes_of_inheritance": [
-          "Autosomal dominant",
-          "Autosomal recessive"
+          "AD",
+          "AR"
         ],
         "source": "GenCC submissions export (2+ submetentes independentes para 'established')",
         "status": "VERIFICADO",
@@ -860,12 +920,18 @@
           "PanelApp Australia"
         ]
       },
-      "mode_of_inheritance_conflict": true,
+      "mode_of_inheritance_conflict": false,
+      "modes_by_disease": {
+        "congenital prothrombin deficiency": [
+          "AR"
+        ],
+        "thrombophilia due to thrombin defect": [
+          "AD"
+        ]
+      },
       "modes_of_inheritance": [
         "AD",
-        "AR",
-        "Autosomal dominant",
-        "Autosomal recessive"
+        "AR"
       ],
       "status": "VERIFICADO"
     },
@@ -910,19 +976,22 @@
         "status": "VERIFICADO",
         "total": 1492
       },
+      "conflicting_diseases": [],
       "diseases": [
         "congenital factor V deficiency",
         "thrombophilia due to activated protein C resistance"
       ],
       "established": true,
       "established_by": [
-        "ClinGen"
+        "ClinGen",
+        "GenCC"
       ],
       "gencc": {
         "diseases": [
           "congenital factor V deficiency",
           "thrombophilia due to activated protein C resistance"
         ],
+        "established": true,
         "established_groups": [
           {
             "classifications": [
@@ -938,7 +1007,8 @@
               "Labcorp Genetics (formerly Invitae)",
               "PanelApp Australia"
             ],
-            "mode_of_inheritance": "Autosomal recessive",
+            "mode_of_inheritance": "AR",
+            "mode_of_inheritance_reported": "Autosomal recessive",
             "pmids": [
               " 10669158",
               " 11435304",
@@ -972,7 +1042,8 @@
               "Labcorp Genetics (formerly Invitae)",
               "PanelApp Australia"
             ],
-            "mode_of_inheritance": "Autosomal dominant",
+            "mode_of_inheritance": "AD",
+            "mode_of_inheritance_reported": "Autosomal dominant",
             "pmids": [
               " 10666427",
               " 11110695",
@@ -1020,7 +1091,8 @@
               "Labcorp Genetics (formerly Invitae)",
               "PanelApp Australia"
             ],
-            "mode_of_inheritance": "Autosomal recessive",
+            "mode_of_inheritance": "AR",
+            "mode_of_inheritance_reported": "Autosomal recessive",
             "pmids": [
               " 10669158",
               " 11435304",
@@ -1054,7 +1126,8 @@
               "Labcorp Genetics (formerly Invitae)",
               "PanelApp Australia"
             ],
-            "mode_of_inheritance": "Autosomal dominant",
+            "mode_of_inheritance": "AD",
+            "mode_of_inheritance_reported": "Autosomal dominant",
             "pmids": [
               " 10666427",
               " 11110695",
@@ -1094,7 +1167,8 @@
             "disease_curie": "MONDO:0011615",
             "established": false,
             "established_submitters": [],
-            "mode_of_inheritance": "Autosomal dominant",
+            "mode_of_inheritance": "AD",
+            "mode_of_inheritance_reported": "Autosomal dominant",
             "pmids": [
               "23979162"
             ],
@@ -1105,8 +1179,8 @@
         ],
         "mode_of_inheritance_conflicts": [],
         "modes_of_inheritance": [
-          "Autosomal dominant",
-          "Autosomal recessive"
+          "AD",
+          "AR"
         ],
         "source": "GenCC submissions export (2+ submetentes independentes para 'established')",
         "status": "VERIFICADO",
@@ -1118,12 +1192,18 @@
           "PanelApp Australia"
         ]
       },
-      "mode_of_inheritance_conflict": true,
+      "mode_of_inheritance_conflict": false,
+      "modes_by_disease": {
+        "congenital factor v deficiency": [
+          "AR"
+        ],
+        "thrombophilia due to activated protein c resistance": [
+          "AD"
+        ]
+      },
       "modes_of_inheritance": [
         "AD",
-        "AR",
-        "Autosomal dominant",
-        "Autosomal recessive"
+        "AR"
       ],
       "status": "VERIFICADO"
     },
@@ -1157,17 +1237,20 @@
         "status": "VERIFICADO",
         "total": 355
       },
+      "conflicting_diseases": [],
       "diseases": [
         "hemochromatosis type 1"
       ],
       "established": true,
       "established_by": [
-        "ClinGen"
+        "ClinGen",
+        "GenCC"
       ],
       "gencc": {
         "diseases": [
           "hemochromatosis type 1"
         ],
+        "established": true,
         "established_groups": [
           {
             "classifications": [
@@ -1186,7 +1269,8 @@
               "Laboratory for Molecular Medicine",
               "PanelApp Australia"
             ],
-            "mode_of_inheritance": "Autosomal recessive",
+            "mode_of_inheritance": "AR",
+            "mode_of_inheritance_reported": "Autosomal recessive",
             "pmids": [
               " 10575540",
               " 10756356",
@@ -1238,7 +1322,8 @@
               "Laboratory for Molecular Medicine",
               "PanelApp Australia"
             ],
-            "mode_of_inheritance": "Autosomal recessive",
+            "mode_of_inheritance": "AR",
+            "mode_of_inheritance_reported": "Autosomal recessive",
             "pmids": [
               " 10575540",
               " 10756356",
@@ -1279,7 +1364,8 @@
             "disease_curie": "MONDO:0009061",
             "established": false,
             "established_submitters": [],
-            "mode_of_inheritance": "Autosomal recessive",
+            "mode_of_inheritance": "AR",
+            "mode_of_inheritance_reported": "Autosomal recessive",
             "pmids": [
               "30291871"
             ],
@@ -1290,7 +1376,7 @@
         ],
         "mode_of_inheritance_conflicts": [],
         "modes_of_inheritance": [
-          "Autosomal recessive"
+          "AR"
         ],
         "source": "GenCC submissions export (2+ submetentes independentes para 'established')",
         "status": "VERIFICADO",
@@ -1304,10 +1390,14 @@
           "PanelApp Australia"
         ]
       },
-      "mode_of_inheritance_conflict": true,
+      "mode_of_inheritance_conflict": false,
+      "modes_by_disease": {
+        "hemochromatosis type 1": [
+          "AR"
+        ]
+      },
       "modes_of_inheritance": [
-        "AR",
-        "Autosomal recessive"
+        "AR"
       ],
       "status": "VERIFICADO"
     },
@@ -1327,11 +1417,13 @@
         "status": "VERIFICADO",
         "total": 149
       },
+      "conflicting_diseases": [],
       "diseases": [],
       "established": false,
       "established_by": [],
       "gencc": {
         "diseases": [],
+        "established": false,
         "established_groups": [],
         "groups": [
           {
@@ -1342,7 +1434,8 @@
             "disease_curie": "MONDO:0009472",
             "established": false,
             "established_submitters": [],
-            "mode_of_inheritance": "Autosomal recessive",
+            "mode_of_inheritance": "AR",
+            "mode_of_inheritance_reported": "Autosomal recessive",
             "pmids": [
               " 33932406",
               "22409928"
@@ -1361,6 +1454,7 @@
         ]
       },
       "mode_of_inheritance_conflict": false,
+      "modes_by_disease": {},
       "modes_of_inheritance": [],
       "reason": "nem o ClinGen nem o GenCC estabelecem relação gene-doença para NAT2 em nível Definitivo ou Forte com submetentes independentes suficientes; sem isso este sistema não converte variante em achado clínico",
       "status": "NÃO DISPONÍVEL"
@@ -1381,11 +1475,13 @@
         "status": "VERIFICADO",
         "total": 97
       },
+      "conflicting_diseases": [],
       "diseases": [],
       "established": false,
       "established_by": [],
       "gencc": {
         "diseases": [],
+        "established": false,
         "established_groups": [],
         "groups": [],
         "mode_of_inheritance_conflicts": [],
@@ -1396,6 +1492,7 @@
         "submitters": []
       },
       "mode_of_inheritance_conflict": false,
+      "modes_by_disease": {},
       "modes_of_inheritance": [],
       "reason": "nem o ClinGen nem o GenCC estabelecem relação gene-doença para NUDT15 em nível Definitivo ou Forte com submetentes independentes suficientes; sem isso este sistema não converte variante em achado clínico",
       "status": "NÃO DISPONÍVEL"
@@ -1416,11 +1513,13 @@
         "status": "VERIFICADO",
         "total": 216
       },
+      "conflicting_diseases": [],
       "diseases": [],
       "established": false,
       "established_by": [],
       "gencc": {
         "diseases": [],
+        "established": false,
         "established_groups": [],
         "groups": [
           {
@@ -1431,7 +1530,8 @@
             "disease_curie": "MONDO:0013209",
             "established": false,
             "established_submitters": [],
-            "mode_of_inheritance": "Autosomal dominant",
+            "mode_of_inheritance": "AD",
+            "mode_of_inheritance_reported": "Autosomal dominant",
             "pmids": [
               "18820647"
             ],
@@ -1449,6 +1549,7 @@
         ]
       },
       "mode_of_inheritance_conflict": false,
+      "modes_by_disease": {},
       "modes_of_inheritance": [],
       "reason": "nem o ClinGen nem o GenCC estabelecem relação gene-doença para PNPLA3 em nível Definitivo ou Forte com submetentes independentes suficientes; sem isso este sistema não converte variante em achado clínico",
       "status": "NÃO DISPONÍVEL"
@@ -1469,15 +1570,19 @@
         "status": "VERIFICADO",
         "total": 568
       },
+      "conflicting_diseases": [],
       "diseases": [
         "alpha 1-antitrypsin deficiency"
       ],
-      "established": false,
-      "established_by": [],
+      "established": true,
+      "established_by": [
+        "GenCC"
+      ],
       "gencc": {
         "diseases": [
           "alpha 1-antitrypsin deficiency"
         ],
+        "established": true,
         "established_groups": [
           {
             "classifications": [
@@ -1493,7 +1598,8 @@
               "Labcorp Genetics (formerly Invitae)",
               "PanelApp Australia"
             ],
-            "mode_of_inheritance": "Autosomal recessive",
+            "mode_of_inheritance": "AR",
+            "mode_of_inheritance_reported": "Autosomal recessive",
             "pmids": [
               " 20301692",
               " 21248733",
@@ -1525,7 +1631,8 @@
               "Labcorp Genetics (formerly Invitae)",
               "PanelApp Australia"
             ],
-            "mode_of_inheritance": "Autosomal recessive",
+            "mode_of_inheritance": "AR",
+            "mode_of_inheritance_reported": "Autosomal recessive",
             "pmids": [
               " 20301692",
               " 21248733",
@@ -1549,7 +1656,8 @@
             "disease_curie": "MONDO:0009061",
             "established": false,
             "established_submitters": [],
-            "mode_of_inheritance": "Autosomal recessive",
+            "mode_of_inheritance": "AR",
+            "mode_of_inheritance_reported": "Autosomal recessive",
             "pmids": [
               "19738092"
             ],
@@ -1565,7 +1673,8 @@
             "disease_curie": "MONDO:0015801",
             "established": false,
             "established_submitters": [],
-            "mode_of_inheritance": "Autosomal dominant",
+            "mode_of_inheritance": "AD",
+            "mode_of_inheritance_reported": "Autosomal dominant",
             "pmids": [
               "19483159"
             ],
@@ -1576,7 +1685,7 @@
         ],
         "mode_of_inheritance_conflicts": [],
         "modes_of_inheritance": [
-          "Autosomal recessive"
+          "AR"
         ],
         "source": "GenCC submissions export (2+ submetentes independentes para 'established')",
         "status": "VERIFICADO",
@@ -1588,11 +1697,15 @@
         ]
       },
       "mode_of_inheritance_conflict": false,
+      "modes_by_disease": {
+        "alpha 1-antitrypsin deficiency": [
+          "AR"
+        ]
+      },
       "modes_of_inheritance": [
-        "Autosomal recessive"
+        "AR"
       ],
-      "reason": "nem o ClinGen nem o GenCC estabelecem relação gene-doença para SERPINA1 em nível Definitivo ou Forte com submetentes independentes suficientes; sem isso este sistema não converte variante em achado clínico",
-      "status": "NÃO DISPONÍVEL"
+      "status": "VERIFICADO"
     },
     "SLCO1B1": {
       "clingen": {
@@ -1610,11 +1723,13 @@
         "status": "VERIFICADO",
         "total": 273
       },
+      "conflicting_diseases": [],
       "diseases": [],
       "established": false,
       "established_by": [],
       "gencc": {
         "diseases": [],
+        "established": false,
         "established_groups": [],
         "groups": [
           {
@@ -1625,7 +1740,8 @@
             "disease_curie": "MONDO:0009379",
             "established": false,
             "established_submitters": [],
-            "mode_of_inheritance": "Autosomal recessive",
+            "mode_of_inheritance": "AR",
+            "mode_of_inheritance_reported": "Autosomal recessive",
             "pmids": [
               " 23236639",
               "22232210"
@@ -1644,6 +1760,7 @@
         ]
       },
       "mode_of_inheritance_conflict": false,
+      "modes_by_disease": {},
       "modes_of_inheritance": [],
       "reason": "nem o ClinGen nem o GenCC estabelecem relação gene-doença para SLCO1B1 em nível Definitivo ou Forte com submetentes independentes suficientes; sem isso este sistema não converte variante em achado clínico",
       "status": "NÃO DISPONÍVEL"
@@ -1664,11 +1781,13 @@
         "status": "VERIFICADO",
         "total": 70
       },
+      "conflicting_diseases": [],
       "diseases": [],
       "established": false,
       "established_by": [],
       "gencc": {
         "diseases": [],
+        "established": false,
         "established_groups": [],
         "groups": [],
         "mode_of_inheritance_conflicts": [],
@@ -1679,6 +1798,7 @@
         "submitters": []
       },
       "mode_of_inheritance_conflict": false,
+      "modes_by_disease": {},
       "modes_of_inheritance": [],
       "reason": "nem o ClinGen nem o GenCC estabelecem relação gene-doença para TPMT em nível Definitivo ou Forte com submetentes independentes suficientes; sem isso este sistema não converte variante em achado clínico",
       "status": "NÃO DISPONÍVEL"
@@ -1711,11 +1831,13 @@
         "status": "VERIFICADO",
         "total": 76
       },
+      "conflicting_diseases": [],
       "diseases": [],
       "established": false,
       "established_by": [],
       "gencc": {
         "diseases": [],
+        "established": false,
         "established_groups": [],
         "groups": [
           {
@@ -1728,7 +1850,8 @@
             "established_submitters": [
               "PanelApp Australia"
             ],
-            "mode_of_inheritance": "Autosomal dominant",
+            "mode_of_inheritance": "AD",
+            "mode_of_inheritance_reported": "Autosomal dominant",
             "pmids": [
               " 21900891",
               " 28198005",
@@ -1746,7 +1869,8 @@
             "disease_curie": "MONDO:0010187",
             "established": false,
             "established_submitters": [],
-            "mode_of_inheritance": "Autosomal recessive",
+            "mode_of_inheritance": "AR",
+            "mode_of_inheritance_reported": "Autosomal recessive",
             "pmids": [
               "14765194"
             ],
@@ -1765,7 +1889,8 @@
             "established_submitters": [
               "PanelApp Australia"
             ],
-            "mode_of_inheritance": "Autosomal recessive",
+            "mode_of_inheritance": "AR",
+            "mode_of_inheritance_reported": "Autosomal recessive",
             "pmids": [
               " 18315553",
               " 19492146",
@@ -1786,7 +1911,8 @@
             "disease_curie": "MONDO:0011837",
             "established": false,
             "established_submitters": [],
-            "mode_of_inheritance": "Unknown",
+            "mode_of_inheritance": "DESCONHECIDO",
+            "mode_of_inheritance_reported": "Unknown",
             "pmids": [
               "14765194"
             ],
@@ -1807,6 +1933,7 @@
         ]
       },
       "mode_of_inheritance_conflict": false,
+      "modes_by_disease": {},
       "modes_of_inheritance": [],
       "reason": "nem o ClinGen nem o GenCC estabelecem relação gene-doença para VKORC1 em nível Definitivo ou Forte com submetentes independentes suficientes; sem isso este sistema não converte variante em achado clínico",
       "status": "NÃO DISPONÍVEL"
@@ -12602,7 +12729,7 @@
   "method": "Validade gene-doença e modo de herança vêm do ClinGen e, para os genes que o ClinGen ainda não curou, do GenCC com no mínimo 2 submetentes independentes em nível Definitivo ou Forte. As duas fontes são registradas separadamente e `established_by` diz qual sustentou cada gene. Modos de herança divergentes entre submetentes são registrados como conflito e nunca arbitrados. Classificação de variante e condição vêm do ClinVar. Associações de traço vêm do GWAS Catalog, com a ancestralidade da coorte de descoberta buscada no registro do estudo da associação mais forte de cada traço. As três fontes são mantidas separadas: respondem perguntas diferentes com forças diferentes, e achatá-las faria uma associação de GWAS ler como uma curadoria Definitiva do ClinGen.",
   "min_gencc_submitters": 2,
   "schema": "genoma-gene-disease-validity-v1",
-  "sha256": "1f6b1e0af936fb4a0931a4d0595dbf02a928480cac2c5a2d1616897e3ddafc6b",
+  "sha256": "1b191e77b957f9a50a04e54211c729aa3d746ed6ee2b84503e514f0835f2be05",
   "sources": [
     "ClinGen Gene-Disease Validity, https://search.clinicalgenome.org/kb/gene-validity/download, arquivo de 2026-08-19, 3664 curadorias",
     "GenCC (Gene Curation Coalition) submissions export, https://search.thegencc.org/download/action/submissions-export-tsv, 30419 submissões, recuperado em 2026-08-19. Agrega ClinGen, Genomics England PanelApp, PanelApp Australia, Orphanet, G2P, Ambry, Labcorp e Laboratory for Molecular Medicine",
@@ -12616,9 +12743,9 @@
   "totals": {
     "genes": 16,
     "genes_curated_by_clingen": 4,
-    "genes_established_by_gencc_only": 0,
-    "genes_with_established_validity": 3,
-    "genes_with_mode_of_inheritance_conflict": 4,
+    "genes_established_by_gencc_only": 4,
+    "genes_with_established_validity": 7,
+    "genes_with_mode_of_inheritance_conflict": 1,
     "loci": 29,
     "loci_with_clinvar_record": 28,
     "loci_with_gwas_association": 21

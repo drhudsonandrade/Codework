@@ -92,5 +92,30 @@ class CatalogShapeTest(unittest.TestCase):
         self.assertEqual(len(load_catalog()), 11)
 
 
+
+class AssociationSectionRolesTest(unittest.TestCase):
+    """The association reports do not order their sections alike.
+
+    Mapping them by position put report 08's trait matrix under "Sentidos, fisiologia e
+    preferências" and its refusal under "Cartões de traços", and nothing errored. The roles
+    are now named, and this checks they still name real catalogue sections.
+    """
+
+    def test_every_role_names_a_real_middle_section(self):
+        module = _load(ROOT / "scripts" / "build_association_report.py")
+        for report_id, roles in module.SECTION_ROLES.items():
+            with self.subTest(report=report_id):
+                middle = section_titles(report_id)[1:-1]
+                self.assertEqual(sorted(roles), sorted(middle))
+
+    def test_each_report_maps_exactly_one_section_to_the_association_matrix(self):
+        module = _load(ROOT / "scripts" / "build_association_report.py")
+        for report_id, roles in module.SECTION_ROLES.items():
+            with self.subTest(report=report_id):
+                self.assertEqual(
+                    sum(1 for role in roles.values() if role == "associations"), 1
+                )
+
+
 if __name__ == "__main__":
     unittest.main()
