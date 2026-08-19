@@ -125,6 +125,21 @@ REPORT_RESOLVERS: dict[str, dict[str, Resolver]] = {
             p, "Medicações e fenoconversão"
         ),
     },
+    "10": {
+        # A one-page summary is where "nothing found" quietly replaces "nothing was tested
+        # for", so the classes are kept apart on the page rather than collapsed.
+        "RESUMO_EM_ATE_60_PALAVRAS_SEM_JARGAO": lambda p: p.get("summary"),
+        "STATUS": lambda p: _section(p, "Situação atual"),
+        "ACHADO": lambda p: _section(p, "Achados essenciais"),
+        "ACHADO_OU_NENHUM": lambda p: _section(p, "Achados essenciais"),
+        "ALERTA_OU_LACUNA": lambda p: _section(p, "Alertas e pontos cegos"),
+        "SIGNIFICADO": lambda p: _section(p, "Uso seguro e vínculos"),
+        "SIGNIFICADO_CURTO": lambda p: _section(p, "Uso seguro e vínculos"),
+        "IDS_E_VERSOES": lambda p: p.get("sources"),
+        "TEMA": lambda p: _section(p, "Situação atual"),
+        # Priority, action and confirmation are clinical decisions this pipeline does not
+        # make. Leaving them unmapped is what makes the page print NÃO DISPONÍVEL.
+    },
     "09": {
         "LABORATORIO_E_PLATAFORMA": lambda p: _section(p, "Painel de completude"),
         "N_CLASSES": lambda p: _section(p, "Matriz por classe"),
