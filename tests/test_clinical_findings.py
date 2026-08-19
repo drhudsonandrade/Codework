@@ -1,0 +1,386 @@
+"""Screening must not become diagnosis, and a text match must not become a coordinate match.
+
+The clinical join is where a genotype acquires a meaning, so every step that adds meaning has
+a guard here and every guard has a negative control — a fixture where it must fire, so that a
+passing test proves the check works rather than proving the fixture was easy.
+"""
+from __future__ import annotations
+
+import json
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from array_pipeline.clinical_findings import (
+    ACIONAVEL,
+    GENOTIPO_DE_RISCO,
+    NAO_INTERROGADO,
+    NEGATIVO,
+    PORTADOR,
+    SEM_INTERPRETACAO,
+    ClinicalEvidenceError,
+    build_clinical_findings,
+    normalised_moi,
+)
+
+MATRIX = {
+    "schema": "genoma-genome-completeness-matrix-v1",
+    "operational_status": "VERIFICADO",
+    "case_id": "CASE-1",
+    "input_sha256": "abc",
+    "sha256": "matrix-sha",
+    "qc_gate_passed": True,
+    "negative_statement_policy": "Só NÃO DETECTADO admite afirmação de ausência.",
+    "entries": [],
+}
+
+
+def _entry(rsid, gene, classification="OBSERVADO", genotype="AG", scope="CLINICO"):
+    return {
+        "rsid": rsid,
+        "gene": gene,
+        "scope": scope,
+        "classification": classification,
+        "basis": "fixture",
+        "interpretable": classification in ("OBSERVADO", "NÃO DETECTADO"),
+        "genotype": genotype if classification in ("OBSERVADO", "NÃO DETECTADO") else None,
+        "genotype_withheld": classification not in ("OBSERVADO", "NÃO DETECTADO"),
+        "assessed_allele": "A",
+    }
+
+
+def _validity(
+    *,
+    clingen=(),
+    gencc=(),
+):
+    return {
+        "clingen": {
+            "status": "VERIFICADO" if clingen else "NÃO DISPONÍVEL",
+            "curations": list(clingen),
+            "classifications": sorted({c["classification"] for c in clingen}),
+            "modes_of_inheritance": sorted(
+                {normalised_moi(c["mode_of_inheritance"]) for c in clingen
+                 if c["classification"] in ("Definitive", "Strong")}
+            ),
+            "established": any(c["classification"] in ("Definitive", "Strong") for c in clingen),
+        },
+        "gencc": {
+            "status": "VERIFICADO" if gencc else "NÃO DISPONÍVEL",
+            "groups": list(gencc),
+            "established_groups": [g for g in gencc if g.get("established")],
+            "modes_of_inheritance": sorted(
+                {normalised_moi(g["mode_of_inheritance"]) for g in gencc if g.get("established")}
+            ),
+            "diseases": sorted({g["disease"] for g in gencc if g.get("established")}),
+            "established": any(g.get("established") for g in gencc),
+            "mode_of_inheritance_conflicts": [],
+        },
+    }
+
+
+def _evidence(gene_validity, loci):
+    return {
+        "schema": "genoma-gene-disease-validity-v1",
+        "sha256": "evidence-sha",
+        "curated_at": "2026-08-19T00:00:00Z",
+        "clingen_file_created": "2026-08-19",
+        "sources": ["fixture de teste"],
+        "gene_validity": gene_validity,
+        "loci": loci,
+    }
+
+
+def _locus(rsid, gene, records):
+    return {"rsid": rsid, "gene": gene, "clinvar": {"records": records}, "gwas": {"traits": []}}
+
+
+def _record(accession, classification, conditions=(), review="criteria provided, multiple submitters, no conflicts"):
+    return {
+        "accession": accession,
+        "title": f"{accession} title",
+        "classification": classification,
+        "review_status": review,
+        "last_evaluated": "2026/01/01",
+        "conditions": [
+            {"name": name, "xrefs": {"MONDO": mondo} if mondo else {}}
+            for name, mondo in conditions
+        ],
+        "genes": [gene for gene in ()],
+    }
+
+
+def _assessed(rsid, accessions):
+    return {
+        "results": [
+            {
+                "rsid": rsid,
+                "clinvar_records_at_this_coordinate": [{"accession": a} for a in accessions],
+            }
+        ]
+    }
+
+
+def _run(entries, gene_validity, loci, assessed):
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        matrix = dict(MATRIX, entries=entries)
+        (root / "m.json").write_text(json.dumps(matrix), encoding="utf-8")
+        (root / "e.json").write_text(json.dumps(_evidence(gene_validity, loci)), encoding="utf-8")
+        (root / "a.json").write_text(json.dumps(assessed), encoding="utf-8")
+        return build_clinical_findings(root / "m.json", root / "e.json", root / "a.json")
+
+
+AR_CLINGEN = ({"disease": "hemochromatosis type 1", "mondo": "MONDO:0021001",
+               "mode_of_inheritance": "AR", "classification": "Definitive"},)
+AD_CLINGEN = ({"disease": "thrombophilia", "mondo": "MONDO:0008560",
+               "mode_of_inheritance": "AD", "classification": "Definitive"},)
+
+
+class CoordinateJoinTest(unittest.TestCase):
+    """ClinVar is joined by verified accession, never by the rsid text search that found it."""
+
+    def test_an_accession_outside_the_verified_set_is_discarded(self):
+        result = _run(
+            [_entry("rs1", "HFE")],
+            {"HFE": _validity(clingen=AR_CLINGEN)},
+            [_locus("rs1", "HFE", [
+                _record("VCV000001", "Pathogenic", [("hemochromatosis type 1", "MONDO:0021001")]),
+                _record("VCV999999", "Pathogenic", [("unrelated disease", "MONDO:9999999")]),
+            ])],
+            _assessed("rs1", ["VCV000001"]),
+        )
+        finding = result["findings"][0]
+        self.assertEqual(finding["clinvar"]["accessions_discarded_by_coordinate"], 1)
+        self.assertEqual([r["accession"] for r in finding["clinvar"]["records"]], ["VCV000001"])
+
+    def test_no_verified_accession_means_no_clinvar_evidence(self):
+        # Negative control: if the coordinate check were skipped, this locus would come back
+        # Pathogenic on the strength of a text match alone.
+        result = _run(
+            [_entry("rs1", "HFE")],
+            {"HFE": _validity(clingen=AR_CLINGEN)},
+            [_locus("rs1", "HFE", [_record("VCV999999", "Pathogenic")])],
+            _assessed("rs1", ["VCV000001"]),
+        )
+        finding = result["findings"][0]
+        self.assertEqual(finding["clinvar"]["status"], "NÃO DISPONÍVEL")
+        self.assertFalse(finding["clinvar"]["asserts_pathogenic"])
+        self.assertEqual(finding["interpretation"], SEM_INTERPRETACAO)
+
+
+class InterpretationTest(unittest.TestCase):
+    def test_heterozygous_pathogenic_in_a_recessive_condition_is_a_carrier(self):
+        result = _run(
+            [_entry("rs1", "HFE", genotype="AG")],
+            {"HFE": _validity(clingen=AR_CLINGEN)},
+            [_locus("rs1", "HFE", [
+                _record("V1", "Pathogenic", [("hemochromatosis type 1", "MONDO:0021001")])
+            ])],
+            _assessed("rs1", ["V1"]),
+        )
+        self.assertEqual(result["findings"][0]["interpretation"], PORTADOR)
+
+    def test_heterozygous_pathogenic_in_a_dominant_condition_is_actionable(self):
+        result = _run(
+            [_entry("rs1", "F5", genotype="AG")],
+            {"F5": _validity(clingen=AD_CLINGEN)},
+            [_locus("rs1", "F5", [_record("V1", "Pathogenic", [("thrombophilia", "MONDO:0008560")])])],
+            _assessed("rs1", ["V1"]),
+        )
+        self.assertEqual(result["findings"][0]["interpretation"], ACIONAVEL)
+
+    def test_the_condition_clinvar_names_decides_the_mode_not_the_gene_union(self):
+        # F5 is dominant for thrombophilia and recessive for factor V deficiency. Taking the
+        # union over the gene would refuse both; matching the variant's own condition by
+        # MONDO gets the right one.
+        both = (
+            {"disease": "thrombophilia", "mondo": "MONDO:0008560",
+             "mode_of_inheritance": "AD", "classification": "Definitive"},
+            {"disease": "factor V deficiency", "mondo": "MONDO:0009210",
+             "mode_of_inheritance": "AR", "classification": "Definitive"},
+        )
+        result = _run(
+            [_entry("rs1", "F5", genotype="AG")],
+            {"F5": _validity(clingen=both)},
+            [_locus("rs1", "F5", [_record("V1", "Pathogenic", [("thrombophilia", "MONDO:0008560")])])],
+            _assessed("rs1", ["V1"]),
+        )
+        finding = result["findings"][0]
+        self.assertEqual(finding["interpretation"], ACIONAVEL)
+        self.assertIn("thrombophilia", finding["interpretation_basis"])
+
+    def test_an_unmatched_condition_falls_back_to_the_gene_union_and_says_so(self):
+        both = (
+            {"disease": "thrombophilia", "mondo": "MONDO:0008560",
+             "mode_of_inheritance": "AD", "classification": "Definitive"},
+            {"disease": "factor V deficiency", "mondo": "MONDO:0009210",
+             "mode_of_inheritance": "AR", "classification": "Definitive"},
+        )
+        result = _run(
+            [_entry("rs1", "F5", genotype="AG")],
+            {"F5": _validity(clingen=both)},
+            [_locus("rs1", "F5", [_record("V1", "Pathogenic", [("some other thing", "MONDO:1111111")])])],
+            _assessed("rs1", ["V1"]),
+        )
+        finding = result["findings"][0]
+        self.assertEqual(finding["interpretation"], GENOTIPO_DE_RISCO)
+        self.assertIn("nenhuma condição do ClinVar coincide", finding["interpretation_basis"])
+
+    def test_homozygous_pathogenic_is_a_risk_genotype_not_a_diagnosis(self):
+        result = _run(
+            [_entry("rs1", "HFE", genotype="AA")],
+            {"HFE": _validity(clingen=AR_CLINGEN)},
+            [_locus("rs1", "HFE", [
+                _record("V1", "Pathogenic", [("hemochromatosis type 1", "MONDO:0021001")])
+            ])],
+            _assessed("rs1", ["V1"]),
+        )
+        finding = result["findings"][0]
+        self.assertEqual(finding["interpretation"], GENOTIPO_DE_RISCO)
+        self.assertIn("não diagnóstico", finding["interpretation_basis"])
+        self.assertNotIn("afetado", finding["interpretation_basis"])
+
+    def test_pathogenic_without_established_validity_is_not_a_finding(self):
+        result = _run(
+            [_entry("rs1", "SERPINA1", genotype="AG")],
+            {"SERPINA1": _validity()},
+            [_locus("rs1", "SERPINA1", [_record("V1", "Pathogenic")])],
+            _assessed("rs1", ["V1"]),
+        )
+        finding = result["findings"][0]
+        self.assertEqual(finding["interpretation"], SEM_INTERPRETACAO)
+        self.assertIn("nem o ClinGen nem o GenCC", finding["interpretation_basis"])
+
+    def test_gencc_alone_can_establish_validity(self):
+        # The bug this pins: `_gencc_summary` once returned no `established` key, so the
+        # aggregate was fetched, grouped, and then ignored by the caller.
+        gencc = (
+            {"disease": "alpha 1-antitrypsin deficiency", "disease_curie": "MONDO:0013282",
+             "mode_of_inheritance": "Autosomal recessive", "established": True,
+             "submitters": ["A", "B"], "classifications": ["Strong"]},
+        )
+        result = _run(
+            [_entry("rs1", "SERPINA1", genotype="AG")],
+            {"SERPINA1": _validity(gencc=gencc)},
+            [_locus("rs1", "SERPINA1", [
+                _record("V1", "Pathogenic", [("alpha 1-antitrypsin deficiency", "MONDO:0013282")])
+            ])],
+            _assessed("rs1", ["V1"]),
+        )
+        finding = result["findings"][0]
+        self.assertEqual(finding["interpretation"], PORTADOR)
+        self.assertEqual(finding["validity"]["established_by"], ["GenCC"])
+
+    def test_benign_is_reported_as_benign_not_as_absence_of_evidence(self):
+        result = _run(
+            [_entry("rs1", "HFE", genotype="AG")],
+            {"HFE": _validity(clingen=AR_CLINGEN)},
+            [_locus("rs1", "HFE", [_record("V1", "Benign")])],
+            _assessed("rs1", ["V1"]),
+        )
+        finding = result["findings"][0]
+        self.assertEqual(finding["interpretation"], SEM_INTERPRETACAO)
+        self.assertIn("benigna", finding["interpretation_basis"])
+
+    def test_an_unrecognised_clinvar_label_is_surfaced_and_is_not_pathogenic(self):
+        result = _run(
+            [_entry("rs1", "HFE", genotype="AG")],
+            {"HFE": _validity(clingen=AR_CLINGEN)},
+            [_locus("rs1", "HFE", [_record("V1", "Probably quite bad")])],
+            _assessed("rs1", ["V1"]),
+        )
+        finding = result["findings"][0]
+        self.assertFalse(finding["clinvar"]["asserts_pathogenic"])
+        self.assertEqual(finding["clinvar"]["unrecognised_classifications"], ["Probably quite bad"])
+        self.assertEqual(finding["interpretation"], SEM_INTERPRETACAO)
+
+
+class CoverageClassTest(unittest.TestCase):
+    def test_not_detected_licenses_a_negative_only_for_that_locus(self):
+        result = _run(
+            [_entry("rs1", "HFE", classification="NÃO DETECTADO", genotype="GG")],
+            {"HFE": _validity(clingen=AR_CLINGEN)},
+            [_locus("rs1", "HFE", [_record("V1", "Pathogenic")])],
+            _assessed("rs1", ["V1"]),
+        )
+        finding = result["findings"][0]
+        self.assertEqual(finding["interpretation"], NEGATIVO)
+        self.assertIn("apenas para este locus", finding["interpretation_basis"])
+
+    def test_non_interpretable_classes_license_nothing(self):
+        for classification in ("NÃO TESTADO", "NO-CALL", "NÃO REPORTÁVEL"):
+            with self.subTest(classification=classification):
+                result = _run(
+                    [_entry("rs1", "HFE", classification=classification)],
+                    {"HFE": _validity(clingen=AR_CLINGEN)},
+                    [_locus("rs1", "HFE", [_record("V1", "Pathogenic")])],
+                    _assessed("rs1", ["V1"]),
+                )
+                self.assertEqual(result["findings"][0]["interpretation"], NAO_INTERROGADO)
+
+
+class ModeNormalisationTest(unittest.TestCase):
+    def test_clingen_abbreviations_and_gencc_labels_are_the_same_mode(self):
+        self.assertEqual(normalised_moi("AR"), normalised_moi("Autosomal recessive"))
+        self.assertEqual(normalised_moi("AD"), normalised_moi("Autosomal dominant"))
+
+    def test_an_unknown_label_does_not_become_a_recognised_mode(self):
+        for label in (None, "", "digenic", "mitochondrial"):
+            self.assertEqual(normalised_moi(label), "DESCONHECIDO", label)
+
+
+class ContractTest(unittest.TestCase):
+    def test_evidence_without_sources_is_refused(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "m.json").write_text(json.dumps(MATRIX), encoding="utf-8")
+            evidence = _evidence({}, [])
+            evidence["sources"] = []
+            (root / "e.json").write_text(json.dumps(evidence), encoding="utf-8")
+            (root / "a.json").write_text(json.dumps({"results": []}), encoding="utf-8")
+            with self.assertRaises(ClinicalEvidenceError):
+                build_clinical_findings(root / "m.json", root / "e.json", root / "a.json")
+
+    def test_the_join_is_never_stronger_than_the_matrix(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            matrix = dict(MATRIX, operational_status="NÃO DISPONÍVEL", entries=[_entry("rs1", "HFE")])
+            (root / "m.json").write_text(json.dumps(matrix), encoding="utf-8")
+            (root / "e.json").write_text(json.dumps(_evidence({}, [])), encoding="utf-8")
+            (root / "a.json").write_text(json.dumps({"results": []}), encoding="utf-8")
+            result = build_clinical_findings(root / "m.json", root / "e.json", root / "a.json")
+        self.assertEqual(result["operational_status"], "NÃO DISPONÍVEL")
+
+    def test_totals_are_counted_not_asserted(self):
+        result = _run(
+            [
+                _entry("rs1", "HFE", genotype="AG"),
+                _entry("rs2", "HFE", classification="NÃO DETECTADO", genotype="GG"),
+                _entry("rs3", "HFE", classification="NO-CALL"),
+            ],
+            {"HFE": _validity(clingen=AR_CLINGEN)},
+            [
+                _locus("rs1", "HFE", [
+                    _record("V1", "Pathogenic", [("hemochromatosis type 1", "MONDO:0021001")])
+                ]),
+                _locus("rs2", "HFE", []),
+                _locus("rs3", "HFE", []),
+            ],
+            {"results": [{"rsid": "rs1", "clinvar_records_at_this_coordinate": [{"accession": "V1"}]}]},
+        )
+        totals = result["totals"]
+        self.assertEqual(totals["loci"], 3)
+        self.assertEqual(totals[f"kind_{PORTADOR}"], 1)
+        self.assertEqual(totals[f"kind_{NEGATIVO}"], 1)
+        self.assertEqual(totals[f"kind_{NAO_INTERROGADO}"], 1)
+        self.assertEqual(totals["confirmation_required"], 1)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -140,6 +140,145 @@ REPORT_RESOLVERS: dict[str, dict[str, Resolver]] = {
         # Priority, action and confirmation are clinical decisions this pipeline does not
         # make. Leaving them unmapped is what makes the page print NÃO DISPONÍVEL.
     },
+    # Report 01: clinical. Findings, negatives and blind spots are separate sections on
+    # purpose, so the tokens that ask about each resolve to their own one — mapping them all
+    # to the findings section would print a finding where the template asks for a negative.
+    "01": {
+        "LABORATORIO_E_PLATAFORMA": lambda p: _section(p, "Identificação e controle"),
+        "ACHADO_OU_NENHUM": lambda p: _section(p, "Achados clínicos e diagnósticos"),
+        "GENE_VARIANTE_CONDICAO": lambda p: _section(p, "Achados clínicos e diagnósticos"),
+        "INTERPRETACAO_CURTA": lambda p: _section(p, "Resumo clínico executivo"),
+        "CLINICO_OU_PREDISPOSICAO": lambda p: _section(p, "Predisposições, risco e achados negativos"),
+        "RESULTADO_NEGATIVO": lambda p: _section(p, "Predisposições, risco e achados negativos"),
+        "GENES_E_CLASSES": lambda p: _section(p, "Predisposições, risco e achados negativos"),
+        "ESCOPO_EXATO": lambda p: _section(p, "Predisposições, risco e achados negativos"),
+        "GENES_REGIOES_CLASSES_E_POPULACAO_COBERTOS": lambda p: _section(
+            p, "Predisposições, risco e achados negativos"
+        ),
+        "CONFIRMACAO": lambda p: _section(p, "Confirmação, pontos cegos e reanálise"),
+        "LIMITACOES_RESIDUAIS": lambda p: _section(p, "Confirmação, pontos cegos e reanálise"),
+        "ACHADOS_QUE_EXIGEM_METODO_ORTOGONAL_E_SEGREGACAO": lambda p: _section(
+            p, "Confirmação, pontos cegos e reanálise"
+        ),
+        "REGIOES_CLASSES_VAF_FASE_E_MECANISMOS_NAO_AVALIADOS": lambda p: _section(
+            p, "Confirmação, pontos cegos e reanálise"
+        ),
+        "CURADORIA_GENE_DOENCA_E_VARIANTE": lambda p: _section(p, "Fontes e Execution Manifest"),
+        "NIVEL_E_FONTES": lambda p: _section(p, "Fontes e Execution Manifest"),
+        "REGISTRO_DE_CONSULTAS": lambda p: _section(p, "Fontes e Execution Manifest"),
+        "STATUS_OPERACIONAL": lambda p: p.get("operational_status"),
+        "N_ACHADOS_P1_P2": lambda p: _count_findings(p, lambda _f: True),
+        "N_CONFIRMACOES": lambda p: _count_findings(p, lambda _f: True),
+    },
+    # Report 02: ancestry. It measures feasibility rather than estimating origins, so the
+    # tokens asking for an estimate deliberately have no resolver and print NÃO DISPONÍVEL.
+    "02": {
+        "LABORATORIO_E_PLATAFORMA": lambda p: _section(p, "Qualidade, painel e sensibilidade"),
+        "METODO_VERSAO_QUALIDADE": lambda p: _section(p, "Qualidade, painel e sensibilidade"),
+        "METRICAS_E_LIMIARES": lambda p: _section(p, "Qualidade, painel e sensibilidade"),
+        "N_SNP_POS_QC": lambda p: _section(p, "Qualidade, painel e sensibilidade"),
+        "PLATAFORMA": lambda p: _section(p, "Qualidade, painel e sensibilidade"),
+        "HAPLOGRUPO_HAPLOTIPO_IBD_AFINIDADE": lambda p: _section(p, "Linhagens materna e paterna"),
+        "SUBCLADO_MT": lambda p: _section(p, "Linhagens materna e paterna"),
+        "SUBCLADO_Y_OU_NA": lambda p: _section(p, "Linhagens materna e paterna"),
+        "ARVORE_VERSAO": lambda p: _section(p, "Linhagens materna e paterna"),
+        "NOME_VERSAO_N_AMOSTRAS": lambda p: _section(p, "Limitações e fontes"),
+        "MODELO_VERSAO_REFERENCIA": lambda p: _section(p, "Limitações e fontes"),
+        "LACUNAS": lambda p: _section(p, "Limitações e fontes"),
+        "REGIOES_CLASSES_VAF_FASE_E_MECANISMOS_NAO_AVALIADOS": lambda p: _section(
+            p, "Limitações e fontes"
+        ),
+        "REGISTRO_DE_CONSULTAS": lambda p: p.get("sources"),
+    },
+    # Report 03: reproductive. Couple summary and combined risk have no resolver because
+    # only one person was analysed; leaving them unmapped is what prints the refusal.
+    "03": {
+        "LABORATORIO_E_PLATAFORMA": lambda p: _section(p, "Identificação e controle"),
+        "ESCOPO_A": lambda p: _section(p, "Escopo individual e comparabilidade"),
+        "COBERTURA_A": lambda p: _section(p, "Escopo individual e comparabilidade"),
+        "RESIDUAL": lambda p: _section(p, "Escopo individual e comparabilidade"),
+        "FAIXA_RESIDUAL": lambda p: _section(p, "Escopo individual e comparabilidade"),
+        "CONDICAO_GENE": lambda p: _section(p, "Achados de portador por pessoa"),
+        "GENOTIPO": lambda p: _section(p, "Achados de portador por pessoa"),
+        "ZIGOSIDADE": lambda p: _section(p, "Achados de portador por pessoa"),
+        "AR_XL_AD_MT_OUTRO": lambda p: _section(p, "Achados de portador por pessoa"),
+        "N_PORTADOR_A": lambda p: _section(p, "Achados de portador por pessoa"),
+        "ACONSELHAMENTO": lambda p: _section(p, "Opções, confirmação e aconselhamento"),
+        "CONFIRMACAO_VARIANTES": lambda p: _section(p, "Opções, confirmação e aconselhamento"),
+        "ENCAMINHAMENTO": lambda p: _section(p, "Opções, confirmação e aconselhamento"),
+        "LIMITES": lambda p: _section(p, "Limitações e fontes"),
+        "LACUNAS": lambda p: _section(p, "Limitações e fontes"),
+        "REGIOES_CLASSES_VAF_FASE_E_MECANISMOS_NAO_AVALIADOS": lambda p: _section(
+            p, "Limitações e fontes"
+        ),
+        "REGISTRO_DE_CONSULTAS": lambda p: p.get("sources"),
+    },
+    # Reports 04, 07 and 08 share a producer, so they share the shape of their resolvers:
+    # the association matrix, the effect direction, and the limitations that carry the
+    # evidence tier. Recommendation tokens are unmapped on purpose.
+    "04": {
+        "LABORATORIO_E_PLATAFORMA": lambda p: _section(p, "Identificação e controle"),
+        "GENETICA_FENOTIPO": lambda p: _section(p, "Matriz gene–nutriente–fenótipo"),
+        "GENE_RS_HGVS": lambda p: _section(p, "Matriz gene–nutriente–fenótipo"),
+        "EVIDENCIA_E_EFEITO": lambda p: _section(p, "Matriz gene–nutriente–fenótipo"),
+        "BETA_OR_RR_IC": lambda p: _section(p, "Matriz gene–nutriente–fenótipo"),
+        "COORTE_ANCESTRALIDADE": lambda p: _section(p, "Matriz gene–nutriente–fenótipo"),
+        "FATO_ASSOCIACAO_HIPOTESE": lambda p: _section(p, "Módulos de interpretação"),
+        "NIVEL_EVIDENCIA": lambda p: _section(p, "Módulos de interpretação"),
+        "RISCO_E_RESPOSTA": lambda p: _section(p, "Módulos de interpretação"),
+        "GENES_REGIOES_CLASSES_E_POPULACAO_COBERTOS": lambda p: _section(p, "Limitações e fontes"),
+        "REGIOES_CLASSES_VAF_FASE_E_MECANISMOS_NAO_AVALIADOS": lambda p: _section(
+            p, "Limitações e fontes"
+        ),
+        "REGISTRO_DE_CONSULTAS": lambda p: p.get("sources"),
+    },
+    "07": {
+        "LABORATORIO_E_PLATAFORMA": lambda p: _section(p, "Identificação e controle"),
+        "GENE_VARIANTE": lambda p: _section(p, "Matriz de predisposição"),
+        "RISCO_IC": lambda p: _section(p, "Matriz de predisposição"),
+        "EFEITO_IC": lambda p: _section(p, "Matriz de predisposição"),
+        "COORTES": lambda p: _section(p, "Matriz de predisposição"),
+        "MONOGENICO_PRS_ASSOCIACAO": lambda p: _section(p, "Matriz de predisposição"),
+        "PROTETOR": lambda p: _section(p, "Variantes e fatores protetores"),
+        "EFEITO": lambda p: _section(p, "Variantes e fatores protetores"),
+        "N_PROTETORES": lambda p: _section(p, "Variantes e fatores protetores"),
+        "GENES_REGIOES_CLASSES_E_POPULACAO_COBERTOS": lambda p: _section(p, "Limitações e fontes"),
+        "REGIOES_CLASSES_VAF_FASE_E_MECANISMOS_NAO_AVALIADOS": lambda p: _section(
+            p, "Limitações e fontes"
+        ),
+        "REGISTRO_DE_CONSULTAS": lambda p: p.get("sources"),
+    },
+    "08": {
+        "LABORATORIO_E_PLATAFORMA": lambda p: _section(p, "Identificação e controle"),
+        "TRACO": lambda p: _section(p, "Cartões de traços"),
+        "ASSOCIACAO": lambda p: _section(p, "Cartões de traços"),
+        "EFEITO": lambda p: _section(p, "Cartões de traços"),
+        "EFEITO_ESCALA": lambda p: _section(p, "Cartões de traços"),
+        "N_ASSOCIACOES": lambda p: _section(p, "Cartões de traços"),
+        "FISIOLOGIA": lambda p: _section(p, "Sentidos, fisiologia e preferências"),
+        "PERCEPCAO": lambda p: _section(p, "Sentidos, fisiologia e preferências"),
+        "REPLICADO": lambda p: _section(p, "Evidência e reprodutibilidade"),
+        "MODELO_VALIDADO": lambda p: _section(p, "Evidência e reprodutibilidade"),
+        "GENES_REGIOES_CLASSES_E_POPULACAO_COBERTOS": lambda p: _section(p, "Limitações e fontes"),
+        "REGIOES_CLASSES_VAF_FASE_E_MECANISMOS_NAO_AVALIADOS": lambda p: _section(
+            p, "Limitações e fontes"
+        ),
+        "REGISTRO_DE_CONSULTAS": lambda p: p.get("sources"),
+    },
+    # Report 11: the editorial guide. It describes the system, so its resolvers read the
+    # analysis of the system rather than any measurement of a person.
+    "11": {
+        "PROCESSO": lambda p: _section(p, "Matriz de seleção"),
+        "ARTEFATO": lambda p: _section(p, "Matriz de seleção"),
+        "DETALHE": lambda p: _section(p, "Dicionário de campos"),
+        "ESCALA_DEFINIDA_POR_MODULO": lambda p: _section(p, "Taxonomias obrigatórias"),
+        "STATUS_OPERACIONAL": lambda p: p.get("operational_status"),
+        "CONTROLE": lambda p: _section(p, "QA antes da publicação"),
+        "SEMVER": lambda p: _section(p, "Versionamento e manutenção"),
+        "MUDANCA": lambda p: _section(p, "Versionamento e manutenção"),
+        "FONTE_VERSAO_DATA": lambda p: p.get("sources"),
+        "REGISTRO_DE_CONSULTAS": lambda p: p.get("sources"),
+    },
     "09": {
         "LABORATORIO_E_PLATAFORMA": lambda p: _section(p, "Painel de completude"),
         "N_CLASSES": lambda p: _section(p, "Matriz por classe"),
@@ -167,7 +306,12 @@ def _resolve(report_id: str, token: str, payload: dict[str, Any]) -> Any:
             value = resolver(payload)
         except (KeyError, TypeError, ValueError):
             return None
-        if value not in (None, ""):
+        # A resolver that reaches a section whose content is itself NÃO DISPONÍVEL has not
+        # derived anything. Counting it as derived inflates `derived_count`, and
+        # `render_report_pdfs.py` refuses to publish only when that count is zero — so a
+        # report whose every section was unavailable would have published as if it carried
+        # measurements.
+        if value not in (None, "", UNAVAILABLE):
             return value
     return None
 

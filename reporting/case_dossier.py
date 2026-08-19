@@ -143,7 +143,14 @@ def load_dossier(path: Path, *, expected_case_id: str | None = None) -> dict[str
     return {
         "schema": SCHEMA,
         "case_id": case_id,
-        "consent_documented": bool(consent),
+        # Documented means the consent instrument is *identified* — id, version, date and
+        # purposes. A block carrying only downstream preferences (which reports, which
+        # recipients, how long to retain) is a delivery policy, not a consent record, and
+        # reading it as one would print "consentimento documentado" over a case where no
+        # consent instrument was ever named.
+        "consent_documented": all(field in consent for field in CONSENT_REQUIRED_TOGETHER),
+        "consent_preferences_only": bool(consent)
+        and not all(field in consent for field in CONSENT_REQUIRED_TOGETHER),
         "fields_supplied": supplied,
         "fields_possible": total,
         # Reported so a reader can see how much of the administrative record exists, rather

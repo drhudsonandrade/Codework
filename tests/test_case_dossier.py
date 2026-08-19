@@ -19,6 +19,7 @@ if str(ROOT) not in sys.path:
 
 from reporting.case_dossier import (
     CONSENT_REQUIRED_TOGETHER,
+    SCHEMA,
     SECTIONS,
     CaseDossierError,
     dossier_values,
@@ -199,3 +200,54 @@ class DossierToTemplateTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ConsentDocumentedTest(unittest.TestCase):
+    """"Consentimento documentado" must mean an instrument was identified.
+
+    The all-or-nothing rule covers id/version/date/purposes, but the rest of the consent
+    block — which reports, which recipients, how long to retain — is outside it. A dossier
+    carrying only those parsed cleanly and still reported `consent_documented`, which is a
+    delivery policy printed as a consent record.
+    """
+
+    def _write(self, root: Path, consent: dict) -> Path:
+        path = root / "dossier.json"
+        path.write_text(
+            json.dumps({"schema": SCHEMA, "case_id": "CASE-1", "consent": consent}),
+            encoding="utf-8",
+        )
+        return path
+
+    def test_preferences_without_an_instrument_are_not_documented_consent(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = self._write(
+                Path(td),
+                {"authorised_reports": ["05", "06"], "retention_policy": "uso pessoal"},
+            )
+            dossier = load_dossier(path)
+        self.assertFalse(dossier["consent_documented"])
+        self.assertTrue(dossier["consent_preferences_only"])
+
+    def test_a_complete_instrument_is_documented_consent(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = self._write(
+                Path(td),
+                {
+                    "consent_id": "TCLE-1",
+                    "consent_version": "1.0",
+                    "consent_date": "2026-08-19",
+                    "authorised_purposes": ["análise farmacogenômica"],
+                    "authorised_reports": ["05", "06"],
+                },
+            )
+            dossier = load_dossier(path)
+        self.assertTrue(dossier["consent_documented"])
+        self.assertFalse(dossier["consent_preferences_only"])
+
+    def test_an_empty_consent_block_is_neither(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = self._write(Path(td), {})
+            dossier = load_dossier(path)
+        self.assertFalse(dossier["consent_documented"])
+        self.assertFalse(dossier["consent_preferences_only"])
