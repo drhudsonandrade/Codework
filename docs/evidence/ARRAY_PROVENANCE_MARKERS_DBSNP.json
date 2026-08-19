@@ -1,0 +1,621 @@
+{
+  "discrepancies": [],
+  "marker_table": {
+    "id": "GENOMA-PROVENANCE-MARKERS",
+    "version": "2026-08-19.1"
+  },
+  "markers_checked": 11,
+  "results": [
+    {
+      "alleles": {
+        "dbsnp_alternate_frequency": 0.147929,
+        "dbsnp_major_alternate": "C",
+        "dbsnp_palindromic": false,
+        "dbsnp_reference": "T",
+        "dbsnp_submitted_alleles": [
+          "C",
+          "T"
+        ],
+        "declared": [
+          "C",
+          "T"
+        ],
+        "declared_palindromic": false,
+        "status": "CONFERE"
+      },
+      "assemblies": {
+        "GRCh37": {
+          "assembly_name": "GRCh37.p13",
+          "dbsnp": {
+            "chromosome": "19",
+            "position": 45411941
+          },
+          "declared": {
+            "chromosome": "19",
+            "position": 45411941
+          },
+          "seq_id": "NC_000019.9",
+          "status": "CONFERE"
+        },
+        "GRCh38": {
+          "assembly_name": "GRCh38.p14",
+          "dbsnp": {
+            "chromosome": "19",
+            "position": 44908684
+          },
+          "declared": {
+            "chromosome": "19",
+            "position": 44908684
+          },
+          "seq_id": "NC_000019.10",
+          "status": "CONFERE"
+        }
+      },
+      "dbsnp_build": "157",
+      "frequencies": {
+        "C": 0.147929,
+        "T": 0.852071
+      },
+      "gene": "APOE",
+      "rsid": "rs429358",
+      "variant_type": "snv"
+    },
+    {
+      "alleles": {
+        "dbsnp_alternate_frequency": 0.074002,
+        "dbsnp_major_alternate": "T",
+        "dbsnp_palindromic": false,
+        "dbsnp_reference": "C",
+        "dbsnp_submitted_alleles": [
+          "C",
+          "T"
+        ],
+        "declared": [
+          "C",
+          "T"
+        ],
+        "declared_palindromic": false,
+        "status": "CONFERE"
+      },
+      "assemblies": {
+        "GRCh37": {
+          "assembly_name": "GRCh37.p13",
+          "dbsnp": {
+            "chromosome": "19",
+            "position": 45412079
+          },
+          "declared": {
+            "chromosome": "19",
+            "position": 45412079
+          },
+          "seq_id": "NC_000019.9",
+          "status": "CONFERE"
+        },
+        "GRCh38": {
+          "assembly_name": "GRCh38.p14",
+          "dbsnp": {
+            "chromosome": "19",
+            "position": 44908822
+          },
+          "declared": {
+            "chromosome": "19",
+            "position": 44908822
+          },
+          "seq_id": "NC_000019.10",
+          "status": "CONFERE"
+        }
+      },
+      "dbsnp_build": "157",
+      "frequencies": {
+        "C": 0.925998,
+        "T": 0.074002
+      },
+      "gene": "APOE",
+      "rsid": "rs7412",
+      "variant_type": "snv"
+    },
+    {
+      "alleles": {
+        "dbsnp_alternate_frequency": 0.022019,
+        "dbsnp_major_alternate": "T",
+        "dbsnp_palindromic": false,
+        "dbsnp_reference": "C",
+        "dbsnp_submitted_alleles": [
+          "A",
+          "C",
+          "G",
+          "T"
+        ],
+        "declared": [
+          "C",
+          "T"
+        ],
+        "declared_palindromic": false,
+        "status": "CONFERE"
+      },
+      "assemblies": {
+        "GRCh37": {
+          "assembly_name": "GRCh37.p13",
+          "dbsnp": {
+            "chromosome": "1",
+            "position": 169519049
+          },
+          "declared": {
+            "chromosome": "1",
+            "position": 169519049
+          },
+          "seq_id": "NC_000001.10",
+          "status": "CONFERE"
+        },
+        "GRCh38": {
+          "assembly_name": "GRCh38.p14",
+          "dbsnp": {
+            "chromosome": "1",
+            "position": 169549811
+          },
+          "declared": {
+            "chromosome": "1",
+            "position": 169549811
+          },
+          "seq_id": "NC_000001.11",
+          "status": "CONFERE"
+        }
+      },
+      "dbsnp_build": "157",
+      "frequencies": {
+        "C": 0.977981,
+        "T": 0.022019
+      },
+      "gene": "F5",
+      "rsid": "rs6025",
+      "variant_type": "snv"
+    },
+    {
+      "alleles": {
+        "dbsnp_alternate_frequency": 0.011596,
+        "dbsnp_major_alternate": "A",
+        "dbsnp_palindromic": false,
+        "dbsnp_reference": "G",
+        "dbsnp_submitted_alleles": [
+          "A",
+          "G"
+        ],
+        "declared": [
+          "A",
+          "G"
+        ],
+        "declared_palindromic": false,
+        "status": "CONFERE"
+      },
+      "assemblies": {
+        "GRCh37": {
+          "assembly_name": "GRCh37.p13",
+          "dbsnp": {
+            "chromosome": "11",
+            "position": 46761055
+          },
+          "declared": {
+            "chromosome": "11",
+            "position": 46761055
+          },
+          "seq_id": "NC_000011.9",
+          "status": "CONFERE"
+        },
+        "GRCh38": {
+          "assembly_name": "GRCh38.p14",
+          "dbsnp": {
+            "chromosome": "11",
+            "position": 46739505
+          },
+          "declared": {
+            "chromosome": "11",
+            "position": 46739505
+          },
+          "seq_id": "NC_000011.10",
+          "status": "CONFERE"
+        }
+      },
+      "dbsnp_build": "157",
+      "frequencies": {
+        "A": 0.011596,
+        "G": 0.988404
+      },
+      "gene": "F2",
+      "rsid": "rs1799963",
+      "variant_type": "snv"
+    },
+    {
+      "alleles": {
+        "dbsnp_alternate_frequency": 0.322691,
+        "dbsnp_major_alternate": "T",
+        "dbsnp_palindromic": false,
+        "dbsnp_reference": "C",
+        "dbsnp_submitted_alleles": [
+          "A",
+          "C",
+          "G",
+          "T"
+        ],
+        "declared": [
+          "C",
+          "T"
+        ],
+        "declared_palindromic": false,
+        "status": "CONFERE"
+      },
+      "assemblies": {
+        "GRCh37": {
+          "assembly_name": "GRCh37.p13",
+          "dbsnp": {
+            "chromosome": "16",
+            "position": 31107689
+          },
+          "declared": {
+            "chromosome": "16",
+            "position": 31107689
+          },
+          "seq_id": "NC_000016.9",
+          "status": "CONFERE"
+        },
+        "GRCh38": {
+          "assembly_name": "GRCh38.p14",
+          "dbsnp": {
+            "chromosome": "16",
+            "position": 31096368
+          },
+          "declared": {
+            "chromosome": "16",
+            "position": 31096368
+          },
+          "seq_id": "NC_000016.10",
+          "status": "CONFERE"
+        }
+      },
+      "dbsnp_build": "157",
+      "frequencies": {
+        "C": 0.677309,
+        "T": 0.322691
+      },
+      "gene": "VKORC1",
+      "rsid": "rs9923231",
+      "variant_type": "snv"
+    },
+    {
+      "alleles": {
+        "dbsnp_alternate_frequency": 0.14443,
+        "dbsnp_major_alternate": "C",
+        "dbsnp_palindromic": false,
+        "dbsnp_reference": "T",
+        "dbsnp_submitted_alleles": [
+          "A",
+          "C",
+          "T"
+        ],
+        "declared": [
+          "C",
+          "T"
+        ],
+        "declared_palindromic": false,
+        "status": "CONFERE"
+      },
+      "assemblies": {
+        "GRCh37": {
+          "assembly_name": "GRCh37.p13",
+          "dbsnp": {
+            "chromosome": "12",
+            "position": 21331549
+          },
+          "declared": {
+            "chromosome": "12",
+            "position": 21331549
+          },
+          "seq_id": "NC_000012.11",
+          "status": "CONFERE"
+        },
+        "GRCh38": {
+          "assembly_name": "GRCh38.p14",
+          "dbsnp": {
+            "chromosome": "12",
+            "position": 21178615
+          },
+          "declared": {
+            "chromosome": "12",
+            "position": 21178615
+          },
+          "seq_id": "NC_000012.12",
+          "status": "CONFERE"
+        }
+      },
+      "dbsnp_build": "157",
+      "frequencies": {
+        "C": 0.14443,
+        "T": 0.85557
+      },
+      "gene": "SLCO1B1",
+      "rsid": "rs4149056",
+      "variant_type": "snv"
+    },
+    {
+      "alleles": {
+        "dbsnp_alternate_frequency": 0.118073,
+        "dbsnp_major_alternate": "T",
+        "dbsnp_palindromic": false,
+        "dbsnp_reference": "C",
+        "dbsnp_submitted_alleles": [
+          "A",
+          "C",
+          "T"
+        ],
+        "declared": [
+          "C",
+          "T"
+        ],
+        "declared_palindromic": false,
+        "status": "CONFERE"
+      },
+      "assemblies": {
+        "GRCh37": {
+          "assembly_name": "GRCh37.p13",
+          "dbsnp": {
+            "chromosome": "10",
+            "position": 96702047
+          },
+          "declared": {
+            "chromosome": "10",
+            "position": 96702047
+          },
+          "seq_id": "NC_000010.10",
+          "status": "CONFERE"
+        },
+        "GRCh38": {
+          "assembly_name": "GRCh38.p14",
+          "dbsnp": {
+            "chromosome": "10",
+            "position": 94942290
+          },
+          "declared": {
+            "chromosome": "10",
+            "position": 94942290
+          },
+          "seq_id": "NC_000010.11",
+          "status": "CONFERE"
+        }
+      },
+      "dbsnp_build": "157",
+      "frequencies": {
+        "C": 0.881927,
+        "T": 0.118073
+      },
+      "gene": "CYP2C9",
+      "rsid": "rs1799853",
+      "variant_type": "snv"
+    },
+    {
+      "alleles": {
+        "dbsnp_alternate_frequency": 0.063889,
+        "dbsnp_major_alternate": "C",
+        "dbsnp_palindromic": false,
+        "dbsnp_reference": "A",
+        "dbsnp_submitted_alleles": [
+          "A",
+          "C",
+          "G"
+        ],
+        "declared": [
+          "A",
+          "C"
+        ],
+        "declared_palindromic": false,
+        "status": "CONFERE"
+      },
+      "assemblies": {
+        "GRCh37": {
+          "assembly_name": "GRCh37.p13",
+          "dbsnp": {
+            "chromosome": "10",
+            "position": 96741053
+          },
+          "declared": {
+            "chromosome": "10",
+            "position": 96741053
+          },
+          "seq_id": "NC_000010.10",
+          "status": "CONFERE"
+        },
+        "GRCh38": {
+          "assembly_name": "GRCh38.p14",
+          "dbsnp": {
+            "chromosome": "10",
+            "position": 94981296
+          },
+          "declared": {
+            "chromosome": "10",
+            "position": 94981296
+          },
+          "seq_id": "NC_000010.11",
+          "status": "CONFERE"
+        }
+      },
+      "dbsnp_build": "157",
+      "frequencies": {
+        "A": 0.936111,
+        "C": 0.063889,
+        "G": 0.0
+      },
+      "gene": "CYP2C9",
+      "rsid": "rs1057910",
+      "variant_type": "snv"
+    },
+    {
+      "alleles": {
+        "dbsnp_alternate_frequency": 0.159125,
+        "dbsnp_major_alternate": "A",
+        "dbsnp_palindromic": false,
+        "dbsnp_reference": "G",
+        "dbsnp_submitted_alleles": [
+          "A",
+          "C",
+          "G",
+          "T"
+        ],
+        "declared": [
+          "A",
+          "G"
+        ],
+        "declared_palindromic": false,
+        "status": "CONFERE"
+      },
+      "assemblies": {
+        "GRCh37": {
+          "assembly_name": "GRCh37.p13",
+          "dbsnp": {
+            "chromosome": "10",
+            "position": 96541616
+          },
+          "declared": {
+            "chromosome": "10",
+            "position": 96541616
+          },
+          "seq_id": "NC_000010.10",
+          "status": "CONFERE"
+        },
+        "GRCh38": {
+          "assembly_name": "GRCh38.p14",
+          "dbsnp": {
+            "chromosome": "10",
+            "position": 94781859
+          },
+          "declared": {
+            "chromosome": "10",
+            "position": 94781859
+          },
+          "seq_id": "NC_000010.11",
+          "status": "CONFERE"
+        }
+      },
+      "dbsnp_build": "157",
+      "frequencies": {
+        "A": 0.159125,
+        "G": 0.840875
+      },
+      "gene": "CYP2C19",
+      "rsid": "rs4244285",
+      "variant_type": "snv"
+    },
+    {
+      "alleles": {
+        "dbsnp_alternate_frequency": 0.244815,
+        "dbsnp_major_alternate": "G",
+        "dbsnp_palindromic": true,
+        "dbsnp_reference": "C",
+        "dbsnp_submitted_alleles": [
+          "A",
+          "C",
+          "G",
+          "T"
+        ],
+        "declared": [
+          "C",
+          "G"
+        ],
+        "declared_palindromic": true,
+        "status": "CONFERE"
+      },
+      "assemblies": {
+        "GRCh37": {
+          "assembly_name": "GRCh37.p13",
+          "dbsnp": {
+            "chromosome": "22",
+            "position": 44324727
+          },
+          "declared": {
+            "chromosome": "22",
+            "position": 44324727
+          },
+          "seq_id": "NC_000022.10",
+          "status": "CONFERE"
+        },
+        "GRCh38": {
+          "assembly_name": "GRCh38.p14",
+          "dbsnp": {
+            "chromosome": "22",
+            "position": 43928847
+          },
+          "declared": {
+            "chromosome": "22",
+            "position": 43928847
+          },
+          "seq_id": "NC_000022.11",
+          "status": "CONFERE"
+        }
+      },
+      "dbsnp_build": "157",
+      "frequencies": {
+        "C": 0.755185,
+        "G": 0.244815
+      },
+      "gene": "PNPLA3",
+      "rsid": "rs738409",
+      "variant_type": "snv"
+    },
+    {
+      "alleles": {
+        "dbsnp_alternate_frequency": 0.03736,
+        "dbsnp_major_alternate": "A",
+        "dbsnp_palindromic": true,
+        "dbsnp_reference": "T",
+        "dbsnp_submitted_alleles": [
+          "A",
+          "T"
+        ],
+        "declared": [
+          "A",
+          "T"
+        ],
+        "declared_palindromic": true,
+        "status": "CONFERE"
+      },
+      "assemblies": {
+        "GRCh37": {
+          "assembly_name": "GRCh37.p13",
+          "dbsnp": {
+            "chromosome": "14",
+            "position": 94847262
+          },
+          "declared": {
+            "chromosome": "14",
+            "position": 94847262
+          },
+          "seq_id": "NC_000014.8",
+          "status": "CONFERE"
+        },
+        "GRCh38": {
+          "assembly_name": "GRCh38.p14",
+          "dbsnp": {
+            "chromosome": "14",
+            "position": 94380925
+          },
+          "declared": {
+            "chromosome": "14",
+            "position": 94380925
+          },
+          "seq_id": "NC_000014.9",
+          "status": "CONFERE"
+        }
+      },
+      "dbsnp_build": "157",
+      "frequencies": {
+        "A": 0.03736,
+        "T": 0.96264
+      },
+      "gene": "SERPINA1",
+      "rsid": "rs17580",
+      "variant_type": "snv"
+    }
+  ],
+  "schema": "genoma-provenance-marker-verification-v1",
+  "source": "NCBI dbSNP RefSNP API (api.ncbi.nlm.nih.gov/variation/v0/refsnp)",
+  "source_note": "SPDI coordinates are 0-based and expressed on the plus strand of the reference sequence; positions below are converted to 1-based and allele pairs are taken directly as plus-strand alleles.",
+  "status": "VERIFICADO",
+  "verified_at": "2026-08-19T01:29:09.401992Z"
+}

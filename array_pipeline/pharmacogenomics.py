@@ -207,6 +207,11 @@ def _diplotype_for(
         )
     if spec is None:
         reasons.append("registro curado de definições de alelos não foi fornecido para este gene")
+    elif spec.get("definitions_unavailable"):
+        # The registry was supplied but the source publishes nothing for this gene. Saying
+        # so beats the generic "no registry" message, which would misdirect the reader into
+        # thinking a registry would fix it.
+        reasons.append(str(spec["definitions_unavailable"]))
     else:
         if not spec.get("complete_panel"):
             reasons.append(
@@ -222,7 +227,20 @@ def _diplotype_for(
                 "(reference_allele); sem ele um portador heterozigoto não tem segundo elemento"
             )
         if gaps:
-            reasons.append(f"posições definidoras não interpretáveis: {', '.join(gaps)}")
+            # CPIC defines dozens of alleles per gene while a consumer array carries a
+            # handful of their positions, so listing every gap produced an unreadable
+            # sentence. The count is the point: it says how far the panel is from complete.
+            positions = sorted({gap.split(":")[1] for gap in gaps if ":" in gap})
+            covered = sorted(
+                {p["rsid"] for f in allele_findings for p in f["positions"] if p["interrogable"]}
+            )
+            sample = ", ".join(positions[:5])
+            more = f" (+{len(positions) - 5})" if len(positions) > 5 else ""
+            reasons.append(
+                f"painel incompleto nesta amostra: {len(covered)} de "
+                f"{len(covered) + len(positions)} posições definidoras do registro são "
+                f"interpretáveis; faltam {sample}{more}"
+            )
 
     detected_findings = [f for f in allele_findings if f["status"] == "DETECTADO"]
     if len(detected_findings) > 1:
@@ -268,6 +286,51 @@ def _diplotype_for(
             "ambiguidade de fase; ainda assim INFERIDO, nunca EXECUTADO, porque a inferência "
             "vem de genótipos e não de haplótipos observados"
         ],
+    }
+
+
+def _phenotype_for(gene: str, spec: dict[str, Any] | None, diplotype: dict[str, Any]) -> dict[str, Any]:
+    """Translate an established diplotype through the registry's cited guideline table.
+
+    The label is looked up, never composed. A diplotype the table does not list yields
+    NÃO DISPONÍVEL rather than a nearest match, because "closest entry" is how a
+    metabolizer status gets invented.
+    """
+    if diplotype["status"] == UNAVAILABLE or not diplotype.get("value"):
+        return {
+            "status": UNAVAILABLE,
+            "value": None,
+            "reason": "fenótipo depende de diplótipo estabelecido; diplótipo não estabelecido",
+        }
+    table = (spec or {}).get("phenotype_map") or {}
+    if not table:
+        return {
+            "status": UNAVAILABLE,
+            "value": None,
+            "reason": "registro não fornece tabela diplótipo→fenótipo para este gene",
+        }
+
+    # Registry keys are bare star names (`*1/*2`); the diplotype carries the gene prefix.
+    parts = [part.replace(gene, "", 1).strip() for part in str(diplotype["value"]).split("/")]
+    for key in ("/".join(parts), "/".join(reversed(parts))):
+        entry = table.get(key)
+        if entry:
+            return {
+                "status": "INFERIDO",
+                "value": entry.get("phenotype"),
+                "activity_score": entry.get("activity_score"),
+                "description": entry.get("description"),
+                "source": (spec or {}).get("phenotype_map_source", UNAVAILABLE),
+                "reason": (
+                    "traduzido pela tabela diplótipo→fenótipo do registro citado; INFERIDO "
+                    "porque o diplótipo de origem é inferido de genótipos, não de haplótipos observados"
+                ),
+            }
+    return {
+        "status": UNAVAILABLE,
+        "value": None,
+        "reason": f"diplótipo {diplotype['value']} não consta na tabela do registro; "
+        "nenhum fenótipo aproximado é emitido",
     }
 
 
@@ -334,17 +397,10 @@ def build_pharmacogenomic_passport(
                 "allele_findings": allele_findings,
                 "diplotype": diplotype,
                 # A phenotype is a function of a diplotype. Without one there is nothing to
-                # translate, and "normal metabolizer" would be an invented default.
-                "phenotype": {
-                    "status": UNAVAILABLE,
-                    "value": None,
-                    "reason": "fenótipo depende de diplótipo estabelecido; "
-                    + (
-                        "diplótipo não estabelecido"
-                        if diplotype["status"] == UNAVAILABLE
-                        else "tradução diplótipo→fenótipo requer diretriz versionada não executada nesta execução"
-                    ),
-                },
+                # translate, and "normal metabolizer" would be an invented default. With one,
+                # the translation still comes from the registry's cited guideline table —
+                # this module never authors a phenotype label.
+                "phenotype": _phenotype_for(gene, spec, diplotype),
             }
         )
 

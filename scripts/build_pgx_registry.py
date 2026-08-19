@@ -1,0 +1,295 @@
+#!/usr/bin/env python3
+"""Build the PGx allele-definition registry from CPIC, with citation.
+
+`array_pipeline/pharmacogenomics.py` refuses to name a star allele unless a curated registry
+supplies the definitions and cites their source, because an uncited definition table is an
+invented clinical assertion wearing a schema. No such registry shipped, so every diplotype
+was NÃO DISPONÍVEL and the anaesthesia card was never emitted.
+
+This script produces that registry from the CPIC API, which is the authoritative source for
+clinical pharmacogenetic allele definitions. It joins four CPIC tables:
+
+    allele            -> allele names, clinical function, PharmVar id, definition id
+    allele_definition -> reference-sequence flag, structural-variation flag
+    allele_location_value -> which variant base defines the allele at each location
+    sequence_location -> the rsid and position of each location
+
+and, separately, the `diplotype` table, which is CPIC's own diplotype -> phenotype mapping.
+Nothing here is authored: every allele, every defining position and every phenotype label is
+whatever CPIC returned, recorded with the retrieval date and CPIC's own version numbers.
+
+**`complete_panel` means complete with respect to CPIC**, not biologically exhaustive. An
+allele CPIC has not catalogued stays indistinguishable from the reference haplotype, and the
+passport says so. Alleles CPIC flags as structural variation are excluded from definitions —
+an array cannot genotype them — and recorded separately so their absence is visible.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from collections import defaultdict
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+CPIC_BASE = "https://api.cpicpgx.org/v1"
+DEFAULT_OUTPUT = ROOT / "config/pgx_allele_definitions.json"
+REQUEST_INTERVAL_SECONDS = 0.3
+
+#: Genes worth fetching: those the target registry routes to a PGx knowledge base.
+DEFAULT_GENES = (
+    "BCHE", "CYP2C19", "CYP2C9", "CYP3A5", "DPYD",
+    "NAT2", "NUDT15", "SLCO1B1", "TPMT", "VKORC1",
+)
+
+#: CPIC marks the reference haplotype with `matchesreferencesequence`. Genes whose
+#: clinically relevant variation is structural are never diplotyped from an array, so the
+#: passport blocks them regardless of what this registry says.
+ANAESTHESIA_RELEVANT = {
+    "BCHE": (
+        "Atividade reduzida de butirilcolinesterase prolonga o bloqueio por succinilcolina e "
+        "mivacúrio. Genótipo não substitui dosagem de atividade enzimática nem número de dibucaína."
+    ),
+}
+
+
+class CpicError(RuntimeError):
+    pass
+
+
+def _get(path: str, *, attempts: int = 4, **params: str) -> list[dict[str, Any]]:
+    """Fetch one CPIC table, retrying transient network faults.
+
+    A dropped connection partway through must not silently yield a shorter allele list: an
+    allele missing from the registry would make an untested haplotype look catalogued, so
+    this raises rather than returning what it managed to collect.
+    """
+    query = urllib.parse.urlencode(params)
+    url = f"{CPIC_BASE}/{path}" + (f"?{query}" if query else "")
+    request = urllib.request.Request(
+        url, headers={"Accept": "application/json", "User-Agent": "genoma-pgx-registry/1.0"}
+    )
+    last: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            if not isinstance(payload, list):
+                raise CpicError(f"CPIC returned a non-list payload for {url}")
+            return payload
+        except (urllib.error.URLError, TimeoutError, ConnectionError, json.JSONDecodeError) as exc:
+            last = exc
+            if attempt < attempts - 1:
+                time.sleep(2**attempt)
+    raise CpicError(f"CPIC fetch failed for {url} after {attempts} attempts: {last}")
+
+
+def _allele_label(symbol: str, name: str) -> str:
+    """`*2` -> `CYP2C19*2`, but CPIC also uses descriptive names.
+
+    VKORC1's alleles are named `rs9923231 variant (T)`; blindly prefixing the symbol
+    produced `VKORC1rs9923231 variant (T)`, which reads as a star allele that does not
+    exist.
+    """
+    return f"{symbol}{name}" if name.startswith("*") else f"{symbol} {name}"
+
+
+def fetch_gene(symbol: str) -> dict[str, Any]:
+    """Assemble one gene's allele definitions and CPIC's diplotype->phenotype table."""
+    alleles = _get("allele", genesymbol=f"eq.{symbol}")
+    if not alleles:
+        # CPIC lists some gene symbols without publishing an allele definition table.
+        # BCHE is one of them, and PharmVar's API requires credentials this project does
+        # not hold. Recording the gap is the whole point: without definitions no star
+        # allele may be named, and the passport must say why rather than fall silent.
+        return {
+            "complete_panel": False,
+            "complete_panel_scope": "CPIC",
+            "definitions_unavailable": (
+                "CPIC não publica tabela de definição de alelos para este gene "
+                "(allele, allele_definition e sequence_location retornam vazio). "
+                "PharmVar exige credenciais que este projeto não possui. "
+                "Nenhum alelo estrela pode ser nomeado; apenas genótipos observados."
+            ),
+            "reference_allele": None,
+            "alleles": {},
+            "structural_alleles_excluded": [],
+            "alleles_without_usable_snp_definition": [],
+            "phenotype_map": {},
+            "phenotype_map_source": "NÃO DISPONÍVEL",
+            **(
+                {"anesthesia_relevant": True, "anesthesia_note": ANAESTHESIA_RELEVANT[symbol]}
+                if symbol in ANAESTHESIA_RELEVANT
+                else {}
+            ),
+        }
+    time.sleep(REQUEST_INTERVAL_SECONDS)
+    definitions = _get("allele_definition", genesymbol=f"eq.{symbol}")
+    time.sleep(REQUEST_INTERVAL_SECONDS)
+    locations = _get("sequence_location", genesymbol=f"eq.{symbol}")
+    time.sleep(REQUEST_INTERVAL_SECONDS)
+
+    definition_by_id = {d["id"]: d for d in definitions}
+    location_by_id = {loc["id"]: loc for loc in locations}
+
+    values: list[dict[str, Any]] = []
+    definition_ids = [str(d["id"]) for d in definitions]
+    for chunk_start in range(0, len(definition_ids), 40):
+        chunk = definition_ids[chunk_start : chunk_start + 40]
+        values.extend(
+            _get("allele_location_value", alleledefinitionid=f"in.({','.join(chunk)})")
+        )
+        time.sleep(REQUEST_INTERVAL_SECONDS)
+
+    by_definition: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for value in values:
+        by_definition[value["alleledefinitionid"]].append(value)
+
+    built: dict[str, Any] = {}
+    structural: list[str] = []
+    reference_allele: str | None = None
+    skipped_no_rsid: list[str] = []
+
+    for allele in sorted(alleles, key=lambda a: str(a.get("name") or "")):
+        name = str(allele.get("name") or "").strip()
+        definition = definition_by_id.get(allele.get("definitionid"))
+        if not name or definition is None:
+            continue
+        if definition.get("matchesreferencesequence"):
+            reference_allele = _allele_label(symbol, name)
+        if definition.get("structuralvariation"):
+            # A duplication or hybrid is not a base substitution; no SNP set defines it.
+            structural.append(_allele_label(symbol, name))
+            continue
+
+        defining: list[dict[str, Any]] = []
+        missing_rsid = False
+        for value in by_definition.get(definition["id"], []):
+            location = location_by_id.get(value["locationid"])
+            if location is None:
+                continue
+            rsid = (location.get("dbsnpid") or "").strip()
+            variant = (value.get("variantallele") or "").strip().upper()
+            if not variant or len(variant) != 1 or variant not in "ACGT":
+                # Indels and multi-base variants are outside what the array probe reads.
+                continue
+            if not rsid:
+                missing_rsid = True
+                continue
+            defining.append(
+                {
+                    "rsid": rsid.lower(),
+                    "allele": variant,
+                    "cpic_location": location.get("name"),
+                    "chromosome_location": location.get("chromosomelocation"),
+                }
+            )
+
+        if definition.get("matchesreferencesequence"):
+            # The reference haplotype is defined by the absence of the others, not by a
+            # variant of its own; it is named in `reference_allele`, not as a definition.
+            continue
+        if not defining:
+            skipped_no_rsid.append(_allele_label(symbol, name))
+            continue
+        if missing_rsid:
+            skipped_no_rsid.append(f"{_allele_label(symbol, name)} (parcial)")
+
+        built[_allele_label(symbol, name)] = {
+            "defining": sorted(defining, key=lambda d: d["rsid"]),
+            "cpic_clinical_function": allele.get("clinicalfunctionalstatus"),
+            "cpic_activity_value": allele.get("activityvalue"),
+            "cpic_strength": allele.get("strength"),
+            "pharmvar_id": definition.get("pharmvarid"),
+            "citations": allele.get("citations") or [],
+        }
+
+    diplotypes = _get("diplotype", genesymbol=f"eq.{symbol}")
+    time.sleep(REQUEST_INTERVAL_SECONDS)
+    phenotype_map = {
+        str(d["diplotype"]): {
+            "phenotype": d.get("generesult"),
+            "activity_score": d.get("totalactivityscore"),
+            "description": d.get("description"),
+        }
+        for d in diplotypes
+        if d.get("diplotype")
+    }
+
+    record: dict[str, Any] = {
+        # Complete with respect to CPIC's catalogue, which is what the citation covers.
+        "complete_panel": bool(built),
+        "complete_panel_scope": "CPIC",
+        "reference_allele": reference_allele,
+        "alleles": built,
+        "structural_alleles_excluded": sorted(structural),
+        "alleles_without_usable_snp_definition": sorted(skipped_no_rsid),
+        "phenotype_map": phenotype_map,
+        "phenotype_map_source": "CPIC diplotype table",
+    }
+    if symbol in ANAESTHESIA_RELEVANT:
+        record["anesthesia_relevant"] = True
+        record["anesthesia_note"] = ANAESTHESIA_RELEVANT[symbol]
+    return record
+
+
+def build(genes: tuple[str, ...] = DEFAULT_GENES) -> dict[str, Any]:
+    retrieved = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    built = {symbol: fetch_gene(symbol) for symbol in genes}
+    return {
+        "schema": "genoma-pgx-registry-v1",
+        "id": "GENOMA-PGX-CPIC",
+        "version": retrieved[:10].replace("-", "") + ".1",
+        "source": (
+            "CPIC (Clinical Pharmacogenetics Implementation Consortium) API, api.cpicpgx.org/v1, "
+            f"recuperado em {retrieved}. Definições de alelo obtidas do join allele + "
+            "allele_definition + allele_location_value + sequence_location; mapeamento "
+            "diplótipo->fenótipo da tabela diplotype do próprio CPIC. Identificadores PharmVar "
+            "preservados por alelo quando o CPIC os fornece. Reproduzir com "
+            "scripts/build_pgx_registry.py."
+        ),
+        "retrieved_at": retrieved,
+        "scope_note": (
+            "complete_panel significa completo em relação ao catálogo do CPIC, não "
+            "biologicamente exaustivo: um alelo que o CPIC não cataloga permanece "
+            "indistinguível do haplótipo de referência. Alelos marcados pelo CPIC como "
+            "variação estrutural são excluídos das definições porque genotipagem em array "
+            "não os resolve, e ficam listados em structural_alleles_excluded."
+        ),
+        "genes": built,
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
+    parser.add_argument("--genes", nargs="*", default=list(DEFAULT_GENES))
+    args = parser.parse_args()
+
+    registry = build(tuple(args.genes))
+    out = Path(args.output)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(registry, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    print(f"registro escrito em {out}")
+    for symbol, gene in sorted(registry["genes"].items()):
+        print(
+            f"  {symbol:<9} alelos={len(gene['alleles']):<3} "
+            f"ref={gene['reference_allele'] or 'NÃO DISPONÍVEL':<12} "
+            f"fenótipos={len(gene['phenotype_map']):<4} "
+            f"estruturais_excluídos={len(gene['structural_alleles_excluded'])}"
+        )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

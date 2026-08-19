@@ -478,5 +478,98 @@ class ReportIntegrationTest(unittest.TestCase):
         self.assertEqual(tuple(load_catalog()["06"]["sections"]), SECTIONS)
 
 
+class CpicRegistryTest(unittest.TestCase):
+    """The shipped registry must be CPIC's data, not a hand-written table."""
+
+    @classmethod
+    def setUpClass(cls):
+        path = ROOT / "config/pgx_allele_definitions.json"
+        cls.registry = load_pgx_registry(path)
+
+    def test_the_registry_cites_cpic_and_its_retrieval_date(self):
+        self.assertIn("CPIC", self.registry["source"])
+        self.assertIn("api.cpicpgx.org", self.registry["source"])
+        self.assertIn("build_pgx_registry.py", self.registry["source"])
+        self.assertRegex(self.registry["retrieved_at"], r"^\d{4}-\d{2}-\d{2}T")
+
+    def test_complete_panel_is_scoped_to_cpic_not_claimed_absolute(self):
+        """An allele CPIC has not catalogued stays indistinguishable from reference."""
+        self.assertIn("não biologicamente exaustivo", self.registry["scope_note"])
+        for gene, spec in self.registry["genes"].items():
+            with self.subTest(gene=gene):
+                if spec.get("complete_panel"):
+                    self.assertEqual(spec["complete_panel_scope"], "CPIC")
+
+    def test_every_defining_position_carries_an_rsid_and_a_single_base(self):
+        for gene, spec in self.registry["genes"].items():
+            for allele, definition in spec["alleles"].items():
+                for position in definition["defining"]:
+                    with self.subTest(allele=allele):
+                        self.assertRegex(position["rsid"], r"^rs\d+$")
+                        self.assertIn(position["allele"], set("ACGT"))
+
+    def test_a_gene_cpic_does_not_define_records_why(self):
+        """BCHE: CPIC publishes no allele table and PharmVar needs credentials."""
+        bche = self.registry["genes"]["BCHE"]
+        self.assertEqual(bche["alleles"], {})
+        self.assertFalse(bche["complete_panel"])
+        self.assertIn("CPIC não publica", bche["definitions_unavailable"])
+        self.assertIn("PharmVar", bche["definitions_unavailable"])
+
+    def test_structural_alleles_are_excluded_and_listed(self):
+        """An array cannot genotype a duplication; excluding it silently would hide that."""
+        excluded = {a for s in self.registry["genes"].values() for a in s["structural_alleles_excluded"]}
+        self.assertTrue(excluded, "CPIC marks some alleles structural; none were recorded")
+        for gene, spec in self.registry["genes"].items():
+            for allele in spec["structural_alleles_excluded"]:
+                with self.subTest(allele=allele):
+                    self.assertNotIn(allele, spec["alleles"])
+
+    def test_allele_labels_are_not_blindly_concatenated(self):
+        """VKORC1's alleles are named descriptively; `VKORC1rs9923231 variant (T)` is wrong."""
+        for gene, spec in self.registry["genes"].items():
+            for allele in spec["alleles"]:
+                with self.subTest(allele=allele):
+                    remainder = allele[len(gene):]
+                    self.assertTrue(
+                        remainder.startswith("*") or remainder.startswith(" "),
+                        f"{allele!r} concatenates the symbol onto a descriptive name",
+                    )
+
+    def test_a_gene_with_no_phenotype_table_does_not_get_a_phenotype(self):
+        """CPIC has no metabolizer phenotype for VKORC1; none must be invented."""
+        from array_pipeline.pharmacogenomics import _phenotype_for
+
+        spec = self.registry["genes"]["VKORC1"]
+        self.assertEqual(spec["phenotype_map"], {})
+        result = _phenotype_for("VKORC1", spec, {"status": "INFERIDO", "value": "A/B"})
+        self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+        self.assertIn("não fornece tabela", result["reason"])
+
+    def test_a_diplotype_absent_from_the_table_yields_no_nearest_match(self):
+        from array_pipeline.pharmacogenomics import _phenotype_for
+
+        spec = self.registry["genes"]["CYP2C19"]
+        self.assertTrue(spec["phenotype_map"])
+        result = _phenotype_for(
+            "CYP2C19", spec, {"status": "INFERIDO", "value": "CYP2C19*999/CYP2C19*998"}
+        )
+        self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+        self.assertIn("não consta", result["reason"])
+
+    def test_a_listed_diplotype_is_translated_and_marked_inferido(self):
+        from array_pipeline.pharmacogenomics import _phenotype_for
+
+        spec = self.registry["genes"]["CYP2C19"]
+        key = next(k for k in spec["phenotype_map"] if k.count("/") == 1)
+        value = "/".join(f"CYP2C19{part}" for part in key.split("/"))
+        result = _phenotype_for("CYP2C19", spec, {"status": "INFERIDO", "value": value})
+        self.assertEqual(result["status"], "INFERIDO")
+        self.assertEqual(result["value"], spec["phenotype_map"][key]["phenotype"])
+        self.assertIn("CPIC", result["source"])
+        # Never EXECUTADO: the diplotype behind it is inferred from genotypes.
+        self.assertNotEqual(result["status"], "EXECUTADO")
+
+
 if __name__ == "__main__":
     unittest.main()
