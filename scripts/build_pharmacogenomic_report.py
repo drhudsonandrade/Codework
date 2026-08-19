@@ -297,19 +297,39 @@ def main() -> int:
     parser.add_argument("--targets", required=True, help="target registry JSON")
     parser.add_argument("--annotation", help="partial-genome annotation JSON (links evidence)")
     parser.add_argument("--pgx-registry", help="curated, cited allele-definition registry")
+    parser.add_argument(
+        "--pgx-panel",
+        help=(
+            "CPIC defining-position panel manifest from scripts/build_pgx_panel.py. Without it "
+            "coverage is measured over the curated targets only, and every other CPIC position "
+            "reads as NÃO TESTADO whether or not the array carries it."
+        ),
+    )
     parser.add_argument("--matrix-out", required=True)
+    parser.add_argument("--panel-matrix-out", help="where to write the panel coverage matrix")
     parser.add_argument("--passport-out", required=True)
     parser.add_argument("--payload-out", required=True)
     args = parser.parse_args()
 
+    if args.pgx_panel and not args.panel_matrix_out:
+        parser.error("--pgx-panel requires --panel-matrix-out")
+
     matrix = build_completeness_matrix(Path(args.input), Path(args.qc), Path(args.targets))
     matrix_path = write_matrix(matrix, Path(args.matrix_out))
+
+    panel_matrix_path = None
+    if args.pgx_panel:
+        panel_matrix = build_completeness_matrix(
+            Path(args.input), Path(args.qc), Path(args.pgx_panel)
+        )
+        panel_matrix_path = write_matrix(panel_matrix, Path(args.panel_matrix_out))
 
     passport = build_pharmacogenomic_passport(
         matrix_path,
         Path(args.targets),
         annotation_path=Path(args.annotation) if args.annotation else None,
         pgx_registry_path=Path(args.pgx_registry) if args.pgx_registry else None,
+        panel_matrix_path=panel_matrix_path,
     )
     passport_path = write_passport(passport, Path(args.passport_out))
 

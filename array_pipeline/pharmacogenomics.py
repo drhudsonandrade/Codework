@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 import normative
+from array_pipeline.allele_discrimination import analyse_gene
 from array_pipeline.completeness import INTERPRETABLE, NAO_DETECTADO
 from array_pipeline.targets import load_target_manifest, sha256_json
 
@@ -125,10 +126,15 @@ def _evidence_for(rsid: str, annotation: dict[str, Any] | None) -> list[dict[str
 def _allele_findings(
     gene: str,
     spec: dict[str, Any],
-    loci: list[dict[str, Any]],
+    by_rsid: dict[str, dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    """For each defined allele, say whether it was interrogable and whether it was seen."""
-    by_rsid = {locus["rsid"]: locus for locus in loci}
+    """For each defined allele, say whether it was interrogable and whether it was seen.
+
+    `by_rsid` is keyed by every locus whose classification is known — the curated target
+    registry plus, when one is supplied, the full CPIC defining-position panel. Passing only
+    the curated targets is what made every CPIC position outside them read as NÃO TESTADO
+    regardless of what the array carried.
+    """
     findings: list[dict[str, Any]] = []
     gaps: list[str] = []
     for allele in sorted(spec.get("alleles", {})):
@@ -189,6 +195,34 @@ def _allele_findings(
             }
         )
     return findings, sorted(set(gaps))
+
+
+def _heterozygous_defining_positions(
+    spec: dict[str, Any] | None,
+    observations: dict[str, dict[str, Any]],
+) -> list[str]:
+    """Interpretable defining positions of this gene that came back heterozygous.
+
+    Phase ambiguity is a property of the positions that were actually read, so counting it
+    over the gene's whole curated locus list — which may include positions no CPIC allele
+    uses — would block calls for a reason CPIC's definitions do not support.
+    """
+    if not spec:
+        return []
+    positions = {
+        str(item["rsid"]).lower()
+        for definition in (spec.get("alleles") or {}).values()
+        for item in definition.get("defining") or []
+    }
+    heterozygous: list[str] = []
+    for rsid in sorted(positions):
+        observation = observations.get(rsid)
+        if not observation or observation["classification"] not in INTERPRETABLE:
+            continue
+        genotype = str(observation.get("genotype") or "")
+        if genotype and len(set(genotype)) > 1:
+            heterozygous.append(rsid)
+    return heterozygous
 
 
 def _diplotype_for(
@@ -340,12 +374,29 @@ def build_pharmacogenomic_passport(
     *,
     annotation_path: Path | None = None,
     pgx_registry_path: Path | None = None,
+    panel_matrix_path: Path | None = None,
     evaluated_at: str | None = None,
 ) -> dict[str, Any]:
-    """Assemble the passport from the completeness matrix and the target registry."""
+    """Assemble the passport from the completeness matrix and the target registry.
+
+    `panel_matrix_path` is a second completeness matrix, built over the full CPIC
+    defining-position panel (`scripts/build_pgx_panel.py`). Without it the passport can only
+    see the curated targets, so every other CPIC position is NÃO TESTADO by construction and
+    the coverage figure measures this pipeline's target list rather than the array. It is
+    optional so that existing callers keep working, and its absence is recorded on the face
+    of the passport instead of being silently equivalent to full coverage.
+    """
     matrix = json.loads(Path(completeness_path).read_text(encoding="utf-8"))
     if matrix.get("schema") != "genoma-genome-completeness-matrix-v1":
         raise ValueError("completeness matrix schema mismatch")
+
+    panel_matrix = None
+    if panel_matrix_path is not None:
+        panel_matrix = json.loads(Path(panel_matrix_path).read_text(encoding="utf-8"))
+        if panel_matrix.get("schema") != "genoma-genome-completeness-matrix-v1":
+            raise ValueError("panel matrix schema mismatch")
+        if panel_matrix.get("input_sha256") != matrix.get("input_sha256"):
+            raise ValueError("panel matrix and completeness matrix describe different inputs")
 
     manifest = load_target_manifest(Path(target_manifest_path))
     pgx_targets = _pgx_targets(manifest)
@@ -379,12 +430,32 @@ def build_pharmacogenomic_passport(
             }
         )
 
+    # Every locus whose classification is known, from either matrix. The curated targets win
+    # a collision: they carry a hand-verified assessed allele, while the panel entry is
+    # derived. Both matrices are built from the same input file, checked above by SHA-256.
+    observations: dict[str, dict[str, Any]] = {}
+    for entry in (panel_matrix or {}).get("entries", []):
+        observations[str(entry["rsid"]).lower()] = {
+            "rsid": str(entry["rsid"]).lower(),
+            "classification": entry.get("classification", "NÃO TESTADO"),
+            "genotype": entry.get("genotype"),
+            "interpretable": bool(entry.get("interpretable")),
+        }
+    for entry in matrix.get("entries", []):
+        observations[str(entry["rsid"]).lower()] = {
+            "rsid": str(entry["rsid"]).lower(),
+            "classification": entry.get("classification", "NÃO TESTADO"),
+            "genotype": entry.get("genotype"),
+            "interpretable": bool(entry.get("interpretable")),
+        }
+    classifications = {rsid: obs["classification"] for rsid, obs in observations.items()}
+
     gene_records: list[dict[str, Any]] = []
     for gene in sorted(genes):
         loci = sorted(genes[gene], key=lambda x: x["rsid"])
         spec = (registry or {}).get("genes", {}).get(gene) if registry else None
         if spec is not None:
-            allele_findings, gaps = _allele_findings(gene, spec, loci)
+            allele_findings, gaps = _allele_findings(gene, spec, observations)
         else:
             allele_findings, gaps = [], []
         diplotype = _diplotype_for(gene, spec, loci, allele_findings, gaps)
@@ -401,6 +472,17 @@ def build_pharmacogenomic_passport(
                 # the translation still comes from the registry's cited guideline table —
                 # this module never authors a phenotype label.
                 "phenotype": _phenotype_for(gene, spec, diplotype),
+                # The discrimination analysis is additive. It never relaxes `diplotype`; it
+                # answers the separate question of how much of the gene the panel could
+                # exclude, and what it would take to exclude the rest.
+                "discrimination": analyse_gene(
+                    gene,
+                    spec,
+                    classifications,
+                    allele_findings,
+                    _heterozygous_defining_positions(spec, observations),
+                    structurally_unresolved=gene.upper() in STRUCTURALLY_UNRESOLVED_GENES,
+                ),
             }
         )
 
@@ -443,7 +525,57 @@ def build_pharmacogenomic_passport(
             "genes_with_phenotype": sum(
                 1 for g in gene_records if g["phenotype"]["status"] != UNAVAILABLE
             ),
+            # Counted the same way, from the records themselves. Conditional calls are kept
+            # in their own totals so a reader can never mistake ten conditional diplotypes
+            # for ten established ones.
+            "genes_with_conditional_diplotype": sum(
+                1
+                for g in gene_records
+                if (g["discrimination"].get("conditional_diplotype") or {}).get("status")
+                not in (None, UNAVAILABLE)
+            ),
+            "genes_with_conditional_phenotype": sum(
+                1
+                for g in gene_records
+                if (g["discrimination"].get("conditional_phenotype") or {}).get("status")
+                not in (None, UNAVAILABLE)
+            ),
+            "defining_positions_total": sum(
+                g["discrimination"].get("positions_total", 0) for g in gene_records
+            ),
+            "defining_positions_interpretable": sum(
+                g["discrimination"].get("positions_interpretable", 0) for g in gene_records
+            ),
+            "alleles_catalogued": sum(
+                g["discrimination"].get("alleles_catalogued", 0) for g in gene_records
+            ),
+            "alleles_discriminable": sum(
+                g["discrimination"].get("alleles_discriminable", 0) for g in gene_records
+            ),
         },
+        "panel_matrix": (
+            {
+                "case_id": panel_matrix.get("case_id"),
+                "sha256": panel_matrix.get("sha256"),
+                "target_manifest": panel_matrix.get("target_manifest"),
+                "totals": panel_matrix.get("totals"),
+            }
+            if panel_matrix
+            else {
+                "status": UNAVAILABLE,
+                "reason": (
+                    "nenhuma matriz do painel completo de posições definidoras do CPIC foi "
+                    "fornecida; a cobertura abaixo mede apenas os alvos curados, e posições que "
+                    "o array pode carregar aparecem como NÃO TESTADO por construção. Gerar com "
+                    "scripts/build_pgx_panel.py + scripts/build_completeness_report.py."
+                ),
+            }
+        ),
+        "sequencing_requisitions": [
+            g["discrimination"]["sequencing_requisition"]
+            for g in gene_records
+            if (g["discrimination"].get("sequencing_requisition") or {}).get("status") == "PROPOSTO"
+        ],
         "genes": gene_records,
         "anesthesia_card": anesthesia,
         "prescribing_policy": (
@@ -458,6 +590,11 @@ def build_pharmacogenomic_passport(
             "CYP2D6 não é diplotipado: sua variação clinicamente relevante é estrutural.",
             "Fenoconversão por interação medicamentosa e por estado clínico não é derivável do genótipo.",
             "Achados acionáveis exigem confirmação por método ortogonal antes de mudar conduta.",
+            "Diplótipo condicional não é diplótipo estabelecido: vale sob a suposição declarada "
+            "de que nenhum alelo não interrogado está presente, e o risco residual dessa "
+            "suposição está quantificado por grupo biogeográfico.",
+            "Risco residual sem limite superior (alelo sem frequência publicada pelo CPIC) "
+            "impede a emissão de fenótipo condicional.",
         ],
     }
     payload["sha256"] = sha256_json({k: v for k, v in payload.items() if k != "sha256"})

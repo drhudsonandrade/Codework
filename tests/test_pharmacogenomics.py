@@ -578,5 +578,82 @@ class CpicRegistryTest(unittest.TestCase):
         self.assertNotEqual(result["status"], "EXECUTADO")
 
 
+class PanelMatrixTest(unittest.TestCase):
+    """Coverage must be measured against the array, not against this pipeline's target list.
+
+    Joining CPIC's defining positions to a twenty-nine-locus matrix made every other position
+    NÃO TESTADO by construction, so the passport's coverage figure described the target
+    registry rather than the chip. The panel matrix is what turns that back into a
+    measurement, and its absence has to be visible rather than equivalent to full coverage.
+    """
+
+    def test_a_passport_without_a_panel_matrix_says_so_on_its_face(self):
+        with tempfile.TemporaryDirectory() as td:
+            _matrix, passport, _root = _artifacts(Path(td), CLEAN_ROWS, registry=REGISTRY)
+        self.assertEqual(passport["panel_matrix"]["status"], "NÃO DISPONÍVEL")
+        self.assertIn("NÃO TESTADO por construção", passport["panel_matrix"]["reason"])
+
+    def test_a_panel_matrix_from_a_different_input_is_refused(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            matrix_path, _passport, _root = _artifacts(root, CLEAN_ROWS, registry=REGISTRY)
+
+            other = root / "other"
+            other.mkdir()
+            other_matrix, _p, _r = _artifacts(other, CLEAN_ROWS.replace("rs6025,1,169519049,GG", "rs6025,1,169519049,AG"))
+            with self.assertRaises(ValueError) as raised:
+                build_pharmacogenomic_passport(
+                    matrix_path,
+                    root / "targets.json",
+                    pgx_registry_path=root / "pgx-registry.json",
+                    panel_matrix_path=other_matrix,
+                )
+        self.assertIn("different inputs", str(raised.exception))
+
+    def test_a_panel_matrix_raises_the_measured_defining_position_coverage(self):
+        # rs1234567 defines an allele the curated target list never mentions. Without the
+        # panel matrix it can only read as NÃO TESTADO; with it, the array is actually asked.
+        registry = json.loads(json.dumps(REGISTRY))
+        registry["genes"]["CYP2C19"]["alleles"]["CYP2C19*17"] = {
+            "defining": [{"rsid": "rs1234567", "allele": "T", "position": 1, "chromosome": "chr10"}],
+            "cpic_clinical_function": "Increased function",
+            "cpic_frequency": {"European": 0.21},
+        }
+        panel_targets = {
+            "schema": "genoma-partial-genome-targets-v1",
+            "id": "TEST-PANEL",
+            "version": "test.1",
+            "targets": [
+                {"rsid": "rs1234567", "gene": "CYP2C19", "scope": "CLINICO", "label": "CYP2C19*17",
+                 "queries": {"cpic": {"path": "data/gene"}}, "assessed_allele": "T"},
+            ],
+        }
+        rows = CLEAN_ROWS + "rs1234567,10,94761900,CC,consensus,CC,CC,GM\n"
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            matrix_path, without, _root = _artifacts(root, rows, registry=registry)
+            panel_path = root / "panel-targets.json"
+            panel_path.write_text(json.dumps(panel_targets), encoding="utf-8")
+            panel_matrix = build_completeness_matrix(
+                root / "array.csv.gz", root / "qc.json", panel_path
+            )
+            panel_matrix_path = write_matrix(panel_matrix, root / "panel-matrix.json")
+            with_panel = build_pharmacogenomic_passport(
+                matrix_path,
+                root / "targets.json",
+                pgx_registry_path=root / "pgx-registry.json",
+                panel_matrix_path=panel_matrix_path,
+            )
+
+        before = without["totals"]["defining_positions_interpretable"]
+        after = with_panel["totals"]["defining_positions_interpretable"]
+        self.assertEqual(after, before + 1)
+        self.assertEqual(with_panel["panel_matrix"]["target_manifest"]["id"], "TEST-PANEL")
+        # And the newly-read position actually changes what could be excluded.
+        cyp = next(g for g in with_panel["genes"] if g["gene"] == "CYP2C19")
+        self.assertIn("CYP2C19*17", cyp["discrimination"]["discriminable_alleles"])
+
+
 if __name__ == "__main__":
     unittest.main()

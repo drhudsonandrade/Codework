@@ -18,6 +18,13 @@ and, separately, the `diplotype` table, which is CPIC's own diplotype -> phenoty
 Nothing here is authored: every allele, every defining position and every phenotype label is
 whatever CPIC returned, recorded with the retrieval date and CPIC's own version numbers.
 
+Two further CPIC columns are carried because `array_pipeline/allele_discrimination.py`
+cannot work without them. `allele.frequency` gives each allele's frequency per biogeographic
+group, which is what turns "this allele was not interrogated" into a *quantified* residual
+rather than an open-ended caveat; and `sequence_location.position` plus the gene's GRCh38
+chromosome accession give each defining position a coordinate, which is what turns "targeted
+sequencing is required" into a requisition an external laboratory can actually execute.
+
 **`complete_panel` means complete with respect to CPIC**, not biologically exhaustive. An
 allele CPIC has not catalogued stays indistinguishable from the reference haplotype, and the
 passport says so. Alleles CPIC flags as structural variation are excluded from definitions —
@@ -93,6 +100,22 @@ def _get(path: str, *, attempts: int = 4, **params: str) -> list[dict[str, Any]]
     raise CpicError(f"CPIC fetch failed for {url} after {attempts} attempts: {last}")
 
 
+def _frequency_object(value: Any) -> dict[str, float]:
+    """Keep only real per-population frequency tables.
+
+    A frequency of `null` for a group means CPIC published no number for it, which is not a
+    frequency of zero; those keys are dropped rather than zero-filled so that a consumer
+    counting how many groups are covered gets the honest count.
+    """
+    if not isinstance(value, dict):
+        return {}
+    return {
+        str(group): float(freq)
+        for group, freq in value.items()
+        if isinstance(freq, (int, float)) and not isinstance(freq, bool)
+    }
+
+
 def _allele_label(symbol: str, name: str) -> str:
     """`*2` -> `CYP2C19*2`, but CPIC also uses descriptive names.
 
@@ -130,8 +153,20 @@ def _clinvar_fallback(symbol: str) -> dict[str, Any]:
             if m["alternate"] == record["assessed_allele"]
         ]
         name = next((str(m.get("title")) for m in asserted if m.get("title")), rsid)
+        # The GRCh38 coordinate travels with the definition here for the same reason it does
+        # on the CPIC path: without it the sequencing requisition for this gene would list
+        # rsids a laboratory still has to look up before it can design anything.
+        grch38 = record.get("grch38") or {}
+        chromosome = str(grch38.get("chromosome") or "").strip()
         alleles[f"{symbol} {name}"] = {
-            "defining": [{"rsid": rsid, "allele": record["assessed_allele"]}],
+            "defining": [
+                {
+                    "rsid": rsid,
+                    "allele": record["assessed_allele"],
+                    "position": grch38.get("position"),
+                    "chromosome": f"chr{chromosome}" if chromosome else None,
+                }
+            ],
             "clinvar_accessions": sorted({str(m.get("accession")) for m in asserted if m.get("accession")}),
             "clinvar_classification": next((m["classification"] for m in asserted), None),
             "reference_allele_dbsnp": record.get("reference_allele"),
@@ -202,6 +237,9 @@ def fetch_gene(symbol: str) -> dict[str, Any]:
     time.sleep(REQUEST_INTERVAL_SECONDS)
     locations = _get("sequence_location", genesymbol=f"eq.{symbol}")
     time.sleep(REQUEST_INTERVAL_SECONDS)
+    gene_rows = _get("gene", symbol=f"eq.{symbol}")
+    time.sleep(REQUEST_INTERVAL_SECONDS)
+    gene_row = gene_rows[0] if gene_rows else {}
 
     definition_by_id = {d["id"]: d for d in definitions}
     location_by_id = {loc["id"]: loc for loc in locations}
@@ -256,6 +294,12 @@ def fetch_gene(symbol: str) -> dict[str, Any]:
                     "allele": variant,
                     "cpic_location": location.get("name"),
                     "chromosome_location": location.get("chromosomelocation"),
+                    # Coordinate and accession are what a sequencing requisition is written
+                    # in; without them the "order targeted sequencing" conclusion stays a
+                    # sentence instead of becoming an executable panel design.
+                    "position": location.get("position"),
+                    "chromosome": gene_row.get("chr"),
+                    "reference_accession": gene_row.get("chromosequenceid"),
                 }
             )
 
@@ -276,6 +320,20 @@ def fetch_gene(symbol: str) -> dict[str, Any]:
             "cpic_strength": allele.get("strength"),
             "pharmvar_id": definition.get("pharmvarid"),
             "citations": allele.get("citations") or [],
+            # Per-biogeographic-group frequency, exactly as CPIC publishes it. `frequency`
+            # is CPIC's observed table and `inferredfrequency` its imputed one; they are kept
+            # apart so a residual computed from inferred numbers can never be presented as an
+            # observed one. A null inside either object means CPIC published no number for
+            # that group — not a frequency of zero, and the discrimination module must not
+            # read it as one.
+            # CPIC returns `inferredfrequency` as a boolean flag on some alleles and as a
+            # frequency object on others. Coercing whatever arrives into a dict would turn
+            # `true` into an empty frequency table that reads as "no frequencies published";
+            # keeping only real objects, and recording the flag separately, keeps the two
+            # meanings apart.
+            "cpic_frequency": _frequency_object(allele.get("frequency")),
+            "cpic_inferred_frequency": _frequency_object(allele.get("inferredfrequency")),
+            "cpic_frequency_is_inferred": allele.get("inferredfrequency") is True,
         }
 
     diplotypes = _get("diplotype", genesymbol=f"eq.{symbol}")
@@ -294,6 +352,9 @@ def fetch_gene(symbol: str) -> dict[str, Any]:
         # Complete with respect to CPIC's catalogue, which is what the citation covers.
         "complete_panel": bool(built),
         "complete_panel_scope": "CPIC",
+        "chromosome": gene_row.get("chr"),
+        "reference_accession": gene_row.get("chromosequenceid"),
+        "gene_reference_sequence": gene_row.get("genesequenceid"),
         "reference_allele": reference_allele,
         "alleles": built,
         "structural_alleles_excluded": sorted(structural),
