@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 from dataclasses import dataclass
@@ -8,6 +9,21 @@ from typing import Any, Iterable
 
 ALLOWED_SCOPES = {"CLINICO", "PREDISPOSICAO", "PESQUISA", "CURIOSIDADE"}
 ALLOWED_SOURCES = {"clinvar", "clingen", "cpic", "clinpgx", "gnomad", "pgs_catalog"}
+
+
+def read_manifest_bytes(path: Path) -> str:
+    """Read a target manifest, transparently decompressing a `.gz`.
+
+    The curated registry holds twenty-nine loci and the ClinVar-derived one holds tens of
+    thousands; the second is an order of magnitude too large to keep as plain JSON in the
+    repository. Compression is decided by the file's own gzip magic number rather than by its
+    extension, so a manifest that was compressed without being renamed still loads instead of
+    failing with a decoding error that says nothing about the real cause.
+    """
+    raw = Path(path).read_bytes()
+    if raw[:2] == b"\x1f\x8b":
+        raw = gzip.decompress(raw)
+    return raw.decode("utf-8")
 
 
 @dataclass(frozen=True)
@@ -28,7 +44,7 @@ def sha256_json(value: Any) -> str:
 
 
 def load_target_manifest(path: Path) -> dict[str, Any]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = json.loads(read_manifest_bytes(Path(path)))
     if payload.get("schema") != "genoma-partial-genome-targets-v1":
         raise ValueError("unsupported target manifest schema")
     targets = payload.get("targets")

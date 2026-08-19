@@ -128,18 +128,52 @@ def _verified_accessions(assessed: dict[str, Any]) -> dict[str, set[str]]:
     return out
 
 
+def _coordinate(value: Any) -> tuple[str, int] | None:
+    if not isinstance(value, dict):
+        return None
+    chromosome = str(value.get("chromosome") or "").strip().replace("chr", "")
+    position = value.get("position")
+    if not chromosome or not isinstance(position, int):
+        return None
+    return chromosome, position
+
+
 def _clinvar_for(
     rsid: str,
     locus_evidence: dict[str, Any],
     allowed: set[str],
 ) -> dict[str, Any]:
-    """ClinVar records for this locus, restricted to coordinate-verified accessions."""
-    records = [
-        record
-        for record in (locus_evidence.get("clinvar") or {}).get("records", [])
-        if str(record.get("accession")) in allowed
-    ]
-    discarded = len((locus_evidence.get("clinvar") or {}).get("records", [])) - len(records)
+    """ClinVar records for this locus, admitted only on a coordinate they can be checked at.
+
+    Two evidence routes reach this function and they carry different risks, so each is
+    checked on its own terms rather than through one weakened rule.
+
+    The **API route** finds records by an rsid *text* search, which returns unrelated variants
+    that merely mention the identifier — on rs4244285 it returned twelve. Those records carry
+    no coordinate of their own, so they are admitted only if their accession appears in the
+    set already verified to sit at the target's GRCh38 coordinate.
+
+    The **bulk route** reads accession, classification and coordinate from one row of
+    ClinVar's own release. There is no cross-source join to get wrong, and the record carries
+    its coordinate, so it is admitted when that coordinate matches the locus's. This is a
+    check performed here, not a flag the evidence file can set to exempt itself: a record with
+    no coordinate falls back to the allowlist however the file describes its provenance.
+    """
+    all_records = (locus_evidence.get("clinvar") or {}).get("records", [])
+    locus_coordinate = _coordinate(locus_evidence.get("grch38"))
+
+    records: list[dict[str, Any]] = []
+    by_coordinate = 0
+    for record in all_records:
+        record_coordinate = _coordinate(record.get("grch38"))
+        if record_coordinate is not None and locus_coordinate is not None:
+            if record_coordinate == locus_coordinate:
+                records.append(record)
+                by_coordinate += 1
+            continue
+        if str(record.get("accession")) in allowed:
+            records.append(record)
+    discarded = len(all_records) - len(records)
     if not records:
         return {
             "status": UNAVAILABLE,
@@ -148,9 +182,8 @@ def _clinvar_for(
             "conditions": [],
             "asserts_pathogenic": False,
             "reason": (
-                "nenhum registro do ClinVar recuperado por rsid coincide com um acesso já "
-                f"verificado na coordenada deste alvo ({discarded} descartados); a junção é por "
-                "coordenada, nunca por texto"
+                "nenhum registro do ClinVar para este locus pôde ser confirmado na coordenada "
+                f"do alvo ({discarded} descartados); a junção é por coordenada, nunca por texto"
             ),
         }
     classifications = sorted({str(r.get("classification")) for r in records})
@@ -188,6 +221,10 @@ def _clinvar_for(
         # not be silently treated as "not pathogenic" without the reader being told.
         "unrecognised_classifications": unrecognised,
         "accessions_discarded_by_coordinate": discarded,
+        # Which route admitted the records, so a reader can tell a coordinate-native release
+        # row from a text search checked against an allowlist.
+        "records_verified_by_coordinate": by_coordinate,
+        "records_verified_by_accession": len(records) - by_coordinate,
     }
 
 
@@ -485,19 +522,71 @@ def build_clinical_findings(
 
     by_rsid = {str(x["rsid"]).lower(): x for x in evidence.get("loci", [])}
 
+    # Validity is computed once per gene and stored once. Copying it into every finding cost
+    # 391 MB and 2.8 GB of peak memory on the 54,845-locus registry, because a gene with
+    # hundreds of catalogued variants carried hundreds of identical copies of its ClinGen and
+    # GenCC curations. Normalising loses nothing: every finding names its gene.
+    validity_cache: dict[str, dict[str, Any]] = {}
+
+    def validity_for(gene: Any) -> dict[str, Any]:
+        key = str(gene or "")
+        if key not in validity_cache:
+            validity_cache[key] = _validity_for(gene, evidence)
+        return validity_cache[key]
+
     findings: list[dict[str, Any]] = []
     for entry in matrix.get("entries", []):
         rsid = str(entry["rsid"]).lower()
+        classification = str(entry.get("classification"))
+        gene = entry.get("gene")
+        interrogated = classification in INTERPRETABLE
+
+        if not interrogated:
+            # A locus the array never carried has nothing per-locus to say beyond its
+            # identity and why it is out of reach. Its ClinVar records and its gene's
+            # curations are unchanged in the evidence file, which this artifact names by
+            # SHA-256 — the detail is normalised away, not dropped, and the omission is
+            # stated rather than left for a reader to infer from a missing key.
+            findings.append(
+                {
+                    "rsid": rsid,
+                    "gene": gene,
+                    "scope": entry.get("scope"),
+                    "coverage_class": classification,
+                    "coverage_basis": entry.get("basis"),
+                    "genotype": None,
+                    "genotype_withheld": bool(entry.get("genotype_withheld")),
+                    "zygosity": None,
+                    "assessed_allele": entry.get("assessed_allele"),
+                    "interpretation": NAO_INTERROGADO,
+                    # "not on the chip" and "on the chip but unusable in this sample" are
+                    # different facts, and collapsing them would hide which of the two a
+                    # missing answer came from.
+                    "interpretation_basis": (
+                        "locus não presente no array; nada foi interrogado e nada pode ser afirmado"
+                        if classification == NAO_TESTADO
+                        else f"locus classificado {classification}: {entry.get('basis')}"
+                    ),
+                    "detail_omitted": (
+                        "registros do ClinVar e curadoria do gene não são repetidos para um "
+                        "locus não interrogado; constam do arquivo de evidência citado por "
+                        "SHA-256 e do índice gene_validity deste artefato"
+                    ),
+                    "confirmation_required": False,
+                }
+            )
+            continue
+
         locus_evidence = by_rsid.get(rsid, {})
         clinvar = _clinvar_for(rsid, locus_evidence, allowed_by_rsid.get(rsid, set()))
-        validity = _validity_for(entry.get("gene"), evidence)
+        validity = validity_for(gene)
         interpretation = _interpretation(entry, clinvar, validity)
         findings.append(
             {
                 "rsid": rsid,
-                "gene": entry.get("gene"),
+                "gene": gene,
                 "scope": entry.get("scope"),
-                "coverage_class": entry.get("classification"),
+                "coverage_class": classification,
                 "coverage_basis": entry.get("basis"),
                 "genotype": entry.get("genotype"),
                 "genotype_withheld": bool(entry.get("genotype_withheld")),
@@ -534,21 +623,45 @@ def build_clinical_findings(
             "clingen_file_created": evidence.get("clingen_file_created"),
         },
         "findings": findings,
+        # Validity per gene, stored once. Findings for interrogated loci also carry their
+        # gene's block inline so a reader following one finding does not have to resolve a
+        # reference; findings for loci the array never carried point here instead.
+        "gene_validity": {
+            gene: block for gene, block in sorted(validity_cache.items()) if gene
+        },
         "totals": {
             "loci": len(findings),
             **{f"kind_{kind}": sum(1 for f in findings if f["interpretation"] == kind) for kind in kinds},
+            # Counted over the genes of the loci this run actually interrogated, since a gene
+            # reached only by untested loci says nothing about this sample.
+            "genes_interrogated": len(
+                {f["gene"] for f in findings if f["gene"] and "validity" in f}
+            ),
             "genes_with_established_validity": len(
-                {f["gene"] for f in findings if f["validity"]["established"] and f["gene"]}
+                {f["gene"] for f in findings if f.get("validity", {}).get("established") and f["gene"]}
             ),
             "genes_without_established_validity": len(
-                {f["gene"] for f in findings if not f["validity"]["established"] and f["gene"]}
+                {
+                    f["gene"]
+                    for f in findings
+                    if "validity" in f and not f["validity"]["established"] and f["gene"]
+                }
             ),
             "genes_established_by_gencc_only": len(
-                {f["gene"] for f in findings if f["validity"]["established_by"] == ["GenCC"] and f["gene"]}
+                {
+                    f["gene"]
+                    for f in findings
+                    if f.get("validity", {}).get("established_by") == ["GenCC"] and f["gene"]
+                }
             ),
             "genes_with_mode_of_inheritance_conflict": len(
-                {f["gene"] for f in findings if f["validity"]["mode_of_inheritance_conflict"] and f["gene"]}
+                {
+                    f["gene"]
+                    for f in findings
+                    if f.get("validity", {}).get("mode_of_inheritance_conflict") and f["gene"]
+                }
             ),
+            "loci_not_interrogated": sum(1 for f in findings if "detail_omitted" in f),
             "confirmation_required": sum(1 for f in findings if f["confirmation_required"]),
         },
         "interpretation_policy": (

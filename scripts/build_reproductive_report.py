@@ -58,46 +58,99 @@ UNAVAILABLE = "NÃO DISPONÍVEL"
 
 
 def _recessive_genes(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    """Loci in genes with a curated autosomal-recessive relationship, carrier-relevant."""
+    """Interrogated loci in genes with a curated autosomal-recessive relationship.
+
+    A finding for a locus the array never carried has no `validity` block — the clinical join
+    stores gene curations once, under `gene_validity`, rather than copying them onto tens of
+    thousands of untested loci. Those loci are correctly outside carrier screening anyway:
+    nothing was interrogated, so nothing can be screened.
+    """
     return [
         f
         for f in payload["findings"]
-        if f["validity"]["established"] and AUTOSOMAL_RECESSIVE in f["validity"]["modes_of_inheritance"]
+        if f.get("validity", {}).get("established")
+        and AUTOSOMAL_RECESSIVE in f["validity"]["modes_of_inheritance"]
     ]
 
 
-def _coverage_line(gene: str, counts: dict[str, Any], interrogated: int) -> str:
-    pathogenic = counts.get("pathogenic")
-    if pathogenic is None:
-        return (
-            f"{gene}: {interrogated} variante(s) interrogada(s); a contagem de variantes P/LP "
-            "no ClinVar não foi recuperada, portanto a fração do catálogo coberta é "
-            f"{UNAVAILABLE}"
+#: How many genes the scope section names individually. The rest are summarised, because a
+#: panel covering seven hundred recessive genes produces a paragraph nobody reads and the
+#: aggregate detection rate is the number that answers the question.
+MAX_GENES_NAMED = 12
+
+
+def _detection(payload: dict[str, Any]) -> dict[str, Any]:
+    """Interrogated variants against the pathogenic catalogue, per gene and in aggregate.
+
+    This is the number report 03 exists to state and could not: a negative carrier screen is
+    only interpretable against how much of each gene's pathogenic catalogue the panel could
+    even look at. It is a count of *variants*, never a detection rate over risk — rare
+    variants dominate the count while common ones dominate the frequency.
+    """
+    by_gene: dict[str, dict[str, Any]] = {}
+    for finding in _recessive_genes(payload):
+        gene = str(finding.get("gene") or "sem gene")
+        counts = finding["validity"].get("clinvar_variant_counts") or {}
+        entry = by_gene.setdefault(
+            gene,
+            {
+                "gene": gene,
+                "interrogated": 0,
+                "catalogued": counts.get("pathogenic"),
+                "representable": counts.get("representable_in_registry"),
+            },
         )
-    return (
-        f"{gene}: {interrogated} de {pathogenic} variantes classificadas P/LP no ClinVar foram "
-        "interrogadas por este painel (contagem de variantes, não de frequência alélica)"
-    )
+        if finding["coverage_class"] in ("OBSERVADO", "NÃO DETECTADO"):
+            entry["interrogated"] += 1
+    genes = [g for g in by_gene.values() if g["interrogated"]]
+    genes.sort(key=lambda g: (-g["interrogated"], g["gene"]))
+    interrogated = sum(g["interrogated"] for g in genes)
+    catalogued = sum(g["catalogued"] or 0 for g in genes)
+    priced = [g for g in genes if g["catalogued"]]
+    return {
+        "genes": genes,
+        "genes_total": len(by_gene),
+        "genes_interrogated": len(genes),
+        "interrogated": interrogated,
+        "catalogued": catalogued,
+        "genes_without_denominator": len(genes) - len(priced),
+    }
 
 
 def _scope_text(payload: dict[str, Any]) -> str:
-    recessive = _recessive_genes(payload)
-    if not recessive:
+    detection = _detection(payload)
+    if not detection["genes"]:
         return (
-            "Nenhum gene do registro de alvos tem relação gene-doença autossômica recessiva "
-            "estabelecida por ClinGen ou GenCC; não há escopo de triagem de portadores neste "
-            "painel."
+            "Nenhum gene com relação gene-doença autossômica recessiva estabelecida por "
+            "ClinGen ou GenCC teve variante interrogada nesta amostra; não há escopo de "
+            "triagem de portadores neste painel."
         )
-    by_gene: dict[str, list[dict[str, Any]]] = {}
-    for finding in recessive:
-        by_gene.setdefault(str(finding.get("gene")), []).append(finding)
-    lines = []
-    for gene in sorted(by_gene):
-        items = by_gene[gene]
-        counts = items[0]["validity"].get("clinvar_variant_counts") or {}
-        interrogated = sum(1 for f in items if f["coverage_class"] in ("OBSERVADO", "NÃO DETECTADO"))
-        lines.append(_coverage_line(gene, counts, interrogated))
-    return " | ".join(lines)
+    named = detection["genes"][:MAX_GENES_NAMED]
+    lines = [
+        f"{g['gene']}: {g['interrogated']}/"
+        + (str(g["catalogued"]) if g["catalogued"] else UNAVAILABLE)
+        for g in named
+    ]
+    remaining = detection["genes_interrogated"] - len(named)
+    rate = (
+        f"{detection['interrogated']} de {detection['catalogued']} variantes classificadas "
+        f"P/LP no ClinVar foram interrogadas, em {detection['genes_interrogated']} genes "
+        f"recessivos curados dos {detection['genes_total']} presentes no registro"
+    )
+    return (
+        rate
+        + " (contagem de variantes, não de frequência alélica: variantes raras dominam a "
+        "contagem e comuns dominam a frequência, portanto isto limita quanto do catálogo foi "
+        "coberto e nada diz sobre quanto do risco foi). Genes mais cobertos, interrogadas/"
+        "catalogadas: "
+        + "; ".join(lines)
+        + (f" (+{remaining} genes)" if remaining > 0 else "")
+        + (
+            f". {detection['genes_without_denominator']} genes sem denominador recuperado."
+            if detection["genes_without_denominator"]
+            else ""
+        )
+    )
 
 
 def _carrier_text(payload: dict[str, Any]) -> str:
