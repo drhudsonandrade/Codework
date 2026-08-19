@@ -85,6 +85,43 @@ def verify_ruleset_identity() -> tuple[bool, dict, str]:
     return ok, block, detail
 
 
+#: Which checks constitute each plane. Naming them here — rather than filtering the check
+#: list inline — is what makes a missing check detectable. The previous form,
+#: `all(c["state"] == "PASS" for c in checks if c["id"] in {...})`, is vacuously True when
+#: the filter matches nothing, so renaming a check id turned its FAIL into a plane PASS,
+#: and an empty blocking set made the whole audit pass. This is the top-level aggregator
+#: that reports the project VERIFICADO, so it is the last place a fail-open belongs.
+PLANE_CHECKS = {
+    "policy_control": ("RULESET_GATE", "REPOSITORY_CONTRACT", "SUPPLY_CHAIN_LOCK"),
+    "scientific_data": ("SCIENTIFIC_DATA_PLANE_ARRAY",),
+    "evidence": ("EVIDENCE_ANNOTATION_PLANE",),
+}
+
+#: The audit plane covers every blocking check, so it is defined by the blocking flag
+#: rather than a list — but it must still cover at least this many.
+MIN_BLOCKING_CHECKS = 5
+
+
+def _aggregate_planes(checks: list[dict]) -> dict[str, str]:
+    """Reduce the check list to plane verdicts, failing closed on a missing check."""
+    by_id = {c["id"]: c for c in checks}
+    planes: dict[str, str] = {}
+    for plane, required in PLANE_CHECKS.items():
+        missing = [name for name in required if name not in by_id]
+        if missing:
+            planes[plane] = "BLOCKED"
+            continue
+        planes[plane] = "PASS" if all(by_id[name]["state"] == "PASS" for name in required) else "BLOCKED"
+
+    blocking = [c for c in checks if c["blocking"]]
+    if len(blocking) < MIN_BLOCKING_CHECKS:
+        # An audit that ran almost nothing must not report the strongest verdict.
+        planes["audit"] = "BLOCKED"
+    else:
+        planes["audit"] = "PASS" if all(c["state"] == "PASS" for c in blocking) else "BLOCKED"
+    return planes
+
+
 def audit(*, allow_template_sealed_only: bool = False) -> dict:
     checks: list[dict] = []
 
@@ -147,12 +184,7 @@ def audit(*, allow_template_sealed_only: bool = False) -> dict:
                 tracked_like.append(str(p.relative_to(ROOT)))
     checks.append(check("NO_PERSONAL_GENOTYPE_FIXTURES", not tracked_like, json.dumps(tracked_like)))
 
-    planes = {
-        "policy_control": "PASS" if all(c["state"] == "PASS" for c in checks if c["id"] in {"RULESET_GATE", "REPOSITORY_CONTRACT", "SUPPLY_CHAIN_LOCK"}) else "BLOCKED",
-        "scientific_data": "PASS" if next(c for c in checks if c["id"] == "SCIENTIFIC_DATA_PLANE_ARRAY")["state"] == "PASS" else "BLOCKED",
-        "evidence": "PASS" if next(c for c in checks if c["id"] == "EVIDENCE_ANNOTATION_PLANE")["state"] == "PASS" else "BLOCKED",
-        "audit": "PASS" if all(c["state"] == "PASS" for c in checks if c["blocking"]) else "BLOCKED",
-    }
+    planes = _aggregate_planes(checks)
     blocking_failures = [c["id"] for c in checks if c["blocking"] and c["state"] != "PASS"]
     return {
         "schema": "genoma-v0.8-four-plane-audit-v1",

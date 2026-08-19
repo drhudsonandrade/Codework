@@ -87,5 +87,74 @@ class GenomaAuditTest(unittest.TestCase):
         self.assertIn("unique_active_manifest", detail)
 
 
+class PlaneAggregationTest(unittest.TestCase):
+    """The top-level aggregator must not report PASS because it checked nothing.
+
+    `all(... for c in checks if c["id"] in {...})` is vacuously True when the filter
+    matches nothing, so renaming a check id silently turned its FAIL into a plane PASS —
+    in the very function that declares the whole project VERIFICADO.
+    """
+
+    def _checks(self, **overrides):
+        from scripts.genoma_audit import MIN_BLOCKING_CHECKS, PLANE_CHECKS
+
+        names = [n for group in PLANE_CHECKS.values() for n in group]
+        checks = [{"id": n, "state": "PASS", "blocking": True} for n in names]
+        while len(checks) < MIN_BLOCKING_CHECKS:
+            checks.append({"id": f"FILLER_{len(checks)}", "state": "PASS", "blocking": True})
+        for name, state in overrides.items():
+            for c in checks:
+                if c["id"] == name:
+                    c["state"] = state
+        return checks
+
+    def test_a_complete_passing_check_set_passes(self):
+        from scripts.genoma_audit import _aggregate_planes
+
+        planes = _aggregate_planes(self._checks())
+        self.assertEqual(set(planes.values()), {"PASS"})
+
+    def test_a_renamed_check_id_blocks_instead_of_vanishing(self):
+        from scripts.genoma_audit import _aggregate_planes
+
+        checks = self._checks()
+        for c in checks:
+            if c["id"] == "RULESET_GATE":
+                c["id"] = "RULESET_GATE_V2"
+                c["state"] = "FAIL"
+        planes = _aggregate_planes(checks)
+        self.assertEqual(planes["policy_control"], "BLOCKED")
+
+    def test_an_empty_check_list_blocks_every_plane(self):
+        from scripts.genoma_audit import _aggregate_planes
+
+        planes = _aggregate_planes([])
+        self.assertEqual(set(planes.values()), {"BLOCKED"})
+
+    def test_too_few_blocking_checks_blocks_the_audit_plane(self):
+        from scripts.genoma_audit import _aggregate_planes
+
+        checks = self._checks()
+        for c in checks:
+            c["blocking"] = False
+        self.assertEqual(_aggregate_planes(checks)["audit"], "BLOCKED")
+
+    def test_a_failing_check_blocks_its_plane(self):
+        from scripts.genoma_audit import _aggregate_planes
+
+        planes = _aggregate_planes(self._checks(EVIDENCE_ANNOTATION_PLANE="FAIL"))
+        self.assertEqual(planes["evidence"], "BLOCKED")
+        self.assertEqual(planes["audit"], "BLOCKED")
+
+    def test_the_real_audit_emits_every_check_the_planes_require(self):
+        """Guards against the fix itself rotting: a renamed check now blocks, loudly."""
+        from scripts.genoma_audit import PLANE_CHECKS, audit
+
+        emitted = {c["id"] for c in audit()["checks"]}
+        for plane, required in PLANE_CHECKS.items():
+            for name in required:
+                self.assertIn(name, emitted, f"{plane} requires {name}")
+
+
 if __name__ == "__main__":
     unittest.main()
