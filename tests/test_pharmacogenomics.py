@@ -509,12 +509,19 @@ class CpicRegistryTest(unittest.TestCase):
                         self.assertIn(position["allele"], set("ACGT"))
 
     def test_a_gene_cpic_does_not_define_records_why(self):
-        """BCHE: CPIC publishes no allele table and PharmVar needs credentials."""
+        """BCHE: CPIC publishes no allele table and PharmVar needs credentials.
+
+        The variants themselves now come from ClinVar with cited accessions, so the gap is
+        narrower than it was — but it is still a gap, and the reason must survive. ClinVar
+        catalogues variants, not haplotypes, so no diplotype follows from it.
+        """
         bche = self.registry["genes"]["BCHE"]
-        self.assertEqual(bche["alleles"], {})
+        self.assertTrue(bche["alleles"], "the ClinVar fallback should supply the variants")
         self.assertFalse(bche["complete_panel"])
+        self.assertIn("ClinVar", bche["complete_panel_scope"])
         self.assertIn("CPIC não publica", bche["definitions_unavailable"])
         self.assertIn("PharmVar", bche["definitions_unavailable"])
+        self.assertEqual(bche["phenotype_map"], {})
 
     def test_structural_alleles_are_excluded_and_listed(self):
         """An array cannot genotype a duplication; excluding it silently would hide that."""

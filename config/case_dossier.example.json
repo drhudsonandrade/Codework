@@ -1,0 +1,50 @@
+{
+  "schema": "genoma-case-dossier-v1",
+  "case_id": "SUBSTITUA-PELO-ID-DO-CASO",
+
+  "notes": [
+    "MODELO. Copie este arquivo, preencha e passe com --case-dossier.",
+    "Nenhum destes campos é derivável do arquivo de genótipos nem de fonte pública: são o registro administrativo do operador.",
+    "Campo que você deixar de fora sai como NÃO DISPONÍVEL no relatório. Isso é correto — não preencha com suposição.",
+    "case_id precisa ser idêntico ao case_id usado no QC do array, senão a carga é recusada.",
+    "Datas em YYYY-MM-DD ou DD/MM/YYYY.",
+    "O bloco consent é tudo-ou-nada: consent_id, consent_version, consent_date e authorised_purposes vêm juntos ou nenhum vem. Consentimento pela metade parece consentimento documentado na página."
+  ],
+
+  "identification": {
+    "pseudonymised_id": "",
+    "date_of_birth": "",
+    "sex_recorded_at_birth": "",
+    "requesting_professional": "",
+    "requesting_service": ""
+  },
+
+  "sample": {
+    "sample_type": "",
+    "sample_identifier": "",
+    "collection_date": "",
+    "laboratory": "",
+    "platform": "",
+    "chain_of_custody_reference": ""
+  },
+
+  "consent": {
+    "consent_id": "",
+    "consent_version": "",
+    "consent_date": "",
+    "authorised_purposes": [],
+    "authorised_reports": [],
+    "secondary_findings": "",
+    "granular_preferences": [],
+    "delivery_preference": "",
+    "authorised_recipients": [],
+    "retention_policy": ""
+  },
+
+  "release": {
+    "responsible_professional": "",
+    "responsible_registration": "",
+    "signature_reference": "",
+    "issue_date": ""
+  }
+}

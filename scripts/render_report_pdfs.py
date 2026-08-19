@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from reporting.case_dossier import load_dossier
 from reporting.editorial_v3 import _verified_coordinate_manifest
 from reporting.engine import render_document
 from reporting.template_fill import build_template_fields
@@ -28,11 +29,23 @@ from reporting.template_v3 import TemplateV3Error, render_pdf_from_template
 import reporting.template_v3 as _template_v3
 
 
-def render(report_id: str, payload_path: Path, template_dir: Path, out_path: Path) -> dict:
+def render(
+    report_id: str,
+    payload_path: Path,
+    template_dir: Path,
+    out_path: Path,
+    dossier_path: Path | None = None,
+) -> dict:
     detailed, coordinate_hashes = _verified_coordinate_manifest(template_dir)
     payload = json.loads(payload_path.read_text(encoding="utf-8"))
 
-    fill = build_template_fields(report_id, payload, detailed)
+    dossier = None
+    if dossier_path is not None:
+        # Bound to the analysed case: an identity block attached to another person's data
+        # is the worst failure this path can cause.
+        dossier = load_dossier(dossier_path, expected_case_id=str(payload.get("case_id") or ""))
+
+    fill = build_template_fields(report_id, payload, detailed, dossier)
     if not fill["derived_count"]:
         raise TemplateV3Error(
             f"report {report_id}: no placeholder could be derived from the payload; "
@@ -68,6 +81,8 @@ def render(report_id: str, payload_path: Path, template_dir: Path, out_path: Pat
         "unavailable_placeholders": fill["unavailable_count"],
         "total_placeholders": fill["total"],
         "derived_tokens": fill["derived_tokens"],
+        "from_dossier": fill["from_dossier"],
+        "dossier_supplied": fill["dossier_supplied"],
         "operational_status": payload.get("operational_status"),
     }
 
@@ -77,6 +92,7 @@ def main() -> int:
     parser.add_argument("--template-dir", required=True, help="installed template pack")
     parser.add_argument("--payload", action="append", required=True, metavar="ID=PATH")
     parser.add_argument("--out-dir", required=True)
+    parser.add_argument("--case-dossier", help="operator-written identification/consent record")
     args = parser.parse_args()
 
     out_dir = Path(args.out_dir)
@@ -85,7 +101,13 @@ def main() -> int:
     for spec in args.payload:
         report_id, _, path = spec.partition("=")
         results.append(
-            render(report_id, Path(path), Path(args.template_dir), out_dir / f"GENOMA-{report_id}.pdf")
+            render(
+                report_id,
+                Path(path),
+                Path(args.template_dir),
+                out_dir / f"GENOMA-{report_id}.pdf",
+                Path(args.case_dossier) if args.case_dossier else None,
+            )
         )
 
     print(json.dumps(results, ensure_ascii=False, indent=2))

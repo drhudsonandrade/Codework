@@ -158,9 +158,21 @@ def _resolve(report_id: str, token: str, payload: dict[str, Any]) -> Any:
 
 
 def build_template_fields(
-    report_id: str, payload: dict[str, Any], detailed_manifest: dict[str, Any]
+    report_id: str,
+    payload: dict[str, Any],
+    detailed_manifest: dict[str, Any],
+    dossier: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Map every fillable placeholder of `report_id` to a value or to NÃO DISPONÍVEL."""
+    """Map every fillable placeholder of `report_id` to a value or to NÃO DISPONÍVEL.
+
+    `dossier` carries the administrative record — identification, consent, custody,
+    signatures — which no resolver can derive because it is not in the data. It takes
+    precedence over the generic resolvers, which only ever supplied a fallback for those
+    tokens (the case id in place of a name, today's date in place of an issue date).
+    """
+    from reporting.case_dossier import dossier_values
+
+    supplied = dossier_values(dossier)
     report = (detailed_manifest.get("reports") or {}).get(report_id)
     if not isinstance(report, dict):
         raise KeyError(f"coordinate manifest has no report {report_id!r}")
@@ -173,7 +185,9 @@ def build_template_fields(
             continue
         field_id = item["field_id"]
         token = str(item.get("token", "")).strip("[] ").strip()
-        value = _resolve(report_id, token, payload)
+        value = supplied.get(token)
+        if value is None:
+            value = _resolve(report_id, token, payload)
         if value is None:
             fields[field_id] = UNAVAILABLE
             unavailable.append(token)
@@ -190,4 +204,6 @@ def build_template_fields(
         # Reported, not hidden: a reader must be able to see how much of the document the
         # pipeline could actually answer.
         "unavailable_tokens": sorted(set(unavailable)),
+        "from_dossier": sorted(set(supplied) & set(derived)),
+        "dossier_supplied": bool(supplied),
     }

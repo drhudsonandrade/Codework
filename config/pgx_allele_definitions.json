@@ -1,17 +1,47 @@
 {
   "genes": {
     "BCHE": {
-      "alleles": {},
+      "alleles": {
+        "BCHE NM_000055.2(BCHE):c.1699G>A (p.Ala567Thr)": {
+          "clinvar_accessions": [
+            "VCV000013220"
+          ],
+          "clinvar_classification": "Conflicting classifications of pathogenicity",
+          "defining": [
+            {
+              "allele": "T",
+              "rsid": "rs1803274"
+            }
+          ],
+          "population_frequency_dbsnp": 0.195249,
+          "reference_allele_dbsnp": "C"
+        },
+        "BCHE NM_000055.2(BCHE):c.293A>G (p.Asp98Gly)": {
+          "clinvar_accessions": [
+            "VCV000013215"
+          ],
+          "clinvar_classification": "Pathogenic/Likely pathogenic",
+          "defining": [
+            {
+              "allele": "C",
+              "rsid": "rs1799807"
+            }
+          ],
+          "population_frequency_dbsnp": 0.016484,
+          "reference_allele_dbsnp": "T"
+        }
+      },
       "alleles_without_usable_snp_definition": [],
       "anesthesia_note": "Atividade reduzida de butirilcolinesterase prolonga o bloqueio por succinilcolina e mivacúrio. Genótipo não substitui dosagem de atividade enzimática nem número de dibucaína.",
       "anesthesia_relevant": true,
       "complete_panel": false,
-      "complete_panel_scope": "CPIC",
-      "definitions_unavailable": "CPIC não publica tabela de definição de alelos para este gene (allele, allele_definition e sequence_location retornam vazio). PharmVar exige credenciais que este projeto não possui. Nenhum alelo estrela pode ser nomeado; apenas genótipos observados.",
+      "complete_panel_scope": "ClinVar (variant catalogue, not an allele-definition registry)",
+      "definitions_unavailable": "CPIC não publica tabela de definição de alelos para este gene e o PharmVar exige credenciais que este projeto não possui. As variantes abaixo vêm do ClinVar, com acesso citado, e são nomeadas pela designação HGVS do próprio ClinVar — a nomenclatura estrela deste gene não está em registro público verificável, e inventá-la seria asserção clínica sem fonte. Nenhum diplótipo é estabelecido.",
       "phenotype_map": {},
       "phenotype_map_source": "NÃO DISPONÍVEL",
       "reference_allele": null,
-      "structural_alleles_excluded": []
+      "structural_alleles_excluded": [],
+      "variant_source": "NCBI ClinVar via E-utilities, joined to dbSNP by GRCh38 coordinate"
     },
     "CYP2C19": {
       "alleles": {
@@ -63929,9 +63959,9 @@
     }
   },
   "id": "GENOMA-PGX-CPIC",
-  "retrieved_at": "2026-08-19T01:35:09.470795Z",
+  "retrieved_at": "2026-08-19T10:28:06.116211Z",
   "schema": "genoma-pgx-registry-v1",
   "scope_note": "complete_panel significa completo em relação ao catálogo do CPIC, não biologicamente exaustivo: um alelo que o CPIC não cataloga permanece indistinguível do haplótipo de referência. Alelos marcados pelo CPIC como variação estrutural são excluídos das definições porque genotipagem em array não os resolve, e ficam listados em structural_alleles_excluded.",
-  "source": "CPIC (Clinical Pharmacogenetics Implementation Consortium) API, api.cpicpgx.org/v1, recuperado em 2026-08-19T01:35:09.470795Z. Definições de alelo obtidas do join allele + allele_definition + allele_location_value + sequence_location; mapeamento diplótipo->fenótipo da tabela diplotype do próprio CPIC. Identificadores PharmVar preservados por alelo quando o CPIC os fornece. Reproduzir com scripts/build_pgx_registry.py.",
+  "source": "CPIC (Clinical Pharmacogenetics Implementation Consortium) API, api.cpicpgx.org/v1, recuperado em 2026-08-19T10:28:06.116211Z. Definições de alelo obtidas do join allele + allele_definition + allele_location_value + sequence_location; mapeamento diplótipo->fenótipo da tabela diplotype do próprio CPIC. Identificadores PharmVar preservados por alelo quando o CPIC os fornece. Reproduzir com scripts/build_pgx_registry.py.",
   "version": "20260819.1"
 }

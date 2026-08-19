@@ -103,9 +103,74 @@ def _allele_label(symbol: str, name: str) -> str:
     return f"{symbol}{name}" if name.startswith("*") else f"{symbol} {name}"
 
 
+#: Genes CPIC lists without publishing an allele table, and the rsids whose ClinVar records
+#: define their clinically relevant variants. Naming here is deliberately HGVS/ClinVar, not
+#: star nomenclature: BCHE's star names are not in a machine-readable public registry this
+#: project can verify, and inventing `BCHE*2` from memory is the assertion the whole design
+#: refuses. The variants are real and cited; only the shorthand is withheld.
+CLINVAR_FALLBACK_GENES: dict[str, tuple[str, ...]] = {
+    "BCHE": ("rs1799807", "rs1803274"),
+}
+
+
+def _clinvar_fallback(symbol: str) -> dict[str, Any]:
+    """Build a gene's definitions from ClinVar when CPIC publishes no allele table."""
+    from scripts.curate_assessed_alleles import curate_target
+
+    alleles: dict[str, Any] = {}
+    unresolved: list[str] = []
+    for rsid in CLINVAR_FALLBACK_GENES[symbol]:
+        record = curate_target(rsid, None)
+        if not record.get("assessed_allele"):
+            unresolved.append(f"{rsid}: {record.get('reason', 'no assertion')}")
+            continue
+        asserted = [
+            m
+            for m in record.get("clinvar_records_at_this_coordinate", [])
+            if m["alternate"] == record["assessed_allele"]
+        ]
+        name = next((str(m.get("title")) for m in asserted if m.get("title")), rsid)
+        alleles[f"{symbol} {name}"] = {
+            "defining": [{"rsid": rsid, "allele": record["assessed_allele"]}],
+            "clinvar_accessions": sorted({str(m.get("accession")) for m in asserted if m.get("accession")}),
+            "clinvar_classification": next((m["classification"] for m in asserted), None),
+            "reference_allele_dbsnp": record.get("reference_allele"),
+            "population_frequency_dbsnp": (record.get("dbsnp_frequencies") or {}).get(
+                record["assessed_allele"]
+            ),
+        }
+    return {
+        # ClinVar catalogues variants, not haplotypes: it cannot say the panel is complete,
+        # so no diplotype will be established for this gene and the passport says why.
+        "complete_panel": False,
+        "complete_panel_scope": "ClinVar (variant catalogue, not an allele-definition registry)",
+        "definitions_unavailable": (
+            "CPIC não publica tabela de definição de alelos para este gene e o PharmVar exige "
+            "credenciais que este projeto não possui. As variantes abaixo vêm do ClinVar, com "
+            "acesso citado, e são nomeadas pela designação HGVS do próprio ClinVar — a "
+            "nomenclatura estrela deste gene não está em registro público verificável, e "
+            "inventá-la seria asserção clínica sem fonte. Nenhum diplótipo é estabelecido."
+        ),
+        "reference_allele": None,
+        "alleles": alleles,
+        "structural_alleles_excluded": [],
+        "alleles_without_usable_snp_definition": unresolved,
+        "phenotype_map": {},
+        "phenotype_map_source": "NÃO DISPONÍVEL",
+        "variant_source": "NCBI ClinVar via E-utilities, joined to dbSNP by GRCh38 coordinate",
+        **(
+            {"anesthesia_relevant": True, "anesthesia_note": ANAESTHESIA_RELEVANT[symbol]}
+            if symbol in ANAESTHESIA_RELEVANT
+            else {}
+        ),
+    }
+
+
 def fetch_gene(symbol: str) -> dict[str, Any]:
     """Assemble one gene's allele definitions and CPIC's diplotype->phenotype table."""
     alleles = _get("allele", genesymbol=f"eq.{symbol}")
+    if not alleles and symbol in CLINVAR_FALLBACK_GENES:
+        return _clinvar_fallback(symbol)
     if not alleles:
         # CPIC lists some gene symbols without publishing an allele definition table.
         # BCHE is one of them, and PharmVar's API requires credentials this project does

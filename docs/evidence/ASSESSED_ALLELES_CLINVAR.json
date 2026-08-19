@@ -1,0 +1,1222 @@
+{
+  "assessed_alleles_established": 28,
+  "curated_at": "2026-08-19T10:27:18.503052Z",
+  "method": "dbSNP supplies the plus-strand reference base from the SPDI deleted_sequence; ClinVar supplies the alternate from canonical_spdi. The two are joined by coordinate, never by text, because an rsid text search in ClinVar also returns unrelated variants. A target with no asserted alternate, or with more than one, is left without an assessed allele and the reason is recorded.",
+  "results": [
+    {
+      "assessed_allele": "C",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000013215",
+          "alternate": "C",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000003.12:165830740:T:C",
+          "classification": "Pathogenic/Likely pathogenic",
+          "title": "NM_000055.2(BCHE):c.293A>G (p.Asp98Gly)"
+        }
+      ],
+      "clinvar_records_considered": 1,
+      "cpic_defined_alleles": {},
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "C": 0.016484,
+        "T": 0.983516
+      },
+      "grch38": {
+        "chromosome": "3",
+        "position": 165830741
+      },
+      "reason": "ClinVar carries exactly one clinically asserted alternate at the dbSNP GRCh38 coordinate for this rsid",
+      "reference_allele": "T",
+      "rsid": "rs1799807",
+      "source": "ClinVar",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "T",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000013220",
+          "alternate": "T",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000003.12:165773491:C:T",
+          "classification": "Conflicting classifications of pathogenicity",
+          "title": "NM_000055.2(BCHE):c.1699G>A (p.Ala567Thr)"
+        }
+      ],
+      "clinvar_records_considered": 1,
+      "cpic_defined_alleles": {},
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "C": 0.804751,
+        "T": 0.195249
+      },
+      "grch38": {
+        "chromosome": "3",
+        "position": 165773492
+      },
+      "reason": "ClinVar carries exactly one clinically asserted alternate at the dbSNP GRCh38 coordinate for this rsid",
+      "reference_allele": "C",
+      "rsid": "rs1803274",
+      "source": "ClinVar",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "A",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000626305",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000014.9:94380924:T:A",
+          "classification": "Pathogenic",
+          "title": "NM_000295.4(SERPINA1):c.[1158dupC;863A>T]"
+        },
+        {
+          "accession": "VCV000440501",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000014.9:94380924:T:A",
+          "classification": "Pathogenic",
+          "title": "NC_000014.9:g.[94380925T>A;94383048G>T]"
+        },
+        {
+          "accession": "VCV000440500",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000014.9:94380924:T:A",
+          "classification": "Pathogenic",
+          "title": "NC_000014.9:g.[94380925T>A;94382636T>C]"
+        },
+        {
+          "accession": "VCV000017969",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000014.9:94380924:T:A",
+          "classification": "Pathogenic/Pathogenic, low penetrance; other",
+          "title": "NM_001127701.1(SERPINA1):c.863A>T (p.Glu288Val)"
+        }
+      ],
+      "clinvar_records_considered": 4,
+      "cpic_defined_alleles": {},
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "A": 0.03736,
+        "T": 0.96264
+      },
+      "grch38": {
+        "chromosome": "14",
+        "position": 94380925
+      },
+      "reason": "ClinVar carries exactly one clinically asserted alternate at the dbSNP GRCh38 coordinate for this rsid",
+      "reference_allele": "T",
+      "rsid": "rs17580",
+      "source": "ClinVar",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "T",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV001492979",
+          "alternate": "G",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000014.9:94378609:C:G",
+          "classification": "Likely pathogenic",
+          "title": "NM_000295.5(SERPINA1):c.1096G>C (p.Glu366Gln)"
+        },
+        {
+          "accession": "VCV000626304",
+          "alternate": "T",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000014.9:94378609:C:T",
+          "classification": "Pathogenic",
+          "title": "NM_000295.4(SERPINA1):c.[1096G>A;35T>C]"
+        },
+        {
+          "accession": "VCV000017967",
+          "alternate": "T",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000014.9:94378609:C:T",
+          "classification": "Pathogenic/Likely pathogenic; risk factor",
+          "title": "NM_001127701.1(SERPINA1):c.1096G>A (p.Glu366Lys)"
+        }
+      ],
+      "clinvar_records_considered": 4,
+      "cpic_defined_alleles": {},
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "C": 0.98529,
+        "G": 0.0,
+        "T": 0.01471
+      },
+      "grch38": {
+        "chromosome": "14",
+        "position": 94378610
+      },
+      "reason": "ClinVar asserts G, T at this coordinate, and dbSNP reports a population frequency only for T (0.01471); the others are not observed in the cohort",
+      "reference_allele": "C",
+      "rsid": "rs28929474",
+      "source": "ClinVar + dbSNP frequency",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "G",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000341932",
+          "alternate": "G",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000022.11:43928846:C:G",
+          "classification": "Conflicting classifications of pathogenicity; risk factor",
+          "title": "NM_025225.3(PNPLA3):c.444C>G (p.Ile148Met)"
+        }
+      ],
+      "clinvar_records_considered": 2,
+      "cpic_defined_alleles": {},
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "C": 0.755185,
+        "G": 0.244815
+      },
+      "grch38": {
+        "chromosome": "22",
+        "position": 43928847
+      },
+      "reason": "ClinVar carries exactly one clinically asserted alternate at the dbSNP GRCh38 coordinate for this rsid",
+      "reference_allele": "C",
+      "rsid": "rs738409",
+      "source": "ClinVar",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "T",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000177709",
+          "alternate": "T",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94942289:C:T",
+          "classification": "drug response",
+          "title": "NM_000771.3(CYP2C9):c.[430C>T;1075A=]"
+        },
+        {
+          "accession": "VCV000008409",
+          "alternate": "T",
+          "asserts_clinical_relevance": false,
+          "canonical_spdi": "NC_000010.11:94942289:C:T",
+          "classification": "Likely benign; drug response; other",
+          "title": "CYP2C9*2"
+        }
+      ],
+      "clinvar_records_considered": 5,
+      "cpic_defined_alleles": {
+        "T": [
+          "CYP2C9*2",
+          "CYP2C9*35",
+          "CYP2C9*61",
+          "CYP2C9*92"
+        ]
+      },
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "C": 0.881927,
+        "T": 0.118073
+      },
+      "grch38": {
+        "chromosome": "10",
+        "position": 94942290
+      },
+      "reason": "CPIC defines CYP2C9*2, CYP2C9*35, CYP2C9*61, CYP2C9*92 by base T at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reference_allele": "C",
+      "rsid": "rs1799853",
+      "source": "CPIC",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "C",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000163021",
+          "alternate": "C",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94981295:A:C",
+          "classification": "drug response",
+          "title": "NM_000771.3(CYP2C9):c.[430C=;1075A>C]"
+        },
+        {
+          "accession": "VCV000008408",
+          "alternate": "C",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94981295:A:C",
+          "classification": "drug response; other",
+          "title": "CYP2C9*3"
+        }
+      ],
+      "clinvar_records_considered": 5,
+      "cpic_defined_alleles": {
+        "C": [
+          "CYP2C9*18",
+          "CYP2C9*3",
+          "CYP2C9*68"
+        ]
+      },
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "A": 0.936111,
+        "C": 0.063889,
+        "G": 0.0
+      },
+      "grch38": {
+        "chromosome": "10",
+        "position": 94981296
+      },
+      "reason": "CPIC defines CYP2C9*18, CYP2C9*3, CYP2C9*68 by base C at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reference_allele": "A",
+      "rsid": "rs1057910",
+      "source": "CPIC",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "T",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000002211",
+          "alternate": "T",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000016.10:31096367:C:T",
+          "classification": "drug response",
+          "title": "NM_024006.4(VKORC1):c.-1639G>A"
+        }
+      ],
+      "clinvar_records_considered": 3,
+      "cpic_defined_alleles": {
+        "T": [
+          "VKORC1 rs9923231 variant (T)"
+        ]
+      },
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "C": 0.677309,
+        "T": 0.322691
+      },
+      "grch38": {
+        "chromosome": "16",
+        "position": 31096368
+      },
+      "reason": "CPIC defines VKORC1 rs9923231 variant (T) by base T at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reference_allele": "C",
+      "rsid": "rs9923231",
+      "source": "CPIC",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "C",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000037346",
+          "alternate": "C",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000012.12:21178614:T:C",
+          "classification": "drug response",
+          "title": "NM_006446.5(SLCO1B1):c.521T>C (p.Val174Ala)"
+        }
+      ],
+      "clinvar_records_considered": 1,
+      "cpic_defined_alleles": {
+        "C": [
+          "SLCO1B1*15",
+          "SLCO1B1*40",
+          "SLCO1B1*47",
+          "SLCO1B1*5"
+        ]
+      },
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "C": 0.14443,
+        "T": 0.85557
+      },
+      "grch38": {
+        "chromosome": "12",
+        "position": 21178615
+      },
+      "reason": "CPIC defines SLCO1B1*15, SLCO1B1*40, SLCO1B1*47, SLCO1B1*5 by base C at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reference_allele": "T",
+      "rsid": "rs4149056",
+      "source": "CPIC",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "C",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000005066",
+          "alternate": "C",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000007.14:99672915:T:C",
+          "classification": "association; drug response; risk factor",
+          "title": "NM_000777.5(CYP3A5):c.219-237A>G"
+        }
+      ],
+      "clinvar_records_considered": 2,
+      "cpic_defined_alleles": {
+        "C": [
+          "CYP3A5*3"
+        ]
+      },
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "C": 0.700688,
+        "T": 0.299312
+      },
+      "grch38": {
+        "chromosome": "7",
+        "position": 99672916
+      },
+      "reason": "CPIC defines CYP3A5*3 by base C at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reference_allele": "T",
+      "rsid": "rs776746",
+      "source": "CPIC",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "A",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000000722",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000008.11:18400592:G:A",
+          "classification": "Benign; drug response",
+          "title": "NM_000015.3(NAT2):c.590G>A (p.Arg197Gln)"
+        }
+      ],
+      "clinvar_records_considered": 1,
+      "cpic_defined_alleles": {
+        "A": [
+          "NAT2*15",
+          "NAT2*30",
+          "NAT2*34",
+          "NAT2*35",
+          "NAT2*36",
+          "NAT2*37",
+          "NAT2*38",
+          "NAT2*39",
+          "NAT2*50",
+          "NAT2*52",
+          "NAT2*53",
+          "NAT2*56",
+          "NAT2*58",
+          "NAT2*6",
+          "NAT2*62",
+          "NAT2*63",
+          "NAT2*64",
+          "NAT2*66",
+          "NAT2*67"
+        ]
+      },
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "A": 0.283336,
+        "C": 0.0,
+        "G": 0.716664
+      },
+      "grch38": {
+        "chromosome": "8",
+        "position": 18400593
+      },
+      "reason": "CPIC defines NAT2*15, NAT2*30, NAT2*34, NAT2*35, NAT2*36, NAT2*37, NAT2*38, NAT2*39, NAT2*50, NAT2*52, NAT2*53, NAT2*56, NAT2*58, NAT2*6, NAT2*62, NAT2*63, NAT2*64, NAT2*66, NAT2*67 by base A at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reference_allele": "G",
+      "rsid": "rs1799930",
+      "source": "CPIC",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "C",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000441269",
+          "alternate": "C",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000019.10:44908683:T:C",
+          "classification": "association",
+          "title": "NM_000041.3(APOE):c.[305C>G;388T>C]"
+        },
+        {
+          "accession": "VCV000441268",
+          "alternate": "C",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000019.10:44908683:T:C",
+          "classification": "Pathogenic/Likely pathogenic",
+          "title": "NM_000041.3(APOE):c.[137T>C;388T>C]"
+        },
+        {
+          "accession": "VCV000441267",
+          "alternate": "C",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000019.10:44908683:T:C",
+          "classification": "Pathogenic",
+          "title": "NM_000041.3(APOE):c.[388T>C;805C>G]"
+        },
+        {
+          "accession": "VCV000440870",
+          "alternate": "C",
+          "asserts_clinical_relevance": false,
+          "canonical_spdi": "NC_000019.10:44908683:T:C",
+          "classification": "not provided",
+          "title": "NM_000041.3(APOE):c.[388T>C;478C>T]"
+        },
+        {
+          "accession": "VCV000017864",
+          "alternate": "C",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000019.10:44908683:T:C",
+          "classification": "Conflicting classifications of pathogenicity; other; risk factor",
+          "title": "NM_000041.4(APOE):c.388T>C (p.Cys130Arg)"
+        }
+      ],
+      "clinvar_records_considered": 8,
+      "cpic_defined_alleles": {},
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "C": 0.147929,
+        "T": 0.852071
+      },
+      "grch38": {
+        "chromosome": "19",
+        "position": 44908684
+      },
+      "reason": "ClinVar carries exactly one clinically asserted alternate at the dbSNP GRCh38 coordinate for this rsid",
+      "reference_allele": "T",
+      "rsid": "rs429358",
+      "source": "ClinVar",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "T",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000441265",
+          "alternate": "T",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000019.10:44908821:C:T",
+          "classification": "Pathogenic",
+          "title": "NM_000041.3(APOE):c.[526C>T;725G>A]"
+        },
+        {
+          "accession": "VCV000441262",
+          "alternate": "T",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000019.10:44908821:C:T",
+          "classification": "Pathogenic",
+          "title": "NM_000041.3(APOE):c.[434G>A;526C>T]"
+        },
+        {
+          "accession": "VCV000017848",
+          "alternate": "T",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000019.10:44908821:C:T",
+          "classification": "drug response",
+          "title": "NM_000041.2(APOE):c.526C>T (p.Arg176Cys)"
+        }
+      ],
+      "clinvar_records_considered": 4,
+      "cpic_defined_alleles": {},
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "C": 0.925998,
+        "T": 0.074002
+      },
+      "grch38": {
+        "chromosome": "19",
+        "position": 44908822
+      },
+      "reason": "ClinVar carries exactly one clinically asserted alternate at the dbSNP GRCh38 coordinate for this rsid",
+      "reference_allele": "C",
+      "rsid": "rs7412",
+      "source": "ClinVar",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": null,
+      "clinvar_records_at_this_coordinate": [],
+      "clinvar_records_considered": 0,
+      "cpic_defined_alleles": {},
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "C": 0.255979,
+        "T": 0.744021
+      },
+      "grch38": {
+        "chromosome": "5",
+        "position": 25967594
+      },
+      "reason": "no ClinVar record at this coordinate carries a pathogenic, risk-factor, drug-response or association assertion; the allele being interrogated is therefore not established",
+      "reference_allele": "T",
+      "rsid": "rs4307059",
+      "status": "NÃO DISPONÍVEL"
+    },
+    {
+      "assessed_allele": "T",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000000642",
+          "alternate": "T",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000001.11:169549810:C:T",
+          "classification": "drug response",
+          "title": "NM_000130.4(F5):c.1601G>A (p.Arg534Gln)"
+        }
+      ],
+      "clinvar_records_considered": 3,
+      "cpic_defined_alleles": {},
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "C": 0.977981,
+        "T": 0.022019
+      },
+      "grch38": {
+        "chromosome": "1",
+        "position": 169549811
+      },
+      "reason": "ClinVar carries exactly one clinically asserted alternate at the dbSNP GRCh38 coordinate for this rsid",
+      "reference_allele": "C",
+      "rsid": "rs6025",
+      "source": "ClinVar",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "A",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000013310",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000011.10:46739504:G:A",
+          "classification": "Pathogenic/Likely pathogenic/Pathogenic, low penetrance/Established risk allele; risk factor",
+          "title": "NM_000506.5(F2):c.*97G>A"
+        }
+      ],
+      "clinvar_records_considered": 1,
+      "cpic_defined_alleles": {},
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "A": 0.011596,
+        "G": 0.988404
+      },
+      "grch38": {
+        "chromosome": "11",
+        "position": 46739505
+      },
+      "reason": "ClinVar carries exactly one clinically asserted alternate at the dbSNP GRCh38 coordinate for this rsid",
+      "reference_allele": "G",
+      "rsid": "rs1799963",
+      "source": "ClinVar",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "A",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000000009",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000006.12:26092912:G:A",
+          "classification": "Pathogenic/Pathogenic, low penetrance; risk factor",
+          "title": "NM_000410.4(HFE):c.845G>A (p.Cys282Tyr)"
+        }
+      ],
+      "clinvar_records_considered": 1,
+      "cpic_defined_alleles": {},
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "A": 0.052719,
+        "G": 0.947281
+      },
+      "grch38": {
+        "chromosome": "6",
+        "position": 26092913
+      },
+      "reason": "ClinVar carries exactly one clinically asserted alternate at the dbSNP GRCh38 coordinate for this rsid",
+      "reference_allele": "G",
+      "rsid": "rs1800562",
+      "source": "ClinVar",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "G",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000000010",
+          "alternate": "G",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000006.12:26090950:C:G",
+          "classification": "Conflicting classifications of pathogenicity; other",
+          "title": "NM_000410.4(HFE):c.187C>G (p.His63Asp)"
+        }
+      ],
+      "clinvar_records_considered": 1,
+      "cpic_defined_alleles": {},
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "C": 0.864435,
+        "G": 0.135565
+      },
+      "grch38": {
+        "chromosome": "6",
+        "position": 26090951
+      },
+      "reason": "ClinVar carries exactly one clinically asserted alternate at the dbSNP GRCh38 coordinate for this rsid",
+      "reference_allele": "C",
+      "rsid": "rs1799945",
+      "source": "ClinVar",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "T",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV002429124",
+          "alternate": "G",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000001.11:97450057:C:G",
+          "classification": "Pathogenic/Likely pathogenic",
+          "title": "NM_000110.4(DPYD):c.1905+1G>C"
+        },
+        {
+          "accession": "VCV000000432",
+          "alternate": "T",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000001.11:97450057:C:T",
+          "classification": "drug response",
+          "title": "NM_000110.4(DPYD):c.1905+1G>A"
+        }
+      ],
+      "clinvar_records_considered": 2,
+      "cpic_defined_alleles": {
+        "T": [
+          "DPYD c.1905+1G>A (*2A)"
+        ]
+      },
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "C": 0.995761,
+        "G": 0.0,
+        "T": 0.004239
+      },
+      "grch38": {
+        "chromosome": "1",
+        "position": 97450058
+      },
+      "reason": "CPIC defines DPYD c.1905+1G>A (*2A) by base T at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reference_allele": "C",
+      "rsid": "rs3918290",
+      "source": "CPIC",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "C",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000088975",
+          "alternate": "C",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000001.11:97515786:A:C",
+          "classification": "drug response",
+          "title": "NM_000110.4(DPYD):c.1679T>G (p.Ile560Ser)"
+        }
+      ],
+      "clinvar_records_considered": 1,
+      "cpic_defined_alleles": {
+        "C": [
+          "DPYD c.1679T>G (*13)"
+        ]
+      },
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "A": 0.999317,
+        "C": 0.000683
+      },
+      "grch38": {
+        "chromosome": "1",
+        "position": 97515787
+      },
+      "reason": "CPIC defines DPYD c.1679T>G (*13) by base C at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reference_allele": "A",
+      "rsid": "rs55886062",
+      "source": "CPIC",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "A",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000088974",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000001.11:97082390:T:A",
+          "classification": "drug response",
+          "title": "NM_000110.4(DPYD):c.2846A>T (p.Asp949Val)"
+        }
+      ],
+      "clinvar_records_considered": 1,
+      "cpic_defined_alleles": {
+        "A": [
+          "DPYD c.2846A>T"
+        ]
+      },
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "A": 0.005277,
+        "T": 0.994723
+      },
+      "grch38": {
+        "chromosome": "1",
+        "position": 97082391
+      },
+      "reason": "CPIC defines DPYD c.2846A>T by base A at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reference_allele": "T",
+      "rsid": "rs67376798",
+      "source": "CPIC",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "T",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000100100",
+          "alternate": "T",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000001.11:97573862:C:T",
+          "classification": "drug response",
+          "title": "NM_000110.4(DPYD):c.1236G>A (p.Glu412=)"
+        }
+      ],
+      "clinvar_records_considered": 1,
+      "cpic_defined_alleles": {
+        "T": [
+          "DPYD c.1129-5923C>G, c.1236G>A (HapB3)"
+        ]
+      },
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "C": 0.98799,
+        "T": 0.01201
+      },
+      "grch38": {
+        "chromosome": "1",
+        "position": 97573863
+      },
+      "reason": "CPIC defines DPYD c.1129-5923C>G, c.1236G>A (HapB3) by base T at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reference_allele": "C",
+      "rsid": "rs56038477",
+      "source": "CPIC",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "G",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000012721",
+          "alternate": "G",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000006.12:18143723:C:G",
+          "classification": "drug response",
+          "title": "NM_000367.2(TPMT):c.238G>C (p.Ala80Pro)"
+        }
+      ],
+      "clinvar_records_considered": 1,
+      "cpic_defined_alleles": {
+        "G": [
+          "TPMT*2"
+        ]
+      },
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "C": 0.997848,
+        "G": 0.002152
+      },
+      "grch38": {
+        "chromosome": "6",
+        "position": 18143724
+      },
+      "reason": "CPIC defines TPMT*2 by base G at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reference_allele": "C",
+      "rsid": "rs1800462",
+      "source": "CPIC",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "T",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000037126",
+          "alternate": "T",
+          "asserts_clinical_relevance": false,
+          "canonical_spdi": "NC_000006.12:18138996:C:T",
+          "classification": "Benign/Likely benign; other",
+          "title": "NM_000367.5(TPMT):c.460G>A (p.Ala154Thr)"
+        }
+      ],
+      "clinvar_records_considered": 2,
+      "cpic_defined_alleles": {
+        "T": [
+          "TPMT*3A",
+          "TPMT*3B"
+        ]
+      },
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "C": 0.966496,
+        "T": 0.033504
+      },
+      "grch38": {
+        "chromosome": "6",
+        "position": 18138997
+      },
+      "reason": "CPIC defines TPMT*3A, TPMT*3B by base T at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reference_allele": "C",
+      "rsid": "rs1800460",
+      "source": "CPIC",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "C",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000012725",
+          "alternate": "C",
+          "asserts_clinical_relevance": false,
+          "canonical_spdi": "NC_000006.12:18130686:T:C",
+          "classification": "Likely benign; other",
+          "title": "NM_000367.5(TPMT):c.719A>G (p.Tyr240Cys)"
+        },
+        {
+          "accession": "VCV000012722",
+          "alternate": "C",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000006.12:18130686:T:C",
+          "classification": "drug response",
+          "title": "TPMT*3A"
+        }
+      ],
+      "clinvar_records_considered": 2,
+      "cpic_defined_alleles": {
+        "C": [
+          "TPMT*3A",
+          "TPMT*3C"
+        ],
+        "G": [
+          "TPMT*41"
+        ]
+      },
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "C": 0.043074,
+        "T": 0.956926
+      },
+      "grch38": {
+        "chromosome": "6",
+        "position": 18130687
+      },
+      "reason": "CPIC defines alleles by C, G at this position (C=TPMT*3A, TPMT*3C; G=TPMT*41), and dbSNP observes only C in a population cohort (0.043074)",
+      "reference_allele": "T",
+      "rsid": "rs1142345",
+      "source": "CPIC + dbSNP frequency",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "T",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000225201",
+          "alternate": "T",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000013.11:48045718:C:T",
+          "classification": "drug response",
+          "title": "NM_018283.4(NUDT15):c.415C>T (p.Arg139Cys)"
+        }
+      ],
+      "clinvar_records_considered": 1,
+      "cpic_defined_alleles": {
+        "T": [
+          "NUDT15*3"
+        ]
+      },
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "C": 0.988419,
+        "T": 0.011581
+      },
+      "grch38": {
+        "chromosome": "13",
+        "position": 48045719
+      },
+      "reason": "CPIC defines NUDT15*3 by base T at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reference_allele": "C",
+      "rsid": "rs116855232",
+      "source": "CPIC",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "A",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV001703261",
+          "alternate": "T",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94781858:G:T",
+          "classification": "drug response",
+          "title": "NM_000769.4(CYP2C19):c.681G>T (p.Pro227=)"
+        },
+        {
+          "accession": "VCV000638797",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94781858:G:A",
+          "classification": "drug response",
+          "title": "CYP2C19*2/*2"
+        },
+        {
+          "accession": "VCV000634407",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94781858:G:A",
+          "classification": "drug response",
+          "title": "CYP2C19*2/*23"
+        },
+        {
+          "accession": "VCV000634406",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94781858:G:A",
+          "classification": "drug response",
+          "title": "CYP2C19*2/*14"
+        },
+        {
+          "accession": "VCV000634103",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94781858:G:A",
+          "classification": "drug response",
+          "title": "CYP2C19*2/*29"
+        },
+        {
+          "accession": "VCV000634010",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94781858:G:A",
+          "classification": "drug response",
+          "title": "CYP2C19*2/*8"
+        },
+        {
+          "accession": "VCV000634009",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94781858:G:A",
+          "classification": "drug response",
+          "title": "CYP2C19*2/*7"
+        },
+        {
+          "accession": "VCV000634007",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94781858:G:A",
+          "classification": "drug response",
+          "title": "CYP2C19*2/*24"
+        },
+        {
+          "accession": "VCV000633974",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94781858:G:A",
+          "classification": "drug response",
+          "title": "CYP2C19*2/*9"
+        },
+        {
+          "accession": "VCV000633972",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94781858:G:A",
+          "classification": "drug response",
+          "title": "CYP2C19*2/*25"
+        },
+        {
+          "accession": "VCV000633971",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94781858:G:A",
+          "classification": "drug response",
+          "title": "CYP2C19*2/*19"
+        },
+        {
+          "accession": "VCV000633902",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94781858:G:A",
+          "classification": "drug response",
+          "title": "CYP2C19*2/*17"
+        },
+        {
+          "accession": "VCV000633901",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94781858:G:A",
+          "classification": "drug response",
+          "title": "CYP2C19*2/*15"
+        },
+        {
+          "accession": "VCV000633870",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94781858:G:A",
+          "classification": "drug response",
+          "title": "CYP2C19*2/*6"
+        },
+        {
+          "accession": "VCV000633869",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94781858:G:A",
+          "classification": "drug response",
+          "title": "CYP2C19*2/*5"
+        },
+        {
+          "accession": "VCV000633868",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94781858:G:A",
+          "classification": "drug response",
+          "title": "CYP2C19*2/*4B"
+        },
+        {
+          "accession": "VCV000633867",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94781858:G:A",
+          "classification": "drug response",
+          "title": "CYP2C19*2/*4A"
+        },
+        {
+          "accession": "VCV000633866",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94781858:G:A",
+          "classification": "drug response",
+          "title": "CYP2C19*2/*3"
+        },
+        {
+          "accession": "VCV000633856",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94781858:G:A",
+          "classification": "drug response",
+          "title": "CYP2C19*2"
+        },
+        {
+          "accession": "VCV000016897",
+          "alternate": "A",
+          "asserts_clinical_relevance": false,
+          "canonical_spdi": "NC_000010.11:94781858:G:A",
+          "classification": "Likely benign; other",
+          "title": "NM_000769.4(CYP2C19):c.681G>A (p.Pro227=)"
+        }
+      ],
+      "clinvar_records_considered": 37,
+      "cpic_defined_alleles": {
+        "A": [
+          "CYP2C19*2"
+        ]
+      },
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "A": 0.159125,
+        "G": 0.840875
+      },
+      "grch38": {
+        "chromosome": "10",
+        "position": 94781859
+      },
+      "reason": "CPIC defines CYP2C19*2 by base A at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reference_allele": "G",
+      "rsid": "rs4244285",
+      "source": "CPIC",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "T",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000039357",
+          "alternate": "T",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94761899:C:T",
+          "classification": "drug response",
+          "title": "NM_000769.1(CYP2C19):c.-806C>T"
+        }
+      ],
+      "clinvar_records_considered": 36,
+      "cpic_defined_alleles": {
+        "T": [
+          "CYP2C19*17",
+          "CYP2C19*44",
+          "CYP2C19*45"
+        ]
+      },
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "C": 0.803963,
+        "T": 0.196037
+      },
+      "grch38": {
+        "chromosome": "10",
+        "position": 94761900
+      },
+      "reason": "CPIC defines CYP2C19*17, CYP2C19*44, CYP2C19*45 by base T at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reference_allele": "C",
+      "rsid": "rs12248560",
+      "source": "CPIC",
+      "status": "VERIFICADO"
+    },
+    {
+      "assessed_allele": "A",
+      "clinvar_records_at_this_coordinate": [
+        {
+          "accession": "VCV000016899",
+          "alternate": "A",
+          "asserts_clinical_relevance": true,
+          "canonical_spdi": "NC_000010.11:94780652:G:A",
+          "classification": "drug response",
+          "title": "NM_000769.1(CYP2C19):c.636G>A (p.Trp212Ter)"
+        }
+      ],
+      "clinvar_records_considered": 35,
+      "cpic_defined_alleles": {
+        "A": [
+          "CYP2C19*3"
+        ]
+      },
+      "dbsnp_build": "157",
+      "dbsnp_frequencies": {
+        "A": 0.007217,
+        "G": 0.992783
+      },
+      "grch38": {
+        "chromosome": "10",
+        "position": 94780653
+      },
+      "reason": "CPIC defines CYP2C19*3 by base A at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reference_allele": "G",
+      "rsid": "rs4986893",
+      "source": "CPIC",
+      "status": "VERIFICADO"
+    }
+  ],
+  "schema": "genoma-assessed-allele-curation-v1",
+  "sources": [
+    "NCBI dbSNP RefSNP API (api.ncbi.nlm.nih.gov/variation/v0/refsnp) — reference base",
+    "NCBI ClinVar via E-utilities (eutils.ncbi.nlm.nih.gov, db=clinvar) — asserted alternate",
+    "CPIC allele definitions (config/pgx_allele_definitions.json) — pharmacogenomic targets"
+  ],
+  "targets_curated": 29
+}
