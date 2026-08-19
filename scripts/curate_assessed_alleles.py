@@ -40,6 +40,12 @@ if str(ROOT) not in sys.path:
 from scripts.verify_provenance_markers import fetch_refsnp, frequency_alleles, placements
 
 EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+GWAS_CATALOG = "https://www.ebi.ac.uk/gwas/rest/api"
+
+#: How many supporting PMIDs to record per target. The durable reference is the ClinVar
+#: accession or the CPIC allele name; the PMIDs are corroboration, and a variant like
+#: rs6025 links 77 of them.
+MAX_CITATIONS = 10
 DEFAULT_TARGETS = ROOT / "config/partial_genome_annotation_targets.json"
 DEFAULT_EVIDENCE = ROOT / "docs/evidence/ASSESSED_ALLELES_CLINVAR.json"
 SCHEMA = "genoma-assessed-allele-curation-v1"
@@ -94,6 +100,65 @@ def clinvar_records(rsid: str) -> list[dict[str, Any]]:
     return [result[uid] for uid in result.get("uids", []) if uid in result]
 
 
+def clinvar_citations(uids: list[str]) -> list[str]:
+    """PubMed ids ClinVar links to these records, newest first."""
+    if not uids:
+        return []
+    try:
+        linked = _get(
+            f"{EUTILS}/elink.fcgi?dbfrom=clinvar&db=pubmed&id={','.join(uids)}&retmode=json"
+        )
+    except CurationError:
+        return []
+    pmids: list[str] = []
+    for linkset in linked.get("linksets", []):
+        for db in linkset.get("linksetdbs", []):
+            if db.get("linkname") == "clinvar_pubmed":
+                pmids.extend(str(x) for x in db.get("links", []))
+    # elink returns them newest first; de-duplicate while keeping that order.
+    seen: set[str] = set()
+    ordered = [p for p in pmids if not (p in seen or seen.add(p))]
+    return ordered[:MAX_CITATIONS]
+
+
+def gwas_risk_alleles(rsid: str) -> dict[str, Any]:
+    """Risk alleles the GWAS Catalog reports for this variant, with study p-values.
+
+    An association SNP has no ClinVar assertion, so without this it could never be
+    assessed. The catalogue is also the source that shows when the literature *disagrees*:
+    rs4307059 is reported with risk allele T in one study and C in two others, which is a
+    documented contradiction rather than a gap, and far more useful than silence.
+    """
+    try:
+        payload = _get(f"{GWAS_CATALOG}/singleNucleotidePolymorphisms/{rsid}/associations")
+    except CurationError:
+        return {"available": False, "risk_alleles": {}, "studies": 0}
+
+    associations = (payload.get("_embedded") or {}).get("associations", [])
+    by_allele: dict[str, list[dict[str, Any]]] = {}
+    for association in associations:
+        for locus in association.get("loci", []):
+            for risk in locus.get("strongestRiskAlleles", []):
+                name = str(risk.get("riskAlleleName") or "")
+                if not name.lower().startswith(rsid.lower() + "-"):
+                    continue
+                allele = name.split("-", 1)[1].strip().upper()
+                if allele not in BASES:
+                    continue
+                by_allele.setdefault(allele, []).append(
+                    {
+                        "p_value": f"{association.get('pvalueMantissa')}e{association.get('pvalueExponent')}",
+                        "risk_frequency": association.get("riskFrequency"),
+                    }
+                )
+    return {
+        "available": True,
+        "risk_alleles": {a: len(v) for a, v in sorted(by_allele.items())},
+        "evidence": {a: v[:3] for a, v in sorted(by_allele.items())},
+        "studies": len(associations),
+    }
+
+
 def _classification(record: dict[str, Any]) -> str:
     for key in ("germline_classification", "clinical_significance", "somatic_classification"):
         block = record.get(key)
@@ -112,6 +177,24 @@ def _spdi(record: dict[str, Any]) -> tuple[str, int, str, str] | None:
     if not position.isdigit():
         return None
     return sequence, int(position), deleted.upper(), inserted.upper()
+
+
+def registry_source(rsid: str, registry: dict[str, Any] | None) -> str:
+    """Which source actually defined this rsid in the PGx registry.
+
+    The registry holds CPIC data for most genes and a ClinVar fallback for the ones CPIC
+    does not publish (BCHE). Labelling everything "CPIC" because it came out of that file
+    would misattribute the provenance of exactly the entries whose provenance is unusual.
+    """
+    for spec in (registry or {}).get("genes", {}).values():
+        for definition in (spec.get("alleles") or {}).values():
+            if any(str(x.get("rsid", "")).lower() == rsid for x in definition.get("defining", [])):
+                # `variant_source` is set only by the ClinVar fallback in
+                # build_pgx_registry.py; a CPIC-derived gene leaves it absent.
+                if str(spec.get("variant_source") or "").strip():
+                    return "ClinVar (fallback)"
+                return "CPIC"
+    return "CPIC"
 
 
 def cpic_variant_alleles(rsid: str, registry: dict[str, Any] | None) -> dict[str, list[str]]:
@@ -153,6 +236,7 @@ def curate_target(rsid: str, pgx_registry: dict[str, Any] | None = None) -> dict
     reference = grch38["reference_allele"]
 
     matched: list[dict[str, Any]] = []
+    matched_uids: list[str] = []
     considered = 0
     for record in clinvar_records(rsid):
         considered += 1
@@ -170,6 +254,8 @@ def curate_target(rsid: str, pgx_registry: dict[str, Any] | None = None) -> dict
         asserts = any(term in lowered for term in ASSERTING) and not all(
             term in lowered for term in NON_ASSERTING
         )
+        if record.get("uid"):
+            matched_uids.append(str(record["uid"]))
         matched.append(
             {
                 "alternate": inserted,
@@ -195,16 +281,32 @@ def curate_target(rsid: str, pgx_registry: dict[str, Any] | None = None) -> dict
     cpic = cpic_variant_alleles(rsid, pgx_registry)
     base["cpic_defined_alleles"] = cpic
 
+    # References, so a reader can go to the primary literature rather than trusting this
+    # file. CPIC ships PMIDs per allele; ClinVar links its own; both are recorded.
+    cpic_pmids: list[str] = []
+    for gene_spec in (pgx_registry or {}).get("genes", {}).values():
+        for allele, definition in (gene_spec.get("alleles") or {}).items():
+            if any(str(x.get("rsid", "")).lower() == rsid for x in definition.get("defining", [])):
+                cpic_pmids.extend(str(c) for c in (definition.get("citations") or []))
+    time.sleep(REQUEST_INTERVAL_SECONDS)
+    base["references"] = {
+        "clinvar_accessions": sorted({str(m["accession"]) for m in matched if m.get("accession")}),
+        "clinvar_pubmed": clinvar_citations(matched_uids),
+        "cpic_pubmed": sorted(set(cpic_pmids))[:MAX_CITATIONS],
+    }
+
     if len(cpic) == 1:
         allele, names = next(iter(cpic.items()))
+        source = registry_source(rsid, pgx_registry)
         base.update(
             {
                 "assessed_allele": allele,
                 "status": "VERIFICADO",
-                "source": "CPIC",
+                "source": source,
                 "reason": (
-                    f"CPIC defines {', '.join(sorted(names))} by base {allele} at this position; "
-                    "a pharmacogenomic target's assessed allele is the one its guideline names"
+                    f"{source} defines {', '.join(sorted(names))} by base {allele} at this "
+                    "position; a pharmacogenomic target's assessed allele is the one its "
+                    "source names"
                 ),
             }
         )
@@ -223,10 +325,10 @@ def curate_target(rsid: str, pgx_registry: dict[str, Any] | None = None) -> dict
                 {
                     "assessed_allele": observed[0],
                     "status": "VERIFICADO",
-                    "source": "CPIC + dbSNP frequency",
+                    "source": f"{registry_source(rsid, pgx_registry)} + dbSNP frequency",
                     "reason": (
-                        f"CPIC defines alleles by {', '.join(sorted(cpic))} at this position "
-                        f"({detail}), "
+                        f"{registry_source(rsid, pgx_registry)} defines alleles by "
+                        f"{', '.join(sorted(cpic))} at this position ({detail}), "
                         f"and dbSNP observes only {observed[0]} in a population cohort "
                         f"({frequencies.get(observed[0])})"
                     ),
@@ -237,9 +339,10 @@ def curate_target(rsid: str, pgx_registry: dict[str, Any] | None = None) -> dict
             {
                 "assessed_allele": None,
                 "status": "NÃO DISPONÍVEL",
-                "source": "CPIC",
+                "source": registry_source(rsid, pgx_registry),
                 "reason": (
-                    f"CPIC defines different alleles by different bases here ({', '.join(sorted(cpic))}) "
+                    f"{registry_source(rsid, pgx_registry)} defines different alleles by "
+                    f"different bases here ({', '.join(sorted(cpic))}) "
                     f"and dbSNP observes {len(observed)} of them in a cohort; the locus "
                     "interrogates more than one question"
                 ),
@@ -266,6 +369,42 @@ def curate_target(rsid: str, pgx_registry: dict[str, Any] | None = None) -> dict
             }
         )
         return base
+
+    if not asserting:
+        # An association SNP carries no ClinVar assertion; the GWAS Catalogue is its source.
+        gwas = gwas_risk_alleles(rsid)
+        base["gwas_catalog"] = gwas
+        risk = gwas.get("risk_alleles") or {}
+        if len(risk) == 1:
+            allele = next(iter(risk))
+            base.update(
+                {
+                    "assessed_allele": allele,
+                    "status": "VERIFICADO",
+                    "source": "GWAS Catalog",
+                    "reason": (
+                        f"the GWAS Catalogue reports a single risk allele for this variant "
+                        f"({allele}, across {risk[allele]} association record(s)); it carries no "
+                        "ClinVar clinical assertion, which is expected for an association SNP"
+                    ),
+                }
+            )
+            return base
+        if len(risk) > 1:
+            base.update(
+                {
+                    "assessed_allele": None,
+                    "status": "NÃO DISPONÍVEL",
+                    "source": "GWAS Catalog",
+                    "reason": (
+                        "published studies disagree on the risk allele — the GWAS Catalogue "
+                        f"reports {', '.join(f'{a} ({n} record(s))' for a, n in sorted(risk.items()))} "
+                        "for this variant. This is a documented contradiction in the literature, "
+                        "not a gap in the data, and choosing a side would manufacture agreement"
+                    ),
+                }
+            )
+            return base
 
     if len(asserting) == 1:
         base.update(
@@ -321,6 +460,8 @@ def curate(targets_path: Path, pgx_registry_path: Path | None = None) -> dict[st
             "NCBI dbSNP RefSNP API (api.ncbi.nlm.nih.gov/variation/v0/refsnp) — reference base",
             "NCBI ClinVar via E-utilities (eutils.ncbi.nlm.nih.gov, db=clinvar) — asserted alternate",
             "CPIC allele definitions (config/pgx_allele_definitions.json) — pharmacogenomic targets",
+            "EBI GWAS Catalog (www.ebi.ac.uk/gwas/rest/api) — risk allele for association SNPs",
+            "PubMed via NCBI elink — supporting citations per target",
         ],
         "method": (
             "dbSNP supplies the plus-strand reference base from the SPDI deleted_sequence; "
@@ -357,6 +498,7 @@ def main() -> int:
                 target["assessed_allele"] = record["assessed_allele"]
                 target["assessed_allele_source"] = record.get("source", "ClinVar")
                 target["assessed_allele_evidence"] = out.name
+                target["references"] = record.get("references", {})
             else:
                 target.pop("assessed_allele", None)
                 target["assessed_allele_status"] = record["status"] if record else "NÃO DISPONÍVEL"

@@ -60,15 +60,42 @@ class AssessedAlleleEvidenceTest(unittest.TestCase):
                     self.assertNotEqual(record["assessed_allele"], record["reference_allele"])
                     self.assertIn(record["assessed_allele"], set("ACGT"))
 
+    #: Every provenance label a verdict may carry. `ClinVar (fallback)` covers genes CPIC
+    #: does not publish — BCHE — where the definitions live in the PGx registry but did not
+    #: come from CPIC. Labelling those "CPIC" because they came out of that file
+    #: misattributed exactly the entries whose provenance is unusual.
+    SOURCES = {
+        "CPIC",
+        "ClinVar",
+        "ClinVar (fallback)",
+        "GWAS Catalog",
+        "CPIC + dbSNP frequency",
+        "ClinVar + dbSNP frequency",
+        "ClinVar (fallback) + dbSNP frequency",
+    }
+
     def test_every_verdict_states_which_source_decided_it(self):
         for record in self.evidence["results"]:
             with self.subTest(rsid=record["rsid"]):
                 self.assertTrue(record["reason"])
                 if record["status"] == "VERIFICADO":
-                    self.assertIn(
-                        record["source"],
-                        {"CPIC", "ClinVar", "CPIC + dbSNP frequency", "ClinVar + dbSNP frequency"},
-                    )
+                    self.assertIn(record["source"], self.SOURCES)
+
+    def test_a_clinvar_fallback_gene_is_not_labelled_cpic(self):
+        """BCHE's definitions came from ClinVar; the registry file is not the provenance."""
+        for rsid in ("rs1799807", "rs1803274"):
+            with self.subTest(rsid=rsid):
+                self.assertEqual(self.by_rsid[rsid]["source"], "ClinVar (fallback)")
+        target = next(t for t in self.targets["targets"] if t["rsid"] == "rs1799807")
+        self.assertEqual(target["assessed_allele_source"], "ClinVar (fallback)")
+
+    def test_a_contradiction_in_the_literature_is_recorded_as_such(self):
+        """rs4307059: the GWAS Catalogue reports opposite risk alleles across studies."""
+        record = self.by_rsid["rs4307059"]
+        self.assertEqual(record["status"], "NÃO DISPONÍVEL")
+        self.assertEqual(record["source"], "GWAS Catalog")
+        self.assertIn("disagree", record["reason"])
+        self.assertGreater(len(record["gwas_catalog"]["risk_alleles"]), 1)
 
     def test_a_target_without_a_source_assertion_stays_unavailable(self):
         """rs4307059 is a GWAS association with no ClinVar assertion; absence is not claimable."""
@@ -136,6 +163,29 @@ class DecisionRuleTest(unittest.TestCase):
 
         self.assertEqual(cpic_variant_alleles("rs1142345", None), {})
 
+    def test_provenance_is_read_from_the_gene_not_the_file_it_lives_in(self):
+        """The PGx registry holds both CPIC data and a ClinVar fallback; only the gene knows."""
+        from scripts.curate_assessed_alleles import registry_source
+
+        cpic = {"genes": {"TPMT": {"alleles": {"TPMT*3C": {"defining": [{"rsid": "rs1142345", "allele": "C"}]}}}}}
+        fallback = {
+            "genes": {
+                "BCHE": {
+                    "variant_source": "NCBI ClinVar via E-utilities",
+                    "alleles": {"BCHE x": {"defining": [{"rsid": "rs1799807", "allele": "C"}]}},
+                }
+            }
+        }
+        self.assertEqual(registry_source("rs1142345", cpic), "CPIC")
+        self.assertEqual(registry_source("rs1799807", fallback), "ClinVar (fallback)")
+        self.assertEqual(registry_source("rs999999", cpic), "CPIC")
+        self.assertEqual(registry_source("rs1", None), "CPIC")
+
+    def test_the_shipped_registry_marks_its_fallback_gene(self):
+        registry = json.loads(PGX_PATH.read_text(encoding="utf-8"))
+        self.assertTrue(registry["genes"]["BCHE"].get("variant_source"))
+        self.assertNotIn("variant_source", registry["genes"]["CYP2C19"])
+
     def test_a_benign_classification_is_not_a_clinical_assertion(self):
         from scripts.curate_assessed_alleles import ASSERTING, NON_ASSERTING
 
@@ -185,6 +235,68 @@ class BcheFallbackTest(unittest.TestCase):
     def test_the_anaesthesia_note_survives_the_fallback(self):
         self.assertTrue(self.bche["anesthesia_relevant"])
         self.assertIn("succinilcolina", self.bche["anesthesia_note"])
+
+
+class ReferencesTest(unittest.TestCase):
+    """A curated allele must be traceable to primary literature, not just to this file."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.targets = json.loads(TARGETS_PATH.read_text(encoding="utf-8"))
+        cls.evidence = json.loads(EVIDENCE_PATH.read_text(encoding="utf-8"))
+        cls.by_rsid = {r["rsid"]: r for r in cls.evidence["results"]}
+
+    def test_the_curation_cites_every_source_it_consulted(self):
+        joined = " ".join(self.evidence["sources"])
+        for source in ("dbSNP", "ClinVar", "CPIC", "GWAS Catalog", "PubMed"):
+            self.assertIn(source, joined)
+
+    def test_every_assessed_target_carries_references(self):
+        for target in self.targets["targets"]:
+            if "assessed_allele" not in target:
+                continue
+            with self.subTest(rsid=target["rsid"]):
+                references = target["references"]
+                self.assertTrue(
+                    references["clinvar_accessions"]
+                    or references["clinvar_pubmed"]
+                    or references["cpic_pubmed"],
+                    "an assessed allele with no reference at all is untraceable",
+                )
+
+    def test_clinvar_accessions_are_well_formed(self):
+        for record in self.evidence["results"]:
+            for accession in record.get("references", {}).get("clinvar_accessions", []):
+                with self.subTest(rsid=record["rsid"], accession=accession):
+                    self.assertRegex(accession, r"^VCV\d+$")
+
+    def test_pubmed_ids_are_numeric_and_bounded(self):
+        from scripts.curate_assessed_alleles import MAX_CITATIONS
+
+        for record in self.evidence["results"]:
+            references = record.get("references", {})
+            for key in ("clinvar_pubmed", "cpic_pubmed"):
+                pmids = references.get(key, [])
+                with self.subTest(rsid=record["rsid"], key=key):
+                    self.assertLessEqual(len(pmids), MAX_CITATIONS)
+                    for pmid in pmids:
+                        self.assertRegex(pmid, r"^\d+$")
+
+    def test_references_are_deduplicated(self):
+        for record in self.evidence["results"]:
+            references = record.get("references", {})
+            for key, values in references.items():
+                with self.subTest(rsid=record["rsid"], key=key):
+                    self.assertEqual(len(values), len(set(values)))
+
+    def test_the_corpus_is_substantial_enough_to_be_worth_citing(self):
+        """A reference block that collapsed to nothing would pass every test above."""
+        total = sum(
+            len(t.get("references", {}).get("clinvar_pubmed", []))
+            + len(t.get("references", {}).get("cpic_pubmed", []))
+            for t in self.targets["targets"]
+        )
+        self.assertGreater(total, 100, "the citation harvest produced almost nothing")
 
 
 if __name__ == "__main__":

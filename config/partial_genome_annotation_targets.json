@@ -23,8 +23,26 @@
         }
       },
       "assessed_allele": "C",
-      "assessed_allele_source": "ClinVar",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_source": "ClinVar (fallback)",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000013215"
+        ],
+        "clinvar_pubmed": [
+          "31702488",
+          "31022120",
+          "30804560",
+          "30600548",
+          "30487145",
+          "28492532",
+          "27551784",
+          "27031121",
+          "26439437",
+          "25741868"
+        ],
+        "cpic_pubmed": []
+      }
     },
     {
       "rsid": "rs1803274",
@@ -45,8 +63,26 @@
         }
       },
       "assessed_allele": "T",
-      "assessed_allele_source": "ClinVar",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_source": "ClinVar (fallback)",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000013220"
+        ],
+        "clinvar_pubmed": [
+          "33061533",
+          "30600548",
+          "28492532",
+          "25741868",
+          "25448037",
+          "23400986",
+          "10699053",
+          "10190327",
+          "9302273",
+          "6716425"
+        ],
+        "cpic_pubmed": []
+      }
     },
     {
       "rsid": "rs17580",
@@ -61,7 +97,28 @@
       },
       "assessed_allele": "A",
       "assessed_allele_source": "ClinVar",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000017969",
+          "VCV000440500",
+          "VCV000440501",
+          "VCV000626305"
+        ],
+        "clinvar_pubmed": [
+          "35346640",
+          "33450625",
+          "32404922",
+          "32181528",
+          "32014855",
+          "31980526",
+          "31447099",
+          "31275557",
+          "31022120",
+          "30585791"
+        ],
+        "cpic_pubmed": []
+      }
     },
     {
       "rsid": "rs28929474",
@@ -76,7 +133,27 @@
       },
       "assessed_allele": "T",
       "assessed_allele_source": "ClinVar + dbSNP frequency",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000017967",
+          "VCV000626304",
+          "VCV001492979"
+        ],
+        "clinvar_pubmed": [
+          "35263815",
+          "34408829",
+          "34408828",
+          "33726816",
+          "33144682",
+          "33087346",
+          "32699024",
+          "32087139",
+          "31980526",
+          "31564432"
+        ],
+        "cpic_pubmed": []
+      }
     },
     {
       "rsid": "rs738409",
@@ -91,7 +168,23 @@
       },
       "assessed_allele": "G",
       "assessed_allele_source": "ClinVar",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000341932"
+        ],
+        "clinvar_pubmed": [
+          "38054408",
+          "29158695",
+          "28073161",
+          "26200108",
+          "25741868",
+          "24917523",
+          "24033266",
+          "21381068"
+        ],
+        "cpic_pubmed": []
+      }
     },
     {
       "rsid": "rs1799853",
@@ -113,7 +206,37 @@
       },
       "assessed_allele": "T",
       "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000008409",
+          "VCV000177709"
+        ],
+        "clinvar_pubmed": [
+          "32779747",
+          "32189324",
+          "30742401",
+          "30742400",
+          "30742399",
+          "28740425",
+          "28198005",
+          "26186657",
+          "25775139",
+          "25712887"
+        ],
+        "cpic_pubmed": [
+          "10413320",
+          "12742136",
+          "1563752",
+          "15637526",
+          "19082874",
+          "20150829",
+          "2145143",
+          "23752738",
+          "24322786",
+          "25775139"
+        ]
+      }
     },
     {
       "rsid": "rs1057910",
@@ -135,7 +258,37 @@
       },
       "assessed_allele": "C",
       "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000008408",
+          "VCV000163021"
+        ],
+        "clinvar_pubmed": [
+          "32779747",
+          "32189324",
+          "30742401",
+          "30742400",
+          "30742399",
+          "28740425",
+          "28198005",
+          "26186657",
+          "25775139",
+          "25712887"
+        ],
+        "cpic_pubmed": [
+          "10413320",
+          "12742136",
+          "15637526",
+          "16099926",
+          "19082874",
+          "20150829",
+          "23752738",
+          "25775139",
+          "27179628",
+          "29283396"
+        ]
+      }
     },
     {
       "rsid": "rs9923231",
@@ -157,7 +310,25 @@
       },
       "assessed_allele": "T",
       "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000002211"
+        ],
+        "clinvar_pubmed": [
+          "35645034",
+          "31902949",
+          "31720756",
+          "31395958",
+          "31114289",
+          "30247353",
+          "29781049",
+          "29577257",
+          "29568565",
+          "29432897"
+        ],
+        "cpic_pubmed": []
+      }
     },
     {
       "rsid": "rs4149056",
@@ -179,7 +350,33 @@
       },
       "assessed_allele": "C",
       "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000037346"
+        ],
+        "clinvar_pubmed": [
+          "35034348",
+          "34114646",
+          "33805706",
+          "32453264",
+          "32361904",
+          "32128760",
+          "31981411",
+          "31967516",
+          "31857620",
+          "31594719"
+        ],
+        "cpic_pubmed": [
+          "11477075",
+          "15970799",
+          "21245207",
+          "25350695",
+          "31220337",
+          "32961594",
+          "33658230"
+        ]
+      }
     },
     {
       "rsid": "rs776746",
@@ -201,7 +398,24 @@
       },
       "assessed_allele": "C",
       "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000005066"
+        ],
+        "clinvar_pubmed": [
+          "25801146",
+          "21412232",
+          "15492926",
+          "12754175",
+          "12065767",
+          "11740341",
+          "11279519"
+        ],
+        "cpic_pubmed": [
+          "15179407"
+        ]
+      }
     },
     {
       "rsid": "rs1799930",
@@ -223,7 +437,28 @@
       },
       "assessed_allele": "A",
       "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000000722"
+        ],
+        "clinvar_pubmed": [
+          "18043717",
+          "2068113"
+        ],
+        "cpic_pubmed": [
+          "10744128",
+          "10762005",
+          "11214777",
+          "11337936",
+          "11773863",
+          "1451720",
+          "15032315",
+          "15110095",
+          "15558239",
+          "15564878"
+        ]
+      }
     },
     {
       "rsid": "rs429358",
@@ -238,7 +473,29 @@
       },
       "assessed_allele": "C",
       "assessed_allele_source": "ClinVar",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000017864",
+          "VCV000440870",
+          "VCV000441267",
+          "VCV000441268",
+          "VCV000441269"
+        ],
+        "clinvar_pubmed": [
+          "37128917",
+          "36528961",
+          "35639372",
+          "35628605",
+          "35460704",
+          "35339733",
+          "35120450",
+          "32808727",
+          "32725777",
+          "32376954"
+        ],
+        "cpic_pubmed": []
+      }
     },
     {
       "rsid": "rs7412",
@@ -253,7 +510,27 @@
       },
       "assessed_allele": "T",
       "assessed_allele_source": "ClinVar",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000017848",
+          "VCV000441262",
+          "VCV000441265"
+        ],
+        "clinvar_pubmed": [
+          "33537346",
+          "32808727",
+          "32725777",
+          "31538826",
+          "31186542",
+          "28391895",
+          "28198005",
+          "26186657",
+          "25741868",
+          "24829003"
+        ],
+        "cpic_pubmed": []
+      }
     },
     {
       "rsid": "rs4307059",
@@ -267,7 +544,7 @@
         }
       },
       "assessed_allele_status": "NÃO DISPONÍVEL",
-      "assessed_allele_reason": "no ClinVar record at this coordinate carries a pathogenic, risk-factor, drug-response or association assertion; the allele being interrogated is therefore not established"
+      "assessed_allele_reason": "published studies disagree on the risk allele — the GWAS Catalogue reports C (2 record(s)), T (1 record(s)) for this variant. This is a documented contradiction in the literature, not a gap in the data, and choosing a side would manufacture agreement"
     },
     {
       "rsid": "rs6025",
@@ -282,7 +559,25 @@
       },
       "assessed_allele": "T",
       "assessed_allele_source": "ClinVar",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000000642"
+        ],
+        "clinvar_pubmed": [
+          "35645034",
+          "34355501",
+          "33674767",
+          "31022120",
+          "30297698",
+          "28750087",
+          "28492532",
+          "27797270",
+          "26990548",
+          "26251307"
+        ],
+        "cpic_pubmed": []
+      }
     },
     {
       "rsid": "rs1799963",
@@ -297,7 +592,25 @@
       },
       "assessed_allele": "A",
       "assessed_allele_source": "ClinVar",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000013310"
+        ],
+        "clinvar_pubmed": [
+          "40616445",
+          "39167180",
+          "38498041",
+          "35645034",
+          "34355501",
+          "34110897",
+          "31022120",
+          "30297698",
+          "30247353",
+          "28707429"
+        ],
+        "cpic_pubmed": []
+      }
     },
     {
       "rsid": "rs1800562",
@@ -312,7 +625,25 @@
       },
       "assessed_allele": "A",
       "assessed_allele_source": "ClinVar",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000000009"
+        ],
+        "clinvar_pubmed": [
+          "37260121",
+          "35802134",
+          "34012068",
+          "32725777",
+          "32153640",
+          "31980526",
+          "31436889",
+          "31335359",
+          "31061747",
+          "31022120"
+        ],
+        "cpic_pubmed": []
+      }
     },
     {
       "rsid": "rs1799945",
@@ -327,7 +658,25 @@
       },
       "assessed_allele": "G",
       "assessed_allele_source": "ClinVar",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000000010"
+        ],
+        "clinvar_pubmed": [
+          "35802134",
+          "34012068",
+          "32725777",
+          "32404922",
+          "32014855",
+          "31980526",
+          "31335359",
+          "31220083",
+          "30311383",
+          "30291871"
+        ],
+        "cpic_pubmed": []
+      }
     },
     {
       "rsid": "rs3918290",
@@ -349,7 +698,28 @@
       },
       "assessed_allele": "T",
       "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000000432",
+          "VCV002429124"
+        ],
+        "clinvar_pubmed": [
+          "38084968",
+          "31745289",
+          "31382864",
+          "31275557",
+          "31022120",
+          "30898145",
+          "30775324",
+          "30723313",
+          "30485432",
+          "30348537"
+        ],
+        "cpic_pubmed": [
+          "23328581"
+        ]
+      }
     },
     {
       "rsid": "rs55886062",
@@ -371,7 +741,27 @@
       },
       "assessed_allele": "C",
       "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000088975"
+        ],
+        "clinvar_pubmed": [
+          "33620159",
+          "33232506",
+          "32595208",
+          "31745289",
+          "31022120",
+          "30858516",
+          "30485432",
+          "30348537",
+          "29152729",
+          "28427087"
+        ],
+        "cpic_pubmed": [
+          "23328581"
+        ]
+      }
     },
     {
       "rsid": "rs67376798",
@@ -393,7 +783,27 @@
       },
       "assessed_allele": "A",
       "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000088974"
+        ],
+        "clinvar_pubmed": [
+          "33232506",
+          "32595208",
+          "31745289",
+          "31486738",
+          "31124962",
+          "31022120",
+          "30858516",
+          "30723313",
+          "30510603",
+          "30485432"
+        ],
+        "cpic_pubmed": [
+          "24648345"
+        ]
+      }
     },
     {
       "rsid": "rs56038477",
@@ -415,7 +825,27 @@
       },
       "assessed_allele": "T",
       "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000100100"
+        ],
+        "clinvar_pubmed": [
+          "33410339",
+          "30485432",
+          "29236957",
+          "29152729",
+          "29045550",
+          "28929491",
+          "28481884",
+          "28112993",
+          "27995989",
+          "27454530"
+        ],
+        "cpic_pubmed": [
+          "28295243"
+        ]
+      }
     },
     {
       "rsid": "rs1800462",
@@ -437,7 +867,33 @@
       },
       "assessed_allele": "G",
       "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000012721"
+        ],
+        "clinvar_pubmed": [
+          "30447069",
+          "23422873",
+          "9931345",
+          "9177237",
+          "8644731",
+          "7862671",
+          "1960624"
+        ],
+        "cpic_pubmed": [
+          "10580024",
+          "11372592",
+          "12880540",
+          "14508387",
+          "14656901",
+          "14985890",
+          "15226673",
+          "16220112",
+          "18021342",
+          "18708949"
+        ]
+      }
     },
     {
       "rsid": "rs1800460",
@@ -459,7 +915,31 @@
       },
       "assessed_allele": "T",
       "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000037126"
+        ],
+        "clinvar_pubmed": [
+          "30447069",
+          "25741868",
+          "23422873",
+          "9931345",
+          "8561894"
+        ],
+        "cpic_pubmed": [
+          "10580024",
+          "11304783",
+          "12217596",
+          "15226673",
+          "15967990",
+          "16220112",
+          "16691038",
+          "18708949",
+          "19057372",
+          "23252716"
+        ]
+      }
     },
     {
       "rsid": "rs1142345",
@@ -483,7 +963,37 @@
       "assessed_allele_reason": "CPIC defines different alleles by different bases here (C, G); the locus interrogates more than one question",
       "assessed_allele": "C",
       "assessed_allele_source": "CPIC + dbSNP frequency",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000012722",
+          "VCV000012725"
+        ],
+        "clinvar_pubmed": [
+          "30447069",
+          "25741868",
+          "23422873",
+          "16476125",
+          "15967990",
+          "15819814",
+          "10751626",
+          "10208641",
+          "9931346",
+          "9931345"
+        ],
+        "cpic_pubmed": [
+          "10580024",
+          "10997970",
+          "11304783",
+          "11372592",
+          "14508387",
+          "14656901",
+          "14985890",
+          "15167635",
+          "15226673",
+          "15255798"
+        ]
+      }
     },
     {
       "rsid": "rs116855232",
@@ -505,7 +1015,36 @@
       },
       "assessed_allele": "T",
       "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000225201"
+        ],
+        "clinvar_pubmed": [
+          "31024313",
+          "30728528",
+          "30101994",
+          "30048756",
+          "30035323",
+          "29967377",
+          "29923122",
+          "29867468",
+          "29720126",
+          "29704867"
+        ],
+        "cpic_pubmed": [
+          "26033531",
+          "26878724",
+          "27416873",
+          "27530327",
+          "27577869",
+          "27604507",
+          "28088792",
+          "28445187",
+          "28659275",
+          "28903549"
+        ]
+      }
     },
     {
       "rsid": "rs4244285",
@@ -527,7 +1066,47 @@
       },
       "assessed_allele": "A",
       "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000016897",
+          "VCV000633856",
+          "VCV000633866",
+          "VCV000633867",
+          "VCV000633868",
+          "VCV000633869",
+          "VCV000633870",
+          "VCV000633901",
+          "VCV000633902",
+          "VCV000633971",
+          "VCV000633972",
+          "VCV000633974",
+          "VCV000634007",
+          "VCV000634009",
+          "VCV000634010",
+          "VCV000634103",
+          "VCV000634406",
+          "VCV000634407",
+          "VCV000638797",
+          "VCV001703261"
+        ],
+        "clinvar_pubmed": [
+          "35034351",
+          "27981572",
+          "27441996",
+          "27026020",
+          "25974703",
+          "25741868",
+          "24946154",
+          "23698643",
+          "21716271",
+          "21412232"
+        ],
+        "cpic_pubmed": [
+          "22027650",
+          "8195181"
+        ]
+      }
     },
     {
       "rsid": "rs12248560",
@@ -549,7 +1128,32 @@
       },
       "assessed_allele": "T",
       "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000039357"
+        ],
+        "clinvar_pubmed": [
+          "35034351",
+          "27026020",
+          "24946154",
+          "23698643",
+          "21716271",
+          "21412232",
+          "21270786",
+          "20633831",
+          "20585015"
+        ],
+        "cpic_pubmed": [
+          "16413245",
+          "17625515",
+          "20083681",
+          "29136336",
+          "29325448",
+          "31649299",
+          "32857933"
+        ]
+      }
     },
     {
       "rsid": "rs4986893",
@@ -571,15 +1175,39 @@
       },
       "assessed_allele": "A",
       "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000016899"
+        ],
+        "clinvar_pubmed": [
+          "35034351",
+          "27441996",
+          "27026020",
+          "24946154",
+          "23698643",
+          "21716271",
+          "21412232",
+          "21270786",
+          "20633831",
+          "20585015"
+        ],
+        "cpic_pubmed": [
+          "22027650",
+          "7969038",
+          "9103550"
+        ]
+      }
     }
   ],
   "assessed_allele_curation": {
-    "curated_at": "2026-08-19T10:27:18.503052Z",
+    "curated_at": "2026-08-19T13:35:30.461122Z",
     "sources": [
       "NCBI dbSNP RefSNP API (api.ncbi.nlm.nih.gov/variation/v0/refsnp) — reference base",
       "NCBI ClinVar via E-utilities (eutils.ncbi.nlm.nih.gov, db=clinvar) — asserted alternate",
-      "CPIC allele definitions (config/pgx_allele_definitions.json) — pharmacogenomic targets"
+      "CPIC allele definitions (config/pgx_allele_definitions.json) — pharmacogenomic targets",
+      "EBI GWAS Catalog (www.ebi.ac.uk/gwas/rest/api) — risk allele for association SNPs",
+      "PubMed via NCBI elink — supporting citations per target"
     ],
     "evidence": "docs/evidence/ASSESSED_ALLELES_CLINVAR.json",
     "established": 28,

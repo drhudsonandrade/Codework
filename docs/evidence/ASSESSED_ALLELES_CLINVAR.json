@@ -1,6 +1,6 @@
 {
   "assessed_alleles_established": 28,
-  "curated_at": "2026-08-19T10:27:18.503052Z",
+  "curated_at": "2026-08-19T13:35:30.461122Z",
   "method": "dbSNP supplies the plus-strand reference base from the SPDI deleted_sequence; ClinVar supplies the alternate from canonical_spdi. The two are joined by coordinate, never by text, because an rsid text search in ClinVar also returns unrelated variants. A target with no asserted alternate, or with more than one, is left without an assessed allele and the reason is recorded.",
   "results": [
     {
@@ -16,7 +16,11 @@
         }
       ],
       "clinvar_records_considered": 1,
-      "cpic_defined_alleles": {},
+      "cpic_defined_alleles": {
+        "C": [
+          "BCHE NM_000055.2(BCHE):c.293A>G (p.Asp98Gly)"
+        ]
+      },
       "dbsnp_build": "157",
       "dbsnp_frequencies": {
         "C": 0.016484,
@@ -26,10 +30,28 @@
         "chromosome": "3",
         "position": 165830741
       },
-      "reason": "ClinVar carries exactly one clinically asserted alternate at the dbSNP GRCh38 coordinate for this rsid",
+      "reason": "ClinVar (fallback) defines BCHE NM_000055.2(BCHE):c.293A>G (p.Asp98Gly) by base C at this position; a pharmacogenomic target's assessed allele is the one its source names",
       "reference_allele": "T",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000013215"
+        ],
+        "clinvar_pubmed": [
+          "31702488",
+          "31022120",
+          "30804560",
+          "30600548",
+          "30487145",
+          "28492532",
+          "27551784",
+          "27031121",
+          "26439437",
+          "25741868"
+        ],
+        "cpic_pubmed": []
+      },
       "rsid": "rs1799807",
-      "source": "ClinVar",
+      "source": "ClinVar (fallback)",
       "status": "VERIFICADO"
     },
     {
@@ -45,7 +67,11 @@
         }
       ],
       "clinvar_records_considered": 1,
-      "cpic_defined_alleles": {},
+      "cpic_defined_alleles": {
+        "T": [
+          "BCHE NM_000055.2(BCHE):c.1699G>A (p.Ala567Thr)"
+        ]
+      },
       "dbsnp_build": "157",
       "dbsnp_frequencies": {
         "C": 0.804751,
@@ -55,10 +81,28 @@
         "chromosome": "3",
         "position": 165773492
       },
-      "reason": "ClinVar carries exactly one clinically asserted alternate at the dbSNP GRCh38 coordinate for this rsid",
+      "reason": "ClinVar (fallback) defines BCHE NM_000055.2(BCHE):c.1699G>A (p.Ala567Thr) by base T at this position; a pharmacogenomic target's assessed allele is the one its source names",
       "reference_allele": "C",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000013220"
+        ],
+        "clinvar_pubmed": [
+          "33061533",
+          "30600548",
+          "28492532",
+          "25741868",
+          "25448037",
+          "23400986",
+          "10699053",
+          "10190327",
+          "9302273",
+          "6716425"
+        ],
+        "cpic_pubmed": []
+      },
       "rsid": "rs1803274",
-      "source": "ClinVar",
+      "source": "ClinVar (fallback)",
       "status": "VERIFICADO"
     },
     {
@@ -110,6 +154,27 @@
       },
       "reason": "ClinVar carries exactly one clinically asserted alternate at the dbSNP GRCh38 coordinate for this rsid",
       "reference_allele": "T",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000017969",
+          "VCV000440500",
+          "VCV000440501",
+          "VCV000626305"
+        ],
+        "clinvar_pubmed": [
+          "35346640",
+          "33450625",
+          "32404922",
+          "32181528",
+          "32014855",
+          "31980526",
+          "31447099",
+          "31275557",
+          "31022120",
+          "30585791"
+        ],
+        "cpic_pubmed": []
+      },
       "rsid": "rs17580",
       "source": "ClinVar",
       "status": "VERIFICADO"
@@ -156,6 +221,26 @@
       },
       "reason": "ClinVar asserts G, T at this coordinate, and dbSNP reports a population frequency only for T (0.01471); the others are not observed in the cohort",
       "reference_allele": "C",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000017967",
+          "VCV000626304",
+          "VCV001492979"
+        ],
+        "clinvar_pubmed": [
+          "35263815",
+          "34408829",
+          "34408828",
+          "33726816",
+          "33144682",
+          "33087346",
+          "32699024",
+          "32087139",
+          "31980526",
+          "31564432"
+        ],
+        "cpic_pubmed": []
+      },
       "rsid": "rs28929474",
       "source": "ClinVar + dbSNP frequency",
       "status": "VERIFICADO"
@@ -185,6 +270,22 @@
       },
       "reason": "ClinVar carries exactly one clinically asserted alternate at the dbSNP GRCh38 coordinate for this rsid",
       "reference_allele": "C",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000341932"
+        ],
+        "clinvar_pubmed": [
+          "38054408",
+          "29158695",
+          "28073161",
+          "26200108",
+          "25741868",
+          "24917523",
+          "24033266",
+          "21381068"
+        ],
+        "cpic_pubmed": []
+      },
       "rsid": "rs738409",
       "source": "ClinVar",
       "status": "VERIFICADO"
@@ -227,8 +328,38 @@
         "chromosome": "10",
         "position": 94942290
       },
-      "reason": "CPIC defines CYP2C9*2, CYP2C9*35, CYP2C9*61, CYP2C9*92 by base T at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reason": "CPIC defines CYP2C9*2, CYP2C9*35, CYP2C9*61, CYP2C9*92 by base T at this position; a pharmacogenomic target's assessed allele is the one its source names",
       "reference_allele": "C",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000008409",
+          "VCV000177709"
+        ],
+        "clinvar_pubmed": [
+          "32779747",
+          "32189324",
+          "30742401",
+          "30742400",
+          "30742399",
+          "28740425",
+          "28198005",
+          "26186657",
+          "25775139",
+          "25712887"
+        ],
+        "cpic_pubmed": [
+          "10413320",
+          "12742136",
+          "1563752",
+          "15637526",
+          "19082874",
+          "20150829",
+          "2145143",
+          "23752738",
+          "24322786",
+          "25775139"
+        ]
+      },
       "rsid": "rs1799853",
       "source": "CPIC",
       "status": "VERIFICADO"
@@ -271,8 +402,38 @@
         "chromosome": "10",
         "position": 94981296
       },
-      "reason": "CPIC defines CYP2C9*18, CYP2C9*3, CYP2C9*68 by base C at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reason": "CPIC defines CYP2C9*18, CYP2C9*3, CYP2C9*68 by base C at this position; a pharmacogenomic target's assessed allele is the one its source names",
       "reference_allele": "A",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000008408",
+          "VCV000163021"
+        ],
+        "clinvar_pubmed": [
+          "32779747",
+          "32189324",
+          "30742401",
+          "30742400",
+          "30742399",
+          "28740425",
+          "28198005",
+          "26186657",
+          "25775139",
+          "25712887"
+        ],
+        "cpic_pubmed": [
+          "10413320",
+          "12742136",
+          "15637526",
+          "16099926",
+          "19082874",
+          "20150829",
+          "23752738",
+          "25775139",
+          "27179628",
+          "29283396"
+        ]
+      },
       "rsid": "rs1057910",
       "source": "CPIC",
       "status": "VERIFICADO"
@@ -304,8 +465,26 @@
         "chromosome": "16",
         "position": 31096368
       },
-      "reason": "CPIC defines VKORC1 rs9923231 variant (T) by base T at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reason": "CPIC defines VKORC1 rs9923231 variant (T) by base T at this position; a pharmacogenomic target's assessed allele is the one its source names",
       "reference_allele": "C",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000002211"
+        ],
+        "clinvar_pubmed": [
+          "35645034",
+          "31902949",
+          "31720756",
+          "31395958",
+          "31114289",
+          "30247353",
+          "29781049",
+          "29577257",
+          "29568565",
+          "29432897"
+        ],
+        "cpic_pubmed": []
+      },
       "rsid": "rs9923231",
       "source": "CPIC",
       "status": "VERIFICADO"
@@ -340,8 +519,34 @@
         "chromosome": "12",
         "position": 21178615
       },
-      "reason": "CPIC defines SLCO1B1*15, SLCO1B1*40, SLCO1B1*47, SLCO1B1*5 by base C at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reason": "CPIC defines SLCO1B1*15, SLCO1B1*40, SLCO1B1*47, SLCO1B1*5 by base C at this position; a pharmacogenomic target's assessed allele is the one its source names",
       "reference_allele": "T",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000037346"
+        ],
+        "clinvar_pubmed": [
+          "35034348",
+          "34114646",
+          "33805706",
+          "32453264",
+          "32361904",
+          "32128760",
+          "31981411",
+          "31967516",
+          "31857620",
+          "31594719"
+        ],
+        "cpic_pubmed": [
+          "11477075",
+          "15970799",
+          "21245207",
+          "25350695",
+          "31220337",
+          "32961594",
+          "33658230"
+        ]
+      },
       "rsid": "rs4149056",
       "source": "CPIC",
       "status": "VERIFICADO"
@@ -373,8 +578,25 @@
         "chromosome": "7",
         "position": 99672916
       },
-      "reason": "CPIC defines CYP3A5*3 by base C at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reason": "CPIC defines CYP3A5*3 by base C at this position; a pharmacogenomic target's assessed allele is the one its source names",
       "reference_allele": "T",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000005066"
+        ],
+        "clinvar_pubmed": [
+          "25801146",
+          "21412232",
+          "15492926",
+          "12754175",
+          "12065767",
+          "11740341",
+          "11279519"
+        ],
+        "cpic_pubmed": [
+          "15179407"
+        ]
+      },
       "rsid": "rs776746",
       "source": "CPIC",
       "status": "VERIFICADO"
@@ -425,8 +647,29 @@
         "chromosome": "8",
         "position": 18400593
       },
-      "reason": "CPIC defines NAT2*15, NAT2*30, NAT2*34, NAT2*35, NAT2*36, NAT2*37, NAT2*38, NAT2*39, NAT2*50, NAT2*52, NAT2*53, NAT2*56, NAT2*58, NAT2*6, NAT2*62, NAT2*63, NAT2*64, NAT2*66, NAT2*67 by base A at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reason": "CPIC defines NAT2*15, NAT2*30, NAT2*34, NAT2*35, NAT2*36, NAT2*37, NAT2*38, NAT2*39, NAT2*50, NAT2*52, NAT2*53, NAT2*56, NAT2*58, NAT2*6, NAT2*62, NAT2*63, NAT2*64, NAT2*66, NAT2*67 by base A at this position; a pharmacogenomic target's assessed allele is the one its source names",
       "reference_allele": "G",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000000722"
+        ],
+        "clinvar_pubmed": [
+          "18043717",
+          "2068113"
+        ],
+        "cpic_pubmed": [
+          "10744128",
+          "10762005",
+          "11214777",
+          "11337936",
+          "11773863",
+          "1451720",
+          "15032315",
+          "15110095",
+          "15558239",
+          "15564878"
+        ]
+      },
       "rsid": "rs1799930",
       "source": "CPIC",
       "status": "VERIFICADO"
@@ -488,6 +731,28 @@
       },
       "reason": "ClinVar carries exactly one clinically asserted alternate at the dbSNP GRCh38 coordinate for this rsid",
       "reference_allele": "T",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000017864",
+          "VCV000440870",
+          "VCV000441267",
+          "VCV000441268",
+          "VCV000441269"
+        ],
+        "clinvar_pubmed": [
+          "37128917",
+          "36528961",
+          "35639372",
+          "35628605",
+          "35460704",
+          "35339733",
+          "35120450",
+          "32808727",
+          "32725777",
+          "32376954"
+        ],
+        "cpic_pubmed": []
+      },
       "rsid": "rs429358",
       "source": "ClinVar",
       "status": "VERIFICADO"
@@ -533,6 +798,26 @@
       },
       "reason": "ClinVar carries exactly one clinically asserted alternate at the dbSNP GRCh38 coordinate for this rsid",
       "reference_allele": "C",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000017848",
+          "VCV000441262",
+          "VCV000441265"
+        ],
+        "clinvar_pubmed": [
+          "33537346",
+          "32808727",
+          "32725777",
+          "31538826",
+          "31186542",
+          "28391895",
+          "28198005",
+          "26186657",
+          "25741868",
+          "24829003"
+        ],
+        "cpic_pubmed": []
+      },
       "rsid": "rs7412",
       "source": "ClinVar",
       "status": "VERIFICADO"
@@ -551,9 +836,41 @@
         "chromosome": "5",
         "position": 25967594
       },
-      "reason": "no ClinVar record at this coordinate carries a pathogenic, risk-factor, drug-response or association assertion; the allele being interrogated is therefore not established",
+      "gwas_catalog": {
+        "available": true,
+        "evidence": {
+          "C": [
+            {
+              "p_value": "3e-22",
+              "risk_frequency": "0.39"
+            },
+            {
+              "p_value": "1e-27",
+              "risk_frequency": "0.0"
+            }
+          ],
+          "T": [
+            {
+              "p_value": "2e-10",
+              "risk_frequency": "0.61"
+            }
+          ]
+        },
+        "risk_alleles": {
+          "C": 2,
+          "T": 1
+        },
+        "studies": 3
+      },
+      "reason": "published studies disagree on the risk allele — the GWAS Catalogue reports C (2 record(s)), T (1 record(s)) for this variant. This is a documented contradiction in the literature, not a gap in the data, and choosing a side would manufacture agreement",
       "reference_allele": "T",
+      "references": {
+        "clinvar_accessions": [],
+        "clinvar_pubmed": [],
+        "cpic_pubmed": []
+      },
       "rsid": "rs4307059",
+      "source": "GWAS Catalog",
       "status": "NÃO DISPONÍVEL"
     },
     {
@@ -581,6 +898,24 @@
       },
       "reason": "ClinVar carries exactly one clinically asserted alternate at the dbSNP GRCh38 coordinate for this rsid",
       "reference_allele": "C",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000000642"
+        ],
+        "clinvar_pubmed": [
+          "35645034",
+          "34355501",
+          "33674767",
+          "31022120",
+          "30297698",
+          "28750087",
+          "28492532",
+          "27797270",
+          "26990548",
+          "26251307"
+        ],
+        "cpic_pubmed": []
+      },
       "rsid": "rs6025",
       "source": "ClinVar",
       "status": "VERIFICADO"
@@ -610,6 +945,24 @@
       },
       "reason": "ClinVar carries exactly one clinically asserted alternate at the dbSNP GRCh38 coordinate for this rsid",
       "reference_allele": "G",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000013310"
+        ],
+        "clinvar_pubmed": [
+          "40616445",
+          "39167180",
+          "38498041",
+          "35645034",
+          "34355501",
+          "34110897",
+          "31022120",
+          "30297698",
+          "30247353",
+          "28707429"
+        ],
+        "cpic_pubmed": []
+      },
       "rsid": "rs1799963",
       "source": "ClinVar",
       "status": "VERIFICADO"
@@ -639,6 +992,24 @@
       },
       "reason": "ClinVar carries exactly one clinically asserted alternate at the dbSNP GRCh38 coordinate for this rsid",
       "reference_allele": "G",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000000009"
+        ],
+        "clinvar_pubmed": [
+          "37260121",
+          "35802134",
+          "34012068",
+          "32725777",
+          "32153640",
+          "31980526",
+          "31436889",
+          "31335359",
+          "31061747",
+          "31022120"
+        ],
+        "cpic_pubmed": []
+      },
       "rsid": "rs1800562",
       "source": "ClinVar",
       "status": "VERIFICADO"
@@ -668,6 +1039,24 @@
       },
       "reason": "ClinVar carries exactly one clinically asserted alternate at the dbSNP GRCh38 coordinate for this rsid",
       "reference_allele": "C",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000000010"
+        ],
+        "clinvar_pubmed": [
+          "35802134",
+          "34012068",
+          "32725777",
+          "32404922",
+          "32014855",
+          "31980526",
+          "31335359",
+          "31220083",
+          "30311383",
+          "30291871"
+        ],
+        "cpic_pubmed": []
+      },
       "rsid": "rs1799945",
       "source": "ClinVar",
       "status": "VERIFICADO"
@@ -708,8 +1097,29 @@
         "chromosome": "1",
         "position": 97450058
       },
-      "reason": "CPIC defines DPYD c.1905+1G>A (*2A) by base T at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reason": "CPIC defines DPYD c.1905+1G>A (*2A) by base T at this position; a pharmacogenomic target's assessed allele is the one its source names",
       "reference_allele": "C",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000000432",
+          "VCV002429124"
+        ],
+        "clinvar_pubmed": [
+          "38084968",
+          "31745289",
+          "31382864",
+          "31275557",
+          "31022120",
+          "30898145",
+          "30775324",
+          "30723313",
+          "30485432",
+          "30348537"
+        ],
+        "cpic_pubmed": [
+          "23328581"
+        ]
+      },
       "rsid": "rs3918290",
       "source": "CPIC",
       "status": "VERIFICADO"
@@ -741,8 +1151,28 @@
         "chromosome": "1",
         "position": 97515787
       },
-      "reason": "CPIC defines DPYD c.1679T>G (*13) by base C at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reason": "CPIC defines DPYD c.1679T>G (*13) by base C at this position; a pharmacogenomic target's assessed allele is the one its source names",
       "reference_allele": "A",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000088975"
+        ],
+        "clinvar_pubmed": [
+          "33620159",
+          "33232506",
+          "32595208",
+          "31745289",
+          "31022120",
+          "30858516",
+          "30485432",
+          "30348537",
+          "29152729",
+          "28427087"
+        ],
+        "cpic_pubmed": [
+          "23328581"
+        ]
+      },
       "rsid": "rs55886062",
       "source": "CPIC",
       "status": "VERIFICADO"
@@ -774,8 +1204,28 @@
         "chromosome": "1",
         "position": 97082391
       },
-      "reason": "CPIC defines DPYD c.2846A>T by base A at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reason": "CPIC defines DPYD c.2846A>T by base A at this position; a pharmacogenomic target's assessed allele is the one its source names",
       "reference_allele": "T",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000088974"
+        ],
+        "clinvar_pubmed": [
+          "33232506",
+          "32595208",
+          "31745289",
+          "31486738",
+          "31124962",
+          "31022120",
+          "30858516",
+          "30723313",
+          "30510603",
+          "30485432"
+        ],
+        "cpic_pubmed": [
+          "24648345"
+        ]
+      },
       "rsid": "rs67376798",
       "source": "CPIC",
       "status": "VERIFICADO"
@@ -807,8 +1257,28 @@
         "chromosome": "1",
         "position": 97573863
       },
-      "reason": "CPIC defines DPYD c.1129-5923C>G, c.1236G>A (HapB3) by base T at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reason": "CPIC defines DPYD c.1129-5923C>G, c.1236G>A (HapB3) by base T at this position; a pharmacogenomic target's assessed allele is the one its source names",
       "reference_allele": "C",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000100100"
+        ],
+        "clinvar_pubmed": [
+          "33410339",
+          "30485432",
+          "29236957",
+          "29152729",
+          "29045550",
+          "28929491",
+          "28481884",
+          "28112993",
+          "27995989",
+          "27454530"
+        ],
+        "cpic_pubmed": [
+          "28295243"
+        ]
+      },
       "rsid": "rs56038477",
       "source": "CPIC",
       "status": "VERIFICADO"
@@ -840,8 +1310,34 @@
         "chromosome": "6",
         "position": 18143724
       },
-      "reason": "CPIC defines TPMT*2 by base G at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reason": "CPIC defines TPMT*2 by base G at this position; a pharmacogenomic target's assessed allele is the one its source names",
       "reference_allele": "C",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000012721"
+        ],
+        "clinvar_pubmed": [
+          "30447069",
+          "23422873",
+          "9931345",
+          "9177237",
+          "8644731",
+          "7862671",
+          "1960624"
+        ],
+        "cpic_pubmed": [
+          "10580024",
+          "11372592",
+          "12880540",
+          "14508387",
+          "14656901",
+          "14985890",
+          "15226673",
+          "16220112",
+          "18021342",
+          "18708949"
+        ]
+      },
       "rsid": "rs1800462",
       "source": "CPIC",
       "status": "VERIFICADO"
@@ -874,8 +1370,32 @@
         "chromosome": "6",
         "position": 18138997
       },
-      "reason": "CPIC defines TPMT*3A, TPMT*3B by base T at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reason": "CPIC defines TPMT*3A, TPMT*3B by base T at this position; a pharmacogenomic target's assessed allele is the one its source names",
       "reference_allele": "C",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000037126"
+        ],
+        "clinvar_pubmed": [
+          "30447069",
+          "25741868",
+          "23422873",
+          "9931345",
+          "8561894"
+        ],
+        "cpic_pubmed": [
+          "10580024",
+          "11304783",
+          "12217596",
+          "15226673",
+          "15967990",
+          "16220112",
+          "16691038",
+          "18708949",
+          "19057372",
+          "23252716"
+        ]
+      },
       "rsid": "rs1800460",
       "source": "CPIC",
       "status": "VERIFICADO"
@@ -921,6 +1441,36 @@
       },
       "reason": "CPIC defines alleles by C, G at this position (C=TPMT*3A, TPMT*3C; G=TPMT*41), and dbSNP observes only C in a population cohort (0.043074)",
       "reference_allele": "T",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000012722",
+          "VCV000012725"
+        ],
+        "clinvar_pubmed": [
+          "30447069",
+          "25741868",
+          "23422873",
+          "16476125",
+          "15967990",
+          "15819814",
+          "10751626",
+          "10208641",
+          "9931346",
+          "9931345"
+        ],
+        "cpic_pubmed": [
+          "10580024",
+          "10997970",
+          "11304783",
+          "11372592",
+          "14508387",
+          "14656901",
+          "14985890",
+          "15167635",
+          "15226673",
+          "15255798"
+        ]
+      },
       "rsid": "rs1142345",
       "source": "CPIC + dbSNP frequency",
       "status": "VERIFICADO"
@@ -952,8 +1502,37 @@
         "chromosome": "13",
         "position": 48045719
       },
-      "reason": "CPIC defines NUDT15*3 by base T at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reason": "CPIC defines NUDT15*3 by base T at this position; a pharmacogenomic target's assessed allele is the one its source names",
       "reference_allele": "C",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000225201"
+        ],
+        "clinvar_pubmed": [
+          "31024313",
+          "30728528",
+          "30101994",
+          "30048756",
+          "30035323",
+          "29967377",
+          "29923122",
+          "29867468",
+          "29720126",
+          "29704867"
+        ],
+        "cpic_pubmed": [
+          "26033531",
+          "26878724",
+          "27416873",
+          "27530327",
+          "27577869",
+          "27604507",
+          "28088792",
+          "28445187",
+          "28659275",
+          "28903549"
+        ]
+      },
       "rsid": "rs116855232",
       "source": "CPIC",
       "status": "VERIFICADO"
@@ -1137,8 +1716,48 @@
         "chromosome": "10",
         "position": 94781859
       },
-      "reason": "CPIC defines CYP2C19*2 by base A at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reason": "CPIC defines CYP2C19*2 by base A at this position; a pharmacogenomic target's assessed allele is the one its source names",
       "reference_allele": "G",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000016897",
+          "VCV000633856",
+          "VCV000633866",
+          "VCV000633867",
+          "VCV000633868",
+          "VCV000633869",
+          "VCV000633870",
+          "VCV000633901",
+          "VCV000633902",
+          "VCV000633971",
+          "VCV000633972",
+          "VCV000633974",
+          "VCV000634007",
+          "VCV000634009",
+          "VCV000634010",
+          "VCV000634103",
+          "VCV000634406",
+          "VCV000634407",
+          "VCV000638797",
+          "VCV001703261"
+        ],
+        "clinvar_pubmed": [
+          "35034351",
+          "27981572",
+          "27441996",
+          "27026020",
+          "25974703",
+          "25741868",
+          "24946154",
+          "23698643",
+          "21716271",
+          "21412232"
+        ],
+        "cpic_pubmed": [
+          "22027650",
+          "8195181"
+        ]
+      },
       "rsid": "rs4244285",
       "source": "CPIC",
       "status": "VERIFICADO"
@@ -1172,8 +1791,33 @@
         "chromosome": "10",
         "position": 94761900
       },
-      "reason": "CPIC defines CYP2C19*17, CYP2C19*44, CYP2C19*45 by base T at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reason": "CPIC defines CYP2C19*17, CYP2C19*44, CYP2C19*45 by base T at this position; a pharmacogenomic target's assessed allele is the one its source names",
       "reference_allele": "C",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000039357"
+        ],
+        "clinvar_pubmed": [
+          "35034351",
+          "27026020",
+          "24946154",
+          "23698643",
+          "21716271",
+          "21412232",
+          "21270786",
+          "20633831",
+          "20585015"
+        ],
+        "cpic_pubmed": [
+          "16413245",
+          "17625515",
+          "20083681",
+          "29136336",
+          "29325448",
+          "31649299",
+          "32857933"
+        ]
+      },
       "rsid": "rs12248560",
       "source": "CPIC",
       "status": "VERIFICADO"
@@ -1205,8 +1849,30 @@
         "chromosome": "10",
         "position": 94780653
       },
-      "reason": "CPIC defines CYP2C19*3 by base A at this position; a pharmacogenomic target's assessed allele is the one its guideline names",
+      "reason": "CPIC defines CYP2C19*3 by base A at this position; a pharmacogenomic target's assessed allele is the one its source names",
       "reference_allele": "G",
+      "references": {
+        "clinvar_accessions": [
+          "VCV000016899"
+        ],
+        "clinvar_pubmed": [
+          "35034351",
+          "27441996",
+          "27026020",
+          "24946154",
+          "23698643",
+          "21716271",
+          "21412232",
+          "21270786",
+          "20633831",
+          "20585015"
+        ],
+        "cpic_pubmed": [
+          "22027650",
+          "7969038",
+          "9103550"
+        ]
+      },
       "rsid": "rs4986893",
       "source": "CPIC",
       "status": "VERIFICADO"
@@ -1216,7 +1882,9 @@
   "sources": [
     "NCBI dbSNP RefSNP API (api.ncbi.nlm.nih.gov/variation/v0/refsnp) — reference base",
     "NCBI ClinVar via E-utilities (eutils.ncbi.nlm.nih.gov, db=clinvar) — asserted alternate",
-    "CPIC allele definitions (config/pgx_allele_definitions.json) — pharmacogenomic targets"
+    "CPIC allele definitions (config/pgx_allele_definitions.json) — pharmacogenomic targets",
+    "EBI GWAS Catalog (www.ebi.ac.uk/gwas/rest/api) — risk allele for association SNPs",
+    "PubMed via NCBI elink — supporting citations per target"
   ],
   "targets_curated": 29
 }
