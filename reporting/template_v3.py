@@ -280,6 +280,63 @@ def _system_values(data: dict[str, Any]) -> dict[str, Any]:
     return values
 
 
+def _redact_placeholder_text(
+    template: Path,
+    meta: dict[str, Any],
+    fields: dict[str, Any],
+    systems: dict[str, Any],
+) -> tuple[Path, int]:
+    """Remove the placeholder text that a filled field is about to cover.
+
+    The overlay draws an opaque rectangle and writes the value on top, which hides the
+    original text visually but leaves it in the content stream. `page.get_text()` on a
+    rendered report therefore returned both — `[[NOME_OU_ID_PSEUDONIMIZADO]]` *and* the case
+    id, in the same box. Anything that reads the PDF as text rather than pixels (copy and
+    paste, indexing, screen readers, downstream extraction) saw the scaffolding mixed into
+    the data, and could recover what a field was meant to hold beside what was drawn.
+
+    PyMuPDF redaction genuinely deletes the glyphs. It runs only over boxes this call is
+    about to fill, so an unfilled placeholder still shows its token — that is the template's
+    own guidance and must survive.
+
+    Returns the path to use as the overlay source and how many boxes were redacted. If
+    PyMuPDF is unavailable the original template is returned unchanged: the report is still
+    correct on the page, and `redacted_placeholder_boxes` reports 0 so the weaker basis is
+    visible rather than assumed.
+    """
+    try:
+        import fitz
+    except ImportError:
+        return template, 0
+
+    boxes: list[tuple[int, tuple[float, float, float, float], str]] = []
+    for item in meta.get("fields", []):
+        if item.get("guidance_only") or _field_value(fields, item) is None:
+            continue
+        boxes.append((int(item["page"]), tuple(float(v) for v in item["bbox"]), str(item["background"])))
+    for item in meta.get("controlled_spans", []):
+        if systems.get(item["source_text"]) is None:
+            continue
+        boxes.append((int(item["page"]), tuple(float(v) for v in item["bbox"]), str(item["background"])))
+    if not boxes:
+        return template, 0
+
+    document = fitz.open(str(template))
+    try:
+        for page_no, bbox, background in boxes:
+            page = document[page_no - 1]
+            page.add_redact_annot(fitz.Rect(*bbox), fill=_hex_to_rgb(background))
+        for page in document:
+            # images=0: redaction must not disturb the template's artwork, only its text.
+            page.apply_redactions(images=0)
+        handle, name = tempfile.mkstemp(prefix="genoma-redacted-", suffix=".pdf")
+        os.close(handle)
+        document.save(name)
+    finally:
+        document.close()
+    return Path(name), len(boxes)
+
+
 def render_pdf_from_template(rendered: dict[str, Any], path: Path, template_dir: Path, *, strict: bool = False) -> dict[str, Any]:
     report_id = str(rendered["metadata"]["report_id"])
     manifest = load_reference_manifest()
@@ -288,7 +345,8 @@ def render_pdf_from_template(rendered: dict[str, Any], path: Path, template_dir:
     fields = data.get("template_fields") if isinstance(data.get("template_fields"), dict) else {}
     systems = _system_values(data)
     fonts = _register_fonts()
-    reader = PdfReader(str(template)); writer = PdfWriter()
+    source, redacted_boxes = _redact_placeholder_text(template, meta, fields, systems)
+    reader = PdfReader(str(source)); writer = PdfWriter()
     by_page_fields: dict[int, list[dict[str, Any]]] = {}
     by_page_controls: dict[int, list[dict[str, Any]]] = {}
     for item in meta.get("fields", []):
@@ -337,6 +395,20 @@ def render_pdf_from_template(rendered: dict[str, Any], path: Path, template_dir:
         writer.add_page(page)
     if strict and unresolved:
         raise TemplateV3Error(f"strict v3 template rendering refused: {len(unresolved)} unresolved fields; first={unresolved[:5]}")
+    if strict and not replaced_fields:
+        # `unresolved` is empty in two very different situations: every field was filled, or
+        # no field was ever attempted. The second happens whenever the manifest in play
+        # carries no coordinates — `load_reference_manifest` returns identity only, and the
+        # detailed manifest is injected by `editorial_v3` — and it wrote out the untouched
+        # template: a document that looks like a finished report and contains nothing
+        # measured. Refusing on zero replacements closes that.
+        declared = sum(1 for item in meta.get("fields", []) if not item.get("guidance_only"))
+        raise TemplateV3Error(
+            "strict v3 template rendering refused: no field was replaced, so the output would "
+            f"be the blank model ({declared} fillable fields declared by the manifest in use; "
+            f"{len(fields)} supplied in data.template_fields). If the manifest carries no "
+            "coordinates, render through reporting.editorial_v3, which loads the detailed one."
+        )
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("wb") as fh:
         writer.write(fh)
@@ -347,6 +419,9 @@ def render_pdf_from_template(rendered: dict[str, Any], path: Path, template_dir:
         "template_status": "VERIFICADO",
         "page_count": meta["page_count"],
         "replaced_fields": replaced_fields,
+        # 0 means the original placeholder glyphs are still under the drawn values, which
+        # happens when PyMuPDF is unavailable. Reported so the weaker basis is visible.
+        "redacted_placeholder_boxes": redacted_boxes,
         "replaced_controlled_spans": replaced_controls,
         "unresolved_fields": unresolved,
         "strict": strict,
