@@ -104,6 +104,28 @@ def _qc_text(qc: dict) -> str:
         f"limiar {_pct(qc['gates']['CROSS_PLATFORM_GATE'].get('max_conflict_rate'))}).",
         f"Gates: {gates}.",
     ]
+    # A gate state on its own does not say what went wrong. Printing "STRUCTURE_GATE=FAIL"
+    # and stopping leaves the one thing a reader needs — which check failed and by how much
+    # — in a QC file nobody reading this report will open.
+    reserved = [
+        (name, gate)
+        for name, gate in sorted(qc["gates"].items())
+        if gate.get("state") not in ("PASS", "NOT_APPLICABLE")
+    ]
+    if reserved:
+        lines.append(
+            "Razões dos gates que não passaram: "
+            + "; ".join(
+                f"{name} ({gate.get('state')}): "
+                + ("; ".join(str(r) for r in (gate.get("reasons") or [])) or "sem razão registrada")
+                for name, gate in reserved
+            )
+            + "."
+        )
+    else:
+        # Said out loud, because "no reasons listed" and "every gate passed" look identical
+        # when the sentence is simply absent.
+        lines.append("Nenhum gate do QC ficou com ressalva: todos passaram ou não se aplicam.")
     return " ".join(lines)
 
 

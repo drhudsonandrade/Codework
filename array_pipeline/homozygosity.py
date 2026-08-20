@@ -30,6 +30,8 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
+from array_pipeline import assembly
+
 UNAVAILABLE = "NÃO DISPONÍVEL"
 
 #: Minimum tract length in kilobases. Shorter homozygous stretches are ordinary — every genome
@@ -52,21 +54,20 @@ MIN_CALLED_MARKERS = 100_000
 #: Below this call rate the missing genotypes, not the person, decide where tracts fall.
 MIN_CALL_RATE = 0.95
 
-#: Autosomal length in kilobases, GRCh37/GRCh38 primary assembly, chromosomes 1-22. The
-#: denominator of F_ROH; stated explicitly because a different denominator silently rescales
-#: every value.
-AUTOSOME_KB = 2_875_001.0
-
 #: Per-chromosome autosomal lengths in kilobases (GRCh37/GRCh38 primary assembly; the two
 #: differ by less than a tenth of a percent, far below anything this check discriminates).
 #: Used as a bounds check, because a coordinate past the end of its chromosome means the file
 #: is not on the assembly assumed here, and every tract length computed from it is fiction.
-CHROMOSOME_KB = {
-    "1": 249_251, "2": 243_200, "3": 198_023, "4": 191_155, "5": 180_916, "6": 171_116,
-    "7": 159_139, "8": 146_365, "9": 141_214, "10": 135_535, "11": 135_007, "12": 133_852,
-    "13": 115_170, "14": 107_350, "15": 102_532, "16": 90_355, "17": 81_196, "18": 78_078,
-    "19": 59_129, "20": 63_026, "21": 48_130, "22": 51_305,
-}
+#:
+#: Read from `array_pipeline.assembly` rather than restated: array QC applies the same bound
+#: at the gate, and when the two carried separate copies they were free to disagree about
+#: which files are physically possible.
+CHROMOSOME_KB = dict(assembly.AUTOSOME_KB_BY_CHROMOSOME)
+
+#: Autosomal length in kilobases, chromosomes 1-22. The denominator of F_ROH; summed from the
+#: table above so the fraction and its bounds check can never be scaled against different
+#: genomes.
+AUTOSOME_KB = assembly.AUTOSOME_TOTAL_KB
 
 #: Expected F_ROH for offspring of a few standard relationships, for placing a measurement.
 #: These are expectations under a simple model, not thresholds, and the report says so.

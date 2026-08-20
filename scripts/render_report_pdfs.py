@@ -29,6 +29,22 @@ from reporting.template_v3 import TemplateV3Error, render_pdf_from_template
 import reporting.template_v3 as _template_v3
 
 
+# Report 11 documents the template suite itself, not a person, and carries a fixed sentinel
+# in place of a case identifier. Binding a dossier to it fails by construction — which
+# blocked its PDF in every orchestrated run that supplied one, the same way report 05 was
+# blocked by an unpassed argument.
+#
+# Both halves are required and both are closed literals: a payload has to be report 11 *and*
+# carry the sentinel to skip the binding. Nothing here lets a payload declare itself
+# case-free, so a real case report with the wrong case_id is still refused.
+SUITE_LEVEL_CASE_ID = "SUITE-EDITORIAL"
+SUITE_LEVEL_REPORTS = frozenset({"11"})
+
+
+def is_suite_level(report_id: str, payload: dict) -> bool:
+    return report_id in SUITE_LEVEL_REPORTS and payload.get("case_id") == SUITE_LEVEL_CASE_ID
+
+
 def render(
     report_id: str,
     payload_path: Path,
@@ -40,7 +56,8 @@ def render(
     payload = json.loads(payload_path.read_text(encoding="utf-8"))
 
     dossier = None
-    if dossier_path is not None:
+    suite_level = is_suite_level(report_id, payload)
+    if dossier_path is not None and not suite_level:
         # Bound to the analysed case: an identity block attached to another person's data
         # is the worst failure this path can cause.
         dossier = load_dossier(dossier_path, expected_case_id=str(payload.get("case_id") or ""))
@@ -83,6 +100,14 @@ def render(
         "derived_tokens": fill["derived_tokens"],
         "from_dossier": fill["from_dossier"],
         "dossier_supplied": fill["dossier_supplied"],
+        # Stated rather than implied: without this line a reader cannot tell a report that
+        # was never meant to carry identification from one whose dossier silently failed.
+        "case_bound": not suite_level,
+        "dossier_skipped_reason": (
+            "relatório de suíte, não de caso: não recebe identificação de paciente"
+            if suite_level and dossier_path is not None
+            else None
+        ),
         "operational_status": payload.get("operational_status"),
     }
 

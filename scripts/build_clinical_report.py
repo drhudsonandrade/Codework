@@ -87,6 +87,59 @@ def _executive_summary(payload: dict[str, Any]) -> str:
     )
 
 
+#: How many loci of one reportable class are described one by one before the rest become a
+#: stated count. Uncapped, this section grew with the registry rather than with the case: a
+#: representative array produced 4,065 reportable loci and a 28 MB payload, in which the
+#: findings that matter were indistinguishable from the ones that did not.
+MAX_FINDINGS_DETAILED_PER_CLASS = 200
+
+#: Classes that are never truncated, whatever the count. An actionable finding is the reason
+#: this report exists; omitting one to keep a document small would be the single worst thing
+#: this pipeline could do, and a large actionable count is itself information the reader
+#: needs rather than a formatting problem to be solved.
+NEVER_TRUNCATED = (ACIONAVEL,)
+
+
+def _split_reportable(
+    findings: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Split reportable findings into the ones described individually and the ones omitted.
+
+    Takes the raw findings list rather than the payload so the compiler's transforms can
+    recompute it from the artifact they were handed, instead of closing over a value this
+    module worked out separately. Order within a class is the artifact's own, which is
+    deterministic, so two runs over the same case describe the same loci.
+    """
+    detailed: list[dict[str, Any]] = []
+    omitted: list[dict[str, Any]] = []
+    for kind in REPORTABLE:
+        items = [f for f in findings if f["interpretation"] == kind]
+        if kind in NEVER_TRUNCATED:
+            detailed.extend(items)
+            continue
+        detailed.extend(items[:MAX_FINDINGS_DETAILED_PER_CLASS])
+        omitted.extend(items[MAX_FINDINGS_DETAILED_PER_CLASS:])
+    return detailed, omitted
+
+
+def _omitted_breakdown(findings: list[dict[str, Any]]) -> str:
+    _detailed, omitted = _split_reportable(findings)
+    counts: dict[str, int] = {}
+    for f in omitted:
+        counts[f["interpretation"]] = counts.get(f["interpretation"], 0) + 1
+    return ", ".join(f"{kind}: {count}" for kind, count in sorted(counts.items()))
+
+
+def _select_reportable(
+    payload: dict[str, Any]
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    detailed, omitted = _split_reportable(payload["findings"])
+    counts: dict[str, int] = {}
+    for f in omitted:
+        counts[f["interpretation"]] = counts.get(f["interpretation"], 0) + 1
+    return detailed, counts
+
+
 def _findings_text(payload: dict[str, Any]) -> str:
     items = [f for f in payload["findings"] if f["interpretation"] in REPORTABLE]
     if not items:
@@ -96,7 +149,19 @@ def _findings_text(payload: dict[str, Any]) -> str:
             "um resultado negativo do genoma: é o resultado deste painel de alvos, sobre as "
             "posições que este array ensaiou."
         )
-    return "; ".join(_describe(f) for f in items)
+    detailed, omitted = _select_reportable(payload)
+    text = "; ".join(_describe(f) for f in detailed)
+    if omitted:
+        # Stated, not implied: the reader has to be able to tell a report that found 200
+        # carrier loci from one that found 2,111 and described the first 200.
+        rest = ", ".join(f"{count} em {kind}" for kind, count in sorted(omitted.items()))
+        text += (
+            f". Além dos descritos acima, {rest} não são detalhados um a um; "
+            f"o limite por classe é {MAX_FINDINGS_DETAILED_PER_CLASS} e nenhum locus de "
+            f"{', '.join(NEVER_TRUNCATED)} é omitido. A contagem completa está no resumo "
+            "executivo e a lista integral na junção clínica que originou este relatório."
+        )
+    return text
 
 
 #: How many loci each negative category names before the rest become a count. The count is
@@ -220,11 +285,14 @@ def build_payload(findings_path: Path, matrix_path: Path, qc_path: Path) -> dict
         kind="evidence_retrieval", transform=lambda items: " | ".join(str(x) for x in items),
     )
 
-    for finding in findings.payload["findings"]:
-        if finding["interpretation"] not in REPORTABLE:
-            continue
-        index = findings.payload["findings"].index(finding)
-        locator = f"findings[{index}]"
+    detailed, omitted = _select_reportable(findings.payload)
+    # Positions come from one pass over the artifact rather than `.index(finding)`, which
+    # was both quadratic and keyed on dict equality: two findings that compared equal would
+    # have pointed every locator at the first of them.
+    positions = {id(f): i for i, f in enumerate(findings.payload["findings"])}
+
+    for finding in detailed:
+        locator = f"findings[{positions[id(finding)]}]"
         builder = compiler.finding(finding["rsid"], basis="locus com achado clínico sustentado")
         builder.derived(
             "domain", artifact="clinical-findings", locator=f"{locator}.gene", status=status,
@@ -297,6 +365,76 @@ def build_payload(findings_path: Path, matrix_path: Path, qc_path: Path) -> dict
         builder.derived(
             "status", artifact="clinical-findings", locator="operational_status",
             status=status, basis="status operacional herdado da junção clínica", kind="computed",
+        )
+        builder.add()
+
+    if omitted:
+        # One aggregate entry standing for the loci not described individually, so a
+        # consumer reading only `findings` still sees that they exist and how many. Without
+        # it the payload would be indistinguishable from a case that genuinely had 200.
+        builder = compiler.finding(
+            "ACHADO-RESTANTE",
+            basis="agregado dos loci reportáveis não descritos um a um",
+        )
+        # Every count here is recomputed from the findings artifact by the transform, not
+        # passed in from the value this module worked out: the compiler refuses a derived
+        # value that did not come from reading the artifact, and it is right to.
+        builder.derived(
+            "domain", artifact="clinical-findings", locator="findings", status=status,
+            basis="genes distintos entre os loci agregados", kind="computed",
+            transform=lambda items: (
+                f"{len({f.get('gene') for f in _split_reportable(items)[1] if f.get('gene')})} genes"
+            ),
+        )
+        builder.derived(
+            "nature", artifact="clinical-findings", locator="findings", status=status,
+            basis="classes de afirmação dos loci agregados", kind="computed",
+            transform=_omitted_breakdown,
+        )
+        builder.derived(
+            "observed_data", artifact="clinical-findings", locator="findings", status=status,
+            basis="contagem exata dos loci agregados", kind="observation",
+            transform=lambda items: (
+                f"{len(_split_reportable(items)[1])} loci reportáveis adicionais não "
+                f"descritos individualmente (limite de {MAX_FINDINGS_DETAILED_PER_CLASS} "
+                f"por classe; {', '.join(NEVER_TRUNCATED)} nunca é truncado)"
+            ),
+        )
+        builder.unavailable(
+            "priority",
+            basis="priorização clínica depende de história, fenótipo e contexto assistencial",
+        )
+        builder.stated(
+            "interpretation",
+            "Estes loci sustentam a mesma classe de afirmação dos descritos acima e estão "
+            "listados integralmente na junção clínica que originou este relatório. A omissão "
+            "aqui é de espaço no documento, não de evidência.",
+            kind="normative", basis="motivo declarado da agregação", status="VERIFICADO",
+        )
+        builder.stated(
+            "confirmation",
+            "Confirmação por método ortogonal é obrigatória antes de qualquer mudança de conduta.",
+            kind="normative", basis="política de confirmação da junção clínica", status="VERIFICADO",
+        )
+        builder.derived(
+            "qc", artifact="clinical-findings", locator="operational_status",
+            status=status, basis="status operacional herdado da junção clínica", kind="qc_metric",
+        )
+        builder.derived(
+            "status", artifact="clinical-findings", locator="operational_status",
+            status=status, basis="status operacional herdado da junção clínica", kind="computed",
+        )
+        builder.derived(
+            "evidence_refs", artifact="clinical-findings", locator="evidence.sources",
+            status="VERIFICADO", kind="evidence_retrieval",
+            basis="fontes curadas da junção clínica; acessos individuais ficam nos loci descritos",
+            transform=lambda items: " | ".join(str(x) for x in items) or UNAVAILABLE,
+        )
+        builder.stated(
+            "uncertainties",
+            "As mesmas incertezas de classe declaradas nos loci descritos acima aplicam-se "
+            "aqui. Penetrância e expressividade não são estabelecidas por genótipo.",
+            kind="normative", basis="incertezas de classe já declaradas", status="VERIFICADO",
         )
         builder.add()
 

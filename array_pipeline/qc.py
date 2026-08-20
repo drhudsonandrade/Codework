@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 import normative
+from array_pipeline import assembly
 
 RULESET = normative.ruleset_block()
 
@@ -266,6 +267,13 @@ def inspect_array(
         duplicate_rsids = 0
         invalid_positions = 0
         invalid_chromosomes = 0
+        # A position past the end of its own chromosome is not a rare value, it is an
+        # impossible one, and it means the coordinate column cannot be trusted for the join
+        # every downstream report performs. The worst offender is kept so the reason can
+        # point at a row instead of only counting them.
+        off_assembly_positions = 0
+        off_assembly_example: tuple[str, int] | None = None
+        assembly_lengths, assembly_basis = assembly.lengths_for(build)
         chromosome_counts: Counter[str] = Counter()
         status_counts: Counter[str] = Counter()
         source_counts: Counter[str] = Counter()
@@ -289,8 +297,13 @@ def inspect_array(
             else:
                 unique_rsids.add(rsid)
             try:
-                if int(pos) <= 0:
+                position = int(pos)
+                if position <= 0:
                     invalid_positions += 1
+                elif assembly.is_beyond_end(chrom, position, assembly_lengths):
+                    off_assembly_positions += 1
+                    if off_assembly_example is None or position > off_assembly_example[1]:
+                        off_assembly_example = (chrom, position)
             except Exception:
                 invalid_positions += 1
             if chrom not in ALLOWED_CHROMS:
@@ -388,19 +401,48 @@ def inspect_array(
 
     structure_reasons: list[str] = []
     structure_notes: list[str] = []
+    # A subset of `structure_reasons`: the ones that mean this is not a usable array at all,
+    # as opposed to a usable array with a defect the per-locus classification absorbs.
+    # Duplicate RSID rows are the clear case of the latter — a real harmonized export was
+    # found emitting them 261 times, and the completeness matrix resolves them locus by
+    # locus rather than arbitrating a winner. Consumers that must refuse read this list, so
+    # the severity is a property of the gate instead of something each caller re-derives by
+    # matching on reason text.
+    structure_blocking: list[str] = []
+
+    def _structural(reason: str, *, blocking: bool) -> None:
+        structure_reasons.append(reason)
+        if blocking:
+            structure_blocking.append(reason)
+
     if total == 0:
-        structure_reasons.append("no rows")
+        _structural("no rows", blocking=True)
     if duplicate_rsids:
         if schema.startswith("harmonized"):
-            structure_reasons.append(f"duplicate RSID rows={duplicate_rsids}")
+            _structural(f"duplicate RSID rows={duplicate_rsids}", blocking=False)
         else:
             structure_notes.append(
                 f"raw source contains duplicate RSID rows={duplicate_rsids}; retained as vendor provenance and must be disambiguated during harmonization"
             )
     if invalid_positions:
-        structure_reasons.append(f"invalid positions={invalid_positions}")
+        _structural(f"invalid positions={invalid_positions}", blocking=True)
     if invalid_chromosomes:
-        structure_reasons.append(f"invalid chromosomes={invalid_chromosomes}")
+        _structural(f"invalid chromosomes={invalid_chromosomes}", blocking=True)
+    if off_assembly_positions:
+        # Any count blocks, with no tolerance: under the declared build these bases do not
+        # exist, so there is no fraction of them that is still a measurement. A file with a
+        # handful is on the wrong assembly just as surely as one with half a million, and
+        # letting a small count through would leave the coordinate join silently wrong for
+        # exactly the loci nobody looked at.
+        chromosome, position = off_assembly_example or ("?", 0)
+        limit = assembly_lengths.get(chromosome, 0)
+        _structural(
+            f"positions beyond the end of their own chromosome={off_assembly_positions} "
+            f"(worst chr{chromosome}:{position:,} against a limit of {limit:,} bp under "
+            f"{assembly_basis}); the file is annotated on another assembly or the coordinate "
+            "column is corrupt, and every position-keyed join would be wrong",
+            blocking=True,
+        )
     structure_state = "PASS" if not structure_reasons else "FAIL"
 
     build_reasons: list[str] = []
@@ -476,6 +518,10 @@ def inspect_array(
             "duplicate_rsid_rows": duplicate_rsids,
             "unique_coordinates": len(coordinate_seen),
             "duplicate_coordinate_rows": duplicate_coordinate_rows,
+            # Reported whether or not it blocked, so a clean file states the zero rather
+            # than leaving the reader to infer it from the gate's silence.
+            "positions_beyond_chromosome_end": off_assembly_positions,
+            "assembly_bounds_basis": assembly_basis,
             "valid_calls": valid_calls,
             "call_rate": call_rate,
             "invalid_called_consensus_genotypes": invalid_called_genotypes,
@@ -497,7 +543,12 @@ def inspect_array(
             "direct_overlap_conflict_rate": overlap_conflict_rate,
         },
         "gates": {
-            "STRUCTURE_GATE": _gate(structure_state, structure_reasons, notes=structure_notes),
+            "STRUCTURE_GATE": _gate(
+                structure_state,
+                structure_reasons,
+                notes=structure_notes,
+                blocking_reasons=structure_blocking,
+            ),
             "BUILD_STRAND_GATE": _gate(build_state, build_reasons),
             "CALLABILITY_GATE": _gate(call_state, call_reasons, threshold=min_call_rate),
             "CROSS_PLATFORM_GATE": _gate(

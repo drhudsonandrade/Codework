@@ -188,5 +188,107 @@ class RedactionTest(unittest.TestCase):
         self.assertTrue(any(token in text for token in guidance))
 
 
+class SuiteLevelDossierTest(unittest.TestCase):
+    """Report 11 describes the template suite, so it has no case to be bound to.
+
+    Requiring the dossier's case_id to match the payload's is right for the ten patient
+    reports and impossible for this one, whose payload carries a fixed sentinel. The result
+    was that supplying a dossier — which every orchestrated run does — blocked report 11's
+    PDF entirely, the same shape as report 05 being blocked by an argument that was never
+    passed. The exemption has to stay narrow, so it is pinned from both sides here.
+    """
+
+    def test_the_editorial_guide_is_recognised_as_suite_level(self):
+        from scripts.render_report_pdfs import SUITE_LEVEL_CASE_ID, is_suite_level
+
+        self.assertTrue(is_suite_level("11", {"case_id": SUITE_LEVEL_CASE_ID}))
+
+    def test_the_builder_still_stamps_the_sentinel_the_renderer_looks_for(self):
+        # If the guide's case_id is ever changed, the exemption stops matching and the PDF
+        # goes back to being blocked. That coupling is asserted rather than assumed.
+        from scripts.build_editorial_guide import REPORT_ID
+        from scripts.render_report_pdfs import SUITE_LEVEL_CASE_ID, SUITE_LEVEL_REPORTS
+
+        self.assertIn(REPORT_ID, SUITE_LEVEL_REPORTS)
+        source = (ROOT / "scripts/build_editorial_guide.py").read_text(encoding="utf-8")
+        self.assertIn(f'case_id="{SUITE_LEVEL_CASE_ID}"', source)
+
+    def test_a_patient_report_can_never_take_the_exemption(self):
+        from scripts.render_report_pdfs import SUITE_LEVEL_CASE_ID, is_suite_level
+
+        # Neither half alone is enough: a case report carrying the sentinel, and report 11
+        # carrying a real case_id, both stay bound.
+        self.assertFalse(is_suite_level("01", {"case_id": SUITE_LEVEL_CASE_ID}))
+        self.assertFalse(is_suite_level("11", {"case_id": "CASE-REAL"}))
+        self.assertFalse(is_suite_level("11", {}))
+
+    @unittest.skipUnless(TEMPLATE_DIR, "set GENOMA_TEMPLATE_DIR to an installed template pack")
+    def test_report_11_renders_with_a_dossier_supplied_and_carries_no_identity(self):
+        import tempfile
+
+        from scripts.render_report_pdfs import SUITE_LEVEL_CASE_ID, render
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            payload_path = root / "payload-11.json"
+            payload = fixture_payload(
+                case_id=SUITE_LEVEL_CASE_ID, report_id="11", summary="fixture", basis="fixture"
+            )
+            payload_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+            dossier_path = root / "dossier.json"
+            dossier_path.write_text(
+                json.dumps(
+                    {
+                        "schema": "genoma-case-dossier-v1",
+                        "case_id": "OUTRO-CASO",
+                        "identification": {"pseudonymised_id": "NAO-DEVE-APARECER"},
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            result = render(
+                "11", payload_path, Path(TEMPLATE_DIR), root / "out.pdf", dossier_path
+            )
+
+        self.assertFalse(result["case_bound"])
+        self.assertFalse(result["dossier_supplied"])
+        self.assertEqual(result["from_dossier"], [])
+        self.assertIsNotNone(result["dossier_skipped_reason"])
+
+    @unittest.skipUnless(TEMPLATE_DIR, "set GENOMA_TEMPLATE_DIR to an installed template pack")
+    def test_a_mismatched_dossier_on_a_patient_report_is_still_refused(self):
+        import tempfile
+
+        from reporting.case_dossier import CaseDossierError
+        from scripts.render_report_pdfs import render
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            payload_path = root / "payload-01.json"
+            payload = fixture_payload(
+                case_id="CASE-A", report_id="01", summary="fixture", basis="fixture"
+            )
+            payload_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+            dossier_path = root / "dossier.json"
+            dossier_path.write_text(
+                json.dumps(
+                    {
+                        "schema": "genoma-case-dossier-v1",
+                        "case_id": "CASE-B",
+                        "identification": {"pseudonymised_id": "OUTRA-PESSOA"},
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(CaseDossierError):
+                render("01", payload_path, Path(TEMPLATE_DIR), root / "out.pdf", dossier_path)
+
+
 if __name__ == "__main__":
     unittest.main()

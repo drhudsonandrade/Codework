@@ -483,5 +483,110 @@ class CompletenessReportTest(unittest.TestCase):
         self.assertEqual(tuple(load_catalog()["09"]["sections"]), SECTIONS)
 
 
+class QCEnforcementTest(unittest.TestCase):
+    """A failed QC has to stop the matrix, because everything else is built on it.
+
+    Found by feeding the pipeline an array whose coordinate column was fabricated: QC
+    returned STRUCTURE_GATE FAIL and `ready: false`, and the orchestrator went on to produce
+    all ten patient reports — one of them naming 27 actionable findings and a specific
+    pathogenic call — with exit status 0 and no report mentioning that the QC had failed.
+    The status flag was there; nothing consumed it.
+    """
+
+    def _matrix_from(self, qc: dict, root: Path, array: Path):
+        qc_path = root / "qc.json"
+        qc_path.write_text(json.dumps(qc), encoding="utf-8")
+        targets_path = root / "targets.json"
+        targets_path.write_text(json.dumps(TARGETS), encoding="utf-8")
+        return build_completeness_matrix(array, qc_path, targets_path)
+
+    def _array_and_qc(self, root: Path, rows: str):
+        array = root / "array.csv.gz"
+        with gzip.open(array, "wt", encoding="utf-8", newline="") as fh:
+            fh.write(HEADER)
+            fh.write(rows)
+        return array, inspect_array(array, case_id="SYN-GCM")
+
+    def test_an_impossible_coordinate_refuses_the_matrix_and_names_the_reason(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            # chr21 ends near 48.1 Mb; a marker at 200 Mb is on no assembly.
+            array, qc = self._array_and_qc(root, "rs1799807,21,200000000,CT,consensus,CT,CT,GM\n")
+            self.assertEqual(qc["gates"]["STRUCTURE_GATE"]["state"], "FAIL")
+            with self.assertRaises(ValueError) as caught:
+                self._matrix_from(qc, root, array)
+        self.assertIn("beyond the end of their own chromosome", str(caught.exception))
+
+    def test_duplicate_rsids_do_not_refuse_because_the_matrix_resolves_them(self):
+        # The line between the two severities: a duplicate row is a real harmonized export's
+        # quirk, classified locus by locus, not a reason to withhold the whole array.
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            array, qc = self._array_and_qc(
+                root,
+                "rs1799807,3,165548529,CT,consensus,CT,CT,GM\n"
+                "rs1799807,3,165548529,CT,consensus,CT,CT,GM\n",
+            )
+            self.assertEqual(qc["gates"]["STRUCTURE_GATE"]["state"], "FAIL")
+            self.assertEqual(qc["gates"]["STRUCTURE_GATE"]["blocking_reasons"], [])
+            matrix = self._matrix_from(qc, root, array)
+        self.assertEqual(matrix["operational_status"], "NÃO DISPONÍVEL")
+
+    def test_a_qc_file_predating_the_severity_split_is_read_fail_closed(self):
+        # An older QC artifact has no blocking_reasons key. Treating "unstated" as "not
+        # blocking" would quietly reopen the hole for every artifact already on disk.
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            array, qc = self._array_and_qc(root, "rs1799807,3,165548529,CT,consensus,CT,CT,GM\n")
+            qc["gates"]["STRUCTURE_GATE"] = {"state": "FAIL", "reasons": ["invalid positions=7"]}
+            with self.assertRaises(ValueError) as caught:
+                self._matrix_from(qc, root, array)
+        self.assertIn("invalid positions=7", str(caught.exception))
+
+    def test_a_non_passing_gate_travels_with_the_matrix_as_a_stated_reservation(self):
+        # Without this the reports inherit NÃO DISPONÍVEL and cannot say why: the reason was
+        # left behind in the QC file that no reader of the report ever sees.
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            array, qc = self._array_and_qc(root, "rs1799807,3,165548529,CT,consensus,CT,CT,GM\n")
+            matrix = self._matrix_from(qc, root, array)
+        gates = {r["gate"] for r in matrix["qc_reservations"]}
+        self.assertIn("BUILD_STRAND_GATE", gates)
+        self.assertTrue(all(r["reasons"] for r in matrix["qc_reservations"]))
+
+    def test_a_clean_matrix_states_an_empty_reservation_list(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            array = root / "array.csv.gz"
+            with gzip.open(array, "wt", encoding="utf-8", newline="") as fh:
+                fh.write(HEADER)
+                fh.write("rs1799807,3,165548529,CT,consensus,CT,CT,GM\n")
+            sha = hashlib.sha256(array.read_bytes()).hexdigest()
+            evidence = json.dumps({
+                "status": "VERIFICADO",
+                "decision": "SATISFIED",
+                "justification": "Fixture determinístico declara build e fita.",
+                "evidence_refs": ["synthetic-completeness-fixture"],
+                "trace": {
+                    "attestation_id": "completeness-fixture",
+                    "created_at": "2026-08-18T00:00:00Z",
+                    "actor_type": "SOFTWARE",
+                    "actor_id": "tests.test_genome_completeness",
+                    "method": "deterministic fixture",
+                    "run_id": "unit-test",
+                    "input_sha256": [sha],
+                    "output_sha256": [],
+                    "tool_versions": {"test": "1"},
+                },
+            })
+            qc = inspect_array(
+                array, case_id="SYN-GCM", build="GRCh37", strand="forward",
+                build_evidence=evidence, strand_evidence=evidence,
+            )
+            matrix = self._matrix_from(qc, root, array)
+        self.assertEqual(matrix["qc_reservations"], [])
+        self.assertTrue(matrix["qc_gate_passed"])
+
+
 if __name__ == "__main__":
     unittest.main()

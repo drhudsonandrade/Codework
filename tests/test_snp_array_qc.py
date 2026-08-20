@@ -106,5 +106,100 @@ class ArrayQCTest(unittest.TestCase):
         self.assertEqual(r["input"]["strand"], "forward")
 
 
+class AssemblyBoundsTest(unittest.TestCase):
+    """A coordinate past the end of its chromosome must stop at the gate, not later.
+
+    This was found by running a fixture whose coordinate column was fabricated: 332,291 of
+    700,000 markers sat beyond the end of their own chromosome, `homozygosity` refused to
+    estimate F_ROH on it, and all five QC gates returned PASS. The clinical join and the
+    completeness matrix consumed the same coordinates in between. The check existed in the
+    codebase; it just was not at the gate that everything downstream trusts.
+    """
+
+    def _write(self, rows: str) -> Path:
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        p = Path(td.name) / "x.csv.gz"
+        with gzip.open(p, "wt", encoding="utf-8", newline="") as f:
+            f.write("RSID,CHROMOSOME,POSITION,RESULT\n" + rows)
+        return p
+
+    def test_a_position_past_the_end_of_its_chromosome_fails_the_structure_gate(self):
+        # chr21 ends near 48.1 Mb on GRCh37; 90 Mb is not a rare value, it is no base at all.
+        p = self._write("rs1,1,100,AA\nrs2,21,90000000,CC\n")
+        r = inspect_array(p, case_id="T", build="GRCh37")
+        self.assertEqual(r["gates"]["STRUCTURE_GATE"]["state"], "FAIL")
+        self.assertEqual(r["metrics"]["positions_beyond_chromosome_end"], 1)
+
+    def test_the_reason_names_the_worst_row_and_the_limit_it_broke(self):
+        p = self._write("rs1,21,90000000,AA\nrs2,21,200000000,CC\n")
+        r = inspect_array(p, case_id="T", build="GRCh37")
+        reason = " ".join(r["gates"]["STRUCTURE_GATE"]["reasons"])
+        self.assertIn("chr21:200,000,000", reason)
+        self.assertIn("48,129,895", reason)
+
+    def test_a_single_offending_row_is_enough(self):
+        # No tolerance: a fraction of impossible coordinates is not a smaller measurement,
+        # it is the same corrupt column affecting the loci nobody happened to check.
+        rows = "".join(f"rs{i},1,{1000 + i},AA\n" for i in range(500))
+        p = self._write(rows + "rs_bad,22,60000000,CC\n")
+        r = inspect_array(p, case_id="T", build="GRCh37")
+        self.assertEqual(r["gates"]["STRUCTURE_GATE"]["state"], "FAIL")
+
+    def test_coordinates_inside_their_chromosomes_pass_and_state_the_zero(self):
+        p = self._write("rs1,1,100000,AA\nrs2,21,48000000,CC\nrs3,X,155000000,GG\nrs4,MT,16000,TT\n")
+        r = inspect_array(p, case_id="T", build="GRCh37")
+        self.assertEqual(r["gates"]["STRUCTURE_GATE"]["state"], "PASS")
+        self.assertEqual(r["metrics"]["positions_beyond_chromosome_end"], 0)
+        self.assertEqual(r["metrics"]["assembly_bounds_basis"], "GRCh37")
+
+    def test_a_grch38_only_coordinate_is_not_flagged_when_grch38_is_declared(self):
+        # chr20 is longer on GRCh38 (64.44 Mb) than on GRCh37 (63.03 Mb). Checking against
+        # the wrong table would manufacture a violation out of a correct file.
+        rows = "rs1,20,64000000,AA\n"
+        self.assertEqual(
+            inspect_array(self._write(rows), case_id="T", build="GRCh38")["gates"][
+                "STRUCTURE_GATE"
+            ]["state"],
+            "PASS",
+        )
+        self.assertEqual(
+            inspect_array(self._write(rows), case_id="T", build="GRCh37")["gates"][
+                "STRUCTURE_GATE"
+            ]["state"],
+            "FAIL",
+        )
+
+    def test_an_unverified_build_is_checked_against_the_longer_of_the_two(self):
+        # Without a build there is no table to prefer, so only violations that hold under
+        # both assemblies are asserted. Anything else would be an accusation with nothing
+        # behind it.
+        r = inspect_array(self._write("rs1,20,64000000,AA\n"), case_id="T")
+        self.assertEqual(r["gates"]["STRUCTURE_GATE"]["state"], "PASS")
+        self.assertIn("build não verificado", r["metrics"]["assembly_bounds_basis"])
+
+        beyond_both = inspect_array(self._write("rs1,20,70000000,AA\n"), case_id="T")
+        self.assertEqual(beyond_both["gates"]["STRUCTURE_GATE"]["state"], "FAIL")
+
+    def test_an_unknown_contig_is_left_to_the_chromosome_allowlist(self):
+        # "beyond the end" needs a declared end. Answering it for an unknown contig would be
+        # an assertion with nothing behind it; the allowlist already refuses the name.
+        r = inspect_array(self._write("rs1,GL000191,100000,AA\n"), case_id="T", build="GRCh37")
+        self.assertEqual(r["metrics"]["positions_beyond_chromosome_end"], 0)
+        self.assertIn(
+            "invalid chromosomes=1", " ".join(r["gates"]["STRUCTURE_GATE"]["reasons"])
+        )
+
+    def test_qc_and_homozygosity_bound_coordinates_identically(self):
+        # The two used to hold separate copies of the table and were free to disagree about
+        # which files are physically possible. They now read the same one.
+        from array_pipeline.assembly import GRCH37
+        from array_pipeline.homozygosity import CHROMOSOME_KB
+
+        for chromosome, kb in CHROMOSOME_KB.items():
+            with self.subTest(chromosome=chromosome):
+                self.assertEqual(kb, -(-GRCH37[chromosome] // 1000))
+
+
 if __name__ == "__main__":
     unittest.main()

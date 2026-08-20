@@ -149,8 +149,52 @@ def build_completeness_matrix(
     if qc.get("input", {}).get("sha256") != sha256_file(input_path):
         raise ValueError("input SHA-256 does not match QC evidence")
 
-    gate = qc.get("gates", {}).get("LIMITED_INTERPRETATION_GATE", {})
+    gates = qc.get("gates", {}) or {}
+
+    # Until this refusal existed the QC verdict was advisory: an array whose STRUCTURE_GATE
+    # failed on 332,291 impossible coordinates still produced a clinical report naming 27
+    # actionable findings, and no report said the QC had failed. Every builder derives from
+    # this matrix, so the refusal belongs here rather than in the orchestrator, which a
+    # direct caller bypasses.
+    #
+    # Only STRUCTURE_GATE blocks, and the line is where it is on purpose. A structural
+    # failure says the file is not a valid array — malformed rows, chromosomes that do not
+    # exist, coordinates that cannot exist — and there is nothing to describe. A failing
+    # CALLABILITY_GATE or CROSS_PLATFORM_GATE says a *valid* file is of poor quality, which
+    # is precisely what this matrix is built to express, locus by locus: a no-call becomes
+    # NÃO TESTADO and an unresolved conflict becomes NÃO REPORTÁVEL. Refusing those would
+    # withhold the measurement instead of qualifying it, and `operational_status` already
+    # drops to NÃO DISPONÍVEL so nothing built on them can publish.
+    structure = gates.get("STRUCTURE_GATE") or {}
+    blocking = structure.get("blocking_reasons")
+    if blocking is None:
+        # A QC file written before the gate distinguished severities. Falling back to the
+        # whole reason list is the fail-closed reading: an old file that failed structurally
+        # is refused rather than admitted on the grounds that its severity is unstated.
+        blocking = structure.get("reasons") or [] if structure.get("state") == "FAIL" else []
+    if blocking:
+        detail = "; ".join(blocking) or "sem razão registrada"
+        raise ValueError(
+            f"array QC failed structurally and no coverage can be derived from it ({detail}). "
+            "Corrija o arquivo de entrada e rode o QC novamente; interpretar sobre ele "
+            "produziria achados cuja base o próprio QC recusou."
+        )
+
+    gate = gates.get("LIMITED_INTERPRETATION_GATE", {})
     qc_passed = gate.get("state") == "PASS" and qc.get("operational_status") == "VERIFICADO"
+
+    # When the matrix is not VERIFICADO, every report built on it inherits that status with
+    # no way to say why. Carrying the non-passing gates through means the reason travels
+    # with the measurement instead of being left behind in the QC file.
+    qc_reservations = [
+        {
+            "gate": name,
+            "state": (gates[name] or {}).get("state"),
+            "reasons": list((gates[name] or {}).get("reasons") or []),
+        }
+        for name in sorted(gates)
+        if (gates[name] or {}).get("state") not in ("PASS", "NOT_APPLICABLE", None)
+    ]
 
     manifest = load_target_manifest(target_manifest_path)
     targets = {str(t["rsid"]).lower(): t for t in manifest["targets"]}
@@ -234,6 +278,7 @@ def build_completeness_matrix(
         "case_id": qc.get("case_id"),
         "input_sha256": qc.get("input", {}).get("sha256"),
         "qc_gate_passed": qc_passed,
+        "qc_reservations": qc_reservations,
         "target_manifest": {
             "id": manifest.get("id"),
             "version": manifest.get("version"),

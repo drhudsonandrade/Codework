@@ -167,18 +167,39 @@ def _scope_text(payload: dict[str, Any]) -> str:
     )
 
 
+#: How many loci each list in this section names before the rest become a stated count. The
+#: section grew with the registry rather than with the case: 2,111 carrier loci described
+#: one by one produced a 1.0 MB section in which no individual result could be found.
+MAX_LOCI_DESCRIBED = 200
+
+
+def _capped(items: list[Any], render, label: str) -> str:
+    """Describe up to MAX_LOCI_DESCRIBED items, then say how many were not described."""
+    text = "; ".join(render(f) for f in items[:MAX_LOCI_DESCRIBED])
+    if len(items) > MAX_LOCI_DESCRIBED:
+        text += (
+            f" (+{len(items) - MAX_LOCI_DESCRIBED} {label} não descritos individualmente; "
+            f"o limite por lista é {MAX_LOCI_DESCRIBED} e a relação completa está na junção "
+            "clínica que originou este relatório)"
+        )
+    return text
+
+
 def _carrier_text(payload: dict[str, Any]) -> str:
     carriers = [f for f in payload["findings"] if f["interpretation"] == PORTADOR]
     risk = [f for f in payload["findings"] if f["interpretation"] == GENOTIPO_DE_RISCO]
     parts: list[str] = []
     if carriers:
         parts.append(
-            "Portador: "
-            + "; ".join(
-                f"{f.get('gene')} {f['rsid']} {f.get('genotype')} — "
-                f"{', '.join(f['validity']['recessive_diseases']) or 'condição curada'} "
-                f"(validade por {', '.join(f['validity']['established_by'])})"
-                for f in carriers
+            f"Portador ({len(carriers)}): "
+            + _capped(
+                carriers,
+                lambda f: (
+                    f"{f.get('gene')} {f['rsid']} {f.get('genotype')} — "
+                    f"{', '.join(f['validity']['recessive_diseases']) or 'condição curada'} "
+                    f"(validade por {', '.join(f['validity']['established_by'])})"
+                ),
+                "loci de portador",
             )
         )
     else:
@@ -188,8 +209,12 @@ def _carrier_text(payload: dict[str, Any]) -> str:
         )
     if risk:
         parts.append(
-            "Genótipo de risco sem interpretação de portador: "
-            + "; ".join(f"{f.get('gene')} {f['rsid']}: {f['interpretation_basis']}" for f in risk)
+            f"Genótipo de risco sem interpretação de portador ({len(risk)}): "
+            + _capped(
+                risk,
+                lambda f: f"{f.get('gene')} {f['rsid']}: {f['interpretation_basis']}",
+                "genótipos de risco",
+            )
         )
     negatives = [
         f
@@ -199,7 +224,7 @@ def _carrier_text(payload: dict[str, Any]) -> str:
     if negatives:
         parts.append(
             f"Interrogados e sem o alelo avaliado em genes recessivos ({len(negatives)}): "
-            + ", ".join(f"{f.get('gene')} {f['rsid']}" for f in negatives)
+            + _capped(negatives, lambda f: f"{f.get('gene')} {f['rsid']}", "loci negativos")
             + ". Resultado negativo por locus não é rastreamento negativo do gene"
         )
     return " | ".join(parts)

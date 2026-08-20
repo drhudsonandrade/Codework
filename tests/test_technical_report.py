@@ -225,6 +225,25 @@ class TechnicalReportTest(unittest.TestCase):
         self.assertIn("ARRAY_QC_SHA256", payload["execution_manifest"])
         self.assertIn("COMPLETENESS_MATRIX_SHA256", payload["execution_manifest"])
 
+    def test_a_gate_that_did_not_pass_states_its_reason_not_just_its_state(self):
+        # "BUILD_STRAND_GATE=BLOCKED" tells a reader that something is wrong and nothing
+        # about what. The reason lived only in the QC file, which nobody reading the report
+        # opens.
+        with tempfile.TemporaryDirectory() as td:
+            payload = self._payload(Path(td), evidence=False)
+        blob = json.dumps(payload, ensure_ascii=False)
+        self.assertIn("Razões dos gates que não passaram", blob)
+        self.assertIn("BUILD_STRAND_GATE", blob)
+        self.assertIn("provenance", blob)
+
+    def test_a_clean_run_says_so_instead_of_leaving_the_sentence_out(self):
+        # An absent sentence reads the same as a forgotten one; the all-clear is stated.
+        with tempfile.TemporaryDirectory() as td:
+            payload = self._payload(Path(td))
+        blob = json.dumps(payload, ensure_ascii=False)
+        self.assertIn("Nenhum gate do QC ficou com ressalva", blob)
+        self.assertNotIn("Razões dos gates que não passaram", blob)
+
 
 if __name__ == "__main__":
     unittest.main()

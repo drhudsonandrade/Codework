@@ -294,5 +294,176 @@ class ClinicalSectionBoundsTest(unittest.TestCase):
         self.assertIn("rs99", text)
 
 
+class ReportableFindingBoundsTest(unittest.TestCase):
+    """The positive findings had no bound at all, and they grow with the case.
+
+    The negative lists were capped; the reportable ones were not. On a representative array
+    that produced 4,065 described loci and a 28 MB payload — a document in which the findings
+    that matter were indistinguishable from the ones that did not. The cap must never reach
+    the actionable class, whose omission would be the worst outcome this pipeline could
+    produce, and whatever it does omit has to be stated as a count.
+    """
+
+    def _module(self):
+        import importlib.util
+
+        path = ROOT / "scripts" / "build_clinical_report.py"
+        spec = importlib.util.spec_from_file_location("_clin_bounds", path)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        return module
+
+    def _findings(self, module, counts: dict[str, int]):
+        out = []
+        n = 0
+        for kind, count in counts.items():
+            for _ in range(count):
+                n += 1
+                out.append({
+                    "rsid": f"rs{n}", "gene": f"GENE{n}", "interpretation": kind,
+                    "genotype": "AA", "clinvar": {"conditions": ["condição"]},
+                })
+        return out
+
+    def test_actionable_findings_are_never_truncated(self):
+        module = self._module()
+        from array_pipeline.clinical_findings import ACIONAVEL
+
+        over = module.MAX_FINDINGS_DETAILED_PER_CLASS * 5
+        detailed, omitted = module._split_reportable(
+            self._findings(module, {ACIONAVEL: over})
+        )
+        self.assertEqual(len(detailed), over)
+        self.assertEqual(omitted, [])
+
+    def test_the_lower_tiers_are_capped_per_class(self):
+        module = self._module()
+        from array_pipeline.clinical_findings import GENOTIPO_DE_RISCO, PORTADOR
+
+        cap = module.MAX_FINDINGS_DETAILED_PER_CLASS
+        detailed, omitted = module._split_reportable(
+            self._findings(module, {PORTADOR: cap + 11, GENOTIPO_DE_RISCO: cap + 7})
+        )
+        self.assertEqual(len(detailed), cap * 2)
+        self.assertEqual(len(omitted), 18)
+
+    def test_every_omitted_locus_is_counted_in_the_section_text(self):
+        module = self._module()
+        from array_pipeline.clinical_findings import ACIONAVEL, PORTADOR
+
+        cap = module.MAX_FINDINGS_DETAILED_PER_CLASS
+        payload = {"findings": self._findings(module, {ACIONAVEL: 3, PORTADOR: cap + 42})}
+        text = module._findings_text(payload)
+        self.assertIn("42 em", text)
+        self.assertIn(str(cap), text)
+        self.assertIn(ACIONAVEL, text)
+
+    def test_nothing_is_said_about_omission_when_nothing_was_omitted(self):
+        module = self._module()
+        from array_pipeline.clinical_findings import PORTADOR
+
+        text = module._findings_text({"findings": self._findings(module, {PORTADOR: 5})})
+        self.assertNotIn("não são detalhados", text)
+
+    def test_the_detailed_and_omitted_sets_partition_the_reportable_ones(self):
+        # No locus may be dropped by the split itself, and none may be described twice.
+        module = self._module()
+        from array_pipeline.clinical_findings import ACIONAVEL, GENOTIPO_DE_RISCO, PORTADOR
+
+        cap = module.MAX_FINDINGS_DETAILED_PER_CLASS
+        findings = self._findings(
+            module, {ACIONAVEL: 9, PORTADOR: cap + 5, GENOTIPO_DE_RISCO: cap + 3}
+        )
+        detailed, omitted = module._split_reportable(findings)
+        rsids = [f["rsid"] for f in detailed] + [f["rsid"] for f in omitted]
+        self.assertEqual(len(rsids), len(set(rsids)), "um locus foi descrito duas vezes")
+        self.assertEqual(set(rsids), {f["rsid"] for f in findings})
+
+    def test_non_reportable_classes_are_left_out_of_both_sets(self):
+        module = self._module()
+        from array_pipeline.clinical_findings import ACIONAVEL, NAO_INTERROGADO, NEGATIVO
+
+        findings = self._findings(
+            module, {ACIONAVEL: 2, NEGATIVO: 30, NAO_INTERROGADO: 40}
+        )
+        detailed, omitted = module._split_reportable(findings)
+        self.assertEqual(len(detailed), 2)
+        self.assertEqual(omitted, [])
+
+    def test_the_split_is_stable_across_calls(self):
+        # The aggregate's counts are recomputed by the compiler's transform from the same
+        # artifact. If the split were not deterministic the prose and the aggregate could
+        # disagree about how many loci were omitted.
+        module = self._module()
+        from array_pipeline.clinical_findings import PORTADOR
+
+        findings = self._findings(
+            module, {PORTADOR: module.MAX_FINDINGS_DETAILED_PER_CLASS + 17}
+        )
+        first = [f["rsid"] for f in module._split_reportable(findings)[0]]
+        second = [f["rsid"] for f in module._split_reportable(findings)[0]]
+        self.assertEqual(first, second)
+        self.assertIn("17", module._omitted_breakdown(findings))
+
+
+class ReproductiveSectionBoundsTest(unittest.TestCase):
+    """Report 03's carrier list grew with the registry, exactly like report 01's findings.
+
+    2,111 carrier loci described one by one produced a 1.0 MB section in which no individual
+    result could be found. The count was already in reach; the list was what made it
+    unreadable.
+    """
+
+    def _module(self):
+        import importlib.util
+
+        path = ROOT / "scripts" / "build_reproductive_report.py"
+        spec = importlib.util.spec_from_file_location("_repro_bounds", path)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        return module
+
+    def _payload(self, module, carriers: int):
+        from array_pipeline.clinical_findings import PORTADOR
+
+        return {
+            "findings": [
+                {
+                    "rsid": f"rs{i}", "gene": f"GENE{i}", "genotype": "AG",
+                    "interpretation": PORTADOR,
+                    "validity": {
+                        "recessive_diseases": ["condição"], "established_by": ["ClinGen"],
+                    },
+                }
+                for i in range(carriers)
+            ]
+        }
+
+    def test_the_carrier_list_is_capped_and_the_remainder_counted(self):
+        module = self._module()
+        cap = module.MAX_LOCI_DESCRIBED
+        text = module._carrier_text(self._payload(module, cap + 33))
+        self.assertIn(f"Portador ({cap + 33})", text)
+        self.assertIn("+33", text)
+        self.assertIn("não descritos individualmente", text)
+
+    def test_a_short_list_is_described_in_full_with_no_omission_notice(self):
+        module = self._module()
+        text = module._carrier_text(self._payload(module, 4))
+        self.assertIn("Portador (4)", text)
+        self.assertNotIn("não descritos individualmente", text)
+        for i in range(4):
+            self.assertIn(f"rs{i}", text)
+
+    def test_the_total_is_stated_even_when_the_list_is_cut(self):
+        # The cap must never make a large case look like a small one.
+        module = self._module()
+        cap = module.MAX_LOCI_DESCRIBED
+        text = module._carrier_text(self._payload(module, cap * 4))
+        self.assertIn(str(cap * 4), text)
+
+
 if __name__ == "__main__":
     unittest.main()
