@@ -7,10 +7,21 @@
 | `partial_genome_annotation_targets.json` | 29 | curadoria manual (ClinVar + CPIC + dbSNP) |
 | `pgx_panel_targets.json` | 342 | posições definidoras do CPIC |
 | `targets_clinvar_plp.json.gz` | **54.845** | release em massa do ClinVar, P/LP, 2★+ |
+| `targets_clinvar_plp_1star.json.gz` | **123.551** | o mesmo, admitindo também o nível de uma estrela |
 | `targets_gwas_traits.json` | **733** | GWAS Catalog, termos declarados |
-| `targets_merged_panel.json.gz` | **55.916** | união dos quatro |
+| `targets_merged_panel.json.gz` | 55.916 | união com o corte de 2★ |
+| **`targets_merged_panel_1star.json.gz`** | **124.621** | união com o corte de 1★ — **o padrão** |
 
-Genes cobertos: de 16 para **3.082**, dos quais **2.965** têm relação gene-doença
+O padrão passou a ser o registro de 1★ porque a interpretação classifica por nível de
+revisão, não por pertencimento: num array representativo o resultado sai **93 ACHADO
+PRELIMINAR contra 20 ACHADO ACIONÁVEL**, ou seja, o nível fica visível no laudo em vez de
+diluído nele. O par de 2★ continua selecionável com `--targets`/`--evidence` para uma execução
+que só deva ver consenso curado.
+
+No corte de 1★: **4.408 genes**, dos quais **3.895** com relação gene-doença estabelecida —
+2.535 recessivos, 1.602 dominantes, 163 ligados ao X.
+
+Com o corte de 2★, que era o padrão anterior: genes cobertos de 16 para **3.082**, dos quais **2.965** têm relação gene-doença
 estabelecida por ao menos um registro curado — eram 2.776 com ClinGen e GenCC apenas.
 Restam **117** genes sem nenhum registro que os estabeleça, e o sistema não converte variante
 em achado clínico em nenhum deles.

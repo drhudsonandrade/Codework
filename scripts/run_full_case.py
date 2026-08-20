@@ -26,18 +26,34 @@ if str(ROOT) not in sys.path:
 
 from array_pipeline.clinical_findings import build_clinical_findings, write_findings
 from array_pipeline.completeness import build_completeness_matrix, write_matrix
+from array_pipeline.homozygosity import analyse_array as analyse_homozygosity
 from array_pipeline.pharmacogenomics import build_pharmacogenomic_passport, write_passport
 
-# The merged panel and the bulk evidence file, not the twenty-nine hand-curated loci. The
-# expanded registry is only an expansion if the default run uses it; leaving the defaults
-# pointing at the small registry would have shipped a system that *can* interrogate 55,916
-# loci and interrogates 29. The small pair remains selectable with --targets/--evidence.
-DEFAULT_TARGETS = ROOT / "config/targets_merged_panel.json.gz"
+# The widest registry, not the twenty-nine hand-curated loci: a registry is only an expansion
+# if the default run uses it, and leaving the defaults pointing at the small one would ship a
+# system that *can* interrogate 124,621 loci and interrogates 29.
+#
+# The default admits ClinVar's one-star tier, which is where most of that width comes from.
+# That is safe only because the interpretation grades by review level rather than by
+# membership: a single-submitter assertion is capped at ACHADO PRELIMINAR and can never
+# become an actionable or carrier finding. On a representative array the split is 93
+# preliminary to 20 actionable, so the tier is visible in the output rather than blended into
+# it. The two-star pair remains selectable with --targets/--evidence for a run that should
+# only ever see curated consensus.
+DEFAULT_TARGETS = ROOT / "config/targets_merged_panel_1star.json.gz"
 DEFAULT_PGX_REGISTRY = ROOT / "config/pgx_allele_definitions.json"
 DEFAULT_PGX_PANEL = ROOT / "config/pgx_panel_targets.json"
-DEFAULT_EVIDENCE = ROOT / "docs/evidence/GENE_DISEASE_VALIDITY_BULK.json.gz"
+DEFAULT_EVIDENCE = ROOT / "docs/evidence/GENE_DISEASE_VALIDITY_1STAR.json.gz"
 DEFAULT_ASSESSED = ROOT / "docs/evidence/ASSESSED_ALLELES_CLINVAR.json"
 DEFAULT_ANCESTRY_PANEL = ROOT / "config/ancestry_reference_panel.json.gz"
+
+
+def _write_json(payload: dict[str, Any], path: Path) -> Path:
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=1, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return path
 
 
 def _step(results: dict[str, Any], name: str, fn: Callable[[], Any]) -> Any:
@@ -121,6 +137,24 @@ def run(
         if loaded:
             sex_at_birth = (loaded.get("identification") or {}).get("sex_recorded_at_birth")
 
+    # Runs of homozygosity are computed over the whole autosome, not over the registry, so
+    # this reads the array again rather than reusing the completeness matrix: tract structure
+    # lives between the targets, and measuring it at the targets would measure their spacing.
+    homozygosity_path = _step(
+        results,
+        "homozygosity",
+        lambda: _write_json(
+            {
+                **analyse_homozygosity(input_path),
+                "case_id": json.loads(matrix_path.read_text(encoding="utf-8")).get("case_id"),
+                "input_sha256": json.loads(
+                    matrix_path.read_text(encoding="utf-8")
+                ).get("input_sha256"),
+            },
+            outdir / "homozygosity.json",
+        ),
+    )
+
     findings_path = None
     if evidence and evidence.is_file() and assessed and assessed.is_file():
         findings_path = _step(
@@ -174,7 +208,7 @@ def run(
         from scripts.build_reproductive_report import build_payload as p03
 
         payload("01", lambda: p01(findings_path, matrix_path, qc_path))
-        payload("03", lambda: p03(findings_path, matrix_path))
+        payload("03", lambda: p03(findings_path, matrix_path, homozygosity_path))
         for report_id in ("04", "07", "08"):
             payload(report_id, (lambda rid: lambda: passoc(rid, findings_path, matrix_path))(report_id))
 

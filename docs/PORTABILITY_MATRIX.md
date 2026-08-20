@@ -8,9 +8,9 @@ GENOMA adopts standards and patterns from mature genomics/workflow ecosystems wh
 | Task portability | container/task contract; future TES adapter | GA4GH Task Execution Service targets HPC/cloud task execution | Optional adapter |
 | Data location abstraction | content-addressed evidence refs; future DRS adapter | GA4GH Data Repository Service | Optional adapter |
 | Workflow engine | current Nextflow + shell/CLI | Nextflow supports multiple executors and container backends | Replaceable |
-| Durable orchestration | no requirement in core | Temporal replay/history + Activities | Optional |
-| Edge/security | loopback/private origin first | Cloudflare Tunnel/Access can avoid exposing the origin | Optional |
-| Evidence query database | rebuildable projection | PostgreSQL/Supabase with grants + RLS | Optional, never canonical |
+| Durable orchestration | no requirement in core | replay/history + activities in any durable engine | Optional |
+| Edge/security | loopback/private origin first | a reverse tunnel and access proxy can avoid exposing the origin | Optional |
+| Evidence query database | rebuildable projection | PostgreSQL with grants and row-level security | Optional, never canonical |
 | Supply-chain provenance | OCI digest + BuildKit provenance + SBOM | SLSA provenance concepts | Registry/provider replaceable |
 | Policy | Python deterministic gates + Rego parity + structured attestations | Policy-as-code / independent policy engines | Normative TXT remains source |
 | Operator interface | CLI + HTTP first; MCP adapter | vendor UI/agent ecosystems | Fully optional |
@@ -30,8 +30,5 @@ GENOMA adopts standards and patterns from mature genomics/workflow ecosystems wh
 - Nextflow executors: https://docs.seqera.io/nextflow/executor
 - Nextflow containers: https://docs.seqera.io/nextflow/container
 - GitHub self-hosted runners: https://docs.github.com/actions/hosting-your-own-runners
-- Temporal workflows: https://docs.temporal.io/workflows
-- Cloudflare Tunnel: https://developers.cloudflare.com/tunnel/
-- Supabase API security/RLS: https://supabase.com/docs/guides/api/securing-your-api
 - GATK resource bundle: https://gatk.broadinstitute.org/hc/en-us/articles/360035890811-Resource-bundle
 - BWA-MEM2: https://github.com/bwa-mem2/bwa-mem2

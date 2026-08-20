@@ -3,10 +3,10 @@
     "policy_http": "http://127.0.0.1:8787",
     "required_external_services": []
   },
-  "cloudflare": {"enabled": false, "role": "optional ingress/WAF/Access/Tunnel only"},
-  "temporal": {"enabled": false, "role": "optional durable orchestration; activities call stable core CLI/HTTP"},
-  "supabase": {"enabled": false, "role": "optional Evidence Plane projection/index; never canonical evidence store"},
-  "vercel": {"enabled": false, "role": "optional web UI"},
-  "microfn": {"enabled": false, "role": "optional stateless glue/health adapter"},
+  "ingress": {"enabled": false, "role": "optional reverse tunnel / access proxy / WAF only"},
+  "orchestration": {"enabled": false, "role": "optional durable orchestration; activities call stable core CLI/HTTP"},
+  "projection": {"enabled": false, "role": "optional Evidence Plane projection/index; never canonical evidence store"},
+  "ui": {"enabled": false, "role": "optional web UI"},
+  "glue": {"enabled": false, "role": "optional stateless glue/health adapter"},
   "agent_interface": {"enabled": false, "role": "optional natural-language/MCP interface; never source of truth"}
 }

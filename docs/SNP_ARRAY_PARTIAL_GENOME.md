@@ -40,8 +40,46 @@ Marcadores presentes nas duas plataformas e concordantes recebem maior garantia 
 
 ## Privacidade
 
-O CI usa exclusivamente fixtures sintéticas. DNA pessoal não é enviado para GitHub Actions, Cloudflare, Supabase, microfn ou qualquer serviço opcional. Os padrões de `.gitignore` bloqueiam nomes usuais dos arquivos genéticos pessoais; o workflow também rejeita fixtures com nomes de dados reais.
+O CI usa exclusivamente fixtures sintéticas. DNA pessoal não é enviado para GitHub Actions, para nenhum adaptador opcional de ingresso, projeção, orquestração ou interface, nem para qualquer outro serviço. Os padrões de `.gitignore` bloqueiam nomes usuais dos arquivos genéticos pessoais; o workflow também rejeita fixtures com nomes de dados reais.
 
 ## Relação com WGS
 
 O Runtime/Resource Gate de WGS continua independente e deve ser reexecutado na sessão de calling real. `full-grch38` e o runner high-memory não são pré-requisitos para o QC de SNP-array parcial, mas continuam obrigatórios antes da via WGS correspondente.
+
+
+## Homozigose em tratos longos (F_ROH)
+
+A triagem de portadores responde "esta pessoa é portadora"; não responde "qual a chance de dois
+portadores carregarem a mesma variante na mesma família". Consanguinidade muda isso, e muda por
+um fator grande: para uma condição rara, a maior parte do aumento de risco vem de identidade
+por descendência, não de dois eventos independentes de portador.
+
+Isso é mensurável no próprio array, sem ensaio adicional, porque ancestralidade compartilhada
+recente deixa tratos homozigotos longos. `array_pipeline/homozygosity.py` calcula **F_ROH** — a
+fração do genoma autossômico dentro de tratos — pelo estimador de McQuillan et al. (*Am J Hum
+Genet* 83:359-372, 2008), preferido aos estimadores por frequência alélica porque estes exigem
+uma população de referência pareada que um genoma brasileiro miscigenado não tem. O resultado
+entra na seção "Risco combinado e fase" do relatório 03.
+
+Parâmetros: trato ≥ 1.500 kb, ≥ 50 marcadores chamados, no máximo 1 heterozigoto tolerado,
+nenhum vão acima de 1.000 kb. Denominador de 2.875.001 kb.
+
+**O que é recusado, e por quê.** O estimador devolve um número em qualquer circunstância, então
+cada modo de falha é uma recusa explícita:
+
+| guarda | motivo |
+|---|---|
+| < 100.000 marcadores chamados | em densidade baixa a fração descreve onde os marcadores caíram, não o genoma |
+| taxa de chamada < 95% | genótipo ausente não interrompe um trato e por isso é lido como homozigose |
+| coordenada além do fim do cromossomo | o arquivo não está na montagem assumida; todo comprimento derivado é ficção |
+| soma dos tratos > autossomo | uma fração do genoma não pode exceder o genoma — recusa, nunca truncamento para 1,0 |
+
+A última apareceu na primeira execução real: uma fixture com coordenadas aleatórias produziu
+F_ROH de 1,91 e o código o reportou. Truncar para 1,0 teria escondido a mesma falha atrás de um
+número plausível.
+
+**O que não é afirmado.** F_ROH não é pedigree e não identifica grau de parentesco. Isolamento
+populacional e efeito fundador produzem tratos longos sem parentesco próximo entre os pais, e
+este exame não distingue as causas. O laudo dá a fração medida, o inventário de tratos e os
+valores esperados para algumas relações de referência — para escala, não como limiar — e para
+por aí.

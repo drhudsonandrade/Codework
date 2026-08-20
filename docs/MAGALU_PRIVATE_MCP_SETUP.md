@@ -169,7 +169,7 @@ For a full clinical-grade workflow, add and validate `nf-core/sarek`/GATK gVCF/B
 
 ## Deferred components
 
-- Cloudflare is not needed for the first private-tunnel deployment and cannot run the high-memory genomics workload at the edge.
-- Temporal can later provide durable job orchestration, but Nextflow is the current workflow engine and keeps the first deployment smaller.
-- Supabase can later index redacted job metadata; genomic files remain in private object/block storage.
+- An edge ingress provider is not needed for the first private-tunnel deployment and could not run the high-memory genomics workload at the edge anyway.
+- A durable orchestrator can be added later, but Nextflow is the current workflow engine and keeps the first deployment smaller.
+- An evidence-projection database can later index redacted job metadata; genomic files remain in private object or block storage.
 - Flower and micro-function tooling do not resolve GitHub App permissions or GRCh38 compute requirements, so they are not in the initial runtime.

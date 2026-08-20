@@ -217,11 +217,50 @@ def _options_text(payload: dict[str, Any]) -> str:
     )
 
 
-def build_payload(findings_path: Path, matrix_path: Path) -> dict:
+def _homozygosity_text(payload: dict[str, Any]) -> str:
+    """What the runs-of-homozygosity estimate contributes to reproductive risk."""
+    if payload.get("status") != "INFERIDO" or payload.get("f_roh") is None:
+        reasons = "; ".join(str(r) for r in payload.get("refusals") or []) or UNAVAILABLE
+        return (
+            "Homozigose em tratos longos não foi estimada nesta execução, portanto "
+            "consanguinidade não é avaliada e o risco recessivo abaixo assume ausência de "
+            f"parentesco entre os pais sem ter medido isso. Motivo: {reasons}"
+        )
+    interpretation = payload.get("interpretation") or {}
+    scale = "; ".join(
+        f"{e['relationship']} ≈ {e['expected_f_roh']:.2%}"
+        for e in payload.get("reference_expectations") or []
+    )
+    return (
+        f"F_ROH = {payload['f_roh']:.2%} do genoma autossômico em "
+        f"{payload.get('tract_count', 0)} trato(s) homozigoto(s) longo(s), o maior com "
+        f"{payload.get('longest_tract_kb', 0):,.0f} kb, sobre "
+        f"{payload.get('called_markers', 0):,} marcadores chamados. "
+        f"Faixa: {interpretation.get('band', UNAVAILABLE)}. "
+        f"{interpretation.get('reading', '')} "
+        f"Para escala, valores esperados: {scale}. "
+        f"{interpretation.get('not_established', '')} "
+        f"{payload.get('method', '')}"
+    )
+
+
+def build_payload(
+    findings_path: Path, matrix_path: Path, homozygosity_path: Path | None = None
+) -> dict:
     findings = Artifact.from_path("clinical-findings", findings_path)
     matrix = Artifact.from_path("completeness-matrix", matrix_path)
     if findings.payload.get("input_sha256") != matrix.payload.get("input_sha256"):
         raise ValueError("clinical findings and completeness matrix describe different inputs")
+
+    homozygosity = (
+        Artifact.from_path("homozygosity", homozygosity_path)
+        if homozygosity_path is not None and Path(homozygosity_path).is_file()
+        else None
+    )
+    if homozygosity is not None and homozygosity.payload.get("input_sha256") not in (
+        None, matrix.payload.get("input_sha256")
+    ):
+        raise ValueError("homozygosity artefact describes a different input")
 
     case_id = findings.payload.get("case_id") or UNAVAILABLE
     compiler = PayloadCompiler(case_id=str(case_id), report_id=REPORT_ID)
@@ -277,14 +316,34 @@ def build_payload(findings_path: Path, matrix_path: Path) -> dict:
         status=status, basis="loci em genes recessivos curados, por classe de afirmação",
         kind="computed", transform=lambda _f: _carrier_text(findings.payload),
     )
-    compiler.section_unavailable(
-        "Risco combinado e fase",
-        basis=(
-            "risco combinado exige duas amostras e apenas uma foi analisada; fase não é "
-            "derivável de genotipagem em array, portanto duas variantes num mesmo gene não "
-            "podem ser atribuídas a cromossomos distintos"
-        ),
-    )
+    # Consanguinity belongs in this section because it is the other multiplier on recessive
+    # risk: carrier frequency answers "are they carriers", identity by descent answers "of the
+    # same variant". Without a second sample the couple's combined risk still cannot be
+    # computed, and the section says both things rather than only the refusal.
+    if homozygosity is not None:
+        compiler.register(homozygosity)
+        compiler.section_derived(
+            "Risco combinado e fase", artifact="homozygosity", locator="f_roh",
+            status=homozygosity.payload.get("status", UNAVAILABLE),
+            basis="carga de homozigose em tratos longos, como medida de consanguinidade",
+            kind="computed",
+            transform=lambda _f: (
+                _homozygosity_text(homozygosity.payload)
+                + " Risco combinado do casal não é calculado: exige duas amostras e apenas "
+                "uma foi analisada. Fase não é derivável de genotipagem em array, portanto "
+                "duas variantes num mesmo gene não podem ser atribuídas a cromossomos "
+                "distintos."
+            ),
+        )
+    else:
+        compiler.section_unavailable(
+            "Risco combinado e fase",
+            basis=(
+                "risco combinado exige duas amostras e apenas uma foi analisada; fase não é "
+                "derivável de genotipagem em array, portanto duas variantes num mesmo gene não "
+                "podem ser atribuídas a cromossomos distintos"
+            ),
+        )
     compiler.section_derived(
         "Opções, confirmação e aconselhamento", artifact="clinical-findings", locator="totals",
         status=status, basis="exigência de confirmação e de aconselhamento", kind="computed",

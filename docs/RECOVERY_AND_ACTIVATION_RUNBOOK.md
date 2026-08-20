@@ -105,9 +105,9 @@ After the future VM exists:
    error in `/srv/genome/audit`.
 
 Connectors are installed in the client, not in GitHub. Fallow is also represented in GitHub by the
-pinned `fallow-rs/fallow@v3.16.0` Action. Cloudflare, Supabase, Temporal, Flower, Vercel and research
-connectors are not dependencies of the genomic data plane and therefore are not copied into the
-repository or container.
+pinned `fallow-rs/fallow@v3.16.0` Action. Ingress, evidence-projection, orchestration, UI and
+research connectors are not dependencies of the genomic data plane and therefore are not copied
+into the repository or container.
 
 ## Future GRCh38 and WGS activation
 
