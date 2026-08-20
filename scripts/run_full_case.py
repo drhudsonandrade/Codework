@@ -33,6 +33,7 @@ DEFAULT_PGX_REGISTRY = ROOT / "config/pgx_allele_definitions.json"
 DEFAULT_PGX_PANEL = ROOT / "config/pgx_panel_targets.json"
 DEFAULT_EVIDENCE = ROOT / "docs/evidence/GENE_DISEASE_VALIDITY.json"
 DEFAULT_ASSESSED = ROOT / "docs/evidence/ASSESSED_ALLELES_CLINVAR.json"
+DEFAULT_ANCESTRY_PANEL = ROOT / "config/ancestry_reference_panel.json.gz"
 
 
 def _step(results: dict[str, Any], name: str, fn: Callable[[], Any]) -> Any:
@@ -60,6 +61,7 @@ def run(
     pgx_panel: Path | None,
     evidence: Path | None,
     assessed: Path | None,
+    ancestry_panel: Path | None,
     template_dir: Path | None,
     dossier: Path | None,
 ) -> dict[str, Any]:
@@ -155,7 +157,18 @@ def run(
 
     from scripts.build_ancestry_report import build_payload as p02
 
-    payload("02", lambda: p02(matrix_path, qc_path))
+    # The ancestry panel is optional: without it report 02 measures feasibility, with it the
+    # case is projected. Passing it here means one command produces either, and the report
+    # states which mode it was in.
+    payload(
+        "02",
+        lambda: p02(
+            matrix_path,
+            qc_path,
+            panel_path=ancestry_panel if ancestry_panel and ancestry_panel.is_file() else None,
+            input_path=input_path if ancestry_panel and ancestry_panel.is_file() else None,
+        ),
+    )
 
     if template_dir and template_dir.is_dir():
         from scripts.build_editorial_guide import analyse, build_payload as p11, render
@@ -200,6 +213,11 @@ def main() -> int:
     parser.add_argument("--pgx-panel", default=str(DEFAULT_PGX_PANEL))
     parser.add_argument("--evidence", default=str(DEFAULT_EVIDENCE))
     parser.add_argument("--assessed-alleles", default=str(DEFAULT_ASSESSED))
+    parser.add_argument(
+        "--ancestry-panel",
+        default=str(DEFAULT_ANCESTRY_PANEL),
+        help="population reference panel; without it report 02 measures feasibility only",
+    )
     parser.add_argument("--template-dir", help="installed v3.0 template pack; renders PDFs")
     parser.add_argument("--dossier", help="case dossier JSON, bound to the analysed case")
     args = parser.parse_args()
@@ -213,6 +231,7 @@ def main() -> int:
         pgx_panel=Path(args.pgx_panel) if args.pgx_panel else None,
         evidence=Path(args.evidence) if args.evidence else None,
         assessed=Path(args.assessed_alleles) if args.assessed_alleles else None,
+        ancestry_panel=Path(args.ancestry_panel) if args.ancestry_panel else None,
         template_dir=Path(args.template_dir) if args.template_dir else None,
         dossier=Path(args.dossier) if args.dossier else None,
     )

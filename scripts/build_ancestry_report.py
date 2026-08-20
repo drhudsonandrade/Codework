@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
-"""Compile report 02 (Ancestralidade e Genealogia Genética) as a measured feasibility report.
+"""Compile report 02 (Ancestralidade e Genealogia Genética).
 
-Ancestry inference needs a reference panel of *genotypes* — 1000 Genomes, HGDP, SGDP — not
-allele frequencies. Without one there is no honest way to produce a pie chart of origins, and
-producing one anyway is the single most common lie in consumer genomics: the percentages come
-from a proprietary panel whose composition the reader never sees, and they change when the
-company updates it.
+Ancestry inference needs a reference panel of *genotypes* — allele frequencies separate
+populations in aggregate but cannot place an individual. Without one there is no honest way
+to produce a pie chart of origins, and producing one anyway is the commonest lie in consumer
+genomics: the percentages come from a proprietary panel whose composition the reader never
+sees, and they change when the company updates it.
 
-So this report does not estimate ancestry. It measures whether ancestry could be estimated,
-which is a real result and one the reader can act on:
+The report therefore has two modes, and which one it is in is stated on its face.
+
+**With a panel** (`--panel`, built by `scripts/build_ancestry_panel.py` from the 1000 Genomes
+Omni chip release plus the Mao et al. Native American reference), the case is projected onto
+components computed from the reference alone, and the section reports population affinity
+with proportions and bootstrap intervals — or affinity alone when the marker overlap is too
+low for proportions to survive projection shrinkage.
+
+**Without one**, it measures whether ancestry *could* be estimated, which is itself a result
+the reader can act on:
 
 * how many autosomal markers this array carries, which sets the ceiling on any PCA or
   admixture analysis;
@@ -17,9 +25,8 @@ which is a real result and one the reader can act on:
   needed to assign them are available here;
 * what exactly is missing, named concretely enough to be procured.
 
-The refusals are not hedges. "Retrato das origens" is NÃO DISPONÍVEL because no reference
-panel was supplied; "parentesco genético" because kinship needs a second sample; "DNA antigo"
-because it needs an ancient-genome panel. Each says which artifact would change the answer.
+The remaining refusals are not hedges. "Parentesco genético" needs a second sample; "DNA
+antigo" needs an ancient-genome panel. Each names the artifact that would change the answer.
 """
 from __future__ import annotations
 
@@ -110,7 +117,54 @@ def _requirements_text() -> str:
     )
 
 
-def build_payload(matrix_path: Path, qc_path: Path) -> dict:
+def _origins_text(projection: dict[str, Any]) -> str:
+    """The origins portrait, or the measured reason there is none."""
+    if projection.get("status") != "INFERIDO":
+        return str(projection.get("reason") or UNAVAILABLE)
+    affinity = ", ".join(
+        f"{a['population']} (distância {a['distance']})" for a in projection["affinity"][:4]
+    )
+    lines = [
+        f"Projeção sobre {projection['markers_used']} marcadores do painel "
+        f"({projection['overlap_fraction']:.1%} do painel). "
+        f"Populações de referência mais próximas: {affinity}."
+    ]
+    if projection.get("proportions"):
+        composition = "; ".join(
+            f"{p['population']} {p['proportion']:.1%} "
+            f"(IC95% {p['interval_95'][0]:.1%}–{p['interval_95'][1]:.1%})"
+            for p in sorted(projection["proportions"], key=lambda x: -x["proportion"])
+            if p["proportion"] >= 0.005
+        )
+        lines.append(f"Composição aproximada: {composition}.")
+        lines.append(str(projection["proportions_method"]))
+    else:
+        lines.append(str(projection.get("proportions_reason") or UNAVAILABLE))
+    return " ".join(lines)
+
+
+def _projection_quality(projection: dict[str, Any]) -> str:
+    return (
+        f"{projection['markers_used']} marcadores usados de "
+        f"{projection['panel']['markers']} do painel; "
+        f"{projection['markers_absent_from_case']} ausentes do array, "
+        f"{projection['markers_allele_mismatch']} com alelos incompatíveis com o painel, "
+        f"{projection['markers_strand_flipped']} resolvidos por complemento de fita. "
+        f"Painel {projection['panel']['id']} v{projection['panel']['version']}, "
+        f"build {projection['panel']['build']}, "
+        f"populações de referência: "
+        + ", ".join(f"{k} n={v}" for k, v in sorted(projection["panel"]["populations"].items()))
+        + "."
+    )
+
+
+def build_payload(
+    matrix_path: Path,
+    qc_path: Path,
+    *,
+    panel_path: Path | None = None,
+    input_path: Path | None = None,
+) -> dict:
     matrix = Artifact.from_path("completeness-matrix", matrix_path)
     qc = Artifact.from_path("array-qc", qc_path)
     if qc.payload.get("input", {}).get("sha256") != matrix.payload.get("input_sha256"):
@@ -126,19 +180,47 @@ def build_payload(matrix_path: Path, qc_path: Path) -> dict:
     status = "VERIFICADO" if verified else UNAVAILABLE
     metrics = qc.payload.get("metrics") or {}
 
-    compiler.derive(
-        "summary", artifact="array-qc", locator="metrics", status=status,
-        basis="densidade de marcadores e viabilidade de inferência de ancestralidade",
-        kind="computed",
-        transform=lambda m: (
-            f"Nenhuma estimativa de ancestralidade é emitida: nenhum painel de referência com "
-            f"genótipos foi fornecido a esta execução. O array carrega {_autosomal(m.get('chromosome_counts') or {})} "
-            f"marcadores autossômicos, {int((m.get('chromosome_counts') or {}).get('MT', 0))} "
-            f"mitocondriais e {int((m.get('chromosome_counts') or {}).get('Y', 0))} no Y, o que "
-            "torna a análise fisicamente possível assim que o painel existir. Percentuais de "
-            "origem sem painel citado são a asserção sem fonte mais comum em genômica de consumo."
-        ),
-    )
+    # The projection is an artifact of its own, so every sentence about origins is anchored
+    # to a value that was computed and stored rather than to prose written here.
+    projection = None
+    if panel_path is not None and input_path is not None:
+        from array_pipeline.ancestry import load_panel, project_case, read_case_genotypes
+
+        panel = load_panel(panel_path)
+        build = str(
+            (qc.payload.get("gates", {}).get("BUILD_GATE", {}) or {}).get("declared")
+            or qc.payload.get("declared_build")
+            or panel.get("build")
+        )
+        genotypes, read_stats = read_case_genotypes(
+            input_path, {str(m["rsid"]).lower() for m in panel["markers"]}
+        )
+        projection = project_case(panel, genotypes, case_build=build)
+        projection["case_read_statistics"] = read_stats
+        compiler.register(Artifact.from_payload("ancestry-projection", projection))
+
+    if projection is not None:
+        compiler.derive(
+            "summary", artifact="ancestry-projection", locator="affinity",
+            status=projection["status"] if projection["status"] != UNAVAILABLE else UNAVAILABLE,
+            basis="projeção do caso nos componentes principais do painel de referência",
+            kind="computed",
+            transform=lambda _a: _origins_text(projection),
+        )
+    else:
+        compiler.derive(
+            "summary", artifact="array-qc", locator="metrics", status=status,
+            basis="densidade de marcadores e viabilidade de inferência de ancestralidade",
+            kind="computed",
+            transform=lambda m: (
+                f"Nenhuma estimativa de ancestralidade é emitida: nenhum painel de referência com "
+                f"genótipos foi fornecido a esta execução. O array carrega {_autosomal(m.get('chromosome_counts') or {})} "
+                f"marcadores autossômicos, {int((m.get('chromosome_counts') or {}).get('MT', 0))} "
+                f"mitocondriais e {int((m.get('chromosome_counts') or {}).get('Y', 0))} no Y, o que "
+                "torna a análise fisicamente possível assim que o painel existir. Percentuais de "
+                "origem sem painel citado são a asserção sem fonte mais comum em genômica de consumo."
+            ),
+        )
 
     compiler.section_derived(
         titles[0], artifact="array-qc", locator="case_id", status=status,
@@ -148,22 +230,45 @@ def build_payload(matrix_path: Path, qc_path: Path) -> dict:
             f"QC {qc.sha256}. Nenhum painel de referência populacional foi registrado."
         ),
     )
-    # The origins portrait is the whole point of the report and the thing that cannot be
-    # produced. Saying which artifact would change that keeps it a requirement, not a hedge.
-    compiler.section_unavailable(
-        titles[1],
-        basis=(
-            "estimativa de composição de ancestralidade exige painel de referência com "
-            "genótipos (1000 Genomes, HGDP ou SGDP), que não foi fornecido a esta execução. "
-            "Frequências alélicas por população não bastam: separam populações no agregado, "
-            "não atribuem proporções a um indivíduo"
-        ),
-    )
-    compiler.section_derived(
-        titles[2], artifact="array-qc", locator="metrics", status=status,
-        basis="densidade por cromossomo, taxa de chamada e heterozigosidade autossômica",
-        kind="qc_metric", transform=_panel_text,
-    )
+    # The origins portrait: derived when a panel was supplied and the case projected onto it,
+    # and otherwise refused with the artifact that would change the answer named.
+    if projection is not None and projection["status"] == "INFERIDO":
+        compiler.section_derived(
+            titles[1], artifact="ancestry-projection", locator="affinity", status="INFERIDO",
+            basis=(
+                "posição do caso no espaço de componentes principais do painel, e distância aos "
+                "centróides das populações de referência"
+            ),
+            kind="computed", transform=lambda _a: _origins_text(projection),
+        )
+    elif projection is not None:
+        compiler.section_unavailable(
+            titles[1],
+            basis=str(projection.get("reason") or "projeção não estabelecida"),
+        )
+    else:
+        compiler.section_unavailable(
+            titles[1],
+            basis=(
+                "estimativa de composição de ancestralidade exige painel de referência com "
+                "genótipos, que não foi fornecido a esta execução. Frequências alélicas por "
+                "população não bastam: separam populações no agregado, não atribuem proporções "
+                "a um indivíduo"
+            ),
+        )
+    if projection is not None:
+        compiler.section_derived(
+            titles[2], artifact="ancestry-projection", locator="markers_used", status=status,
+            basis="cobertura do painel pelo array e resolução de fita na projeção",
+            kind="qc_metric",
+            transform=lambda _n: _panel_text(metrics) + " " + _projection_quality(projection),
+        )
+    else:
+        compiler.section_derived(
+            titles[2], artifact="array-qc", locator="metrics", status=status,
+            basis="densidade por cromossomo, taxa de chamada e heterozigosidade autossômica",
+            kind="qc_metric", transform=_panel_text,
+        )
     compiler.section_derived(
         titles[3], artifact="array-qc", locator="metrics.chromosome_counts", status=status,
         basis="marcadores mitocondriais e do cromossomo Z/Y efetivamente presentes no array",
@@ -194,8 +299,14 @@ def build_payload(matrix_path: Path, qc_path: Path) -> dict:
 
     compiler.state(
         "sources",
-        [f"completeness-matrix:{matrix.sha256}", f"array-qc:{qc.sha256}"],
-        kind="case_control", basis="artefatos dos quais esta avaliação de viabilidade deriva",
+        [f"completeness-matrix:{matrix.sha256}", f"array-qc:{qc.sha256}"]
+        + (
+            [f"ancestry-panel:{projection['panel']['sha256']}"]
+            + list(projection["panel"].get("sources") or [])
+            if projection is not None
+            else []
+        ),
+        kind="case_control", basis="artefatos e painéis dos quais este relatório deriva",
         status="VERIFICADO",
     )
     compiler.state(
@@ -233,7 +344,12 @@ def build_payload(matrix_path: Path, qc_path: Path) -> dict:
             "status": matrix.payload.get("operational_status", UNAVAILABLE),
             "COMPLETENESS_MATRIX_SHA256": matrix.sha256,
             "ARRAY_QC_SHA256": qc.sha256,
-            "REFERENCE_PANEL": UNAVAILABLE,
+                "REFERENCE_PANEL": (
+                f"{projection['panel']['id']} v{projection['panel']['version']} "
+                f"sha256={projection['panel']['sha256']}"
+                if projection is not None
+                else UNAVAILABLE
+            ),
         },
     )
 
@@ -242,10 +358,20 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--matrix", required=True)
     parser.add_argument("--qc", required=True)
+    parser.add_argument("--panel", help="ancestry reference panel from scripts/build_ancestry_panel.py")
+    parser.add_argument("--input", help="SNP-array file; required with --panel")
     parser.add_argument("--payload-out", required=True)
     args = parser.parse_args()
 
-    payload = build_payload(Path(args.matrix), Path(args.qc))
+    if bool(args.panel) != bool(args.input):
+        parser.error("--panel and --input must be supplied together")
+
+    payload = build_payload(
+        Path(args.matrix),
+        Path(args.qc),
+        panel_path=Path(args.panel) if args.panel else None,
+        input_path=Path(args.input) if args.input else None,
+    )
     out = Path(args.payload_out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
