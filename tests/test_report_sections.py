@@ -166,5 +166,73 @@ class CarrierDenominatorTest(unittest.TestCase):
         self.assertIsNone(detection["genes_total"])
 
 
+class UnqueriedLocusTest(unittest.TestCase):
+    """A locus nobody looked up must never be reported as having no association."""
+
+    def _module(self):
+        import importlib.util
+
+        path = ROOT / "scripts" / "build_association_report.py"
+        spec = importlib.util.spec_from_file_location("_assoc", path)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        return module
+
+    #: A locus from the bulk ClinVar route: no GWAS block at all.
+    NEVER_QUERIED = {"rsid": "rs1", "gene": "BRCA1", "coverage_class": "OBSERVADO"}
+    #: A locus from the curated route where the catalogue was consulted and returned nothing.
+    QUERIED_EMPTY = {
+        "rsid": "rs2", "gene": "MTHFR", "coverage_class": "OBSERVADO",
+        "gwas": {"status": "VERIFICADO", "traits": []},
+    }
+    #: The bulk route's explicit marker.
+    BULK_MARKED = {
+        "rsid": "rs3", "gene": "TTN", "coverage_class": "OBSERVADO",
+        "gwas": {"status": "NÃO DISPONÍVEL", "traits": [],
+                 "reason": "não consultado nesta rota em massa"},
+    }
+
+    def test_the_two_kinds_of_silence_are_told_apart(self):
+        module = self._module()
+        self.assertFalse(module._gwas_queried(self.NEVER_QUERIED))
+        self.assertFalse(module._gwas_queried(self.BULK_MARKED))
+        self.assertTrue(module._gwas_queried(self.QUERIED_EMPTY))
+
+    def test_an_unqueried_locus_is_not_reported_as_having_no_association(self):
+        # The defect this guards against: the matrix printed "nenhuma associação com
+        # significância genômica no GWAS Catalog" once per locus, for 124,357 loci the
+        # catalogue was never asked about — a negative finding nobody looked for.
+        module = self._module()
+        text = module._trait_matrix([self.NEVER_QUERIED, self.BULK_MARKED])
+        self.assertIn("não foram consultados", text)
+        self.assertIn("ninguém procurou", text)
+        self.assertNotIn("nenhuma associação com significância genômica no GWAS Catalog", text)
+
+    def test_a_queried_locus_with_nothing_significant_is_counted_as_such(self):
+        module = self._module()
+        text = module._trait_matrix([self.QUERIED_EMPTY])
+        self.assertIn("foram consultados no GWAS Catalog e não têm", text)
+
+    def test_the_matrix_is_bounded_and_counts_the_remainder(self):
+        module = self._module()
+        many = [dict(self.NEVER_QUERIED, rsid=f"rs{i}") for i in range(5000)]
+        text = module._trait_matrix(many)
+        self.assertLess(len(text), 4000, "the matrix grew with the registry again")
+        self.assertIn("5000", text)
+
+    def test_the_evidence_tier_refuses_to_grade_an_unqueried_scope(self):
+        module = self._module()
+        text = module._evidence_tier([self.NEVER_QUERIED, self.BULK_MARKED])
+        self.assertIn("foi consultado no GWAS Catalog", text)
+        self.assertIn("a ausência dela não é resultado", text)
+
+    def test_the_protective_line_counts_only_what_was_consulted(self):
+        module = self._module()
+        text = module._protective_line([self.NEVER_QUERIED, self.QUERIED_EMPTY])
+        self.assertIn("efetivamente consultados", text)
+        self.assertIn("não foram consultados", text)
+
+
 if __name__ == "__main__":
     unittest.main()

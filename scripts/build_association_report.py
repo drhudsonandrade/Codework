@@ -116,6 +116,24 @@ def _significant_traits(finding: dict[str, Any]) -> list[dict[str, Any]]:
     return [t for t in gwas.get("traits", []) if t.get("genome_wide_significant")]
 
 
+def _gwas_queried(finding: dict[str, Any]) -> bool:
+    """Whether the GWAS Catalog was actually consulted for this locus.
+
+    The distinction decides whether a report may say "no association". Loci from the bulk
+    ClinVar route carry no GWAS block at all, or one whose reason reads "não consultado nesta
+    rota em massa" — the catalogue was never asked about them. Printing "no genome-wide
+    significant association in the GWAS Catalog" for those states a negative finding that
+    nobody looked for, which is a false statement in a clinical document, and at the current
+    registry size it was being printed 124,357 times in one section.
+    """
+    gwas = finding.get("gwas")
+    if not isinstance(gwas, dict):
+        return False
+    if gwas.get("traits"):
+        return True
+    return gwas.get("status") == "VERIFICADO"
+
+
 def _ancestry_line(trait: dict[str, Any]) -> str:
     ancestry = trait.get("ancestry") or {}
     if ancestry.get("status") != "VERIFICADO":
@@ -139,16 +157,34 @@ def _effect_line(trait: dict[str, Any]) -> str:
     return "tamanho de efeito não declarado"
 
 
+#: How many loci the matrix names one by one before the rest become counts. A registry of
+#: 124,621 targets makes an unbounded matrix an 11.5 MB section that no renderer can turn into
+#: a page, and one that says nothing: every line in it was a locus with no association.
+MAX_MATRIX_LOCI = 200
+
+
 def _trait_matrix(loci: list[dict[str, Any]]) -> str:
+    """Loci carrying an association, then exact counts for the two kinds of silence.
+
+    "Queried and nothing reached significance" and "never queried" are different statements
+    and are counted separately. Collapsing them into one negative sentence per locus is what
+    made this section assert findings about a catalogue that was never consulted.
+    """
     lines: list[str] = []
+    queried_without_traits = 0
+    never_queried = 0
+    with_traits = 0
     for finding in loci:
         traits = _significant_traits(finding)
         gene = finding.get("gene") or "sem gene declarado"
         if not traits:
-            lines.append(
-                f"{gene} {finding['rsid']} ({finding['coverage_class']}): nenhuma associação "
-                "com significância genômica no GWAS Catalog"
-            )
+            if _gwas_queried(finding):
+                queried_without_traits += 1
+            else:
+                never_queried += 1
+            continue
+        with_traits += 1
+        if with_traits > MAX_MATRIX_LOCI:
             continue
         for trait in traits[:4]:
             lines.append(
@@ -162,7 +198,26 @@ def _trait_matrix(loci: list[dict[str, Any]]) -> str:
                 f"{gene} {finding['rsid']}: mais {len(traits) - 4} traços com significância "
                 "genômica não detalhados"
             )
-    return " | ".join(lines)
+
+    tail: list[str] = []
+    if with_traits > MAX_MATRIX_LOCI:
+        tail.append(
+            f"mais {with_traits - MAX_MATRIX_LOCI} loci com associação significativa não "
+            f"detalhados individualmente (os {MAX_MATRIX_LOCI} acima são os primeiros do "
+            "escopo; a junção clínica citada nas fontes lista todos)"
+        )
+    if queried_without_traits:
+        tail.append(
+            f"{queried_without_traits} loci foram consultados no GWAS Catalog e não têm "
+            "associação com significância genômica"
+        )
+    if never_queried:
+        tail.append(
+            f"{never_queried} loci **não foram consultados** no GWAS Catalog: entraram pelo "
+            "release em massa do ClinVar, que não faz essa consulta. Ausência de associação "
+            "não é afirmada para eles, porque ninguém procurou"
+        )
+    return " | ".join(lines + tail)
 
 
 def _protective_line(loci: list[dict[str, Any]]) -> str:
@@ -180,9 +235,17 @@ def _protective_line(loci: list[dict[str, Any]]) -> str:
                     f"({_effect_line(trait)}, alelo {'/'.join(trait.get('risk_alleles') or []) or UNAVAILABLE})"
                 )
     if not protective:
+        queried = sum(1 for f in loci if _gwas_queried(f))
         return (
-            "Nenhuma associação em direção protetora foi registrada pelo GWAS Catalog para os "
-            "loci deste escopo. Ausência aqui reflete o catálogo e o painel, não a biologia."
+            "Nenhuma associação em direção protetora foi registrada pelo GWAS Catalog entre "
+            f"os {queried} loci deste escopo que foram efetivamente consultados"
+            + (
+                f"; os outros {len(loci) - queried} não foram consultados e nada é afirmado "
+                "sobre eles"
+                if len(loci) - queried
+                else ""
+            )
+            + ". Ausência aqui reflete o catálogo e o painel, não a biologia."
         )
     return (
         "Direção protetora registrada pelo catálogo (o alelo listado é o de referência da "
@@ -194,15 +257,23 @@ def _evidence_tier(loci: list[dict[str, Any]]) -> str:
     """How much of what the catalogue lists actually reaches genome-wide significance."""
     if not loci:
         return "nenhum locus neste escopo; não há evidência a graduar"
-    total = sum(len((f.get("gwas") or {}).get("traits", [])) for f in loci)
-    significant = sum(len(_significant_traits(f)) for f in loci)
+    queried = [f for f in loci if _gwas_queried(f)]
+    if not queried:
+        return (
+            f"Nenhum dos {len(loci)} loci deste escopo foi consultado no GWAS Catalog: todos "
+            "entraram pelo release em massa do ClinVar, que não faz essa consulta. Não há "
+            "evidência de associação a graduar, e a ausência dela não é resultado."
+        )
+    total = sum(len((f.get("gwas") or {}).get("traits", [])) for f in queried)
+    significant = sum(len(_significant_traits(f)) for f in queried)
     with_ancestry = sum(
         1
-        for f in loci
+        for f in queried
         for t in _significant_traits(f)
         if (t.get("ancestry") or {}).get("status") == "VERIFICADO"
     )
     return (
+        f"Entre os {len(queried)} de {len(loci)} loci deste escopo efetivamente consultados, "
         f"{significant} de {total} traços detalhados atingem significância genômica "
         f"(p ≤ 5e-8); {with_ancestry} deles têm a ancestralidade da coorte de descoberta "
         "recuperada do registro do estudo. Um traço abaixo do limiar é reportado como "
@@ -223,12 +294,24 @@ def _summary(report_id: str, loci: list[dict[str, Any]], findings: dict[str, Any
             "afrouxando o que conta como evidência."
         )
     interrogated = sum(1 for f in loci if f["coverage_class"] in ("OBSERVADO", "NÃO DETECTADO"))
-    with_traits = sum(1 for f in loci if _significant_traits(f))
-    total_traits = sum(len(_significant_traits(f)) for f in loci)
+    queried = [f for f in loci if _gwas_queried(f)]
+    with_traits = sum(1 for f in queried if _significant_traits(f))
+    total_traits = sum(len(_significant_traits(f)) for f in queried)
+    # The consulted count is stated before the association count, because "0 carry an
+    # association" and "0 were asked" are different sentences and only the second is true of
+    # a registry built from the ClinVar bulk route.
     return (
         f"{interrogated} de {len(loci)} loci nos escopos {', '.join(spec['scopes'])} foram "
-        f"interrogados; {with_traits} carregam associação com significância genômica no GWAS "
-        f"Catalog, somando {total_traits} traços. {spec['refusal']}"
+        f"interrogados no array. Destes, {len(queried)} foram consultados no GWAS Catalog e "
+        f"{with_traits} carregam associação com significância genômica, somando "
+        f"{total_traits} traços"
+        + (
+            f"; os outros {len(loci) - len(queried)} não foram consultados, e para eles a "
+            "ausência de associação não é afirmada"
+            if len(loci) - len(queried)
+            else ""
+        )
+        + f". {spec['refusal']}"
     )
 
 
