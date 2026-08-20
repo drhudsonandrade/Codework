@@ -148,6 +148,20 @@ def fetch_entries(base: str, *, max_pages: int | None = None) -> tuple[list[dict
     return entries, expected
 
 
+def count_panels(entries: list[dict[str, Any]]) -> dict[str, int]:
+    """How many distinct panels the sweep saw, and how many carry a green gene.
+
+    Counted here from every entry rather than from the per-gene records, which keep only the
+    first eight panels each. Counting distinct panels from those would silently report a
+    lower bound as if it were the total.
+    """
+    all_panels = {e["panel_id"] for e in entries if e.get("panel_id") is not None}
+    green_panels = {
+        e["panel_id"] for e in entries if e["confidence"] == GREEN and e.get("panel_id") is not None
+    }
+    return {"panels": len(all_panels), "panels_with_a_green_gene": len(green_panels)}
+
+
 def summarise(entries: list[dict[str, Any]], instance: str) -> dict[str, dict[str, Any]]:
     """Group one instance's entries by gene."""
     by_gene: dict[str, dict[str, Any]] = {}
@@ -214,6 +228,7 @@ def build(*, max_pages: int | None = None) -> dict[str, Any]:
         totals[name] = {
             "entries": len(entries),
             "expected": expected,
+            **count_panels(entries),
             "genes": len(per_instance[name]),
             "green_genes": sum(1 for g in per_instance[name].values() if g["established"]),
         }
@@ -280,6 +295,8 @@ def build(*, max_pages: int | None = None) -> dict[str, Any]:
             "genes": len(genes),
             "green_genes": sum(1 for g in genes.values() if g["established"]),
             "genes_in_both_instances": sum(1 for g in genes.values() if len(g["instances"]) > 1),
+            "panels": sum(t["panels"] for t in totals.values()),
+            "panels_with_a_green_gene": sum(t["panels_with_a_green_gene"] for t in totals.values()),
             "mode_conflicts": sum(1 for g in genes.values() if g["mode_of_inheritance_conflict"]),
         },
         "genes": genes,

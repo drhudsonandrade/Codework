@@ -219,8 +219,45 @@ class ShippedPanelTest(unittest.TestCase):
         # Without one, a Brazilian genome's indigenous component would be measured against
         # 1000 Genomes AMR, which is itself admixed.
         panel = load_panel(self.PATH)
-        self.assertIn("AMR-NAT", panel["population_centroids"])
-        self.assertGreater(panel["population_counts"]["AMR-NAT"], 0)
+        native = [p for p in panel["population_centroids"] if p.startswith("AMR-NAT")]
+        self.assertTrue(native, "no indigenous American reference in the panel")
+        for population in native:
+            self.assertGreater(panel["population_counts"][population], 0)
+
+    @unittest.skipUnless(PATH.is_file(), "reference panel not built in this checkout")
+    def test_the_indigenous_reference_includes_an_amazonian_group(self):
+        # Nahua, Maya, Quechua and Aymara are Mesoamerican and Andean. Measuring a Brazilian
+        # genome's indigenous component against only those is measuring it against related
+        # but not local peoples, which the panel used to state as an open limitation.
+        panel = load_panel(self.PATH)
+        self.assertIn("AMR-NAT-AMAZONIA", panel["population_centroids"])
+        self.assertGreater(panel["population_counts"]["AMR-NAT-AMAZONIA"], 0)
+
+    @unittest.skipUnless(PATH.is_file(), "reference panel not built in this checkout")
+    def test_the_indigenous_groups_are_not_collapsed_into_one(self):
+        panel = load_panel(self.PATH)
+        native = {p for p in panel["population_centroids"] if p.startswith("AMR-NAT")}
+        self.assertGreaterEqual(len(native), 2, f"indigenous groups collapsed: {native}")
+
+    @unittest.skipUnless(PATH.is_file(), "reference panel not built in this checkout")
+    def test_the_panel_states_the_measured_size_of_a_spurious_component(self):
+        # The number a reader needs in order to know which components mean nothing. It is
+        # measured by projecting individuals of known origin, not asserted.
+        panel = load_panel(self.PATH)
+        summary = panel.get("validation_summary")
+        self.assertIsInstance(summary, dict, "panel carries no validation summary")
+        self.assertGreater(summary["largest_spurious_component"], 0)
+        self.assertTrue(summary["largest_spurious_example"])
+
+    @unittest.skipUnless(PATH.is_file(), "reference panel not built in this checkout")
+    def test_the_allele_orientation_was_measured_rather_than_assumed(self):
+        panel = load_panel(self.PATH)
+        orientation = panel.get("allele_orientation") or {}
+        self.assertIn(orientation.get("decision"), {"ALINHADO", "INVERTIDO", "N/A"})
+        if orientation.get("decision") in {"ALINHADO", "INVERTIDO"}:
+            # Every comparison must be decisive; a near-zero correlation is a wrong join.
+            for comparison in orientation["comparisons"]:
+                self.assertGreaterEqual(abs(comparison["correlation"]), 0.85)
 
     @unittest.skipUnless(PATH.is_file(), "reference panel not built in this checkout")
     def test_every_marker_carries_a_loading_per_component(self):
@@ -235,6 +272,43 @@ class ShippedPanelTest(unittest.TestCase):
         for marker in panel["markers"]:
             pair = {marker["reference_allele"], marker["effect_allele"]}
             self.assertNotIn(pair, ({"A", "T"}, {"C", "G"}), marker["rsid"])
+
+
+class ProportionThresholdTest(unittest.TestCase):
+    """A larger panel must never be harder to use than a smaller one."""
+
+    def test_the_requirement_is_capped_in_absolute_terms(self):
+        from array_pipeline.ancestry import (
+            MAX_MARKERS_FOR_PROPORTIONS,
+            MIN_OVERLAP_FOR_PROPORTIONS,
+        )
+
+        def required(panel_markers: int) -> int:
+            return min(
+                MAX_MARKERS_FOR_PROPORTIONS,
+                int(MIN_OVERLAP_FOR_PROPORTIONS * panel_markers),
+            )
+
+        # The regression this guards against: growing the reference from 12,914 markers to
+        # 60,000 raised a 60%-of-panel bar from 7,748 to 36,000, so an array that earned
+        # proportions against the small panel would be refused by the better one.
+        small, large = required(12_914), required(60_000)
+        self.assertLessEqual(large, small + 1, "a bigger panel became harder to use")
+        self.assertLessEqual(large, MAX_MARKERS_FOR_PROPORTIONS)
+
+    def test_a_tiny_panel_still_uses_the_fraction(self):
+        from array_pipeline.ancestry import (
+            MAX_MARKERS_FOR_PROPORTIONS,
+            MIN_OVERLAP_FOR_PROPORTIONS,
+        )
+
+        panel_markers = 3000
+        required = min(
+            MAX_MARKERS_FOR_PROPORTIONS, int(MIN_OVERLAP_FOR_PROPORTIONS * panel_markers)
+        )
+        # 60% of 3,000 is 1,800 — the fraction binds, not the cap, so a small panel cannot
+        # hand out proportions on a handful of markers.
+        self.assertEqual(required, 1800)
 
 
 if __name__ == "__main__":

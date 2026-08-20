@@ -107,9 +107,18 @@ def _detection(payload: dict[str, Any]) -> dict[str, Any]:
     interrogated = sum(g["interrogated"] for g in genes)
     catalogued = sum(g["catalogued"] or 0 for g in genes)
     priced = [g for g in genes if g["catalogued"]]
+    # The denominator is the registry's recessive genes, not the genes this sample reached.
+    # `by_gene` is built from findings that carry a validity block, and only interrogated
+    # loci do — so `len(by_gene)` equals the interrogated count by construction and printed
+    # as "602 genes ... of the 602 in the registry", a tautology that reads to a clinician as
+    # complete gene coverage. The real figure comes from the clinical join's registry block,
+    # counted over the whole curated evidence file.
+    registry = payload.get("registry") or {}
+    registry_recessive = registry.get("recessive_genes_established")
     return {
         "genes": genes,
-        "genes_total": len(by_gene),
+        "genes_total": registry_recessive,
+        "genes_reached": len(by_gene),
         "genes_interrogated": len(genes),
         "interrogated": interrogated,
         "catalogued": catalogued,
@@ -135,7 +144,12 @@ def _scope_text(payload: dict[str, Any]) -> str:
     rate = (
         f"{detection['interrogated']} de {detection['catalogued']} variantes classificadas "
         f"P/LP no ClinVar foram interrogadas, em {detection['genes_interrogated']} genes "
-        f"recessivos curados dos {detection['genes_total']} presentes no registro"
+        + (
+            f"recessivos curados dos {detection['genes_total']} do registro"
+            if detection["genes_total"]
+            else "recessivos curados; o total de genes recessivos do registro não consta "
+            "deste artefato e nenhum denominador é afirmado"
+        )
     )
     return (
         rate

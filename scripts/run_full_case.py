@@ -109,13 +109,27 @@ def run(
         ),
     )
 
+    # Sex recorded at birth reaches the clinical join because on the X the same genotype means
+    # different things: a hemizygous male is affected, a heterozygous female is usually a
+    # carrier. It is read from the dossier and never inferred — this pipeline does not call
+    # sex chromosomes, and without the field every X-linked locus is refused with a reason.
+    sex_at_birth = None
+    if dossier and dossier.is_file():
+        from reporting.case_dossier import load_dossier
+
+        loaded = _step(results, "case-dossier", lambda: load_dossier(dossier))
+        if loaded:
+            sex_at_birth = (loaded.get("identification") or {}).get("sex_recorded_at_birth")
+
     findings_path = None
     if evidence and evidence.is_file() and assessed and assessed.is_file():
         findings_path = _step(
             results,
             "clinical-findings",
             lambda: write_findings(
-                build_clinical_findings(matrix_path, evidence, assessed),
+                build_clinical_findings(
+                    matrix_path, evidence, assessed, sex_at_birth=sex_at_birth
+                ),
                 outdir / "clinical-findings.json",
             ),
         )

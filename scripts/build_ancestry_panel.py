@@ -41,6 +41,7 @@ projected onto them.
 from __future__ import annotations
 
 import argparse
+import base64
 import gzip
 import hashlib
 import json
@@ -55,7 +56,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from array_pipeline.targets import sha256_json
+from array_pipeline.targets import read_manifest_bytes, sha256_json
 
 SCHEMA = "genoma-ancestry-reference-panel-v1"
 DEFAULT_OUTPUT = ROOT / "config/ancestry_reference_panel.json.gz"
@@ -198,6 +199,137 @@ def read_vcf_genotypes(
             stats["matched"] += 1
     matrix = np.vstack(rows) if rows else np.zeros((0, len(samples)), dtype=np.int8)
     return kept, matrix, info, stats
+
+
+def read_aadr(path: Path) -> tuple[np.ndarray, list[dict[str, Any]], list[str], list[dict[str, str]]]:
+    """The AADR Human Origins reference, in the same shape `harmonise` takes.
+
+    Dosage is *provisionally* the count of the `.snp` file's second allele. Which of the two
+    alleles the packed value actually counts is a convention of the format, and reading it
+    backwards inverts every genotype while producing a panel that still looks well formed —
+    so the orientation is not decided here. `check_orientation` measures it against 1000
+    Genomes frequencies and the caller applies the answer.
+    """
+    raw = read_manifest_bytes(Path(path))
+    payload = json.loads(raw)
+    if payload.get("schema") != "genoma-aadr-genotypes-v1":
+        raise ValueError(f"unexpected AADR artefact schema: {payload.get('schema')!r}")
+    snps = payload["snps"]
+    nsnp = len(snps)
+    samples = payload["samples"]
+
+    columns: list[np.ndarray] = []
+    for encoded in payload["genotypes_packed"]:
+        packed = np.frombuffer(base64.b64decode(encoded), dtype=np.uint8)
+        # Four genotypes per byte, most significant pair first.
+        unpacked = np.empty(packed.size * 4, dtype=np.int8)
+        for offset, shift in enumerate((6, 4, 2, 0)):
+            unpacked[offset::4] = (packed >> shift) & 0b11
+        calls = unpacked[:nsnp].astype(np.int8)
+        calls[calls == 3] = -1
+        columns.append(calls)
+    dosage = np.column_stack(columns) if columns else np.zeros((nsnp, 0), np.int8)
+
+    info = [
+        {
+            "rsid": snp["rsid"],
+            "chromosome": str(snp["chromosome"]),
+            "position": int(snp["position"]),
+            # a2 is the allele the provisional dosage counts, matching `read_plink`.
+            "a1": snp["allele_a"],
+            "a2": snp["allele_b"],
+        }
+        for snp in snps
+    ]
+    ids = [s["id"] for s in samples]
+    meta = [
+        {"sample": s["id"], "population": s["population"], "super_population": s["panel_group"],
+         "country": s.get("country", UNAVAILABLE)}
+        for s in samples
+    ]
+    return dosage, info, ids, meta
+
+
+def check_orientation(
+    aadr_aligned: np.ndarray,
+    aadr_meta: list[dict[str, str]],
+    thousand_aligned: np.ndarray,
+    thousand_populations: list[dict[str, str]],
+) -> dict[str, Any]:
+    """Decide, by measurement, whether the AADR dosages count the same allele as the panel.
+
+    The two datasets share continental populations: the AADR carries French, Han and Yoruba
+    individuals, and the 1000 Genomes release carries EUR, EAS and AFR. At the markers both
+    describe, their allele frequencies must agree — unless the packed genotypes count the
+    other allele, in which case every frequency is *1 − f* and the correlation is close to
+    −1 rather than +1.
+
+    A correlation near zero means the coding is neither aligned nor inverted, which is not a
+    thing to correct; it means the join is wrong. That is refused rather than resolved.
+    """
+    pairs = (("CHECK-EUR", "EUR"), ("CHECK-EAS", "EAS"), ("CHECK-AFR", "AFR"))
+    results: list[dict[str, Any]] = []
+    for aadr_group, thousand_group in pairs:
+        aadr_columns = [i for i, m in enumerate(aadr_meta) if m["super_population"] == aadr_group]
+        thousand_columns = [
+            i for i, p in enumerate(thousand_populations)
+            if p.get("super_population") == thousand_group
+        ]
+        if not aadr_columns or not thousand_columns:
+            continue
+        left = _frequencies(aadr_aligned[:, aadr_columns])
+        right = _frequencies(thousand_aligned[:, thousand_columns])
+        usable = ~(np.isnan(left) | np.isnan(right))
+        # Markers where either side is monomorphic carry no information about orientation
+        # and would dominate the correlation with a cloud of identical points.
+        informative = usable & (right > 0.05) & (right < 0.95)
+        if informative.sum() < 500:
+            continue
+        correlation = float(np.corrcoef(left[informative], right[informative])[0, 1])
+        results.append(
+            {
+                "aadr_group": aadr_group,
+                "thousand_genomes_group": thousand_group,
+                "markers": int(informative.sum()),
+                "correlation": round(correlation, 4),
+            }
+        )
+    if not results:
+        raise ValueError(
+            "nenhum par de populações comparável entre AADR e 1000 Genomes; sem isso a "
+            "orientação dos alelos não pode ser medida e não será presumida"
+        )
+    correlations = [r["correlation"] for r in results]
+    if all(c >= 0.85 for c in correlations):
+        decision, invert = "ALINHADO", False
+    elif all(c <= -0.85 for c in correlations):
+        decision, invert = "INVERTIDO", True
+    else:
+        raise ValueError(
+            "as frequências do AADR não batem nem com o alelo declarado nem com o seu "
+            f"complemento (correlações {correlations}). Isso não é orientação a corrigir, é "
+            "junção errada, e o painel não é construído sobre ela."
+        )
+    return {
+        "decision": decision,
+        "invert": invert,
+        "comparisons": results,
+        "basis": (
+            "correlação entre a frequência alélica das populações continentais do AADR e a "
+            "das superpopulações correspondentes do 1000 Genomes, nos mesmos marcadores. "
+            "Uma inversão de codificação aparece como correlação próxima de −1."
+        ),
+    }
+
+
+def _frequencies(dosage: np.ndarray) -> np.ndarray:
+    """Per-marker allele frequency, NaN where nothing was called."""
+    valid = dosage >= 0
+    counts = np.where(valid, dosage, 0).sum(axis=1)
+    called = valid.sum(axis=1)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        out = np.where(called > 0, counts / (2.0 * np.maximum(called, 1)), np.nan)
+    return out.astype(np.float64)
 
 
 def harmonise(
@@ -349,12 +481,39 @@ def principal_components(dosage: np.ndarray, n_components: int) -> tuple[np.ndar
 def build(
     vcf_path: Path,
     panel_path: Path,
-    native_prefix: Path,
+    native_prefix: Path | None = None,
     *,
+    aadr_path: Path | None = None,
     max_markers: int | None = None,
 ) -> dict[str, Any]:
-    native_rsids, native_dosage, native_info, native_samples = read_plink(native_prefix)
-    print(f"  painel ameríndio: {len(native_rsids):,} marcadores, {len(native_samples)} amostras", flush=True)
+    """Build the panel from the 1000 Genomes release plus one indigenous American reference.
+
+    The two references are alternatives, not additions. Mao et al. is on Affymetrix 6.0 and
+    the AADR is on Human Origins, and requiring both would intersect three platforms: 12,889
+    coordinates against 51,263 for Affy+Mao and 162,289 for Affy+AADR. The AADR is the
+    default because it wins on both counts at once — three times the markers, and Karitiana
+    and Surui, who are Amazonian peoples of Rondônia, where Mao et al. offers only
+    Mesoamerican and Andean groups.
+    """
+    if (native_prefix is None) == (aadr_path is None):
+        raise ValueError(
+            "exatamente uma referência indígena é esperada: --native (Mao et al., Affy 6.0) "
+            "ou --aadr (AADR Human Origins). Exigir as duas interseta três plataformas e "
+            "reduz o painel a 12.889 marcadores; nenhuma o deixa sem referência ameríndia, e "
+            "então o componente indígena de um genoma brasileiro seria estimado contra o AMR "
+            "do 1000 Genomes, que é ele mesmo miscigenado."
+        )
+
+    aadr_meta: list[dict[str, str]] = []
+    if aadr_path is not None:
+        native_dosage, native_info, native_samples, aadr_meta = read_aadr(aadr_path)
+        native_rsids = [v["rsid"] for v in native_info]
+        source_name = "AADR Human Origins"
+    else:
+        native_rsids, native_dosage, native_info, native_samples = read_plink(native_prefix)
+        source_name = "Mao et al. 2007"
+    print(f"  referência ameríndia ({source_name}): {len(native_rsids):,} marcadores, "
+          f"{len(native_samples)} amostras", flush=True)
 
     # Autosomes only. The sex chromosomes have a different effective population size and a
     # different missingness pattern between sexes, both of which distort the components.
@@ -403,10 +562,59 @@ def build(
             populations.append({"sample": sample, "population": UNAVAILABLE, "super_population": UNAVAILABLE})
         else:
             populations.append({"sample": sample, **found})
-    for sample in native_samples:
-        populations.append(
-            {"sample": sample, "population": "NativeAmerican_Mao2007", "super_population": "AMR-NAT"}
-        )
+    if aadr_meta:
+        # Each AADR individual keeps their own people's name and their panel group. Collapsing
+        # Karitiana, Quechua and Mayan into one "AMR-NAT" bucket is exactly what made an
+        # Amazonian genome get measured against Andean and Mesoamerican references.
+        by_id = {m["sample"]: m for m in aadr_meta}
+        for sample in native_samples:
+            meta = by_id[sample]
+            populations.append(
+                {
+                    "sample": sample,
+                    "population": meta["population"],
+                    "super_population": meta["super_population"],
+                    "country": meta.get("country", UNAVAILABLE),
+                }
+            )
+    else:
+        for sample in native_samples:
+            populations.append(
+                {"sample": sample, "population": "NativeAmerican_Mao2007", "super_population": "AMR-NAT"}
+            )
+
+    orientation: dict[str, Any] | None = None
+    if aadr_meta:
+        # Measured before any filter, on the full aligned intersection, so the answer rests on
+        # as many markers as possible rather than on whatever survives pruning.
+        orientation = check_orientation(native_aligned, aadr_meta, thousand_aligned, populations)
+        print(f"  orientação dos alelos AADR: {orientation['decision']} "
+              f"({[c['correlation'] for c in orientation['comparisons']]})", flush=True)
+        if orientation["invert"]:
+            inverted = 2 - native_aligned.astype(np.int16)
+            inverted[native_aligned < 0] = -1
+            native_aligned = inverted.astype(np.int8)
+
+        # The orientation controls leave now. They exist to answer one question and have
+        # answered it; keeping them would put HGDP French, Han and Yoruba individuals into a
+        # panel that already carries EUR, EAS and AFR from the 1000 Genomes release — the
+        # same populations twice, on two platforms, which moves those centroids and invites a
+        # leading component that describes the assay rather than the people.
+        keep_columns = [
+            i for i, m in enumerate(aadr_meta) if not m["super_population"].startswith("CHECK-")
+        ]
+        dropped = len(aadr_meta) - len(keep_columns)
+        kept_ids = {aadr_meta[i]["sample"] for i in keep_columns}
+        native_aligned = native_aligned[:, keep_columns]
+        native_samples = [s for s in native_samples if s in kept_ids]
+        populations = [
+            p for p in populations
+            if not str(p.get("super_population", "")).startswith("CHECK-")
+        ]
+        sample_ids = list(vcf_samples) + list(native_samples)
+        orientation["controls_dropped_after_measurement"] = dropped
+        print(f"  controles de orientação removidos do painel: {dropped}", flush=True)
+        combined = np.hstack([thousand_aligned, native_aligned])
 
     # Quality filters, then pruning, then PCA — in that order, because pruning correlations
     # computed over rare or missing-heavy markers are not worth acting on.
@@ -447,7 +655,11 @@ def build(
     generated = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     payload: dict[str, Any] = {
         "schema": SCHEMA,
-        "id": "GENOMA-ANCESTRY-1KG-OMNI-PLUS-NATIVE",
+        "id": (
+            "GENOMA-ANCESTRY-1KG-AFFY6-PLUS-AADR"
+            if aadr_path is not None
+            else "GENOMA-ANCESTRY-1KG-AFFY6-PLUS-MAO"
+        ),
         "version": generated[:10].replace("-", "") + ".1",
         "generated_at": generated,
         "build": "GRCh37",
@@ -455,18 +667,34 @@ def build(
             "genotype_release": vcf_path.name,
             "genotype_release_sha256": _sha256(vcf_path),
             "population_labels": panel_path.name,
-            "native_american_panel": native_prefix.name,
+            "native_american_panel": (
+                aadr_path.name if aadr_path is not None else native_prefix.name
+            ),
+            "native_american_panel_sha256": _sha256(
+                aadr_path if aadr_path is not None else native_prefix.with_suffix(".bed")
+            ),
         },
         "sources": [
             "1000 Genomes Project, release de genótipos de chip "
             f"({vcf_path.name}, SHA-256 {_sha256(vcf_path)}), com rótulos de população de "
             f"{panel_path.name}",
-            "Native American reference panel, Mao et al. 2007 (Am J Hum Genet 80:1171-78), "
-            "genotipado em Affymetrix 6.0, filtrado e controlado por Kenny, Moreno, Maples e "
-            "Gignoux (Stanford/UCSF) e distribuído pelo 1000 Genomes em "
-            "technical/working/20130711_native_american_admix_train. 43 indivíduos (Nahua, "
-            "Maya, Quechua, Aymara) retidos por terem 99% ou mais de ancestralidade nativa "
-            "segundo ADMIXTURE em K=3.",
+            (
+                "Allen Ancient DNA Resource (AADR) v66.p1, genótipos Human Origins de "
+                "indivíduos atuais, Harvard Dataverse doi:10.7910/DVN/FFIDCW, licença CC0 1.0. "
+                "Referência ameríndia dividida em três grupos nomeados: AMR-NAT-AMAZONIA "
+                "(Karitiana e Surui, Rondônia, Brasil; Piapoco, bacia do Orinoco-Amazonas), "
+                "AMR-NAT-ANDES (Quechua, Bolivian) e AMR-NAT-MESOAMERICA (Mayan, Mixe, "
+                "Mixtec, Pima, Zapotec). Indivíduos marcados pelos curadores como discovery, "
+                "outlier ou QC-remove são excluídos."
+                if aadr_path is not None
+                else
+                "Native American reference panel, Mao et al. 2007 (Am J Hum Genet 80:1171-78), "
+                "genotipado em Affymetrix 6.0, filtrado e controlado por Kenny, Moreno, Maples e "
+                "Gignoux (Stanford/UCSF) e distribuído pelo 1000 Genomes em "
+                "technical/working/20130711_native_american_admix_train. 43 indivíduos (Nahua, "
+                "Maya, Quechua, Aymara) retidos por terem 99% ou mais de ancestralidade nativa "
+                "segundo ADMIXTURE em K=3."
+            ),
         ],
         "method": (
             "Interseção por rsid dos dois painéis, com marcadores palindrômicos (A/T, C/G) "
@@ -484,6 +712,10 @@ def build(
             "ld_step": LD_STEP,
             "ld_max_r2": LD_MAX_R2,
             "components": int(loadings.shape[0]),
+        },
+        "allele_orientation": orientation or {
+            "decision": "N/A",
+            "basis": "referência ameríndia em PLINK, cuja codificação de alelos é declarada no .bim",
         },
         "statistics": {
             "native_markers": len(native_rsids),
@@ -552,7 +784,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--vcf", required=True, help="1000 Genomes chip genotypes VCF")
     parser.add_argument("--panel", required=True, help="1000 Genomes sample population panel")
-    parser.add_argument("--native", required=True, help="PLINK prefix of the Native American panel")
+    parser.add_argument("--native", help="PLINK prefix of the Mao et al. Native American panel")
+    parser.add_argument(
+        "--aadr",
+        help="AADR Human Origins artefact from scripts/fetch_aadr_genotypes.py (recommended: "
+        "three times the markers, and Amazonian peoples of Brazil rather than only "
+        "Mesoamerican and Andean ones)",
+    )
     parser.add_argument("--max-markers", type=int, default=60000)
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
     args = parser.parse_args()
@@ -560,7 +798,8 @@ def main() -> int:
     payload = build(
         Path(args.vcf),
         Path(args.panel),
-        Path(args.native),
+        Path(args.native) if args.native else None,
+        aadr_path=Path(args.aadr) if args.aadr else None,
         max_markers=args.max_markers,
     )
     out = Path(args.output)

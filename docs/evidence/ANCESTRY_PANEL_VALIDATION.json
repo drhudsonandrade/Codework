@@ -1,0 +1,294 @@
+{
+ "cases": [
+  {
+   "closest_matches_expected": true,
+   "closest_population": "AFR",
+   "composition": {
+    "AFR": 0.6658,
+    "AMR-NAT-ANDES": 0.0061,
+    "AMR-NAT-MESOAMERICA": 0.1977,
+    "EAS": 0.015,
+    "EUR": 0.0865,
+    "SAS": 0.029
+   },
+   "description": "Iorubá ascendente, Nigéria (ASW/YRI)",
+   "expected": "AFR",
+   "expected_is_admixed": false,
+   "fit_quality": "boa",
+   "held_out": false,
+   "largest_spurious": 0.1977,
+   "markers_used": 57971,
+   "overlap": null,
+   "proportions_reason": null,
+   "residual": 0.0728,
+   "sample": "NA19625",
+   "source": "1000 Genomes (held-in: contribuiu para os loadings)",
+   "spurious_components": [
+    {
+     "population": "AMR-NAT-MESOAMERICA",
+     "proportion": 0.1977
+    },
+    {
+     "population": "EUR",
+     "proportion": 0.0865
+    }
+   ]
+  },
+  {
+   "closest_matches_expected": true,
+   "closest_population": "EUR",
+   "composition": {
+    "AMR-NAT-AMAZONIA": 0.0135,
+    "EUR": 0.9865
+   },
+   "description": "CEU, Utah",
+   "expected": "EUR",
+   "expected_is_admixed": false,
+   "fit_quality": "boa",
+   "held_out": false,
+   "largest_spurious": 0.0,
+   "markers_used": 58018,
+   "overlap": null,
+   "proportions_reason": null,
+   "residual": 0.1171,
+   "sample": "NA12878",
+   "source": "1000 Genomes (held-in: contribuiu para os loadings)",
+   "spurious_components": []
+  },
+  {
+   "closest_matches_expected": true,
+   "closest_population": "EAS",
+   "composition": {
+    "AFR": 0.0051,
+    "AMR-NAT-ANDES": 0.0178,
+    "EAS": 0.9705,
+    "EUR": 0.0033,
+    "SAS": 0.0033
+   },
+   "description": "Han, Pequim",
+   "expected": "EAS",
+   "expected_is_admixed": false,
+   "fit_quality": "boa",
+   "held_out": false,
+   "largest_spurious": 0.0,
+   "markers_used": 58055,
+   "overlap": null,
+   "proportions_reason": null,
+   "residual": 0.0833,
+   "sample": "NA18525",
+   "source": "1000 Genomes (held-in: contribuiu para os loadings)",
+   "spurious_components": []
+  },
+  {
+   "closest_matches_expected": true,
+   "closest_population": "AMR-NAT-ANDES",
+   "composition": {
+    "AFR": 0.0182,
+    "AMR-NAT-AMAZONIA": 0.0433,
+    "AMR-NAT-ANDES": 0.6534,
+    "AMR-NAT-MESOAMERICA": 0.0057,
+    "EAS": 0.0197,
+    "EUR": 0.2593,
+    "SAS": 0.0005
+   },
+   "description": "Peruano, Lima (população miscigenada)",
+   "expected": "AMR",
+   "expected_is_admixed": true,
+   "fit_quality": "boa",
+   "held_out": false,
+   "largest_spurious": 0.0,
+   "markers_used": 58083,
+   "overlap": null,
+   "proportions_reason": null,
+   "residual": 0.0588,
+   "sample": "HG01565",
+   "source": "1000 Genomes (held-in: contribuiu para os loadings)",
+   "spurious_components": []
+  },
+  {
+   "closest_matches_expected": true,
+   "closest_population": "EUR",
+   "composition": {
+    "AFR": 0.0099,
+    "EUR": 0.9422,
+    "SAS": 0.0479
+   },
+   "description": "Toscano, Itália",
+   "expected": "EUR",
+   "expected_is_admixed": false,
+   "fit_quality": "moderada",
+   "held_out": false,
+   "largest_spurious": 0.0,
+   "markers_used": 58028,
+   "overlap": null,
+   "proportions_reason": null,
+   "residual": 0.2263,
+   "sample": "NA20502",
+   "source": "1000 Genomes (held-in: contribuiu para os loadings)",
+   "spurious_components": []
+  },
+  {
+   "closest_matches_expected": true,
+   "closest_population": "AFR",
+   "composition": {
+    "AFR": 1.0
+   },
+   "description": "Gâmbia",
+   "expected": "AFR",
+   "expected_is_admixed": false,
+   "fit_quality": "moderada",
+   "held_out": false,
+   "largest_spurious": 0.0,
+   "markers_used": 57984,
+   "overlap": null,
+   "proportions_reason": null,
+   "residual": 0.2683,
+   "sample": "HG02461",
+   "source": "1000 Genomes (held-in: contribuiu para os loadings)",
+   "spurious_components": []
+  },
+  {
+   "closest_matches_expected": true,
+   "closest_population": "AMR-NAT-AMAZONIA",
+   "composition": {
+    "AMR-NAT-AMAZONIA": 1.0
+   },
+   "description": "Karitiana, Brazil",
+   "expected": "AMR-NAT-AMAZONIA",
+   "expected_is_admixed": false,
+   "fit_quality": "moderada",
+   "held_out": false,
+   "largest_spurious": 0.0,
+   "markers_used": 59566,
+   "overlap": null,
+   "proportions_reason": null,
+   "residual": 0.1583,
+   "sample": "HGDP00995.HO",
+   "source": "AADR Human Origins (held-in: contribuiu para os loadings)",
+   "spurious_components": []
+  },
+  {
+   "closest_matches_expected": true,
+   "closest_population": "AMR-NAT-AMAZONIA",
+   "composition": {
+    "AMR-NAT-AMAZONIA": 1.0
+   },
+   "description": "Surui, Brazil",
+   "expected": "AMR-NAT-AMAZONIA",
+   "expected_is_admixed": false,
+   "fit_quality": "boa",
+   "held_out": false,
+   "largest_spurious": 0.0,
+   "markers_used": 59906,
+   "overlap": null,
+   "proportions_reason": null,
+   "residual": 0.0614,
+   "sample": "HGDP00832.HO",
+   "source": "AADR Human Origins (held-in: contribuiu para os loadings)",
+   "spurious_components": []
+  },
+  {
+   "closest_matches_expected": true,
+   "closest_population": "AMR-NAT-ANDES",
+   "composition": {
+    "AMR-NAT-AMAZONIA": 0.2766,
+    "AMR-NAT-ANDES": 0.4809,
+    "AMR-NAT-MESOAMERICA": 0.2425
+   },
+   "description": "Piapoco, Colombia",
+   "expected": "AMR-NAT-AMAZONIA",
+   "expected_is_admixed": false,
+   "fit_quality": "boa",
+   "held_out": false,
+   "largest_spurious": 0.0,
+   "markers_used": 59850,
+   "overlap": null,
+   "proportions_reason": null,
+   "residual": 0.0706,
+   "sample": "HGDP00702.HO",
+   "source": "AADR Human Origins (held-in: contribuiu para os loadings)",
+   "spurious_components": []
+  },
+  {
+   "closest_matches_expected": true,
+   "closest_population": "AMR-NAT-ANDES",
+   "composition": {
+    "AMR-NAT-ANDES": 1.0
+   },
+   "description": "Quechua, Peru",
+   "expected": "AMR-NAT-ANDES",
+   "expected_is_admixed": false,
+   "fit_quality": "boa",
+   "held_out": false,
+   "largest_spurious": 0.0,
+   "markers_used": 59907,
+   "overlap": null,
+   "proportions_reason": null,
+   "residual": 0.1061,
+   "sample": "NA11200.HO",
+   "source": "AADR Human Origins (held-in: contribuiu para os loadings)",
+   "spurious_components": []
+  },
+  {
+   "closest_matches_expected": true,
+   "closest_population": "AMR-NAT-MESOAMERICA",
+   "composition": {
+    "AFR": 0.0051,
+    "AMR-NAT-AMAZONIA": 0.0424,
+    "AMR-NAT-ANDES": 0.3186,
+    "AMR-NAT-MESOAMERICA": 0.6017,
+    "EUR": 0.0322
+   },
+   "description": "Mayan, Mexico",
+   "expected": "AMR-NAT-MESOAMERICA",
+   "expected_is_admixed": false,
+   "fit_quality": "boa",
+   "held_out": false,
+   "largest_spurious": 0.0,
+   "markers_used": 59849,
+   "overlap": null,
+   "proportions_reason": null,
+   "residual": 0.0262,
+   "sample": "HGDP00854.HO",
+   "source": "AADR Human Origins (held-in: contribuiu para os loadings)",
+   "spurious_components": []
+  }
+ ],
+ "held_out": false,
+ "held_out_caveat": "Nenhum destes indivíduos é externo ao painel: todos contribuíram para os loadings, então as projeções são otimistas. Isto mede consistência interna e detecção de artefatos, não acurácia fora da amostra.",
+ "known_artefacts": [
+  {
+   "description": "Iorubá ascendente, Nigéria (ASW/YRI)",
+   "reading": "NA19625 é Iorubá ascendente, Nigéria (ASW/YRI) e recebeu 20% de AMR-NAT-MESOAMERICA, 9% de EUR. Isso é artefato de ajuste, não ancestralidade: a projeção distribui peso por direções que a base de referência não separa bem nesta região do espaço.",
+   "residual": 0.0728,
+   "sample": "NA19625",
+   "spurious": [
+    {
+     "population": "AMR-NAT-MESOAMERICA",
+     "proportion": 0.1977
+    },
+    {
+     "population": "EUR",
+     "proportion": 0.0865
+    }
+   ]
+  }
+ ],
+ "method": "Indivíduos de origem conhecida são projetados pelo mesmo caminho que um caso percorre, e a composição obtida é comparada com a população de origem. Um componente continental que a pessoa não tem, acima de 5%, é registrado como artefato nomeado. Grupos ameríndios são comparados como família: um amazônida legitimamente carrega sinal andino, e chamar isso de artefato seria o erro oposto.",
+ "panel": {
+  "id": "GENOMA-ANCESTRY-1KG-AFFY6-PLUS-AADR",
+  "markers": 60000,
+  "sha256": "2b74af5651a9a333c8d973fc7cc21495eaf0265d12f22fe6815fa7df2b32ec0b",
+  "version": "20260820.1"
+ },
+ "schema": "genoma-ancestry-panel-validation-v1",
+ "sha256": "62cb2271e1d92c1bf85baafde0fd37c69211641a564a4333ec08fb7228b6ce06",
+ "spurious_threshold": 0.05,
+ "totals": {
+  "cases": 11,
+  "cases_with_spurious_component": 1,
+  "closest_matches_expected": 11,
+  "largest_spurious_component": 0.1977
+ },
+ "validated_at": "2026-08-20T10:23:19.044684Z"
+}

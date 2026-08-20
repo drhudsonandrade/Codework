@@ -117,5 +117,54 @@ class AssociationSectionRolesTest(unittest.TestCase):
                 )
 
 
+class CarrierDenominatorTest(unittest.TestCase):
+    """The carrier-screening denominator must count the registry, not the sample."""
+
+    def _detection(self, registry_recessive):
+        import importlib.util
+
+        path = ROOT / "scripts" / "build_reproductive_report.py"
+        spec = importlib.util.spec_from_file_location("_rep", path)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        payload = {
+            "registry": {"recessive_genes_established": registry_recessive},
+            "findings": [
+                {
+                    "gene": gene,
+                    "coverage_class": "OBSERVADO",
+                    "validity": {
+                        "established": True,
+                        "modes_of_inheritance": ["AR"],
+                        "clinvar_variant_counts": {
+                            "pathogenic": 100, "representable_in_registry": 10
+                        },
+                    },
+                }
+                for gene in ("HFE", "CFTR", "PAH")
+            ],
+        }
+        return module._detection(payload)
+
+    def test_the_denominator_is_the_registry_not_the_genes_reached(self):
+        # The defect this guards against: the denominator used to be len(by_gene), which is
+        # built only from findings that carry a validity block — and only interrogated loci
+        # do. It therefore always equalled the numerator and printed "N of N", which reads as
+        # complete gene coverage.
+        detection = self._detection(1939)
+        self.assertEqual(detection["genes_interrogated"], 3)
+        self.assertEqual(detection["genes_total"], 1939)
+        self.assertNotEqual(
+            detection["genes_total"],
+            detection["genes_interrogated"],
+            "denominator collapsed back onto the numerator",
+        )
+
+    def test_a_missing_registry_block_yields_no_denominator_rather_than_a_wrong_one(self):
+        detection = self._detection(None)
+        self.assertIsNone(detection["genes_total"])
+
+
 if __name__ == "__main__":
     unittest.main()

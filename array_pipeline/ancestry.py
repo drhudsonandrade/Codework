@@ -44,6 +44,21 @@ MIN_MARKERS = 2000
 #: Proportions additionally require this share of the panel, because shrinkage grows as the
 #: overlap falls and there is no correction applied here.
 MIN_OVERLAP_FOR_PROPORTIONS = 0.60
+#: ...but never more than this many markers in absolute terms.
+#:
+#: A fraction alone makes a *better* panel harder to use. Rebuilding the reference from
+#: 12,914 markers to 60,000 raised the 60% bar from 7,748 markers to 36,000, so an array that
+#: earned proportions against the small panel could be refused by the large one while
+#: carrying strictly more information. Shrinkage depends on how many markers were actually
+#: used, not on how many the panel happens to contain, so the absolute count is the quantity
+#: that means something and the fraction is a secondary floor.
+#:
+#: 7,500 is set at or below what the 12,914-marker panel already demanded (7,748), because
+#: that configuration is the one whose projections were validated. Published
+#: ancestry-informative panels place individuals at continental level on hundreds to a few
+#: thousand markers, so this is not a thin requirement — it is the old one, kept from
+#: tightening as a side effect of a better reference.
+MAX_MARKERS_FOR_PROPORTIONS = 7500
 #: Bootstrap resamples used for the interval around each proportion.
 BOOTSTRAP_SAMPLES = 200
 
@@ -275,14 +290,15 @@ def project_case(
         ),
     }
 
-    if overlap < MIN_OVERLAP_FOR_PROPORTIONS:
+    required = min(MAX_MARKERS_FOR_PROPORTIONS, int(MIN_OVERLAP_FOR_PROPORTIONS * len(markers)))
+    if len(used) < required:
         result["proportions"] = None
         result["proportions_reason"] = (
-            f"sobreposição de {overlap:.1%} com o painel, abaixo de "
-            f"{MIN_OVERLAP_FOR_PROPORTIONS:.0%}. A projeção de um indivíduo encolhe em direção "
-            "à origem quanto menos marcadores compartilha com a referência, e proporções "
-            "lidas de um ponto encolhido subestimam os componentes extremos. A afinidade "
-            "acima não depende dessa escala e permanece válida."
+            f"{len(used):,} marcadores em comum com o painel ({overlap:.1%} dele), abaixo dos "
+            f"{required:,} exigidos. A projeção de um indivíduo encolhe em direção à origem "
+            "quanto menos marcadores compartilha com a referência, e proporções lidas de um "
+            "ponto encolhido subestimam os componentes extremos. A afinidade acima não "
+            "depende dessa escala e permanece válida."
         )
         return result
 
@@ -321,11 +337,36 @@ def project_case(
     result["fit_quality"] = "boa" if ratio < 0.15 else ("moderada" if ratio < 0.30 else "ruim")
     if ratio >= 0.15:
         result["fit_quality_warning"] = (
-            f"resíduo de {ratio:.0%} da distância à origem: componentes pequenos nesta "
-            "composição podem ser artefato do ajuste, não ancestralidade. Um indivíduo de "
-            "referência iorubá, ajustado neste painel, recebe 17,5% de componente ameríndio "
-            "espúrio com resíduo semelhante. Leia o componente majoritário e a afinidade; "
-            "trate componentes abaixo de ~20% como não estabelecidos."
+            f"resíduo de {ratio:.0%} da distância à origem: a pessoa não é bem representada "
+            "por nenhuma combinação das populações de referência, e as proporções abaixo são "
+            "o ajuste mais próximo, não uma decomposição."
+        )
+
+    # The minor-component caveat is unconditional, and that is a correction rather than
+    # caution. It used to fire only above a 15% residual, on the observation that a Yoruba
+    # reference individual picked up a spurious 17.5% Native American component at a 28%
+    # residual. Rebuilding the panel on 60,000 markers moved that individual to a 7% residual
+    # — quality "boa" — while he still receives a 20% spurious component. The residual and
+    # the artefact turned out not to travel together, so a guard keyed to the residual misses
+    # exactly the case it was written for.
+    #
+    # The size quoted is measured, not asserted: it comes from the panel's own validation
+    # artefact, where individuals of known origin are projected and their spurious components
+    # recorded. Without that artefact the floor is unknown and the text says so.
+    measured = (panel.get("validation_summary") or {}).get("largest_spurious_component")
+    if isinstance(measured, (int, float)) and measured > 0:
+        result["minor_component_caveat"] = (
+            f"Componentes abaixo de {measured:.0%} não são estabelecidos por esta projeção. "
+            "Esse número é medido, não estipulado: é o maior componente espúrio observado ao "
+            "projetar indivíduos de origem conhecida por este mesmo painel "
+            f"({(panel.get('validation_summary') or {}).get('largest_spurious_example', '')}). "
+            "Leia o componente majoritário e a afinidade."
+        )
+    else:
+        result["minor_component_caveat"] = (
+            "Este painel não traz artefato de validação, então o tamanho típico de um "
+            "componente espúrio não foi medido. Componentes minoritários não são "
+            "estabelecidos e nenhum limiar pode ser citado para eles."
         )
     result["proportions_method"] = (
         "Mínimos quadrados restritos da posição projetada sobre os centróides das populações "

@@ -34,6 +34,7 @@ from typing import Any
 import normative
 from array_pipeline.completeness import INTERPRETABLE, NAO_DETECTADO, NAO_TESTADO
 from array_pipeline.targets import read_manifest_bytes, sha256_json
+from reporting.case_dossier import SEX_FEMALE, SEX_MALE, normalised_sex
 
 SCHEMA = "genoma-clinical-findings-v1"
 UNAVAILABLE = "NÃO DISPONÍVEL"
@@ -472,6 +473,7 @@ def _interpretation(
     entry: dict[str, Any],
     clinvar: dict[str, Any],
     validity: dict[str, Any],
+    sex_at_birth: str | None = None,
 ) -> dict[str, Any]:
     """Decide what *kind* of statement this locus supports, and say why."""
     classification = str(entry.get("classification"))
@@ -558,6 +560,57 @@ def _interpretation(
             "nenhuma condição do ClinVar coincide com uma doença curada para este gene; o modo "
             "de herança usado é a união do gene"
         )
+    # X-linked before the autosomal branches, because on the X the same genotype means
+    # different things in different people and the autosomal reading of "heterozygous" does
+    # not apply. A male has one X: he is hemizygous, not a carrier, and a pathogenic variant
+    # there is expressed. A female heterozygote is usually a carrier, but X-inactivation is
+    # random and skewed inactivation does produce affected women, so she is never called
+    # unaffected here.
+    #
+    # None of this can be decided from the genotype: this system does not call sex
+    # chromosomes. It comes from the dossier, and without it the interpretation is refused
+    # rather than defaulted — defaulting to female would call an affected boy a carrier.
+    if modes == {X_LINKED}:
+        if sex_at_birth == SEX_MALE:
+            return {
+                "kind": ACIONAVEL,
+                "basis": (
+                    "variante patogênica em condição de herança ligada ao X segundo "
+                    f"{sources} ({condition_note}), em pessoa registrada como do sexo "
+                    "masculino ao nascer. Um único cromossomo X torna o genótipo "
+                    "hemizigoto: não há segunda cópia para compensar, e o estado não é de "
+                    "portador. Exige correlação clínica e confirmação por método ortogonal"
+                ),
+            }
+        if sex_at_birth == SEX_FEMALE:
+            return {
+                "kind": PORTADOR if zygosity == "HETEROZIGOTO" else GENOTIPO_DE_RISCO,
+                "basis": (
+                    "variante patogênica em condição de herança ligada ao X segundo "
+                    f"{sources} ({condition_note}), em pessoa registrada como do sexo "
+                    "feminino ao nascer. "
+                    + (
+                        "Heterozigose no X costuma ser estado de portadora, mas a "
+                        "inativação do X é aleatória e a inativação enviesada produz "
+                        "mulheres afetadas — portadora não é sinônimo de não afetada"
+                        if zygosity == "HETEROZIGOTO"
+                        else "Genótipo homozigoto no X; exige correlação clínica"
+                    )
+                ),
+            }
+        return {
+            "kind": GENOTIPO_DE_RISCO,
+            "basis": (
+                "variante patogênica em condição de herança ligada ao X segundo "
+                f"{sources} ({condition_note}), mas o dossiê não registra o sexo ao nascer. "
+                "No X o mesmo genótipo significa coisas diferentes — hemizigoto afetado ou "
+                "heterozigota portadora — e este sistema não chama cromossomos sexuais. "
+                "Preencha identification.sex_recorded_at_birth no dossiê para que a "
+                "interpretação seja possível; assumir um dos dois chamaria um menino "
+                "afetado de portador"
+            ),
+        }
+
     if zygosity == "HETEROZIGOTO":
         if modes == {AUTOSOMAL_RECESSIVE}:
             return {
@@ -605,12 +658,43 @@ def _interpretation(
     }
 
 
+def _registry_totals(evidence: dict[str, Any]) -> dict[str, Any]:
+    """What the curated registry contains, independent of what this sample interrogated.
+
+    The distinction is the whole point of a carrier-screening denominator. A count taken over
+    the findings answers "how many genes did we look at", which is not a denominator; this
+    answers "how many genes could have been looked at", which is.
+    """
+    validity = evidence.get("gene_validity") or {}
+    established = [v for v in validity.values() if v.get("established")]
+    def with_mode(mode: str) -> int:
+        return sum(
+            1
+            for v in established
+            if mode in {normalised_moi(m) for m in (v.get("modes_of_inheritance") or [])}
+        )
+
+    return {
+        "status": "VERIFICADO" if validity else UNAVAILABLE,
+        "genes": len(validity),
+        "genes_with_established_validity": len(established),
+        "recessive_genes_established": with_mode(AUTOSOMAL_RECESSIVE),
+        "dominant_genes_established": with_mode(AUTOSOMAL_DOMINANT),
+        "x_linked_genes_established": with_mode(X_LINKED),
+        "basis": (
+            "contagem sobre todo o arquivo de evidência curada, não sobre os genes que esta "
+            "amostra alcançou"
+        ),
+    }
+
+
 def build_clinical_findings(
     completeness_path: Path,
     evidence_path: Path,
     assessed_alleles_path: Path,
     *,
     evaluated_at: str | None = None,
+    sex_at_birth: str | None = None,
 ) -> dict[str, Any]:
     """Assemble the clinical join reports 01, 03 and 07 read from."""
     matrix = json.loads(Path(completeness_path).read_text(encoding="utf-8"))
@@ -631,6 +715,11 @@ def build_clinical_findings(
 
     assessed = json.loads(Path(assessed_alleles_path).read_text(encoding="utf-8"))
     allowed_by_rsid = _verified_accessions(assessed)
+
+    # Normalised once, here, rather than at each comparison. A value the vocabulary does not
+    # recognise becomes None and every X-linked locus is refused with a reason the operator
+    # can act on — it never silently matches neither branch and lands in a generic bucket.
+    sex = normalised_sex(sex_at_birth)
 
     by_rsid = {str(x["rsid"]).lower(): x for x in evidence.get("loci", [])}
 
@@ -692,7 +781,7 @@ def build_clinical_findings(
         locus_evidence = by_rsid.get(rsid, {})
         clinvar = _clinvar_for(rsid, locus_evidence, allowed_by_rsid.get(rsid, set()))
         validity = validity_for(gene)
-        interpretation = _interpretation(entry, clinvar, validity)
+        interpretation = _interpretation(entry, clinvar, validity, sex)
         findings.append(
             {
                 "rsid": rsid,
@@ -725,7 +814,17 @@ def build_clinical_findings(
         "operational_status": matrix.get("operational_status", UNAVAILABLE),
         "evaluated_at": now,
         "ruleset": normative.attested_ruleset_block(),
+        # Registry-wide counts, over every gene the curated evidence carries — not only the
+        # genes this sample happened to reach. Report 03 needs the second number to state a
+        # carrier-screening denominator: without it the only available count is "genes with
+        # an interrogated locus", which equals itself and prints as N of N.
+        "registry": _registry_totals(evidence),
         "case_id": matrix.get("case_id"),
+        # Recorded so a reader can tell an X-linked refusal caused by a missing dossier field
+        # from one caused by the evidence. It comes from the dossier and is never inferred:
+        # this system does not call sex chromosomes.
+        "sex_recorded_at_birth": sex or UNAVAILABLE,
+        "sex_source": "dossiê do caso" if sex else "não informado no dossiê",
         "input_sha256": matrix.get("input_sha256"),
         "completeness_matrix_sha256": matrix.get("sha256"),
         "evidence": {

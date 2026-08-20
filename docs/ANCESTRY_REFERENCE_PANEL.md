@@ -11,96 +11,169 @@ separa populações no agregado mas não posiciona um indivíduo. Faltava um pai
 | fonte | amostras | papel |
 |---|---:|---|
 | 1000 Genomes, chip **Affymetrix 6.0** | 3.450 | AFR, EUR, EAS, SAS, AMR |
-| **Mao et al. 2007**, painel ameríndio | 43 | AMR-NAT (Nahua, Maya, Quechua, Aymara) |
+| **AADR** v66.p1, genótipos Human Origins atuais | 97 | AMR-NAT-AMAZONIA, AMR-NAT-ANDES, AMR-NAT-MESOAMERICA |
 
-O segundo é o que torna o resultado significativo para um genoma brasileiro. São os 43
-indivíduos que o **próprio 1000 Genomes** usou para deconvoluir suas populações americanas
-miscigenadas — retidos porque o ADMIXTURE em K=3 os colocou em 99% ou mais de ancestralidade
-nativa, filtrados e controlados por Kenny, Moreno, Maples e Gignoux (Stanford/UCSF).
+O painel ameríndio de Mao et al. (43 indivíduos) foi **substituído** pelo AADR, e por duas
+razões que apontam na mesma direção — ver "Por que o AADR substituiu Mao et al." abaixo.
 
-Sem ele a única referência ameríndia disponível seria o AMR do 1000 Genomes, que **é ele
-mesmo miscigenado**: estimar o componente indígena de um brasileiro contra o PEL seria medi-lo
-com uma régua feita em parte da coisa medida.
+Karitiana e Surui são povos **Tupí de Rondônia, na Amazônia brasileira**; Piapoco são da
+bacia do Orinoco-Amazonas. É a referência local que faltava: a limitação declarada na versão
+anterior deste documento era exatamente que Nahua, Maya, Quechua e Aymara são mesoamericanos e
+andinos, e o componente indígena de um genoma brasileiro estava sendo estimado contra povos
+aparentados mas não locais.
 
-## Por que Affymetrix 6.0 e não Omni 2.5M
+Sem alguma referência ameríndia, a única disponível seria o AMR do 1000 Genomes, que **é ele
+mesmo miscigenado**: estimar o componente indígena de um brasileiro contra o PEL seria
+medi-lo com uma régua feita em parte da coisa medida.
 
-Construí o painel primeiro com o chip Omni. Deu **23.377 coordenadas em comum** — os dois
-arrays se sobrepõem mal. O painel ameríndio é Affy 6.0; usar o release Affy 6.0 do 1000
-Genomes dobra a interseção:
+## Por que o AADR substituiu Mao et al.
 
-| release | coordenadas em comum | após filtros | após poda de LD |
-|---|---:|---:|---:|
-| Omni 2.5M | 23.377 | 19.431 | 9.237 |
-| **Affy 6.0** | **51.263** | **43.466** | **12.914** |
+As duas referências são alternativas, não somáveis: Mao et al. está em Affymetrix 6.0 e o
+AADR em Human Origins, e exigir as duas interseta três plataformas.
+
+| interseção com o release Affy 6.0 do 1000 Genomes | coordenadas |
+|---|---:|
+| Mao et al. (Affy 6.0) | 51.263 |
+| **AADR (Human Origins)** | **162.289** |
+| as três juntas | 12.889 |
+
+O AADR ganha nos dois critérios ao mesmo tempo: **três vezes mais marcadores** e povos
+amazônicos brasileiros onde Mao et al. só oferece grupos mesoamericanos e andinos. Manter as
+duas custaria 92% dos marcadores.
+
+Os três grupos ameríndios entram **separados**, não como um balde "AMR-NAT". Juntá-los é
+precisamente o que fazia um genoma amazônico ser medido contra referências andinas.
+
+| grupo | n | povos |
+|---|---:|---|
+| AMR-NAT-AMAZONIA | 24 | Karitiana, Surui (Brasil), Piapoco (Colômbia) |
+| AMR-NAT-ANDES | 11 | Quechua (Peru), Bolivian |
+| AMR-NAT-MESOAMERICA | 62 | Mayan, Mixe, Mixtec, Pima, Zapotec (México) |
+
+Só indivíduos **atuais** com genótipo Human Origins entram, e os que os próprios curadores
+marcaram como *discovery*, *outlier* ou *QC-remove* ficam de fora — incluir um indivíduo que a
+fonte sinalizou colocaria um outlier dentro de um centróide de referência.
+
+## Dois defeitos que a leitura do AADR expôs
+
+**O deslocamento das linhas.** O `packedancestrymap` é documentado como preenchendo o
+cabeçalho até uma linha inteira; este arquivo não o faz — seus 3,8 GB são exatamente
+`48 + linha × indivíduos`, 145.985 bytes a menos que o layout documentado. Ler pela convenção
+deslocava cada leitura em quase uma linha inteira, servindo a cada indivíduo uma mistura
+embaralhada de duas pessoas — dados que descompactam sem erro, com taxa de chamada
+plausível, e errados. O layout agora é **derivado do tamanho real do arquivo**, e um tamanho
+que não corresponda a nenhum dos dois layouts candidatos é recusado em vez de arredondado
+para o mais próximo.
+
+**A orientação dos alelos.** Os dois bits por genótipo contam cópias de um dos dois alelos do
+`.snp`, e qual deles é convenção. O script não a presume: mede-a comparando a frequência
+alélica dos franceses, han e iorubás do AADR com as superpopulações EUR, EAS e AFR do 1000
+Genomes nos mesmos marcadores. Uma inversão aparece como correlação próxima de −1.
+
+```
+correlações medidas: −0,985 (EUR)  −0,989 (EAS)  −0,966 (AFR)  →  INVERTIDO
+```
+
+Foi essa mesma verificação que pegou o deslocamento: com o cabeçalho errado as correlações
+eram −0,002, −0,004 e −0,000. Correlação perto de zero não é orientação a corrigir, é junção
+errada, e o painel é recusado sobre ela.
 
 ## Construção
 
 ```
-616.568 marcadores do painel ameríndio (autossomos, GRCh37)
-→  51.263  interseção por coordenada com o release do 1000 Genomes
-→  51.228  após excluir palindrômicos (23) e alelos divergentes (12)
-→  43.466  após MAF >= 0,05 e faltantes <= 2%
-→  12.914  após poda de LD (janela 50, passo 5, r² < 0,2)
+584.131 marcadores Human Origins (AADR v66.p1, GRCh37)
+→ 579.720  autossomos
+→ 162.289  interseção por coordenada com o release Affy 6.0 do 1000 Genomes
+→ 162.286  após excluir palindrômicos (1) e alelos divergentes (2)
+→ 149.753  após MAF >= 0,05 e faltantes <= 2%
+→  80.801  após poda de LD (janela 50, passo 5, r² < 0,2)
+→  60.000  após afinamento determinístico, uniforme ao longo do genoma
 ```
 
-**Junção por coordenada, não pela coluna ID.** Só 29% dos IDs do release são rsid; o resto são
-identificadores de sonda (`SNP1-524110`). Uma junção por rsid descartaria sete marcadores em
-dez e chamaria o resto de painel.
+Contra 12.914 marcadores do painel anterior: **4,6× mais**.
 
-**Palindrômicos excluídos.** A/T e C/G não carregam informação de fita — um flip mapeia A↔T e
-C↔G, então o erro é indetectável e inverte o genótipo em silêncio. Os autores do painel
-ameríndio já os removeram; o script remove de novo em vez de confiar.
+**Junção por coordenada, não pela coluna ID.** Só 29% dos IDs do release do 1000 Genomes são
+rsid; o resto são identificadores de sonda (`SNP1-524110`). Uma junção por rsid descartaria
+sete marcadores em dez.
 
-**Poda de LD antes do PCA.** Sem ela os primeiros componentes descrevem alguns blocos
-haplotípicos longos em vez de estrutura populacional.
+**Palindrômicos excluídos.** A/T e C/G não carregam informação de fita. Ambos os painéis
+ameríndios já vêm com **zero** marcadores palindrômicos — seus autores os removeram — e o
+script remove de novo em vez de confiar. Por isso a contagem de excluídos é 1, e não os ~15%
+que o release Affy 6.0 traz sozinho.
+
+**Os 188 controles de orientação saem do painel** depois de responderem à sua pergunta.
+Franceses, han e iorubás do AADR entram só para medir a codificação dos alelos; mantê-los
+poria as mesmas populações duas vezes, em duas plataformas, o que desloca esses centróides e
+convida um componente principal que descreve o ensaio em vez das pessoas.
 
 ## O painel separa populações
 
 | população | n | PC1 | PC2 |
 |---|---:|---:|---:|
-| AFR | 655 | +55,3 ± 8,5 | −2,4 ± 3,1 |
-| AMR | 347 | −17,9 ± 9,8 | +7,0 ± 13,5 |
-| **AMR-NAT** | 43 | **−30,2 ± 0,9** | **−20,5 ± 2,1** |
-| EAS | 501 | −27,4 ± 0,9 | −39,4 ± 1,6 |
-| EUR | 502 | −21,1 ± 1,6 | +29,2 ± 2,2 |
-| SAS | 487 | −20,6 ± 1,0 | +6,3 ± 4,0 |
+| AFR | 655 | +117,1 | +7,3 |
+| AMR | 347 | −37,2 | −16,2 |
+| **AMR-NAT-AMAZONIA** | **24** | **−67,1** | **+47,9** |
+| AMR-NAT-ANDES | 11 | −63,4 | +37,4 |
+| AMR-NAT-MESOAMERICA | 62 | −64,2 | +43,0 |
+| EAS | 501 | −59,4 | +82,2 |
+| EUR | 502 | −41,0 | −65,2 |
+| SAS | 487 | −41,6 | −14,4 |
 
-PC1 separa África de tudo; PC2 separa Leste Asiático de Europa, com AMR-NAT do lado asiático,
-como esperado da ancestralidade compartilhada. Todo par nomeado tem razão distância/dispersão
-acima de 7, a maioria acima de 20. **AMR é o mais disperso** (±9,8 e ±13,5) — que é exatamente
-a razão de ele não servir de referência.
+Os três grupos ameríndios ficam próximos entre si, como deviam — são populações aparentadas —
+e o PC9 é o que os separa: a Amazônia sai em +76,0 contra −12,8 dos Andes e −5,2 da
+Mesoamérica.
 
-## Validação: quatro indivíduos conhecidos
+## Validação: onze indivíduos conhecidos, e o que ela publica
 
-Extraí quatro amostras do próprio release como se fossem casos e projetei:
+`scripts/validate_ancestry_panel.py` projeta pessoas de origem conhecida pelo mesmo caminho
+que um caso percorre e grava o resultado em `docs/evidence/ANCESTRY_PANEL_VALIDATION.json` —
+**incluindo o que o painel erra**, porque um relatório de validação que lista só os casos que
+deram certo é peça de marketing.
 
 | amostra | é | mais próximo | resíduo | composição |
 |---|---|---|---:|---|
-| NA19625 | Iorubá, Nigéria | AFR ✓ | 28% | AFR 83%; AMR-NAT 17% |
-| NA12878 | CEU, Utah | EUR ✓ | 11% | EUR 97%; AMR-NAT 3% |
-| NA18525 | Han, Pequim | EAS ✓ | 5% | EAS 97%; AMR-NAT 2% |
-| HG01565 | Peruano, Lima | AMR ✓ | 13% | **AMR-NAT 56%; EUR 41%** |
+| NA19625 | Iorubá, Nigéria | AFR ✓ | 7% | AFR 67%; **AMR-NAT-MESOAMERICA 20%**; EUR 9% |
+| NA12878 | CEU, Utah | EUR ✓ | 12% | EUR 99% |
+| NA18525 | Han, Pequim | EAS ✓ | 8% | EAS 97% |
+| HG01565 | Peruano, Lima | AMR-NAT-ANDES ✓ | 6% | AMR-NAT-ANDES 65%; EUR 26%; AMR-NAT-AMAZONIA 4% |
+| NA20502 | Toscano, Itália | EUR ✓ | 23% | EUR 94%; SAS 5% |
+| HG02461 | Gâmbia | AFR ✓ | 27% | AFR 100% |
+| HGDP00995 | **Karitiana, Brasil** | AMR-NAT-AMAZONIA ✓ | 16% | AMR-NAT-AMAZONIA 100% |
+| HGDP00832 | **Surui, Brasil** | AMR-NAT-AMAZONIA ✓ | 6% | AMR-NAT-AMAZONIA 100% |
+| HGDP00702 | Piapoco, Colômbia | AMR-NAT-ANDES | 7% | ANDES 48%; AMAZONIA 28%; MESOAMERICA 24% |
+| NA11200 | Quechua, Peru | AMR-NAT-ANDES ✓ | 11% | AMR-NAT-ANDES 100% |
+| HGDP00854 | Mayan, México | AMR-NAT-MESOAMERICA ✓ | 3% | MESOAMERICA 60%; ANDES 32% |
 
-Zero flips de fita, zero incompatibilidades de alelo, 99,8–100% de sobreposição. O peruano sai
-com o perfil correto de Lima.
+Onze de onze caem na família populacional certa. Karitiana e Surui saem 100% amazônicos, que
+é o teste que importa para um genoma brasileiro. O peruano de Lima sai 65% andino e 26%
+europeu — o perfil real de Lima, e **não** artefato: populações do AMR do 1000 Genomes são
+miscigenadas por definição, e contar essa ancestralidade verdadeira como erro inflaria a
+única cifra que este arquivo existe para declarar honestamente.
 
-O iorubá com **17% de componente ameríndio é artefato**, não ancestralidade, e o sistema o
-sinaliza: resíduo de 28% classifica o ajuste como *moderado* e dispara um aviso explícito de
-que componentes abaixo de ~20% podem ser artefato. Os limiares de qualidade (15% e 30%) foram
-calibrados nesses quatro casos, não escolhidos como números redondos.
+## O artefato honesto: 19,8%
 
-## Duas correções que a validação forçou
+**NA19625 é iorubá e recebe 20% de componente ameríndio mesoamericano.** Isso não é
+ancestralidade: é o ajuste distribuindo peso por direções que a base de referência não separa
+bem nessa região do espaço. É o maior componente espúrio medido, e é o número que o
+relatório 02 cita.
 
-**AMR fora da base do ajuste.** Usar AMR como vetor-base é erro conceitual: AMR *é* uma mistura
-das outras populações, o que torna a base linearmente dependente e faz o ajuste distribuir
-peso por direções redundantes. Com AMR na base, o peruano saía 40% AMR + 40% AMR-NAT + 18%
-EUR; sem ela, 56% AMR-NAT + 41% EUR — o perfil real. AMR permanece na lista de afinidade,
-porque "mais próximo de AMR" é verdadeiro e útil.
+O painel anterior produzia 17,5% no mesmo indivíduo com resíduo de 28%, e o aviso do sistema
+estava amarrado ao resíduo: acima de 15%, "componentes pequenos podem ser artefato". **Esse
+aviso deixou de funcionar.** Com 60.000 marcadores o mesmo iorubá ajusta com resíduo de 7% —
+qualidade "boa" — e continua recebendo 20% espúrios. Resíduo e artefato não viajam juntos, e
+uma guarda presa ao resíduo perde exatamente o caso para o qual foi escrita.
 
-**Citação derivada do arquivo.** O primeiro painel publicado citava o release Omni nas fontes
-tendo sido construído a partir do Affy 6.0 — erro de proveniência produzido por uma citação
-escrita à mão que nada conferia. Agora o nome e o SHA-256 do arquivo efetivamente lido entram
-no artefato.
+A correção: a ressalva sobre componentes minoritários passou a ser **incondicional**, e o
+tamanho que ela cita é **medido, não estipulado** — vem do artefato de validação, carimbado
+dentro do próprio painel. Se um painel não trouxer validação, o texto diz que o tamanho
+típico de um componente espúrio não foi medido, em vez de citar um número herdado de outra
+construção.
+
+> Componentes abaixo de 20% não são estabelecidos por esta projeção.
+
+**Nenhum destes indivíduos é externo ao painel.** Todos contribuíram para os loadings, então
+as projeções são otimistas. Isto mede consistência interna e detecção de artefato, não
+acurácia fora da amostra, e o artefato diz isso em `held_out: false`.
 
 ## Guardas na projeção
 
@@ -108,9 +181,16 @@ no artefato.
 |---|---|
 | build | caso em GRCh38 contra painel GRCh37 **recusa**; a junção é por rsid e rodaria em silêncio |
 | mínimo de marcadores | abaixo de 2.000 não emite nada — a projeção cai onde o ruído puser |
-| sobreposição | abaixo de 60% emite afinidade mas **retém proporções**: encolhimento cresce quando a sobreposição cai |
+| sobreposição | abaixo de 7.500 marcadores em comum emite afinidade mas **retém proporções**: encolhimento cresce quando a sobreposição cai |
 | fita | par de alelos que não bate nem com o painel nem com o complemento é descartado e contado |
 | resíduo | quanto a pessoa se afasta da mistura que os pesos descrevem, com aviso acima de 15% |
+| componente minoritário | ressalva **incondicional**, citando o maior componente espúrio medido no painel (19,8%) |
+
+O limiar de proporções é **absoluto, com a fração como piso secundário**, e isso é correção
+de um defeito que a própria reconstrução criou: 60% de um painel de 12.914 marcadores são
+7.748, mas 60% de um painel de 60.000 são 36.000 — um array que ganhava proporções contra o
+painel pequeno seria recusado pelo painel melhor, carregando estritamente mais informação. O
+encolhimento depende de quantos marcadores foram usados, não de quantos o painel tem.
 
 ## O que isto não é
 
@@ -121,9 +201,17 @@ de ancestralidade local.
 
 ## Limitações que permanecem
 
-- Nahua, Maya, Quechua e Aymara são mesoamericanas e andinas. **Não há referência amazônica
-  nem de povos originários do Brasil** neste painel, então o componente ameríndio de um genoma
-  brasileiro é estimado contra populações aparentadas mas não locais.
+- **A sobreposição com um array de consumo nunca foi medida.** O painel vem da interseção
+  Affy 6.0 × Human Origins; quanto dela um chip Illumina de consumo carrega é desconhecido até
+  que um caso real seja projetado. A guarda existe e recusa proporções abaixo de 7.500
+  marcadores em comum, mas recusar não é o mesmo que funcionar, e nenhuma projeção de um array
+  de consumo real foi executada contra este painel nem contra o anterior.
+- A referência amazônica são **24 indivíduos** de três povos. Karitiana e Surui são de
+  Rondônia; não há referência de povos do Nordeste, do Sul, do Xingu nem da costa atlântica, e
+  a diversidade indígena brasileira não é representável por três povos.
+- Os 97 indivíduos ameríndios vêm todos do Human Origins, uma plataforma com **ascertainment
+  próprio**: os marcadores foram escolhidos por critérios que não são neutros entre populações,
+  o que afeta distâncias absolutas mais do que a ordem de afinidade.
 - O grupo AFR do 1000 Genomes mistura africanos continentais com afro-americanos e
   afro-caribenhos, que são miscigenados; o centróide AFR não é âncora africana pura.
 - 958 amostras do release não têm rótulo no arquivo de populações. Entram no PCA, melhorando
@@ -137,14 +225,28 @@ de ancestralidade local.
 B=https://ftp.1000genomes.ebi.ac.uk/vol1/ftp
 curl -O $B/release/20130502/supporting/hd_genotype_chip/ALL.wgs.nhgri_coriell_affy_6.20140825.genotypes_has_ped.vcf.gz
 curl -O $B/release/20130502/integrated_call_samples_v3.20130502.ALL.panel
-for e in bed bim fam; do
-  curl -O $B/technical/working/20130711_native_american_admix_train/native_amr_train_20130711.$e
-done
+# AADR v66.p1 Human Origins: .ind, .anno e .snp inteiros; os genótipos são lidos por
+# requisições HTTP Range, ~100 indivíduos em vez dos 3,8 GB do arquivo.
+D=https://dataverse.harvard.edu/api/access/datafile
+for id in 13994526 13994528 13994527; do curl -sL -o aadr.$id "$D/$id?format=original"; done
+python3 scripts/fetch_aadr_genotypes.py \
+    --ind aadr.13994526 --anno aadr.13994528 --snp aadr.13994527 \
+    --output aadr_reference.json.gz
 python3 scripts/build_ancestry_panel.py \
     --vcf ALL.wgs.nhgri_coriell_affy_6.20140825.genotypes_has_ped.vcf.gz \
     --panel integrated_call_samples_v3.20130502.ALL.panel \
-    --native native_amr_train_20130711
+    --aadr aadr_reference.json.gz \
+    --output config/ancestry_reference_panel.json.gz
+
+python3 scripts/validate_ancestry_panel.py \
+    --panel config/ancestry_reference_panel.json.gz \
+    --vcf ALL.wgs.nhgri_coriell_affy_6.20140825.genotypes_has_ped.vcf.gz \
+    --aadr aadr_reference.json.gz \
+    --aadr-sample HGDP00995.HO --aadr-sample HGDP00832.HO --aadr-sample HGDP00702.HO \
+    --aadr-sample NA11200.HO --aadr-sample HGDP00854.HO \
+    --stamp-panel
 ```
 
-O artefato tem 766 KB comprimido: 12.914 marcadores com loadings, 3.493 amostras de
-referência com coordenadas, e os centróides por população.
+O artefato tem 2,9 MB comprimido: 60.000 marcadores com loadings, 3.547 amostras de
+referência com coordenadas, os centróides das oito populações nomeadas, a decisão medida de
+orientação dos alelos e o resumo de validação carimbado por `--stamp-panel`.

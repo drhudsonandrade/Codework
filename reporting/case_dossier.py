@@ -75,6 +75,45 @@ CONSENT_REQUIRED_TOGETHER = ("consent_id", "consent_version", "consent_date", "a
 #: printed as-is on a clinical document.
 DATE_FIELDS = frozenset({"date_of_birth", "collection_date", "consent_date", "issue_date"})
 
+#: Sex recorded at birth, as a controlled vocabulary rather than free text.
+#:
+#: This field is not administrative decoration: it is what separates a hemizygous male, who
+#: is affected by an X-linked pathogenic variant, from a heterozygous female, who is usually
+#: a carrier. A typo would silently fall through to "unknown" and the X-linked interpretation
+#: would be refused for a reason the operator never sees, so an unrecognised value is
+#: rejected at intake instead.
+#:
+#: It is recorded sex at birth, which is what the genotype interpretation needs; it is not a
+#: statement about the person's gender, and it is not inferred from the genotype — this
+#: system never calls sex chromosomes.
+SEX_FEMALE = "feminino"
+SEX_MALE = "masculino"
+SEX_INTERSEX = "intersexo"
+SEX_NOT_RECORDED = "não registrado"
+
+SEX_VOCABULARY: dict[str, str] = {
+    "f": SEX_FEMALE,
+    "feminino": SEX_FEMALE,
+    "female": SEX_FEMALE,
+    "m": SEX_MALE,
+    "masculino": SEX_MALE,
+    "male": SEX_MALE,
+    "i": SEX_INTERSEX,
+    "intersexo": SEX_INTERSEX,
+    "intersex": SEX_INTERSEX,
+    "nao registrado": SEX_NOT_RECORDED,
+    "não registrado": SEX_NOT_RECORDED,
+    "not recorded": SEX_NOT_RECORDED,
+}
+
+
+def normalised_sex(value: Any) -> str | None:
+    """Map an operator-written sex onto the controlled vocabulary, or None if absent."""
+    text = str(value or "").strip().lower()
+    if not text:
+        return None
+    return SEX_VOCABULARY.get(text)
+
 
 class CaseDossierError(ValueError):
     """The dossier is malformed. An absent dossier is not an error."""
@@ -126,7 +165,21 @@ def load_dossier(path: Path, *, expected_case_id: str | None = None) -> dict[str
         for field, value in block.items():
             if value in (None, "", [], {}):
                 continue
-            out[field] = _parse_date(section, field, value) if field in DATE_FIELDS else value
+            if field in DATE_FIELDS:
+                out[field] = _parse_date(section, field, value)
+            elif field == "sex_recorded_at_birth":
+                normalised = normalised_sex(value)
+                if normalised is None:
+                    raise CaseDossierError(
+                        f"{section}.{field}: {str(value)!r} is not one of "
+                        f"{sorted(set(SEX_VOCABULARY.values()))}. This field decides whether "
+                        "a hemizygous male is read as affected or a heterozygous female as a "
+                        "carrier, so an unrecognised value is refused rather than silently "
+                        "treated as unknown."
+                    )
+                out[field] = normalised
+            else:
+                out[field] = value
         cleaned[section] = out
 
     consent = cleaned.get("consent", {})
@@ -184,6 +237,10 @@ def dossier_values(dossier: dict[str, Any] | None) -> dict[str, Any]:
     values: dict[str, Any] = {
         "NOME_OU_ID_PSEUDONIMIZADO": identification.get("pseudonymised_id"),
         "DATA_NASCIMENTO_OU_NAO_INFORMADA": identification.get("date_of_birth"),
+        # Surfaced on the page as well as consumed by the interpretation. A field the
+        # operator was asked to supply and that then appears nowhere reads as a field that
+        # did not matter, and this one changes what an X-linked variant means.
+        "SEXO_REGISTRADO_AO_NASCER": identification.get("sex_recorded_at_birth"),
         "PROFISSIONAL_OU_SERVICO_SOLICITANTE": " / ".join(
             str(v)
             for v in (

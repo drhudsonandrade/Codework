@@ -136,14 +136,16 @@ def _assessed(rsid, accessions):
     }
 
 
-def _run(entries, gene_validity, loci, assessed):
+def _run(entries, gene_validity, loci, assessed, sex_at_birth=None):
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         matrix = dict(MATRIX, entries=entries)
         (root / "m.json").write_text(json.dumps(matrix), encoding="utf-8")
         (root / "e.json").write_text(json.dumps(_evidence(gene_validity, loci)), encoding="utf-8")
         (root / "a.json").write_text(json.dumps(assessed), encoding="utf-8")
-        return build_clinical_findings(root / "m.json", root / "e.json", root / "a.json")
+        return build_clinical_findings(
+            root / "m.json", root / "e.json", root / "a.json", sex_at_birth=sex_at_birth
+        )
 
 
 AR_CLINGEN = ({"disease": "hemochromatosis type 1", "mondo": "MONDO:0021001",
@@ -546,6 +548,112 @@ class PanelAppAndConstraintTest(unittest.TestCase):
         finding = self._run_with(_validity(panelapp=panel))
         self.assertEqual(finding["validity"]["modes_of_inheritance"], [MOI_UNKNOWN])
         self.assertEqual(finding["interpretation"], GENOTIPO_DE_RISCO)
+
+
+XL_CLINGEN = ({"disease": "hemophilia A", "mondo": "MONDO:0010602",
+               "mode_of_inheritance": "XL", "classification": "Definitive"},)
+
+
+class SexAtBirthTest(unittest.TestCase):
+    """On the X the same genotype means different things, and the genotype cannot say which."""
+
+    def _run_xl(self, sex, genotype="AG"):
+        return _run(
+            [_entry("rs1", "F8", genotype=genotype)],
+            {"F8": _validity(clingen=XL_CLINGEN)},
+            [_locus("rs1", "F8", [
+                _record("V1", "Pathogenic", [("hemophilia A", "MONDO:0010602")])
+            ])],
+            _assessed("rs1", ["V1"]),
+            sex_at_birth=sex,
+        )["findings"][0]
+
+    def test_a_male_is_hemizygous_and_therefore_actionable_not_a_carrier(self):
+        finding = self._run_xl("masculino")
+        self.assertEqual(finding["interpretation"], ACIONAVEL)
+        self.assertIn("hemizigoto", finding["interpretation_basis"])
+
+    def test_a_female_heterozygote_is_a_carrier_but_never_called_unaffected(self):
+        finding = self._run_xl("feminino")
+        self.assertEqual(finding["interpretation"], PORTADOR)
+        # Skewed X-inactivation produces affected women; the text must not promise otherwise.
+        self.assertIn("inativação", finding["interpretation_basis"])
+        self.assertNotIn("não afetada", finding["interpretation_basis"].replace(
+            "portadora não é sinônimo de não afetada", ""))
+
+    def test_without_the_dossier_field_the_interpretation_is_refused_not_defaulted(self):
+        # The failure this guards against: defaulting to female would call an affected boy a
+        # carrier, and defaulting to male would call a carrier girl affected.
+        finding = self._run_xl(None)
+        self.assertEqual(finding["interpretation"], GENOTIPO_DE_RISCO)
+        self.assertIn("não registra o sexo ao nascer", finding["interpretation_basis"])
+        self.assertIn("sex_recorded_at_birth", finding["interpretation_basis"])
+
+    def test_an_unrecognised_sex_is_treated_as_absent_rather_than_as_a_match(self):
+        for value in ("outro", "XY", "1", "  "):
+            with self.subTest(sex=value):
+                finding = self._run_xl(value)
+                self.assertEqual(finding["interpretation"], GENOTIPO_DE_RISCO)
+
+    def test_intersex_is_accepted_by_the_vocabulary_and_still_refuses_the_x_call(self):
+        # A recorded intersex classification does not by itself say how many X chromosomes
+        # there are, so the honest outcome is the same refusal, not a guess either way.
+        finding = self._run_xl("intersexo")
+        self.assertEqual(finding["interpretation"], GENOTIPO_DE_RISCO)
+
+    def test_the_recorded_sex_reaches_the_payload(self):
+        result = _run(
+            [_entry("rs1", "F8", genotype="AG")],
+            {"F8": _validity(clingen=XL_CLINGEN)},
+            [_locus("rs1", "F8", [_record("V1", "Pathogenic")])],
+            _assessed("rs1", ["V1"]),
+            sex_at_birth="masculino",
+        )
+        self.assertEqual(result["sex_recorded_at_birth"], "masculino")
+        self.assertEqual(result["sex_source"], "dossiê do caso")
+
+    def test_an_autosomal_gene_is_unaffected_by_the_sex_field(self):
+        for sex in (None, "masculino", "feminino"):
+            with self.subTest(sex=sex):
+                finding = _run(
+                    [_entry("rs1", "HFE", genotype="AG")],
+                    {"HFE": _validity(clingen=AR_CLINGEN)},
+                    [_locus("rs1", "HFE", [
+                        _record("V1", "Pathogenic",
+                                [("hemochromatosis type 1", "MONDO:0021001")])
+                    ])],
+                    _assessed("rs1", ["V1"]),
+                    sex_at_birth=sex,
+                )["findings"][0]
+                self.assertEqual(finding["interpretation"], PORTADOR)
+
+
+class SexVocabularyTest(unittest.TestCase):
+    def test_the_dossier_refuses_a_value_outside_the_vocabulary(self):
+        import json as _json
+
+        from reporting.case_dossier import CaseDossierError, load_dossier
+
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "d.json"
+            path.write_text(_json.dumps({
+                "schema": "genoma-case-dossier-v1",
+                "case_id": "CASE-1",
+                "identification": {"sex_recorded_at_birth": "masculine"},
+            }), encoding="utf-8")
+            with self.assertRaises(CaseDossierError) as ctx:
+                load_dossier(path)
+        self.assertIn("sex_recorded_at_birth", str(ctx.exception))
+
+    def test_accepted_spellings_normalise_to_one_form(self):
+        from reporting.case_dossier import normalised_sex
+
+        for value in ("M", "m", "Masculino", "male", "MALE"):
+            self.assertEqual(normalised_sex(value), "masculino")
+        for value in ("F", "feminino", "Female"):
+            self.assertEqual(normalised_sex(value), "feminino")
+        self.assertIsNone(normalised_sex("outro"))
+        self.assertIsNone(normalised_sex(""))
 
 
 if __name__ == "__main__":
