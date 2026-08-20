@@ -324,6 +324,52 @@ class TraitScopeTest(unittest.TestCase):
                 TRAITS.build(associations, ancestry, scopes)
         self.assertIn("GO_0050916", str(raised.exception))
 
+    TRAIT_HEADER = "\t".join(
+        ["SNPS", "P-VALUE", "MAPPED_TRAIT", "MAPPED_TRAIT_URI", "CHR_ID", "CHR_POS",
+         "STRONGEST SNP-RISK ALLELE", "RISK ALLELE FREQUENCY", "OR or BETA",
+         "95% CI (TEXT)", "STUDY ACCESSION", "PUBMEDID", "MAPPED_GENE",
+         "REPORTED GENE(S)", "INITIAL SAMPLE SIZE"]
+    )
+
+    def _scan(self, mapped_trait, mapped_uri):
+        row = "\t".join(
+            ["rs4988235", "1e-20", mapped_trait, mapped_uri, "2", "136608646",
+             "rs4988235-T", "0.3", "1.5", "[1-2]", "GCST1", "1", "MCM6", "MCM6",
+             "1000 European"]
+        )
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "a.tsv"
+            path.write_text(self.TRAIT_HEADER + "\n" + row + "\n", encoding="utf-8")
+            return TRAITS.scan(
+                path, {"EFO_0801753": ("PREDISPOSICAO", "persistência da lactase")}, 5e-8
+            )
+
+    def test_a_comma_inside_a_trait_label_does_not_misname_the_locus(self):
+        # MAPPED_TRAIT and MAPPED_TRAIT_URI are comma-separated and positionally aligned, so a
+        # label containing a comma breaks the alignment. Zipping them anyway printed another
+        # trait's name on this locus. Where the lengths disagree the declared label is used.
+        by_rsid, stats = self._scan(
+            "lactase persistence, adult type", "http://x/EFO_0801753"
+        )
+        self.assertEqual(stats["misaligned_trait_columns"], 1)
+        self.assertEqual(by_rsid["rs4988235"][0]["term_label"], "persistência da lactase")
+
+    def test_a_misaligned_row_still_matches_every_term_it_declares(self):
+        # The other half of the failure: with fewer labels than URIs, zip truncates and the
+        # trailing terms are never checked against the declared scope, so their targets
+        # silently vanish.
+        by_rsid, stats = self._scan(
+            "one label only", "http://x/EFO_9999999,http://x/EFO_0801753"
+        )
+        self.assertEqual(stats["misaligned_trait_columns"], 1)
+        self.assertIn("rs4988235", by_rsid)
+        self.assertEqual(by_rsid["rs4988235"][0]["term_id"], "EFO_0801753")
+
+    def test_aligned_columns_keep_the_catalogue_label(self):
+        by_rsid, stats = self._scan("lactase persistence", "http://x/EFO_0801753")
+        self.assertEqual(stats.get("misaligned_trait_columns", 0), 0)
+        self.assertEqual(by_rsid["rs4988235"][0]["term_label"], "lactase persistence")
+
     def test_the_risk_allele_parser_refuses_what_it_cannot_read(self):
         self.assertEqual(TRAITS._risk_allele("rs738409-G", "rs738409"), "G")
         for unreadable in ("rs738409-?", "rs738409", "", "rs738409-NR"):

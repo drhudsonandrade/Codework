@@ -142,6 +142,16 @@ def scan(
             stats["significant"] += 1
             terms = [t.strip() for t in row[idx["MAPPED_TRAIT_URI"]].split(",")]
             labels = [t.strip() for t in row[idx["MAPPED_TRAIT"]].split(",")]
+            # The two columns are comma-separated and positionally aligned, and a trait label
+            # containing a comma breaks that alignment. Zipping them regardless does two
+            # things silently: it puts another trait's name on this locus, and — when the
+            # label list ends up shorter — it truncates, so trailing URIs are never checked
+            # against the declared scope and their targets vanish. Where the lengths disagree
+            # the URIs are kept, because they drive the lookup, and the labels are dropped in
+            # favour of the one declared in config/trait_scopes.json.
+            if len(labels) != len(terms):
+                stats["misaligned_trait_columns"] += 1
+                labels = [""] * len(terms)
             for uri, label in zip(terms, labels):
                 term_id = uri.rsplit("/", 1)[-1].strip()
                 if term_id not in wanted:

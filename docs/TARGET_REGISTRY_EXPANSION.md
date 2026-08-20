@@ -56,6 +56,14 @@ instâncias do PanelApp. Onde os dois estabelecem o mesmo gene, é um corpo de c
 aparecendo duas vezes, não duas fontes concordando: `panelapp_overlaps_gencc` marca esses
 genes e o relatório 01 escreve a ressalva na seção de incertezas.
 
+**A varredura, medida.** 68.991 entradas gene-painel nas duas instâncias, cobrindo **657
+painéis** — 414 do Genomics England e 243 do PanelApp Australia — dos quais 652 carregam ao
+menos um gene verde. São 7.239 genes indexados e **5.004 verdes**. O PanelApp é vivo: entre
+duas varreduras com poucas horas de intervalo, as contagens da Austrália foram de 36.485 para
+36.491 entradas, e por isso a data e as contagens ficam gravadas no artefato em vez de serem
+citadas de memória. Uma leitura curta é recusada, não publicada: um varrimento parcial não é
+um registro menor, é um registro que omite em silêncio os painéis que ordenam por último.
+
 **Verde, e só verde.** Âmbar é evidência insuficiente para reportar e vermelho é gene
 considerado e rejeitado pelos próprios curadores. Ler âmbar como evidência colocaria num
 laudo um gene que o painel explicitamente recusou endossar. Os dois são retidos no artefato;
@@ -73,6 +81,37 @@ intolerante a perda de função sem doença curada, e um gene Definitivo pode se
 pLI do CFTR é ~0 porque portadores são comuns e saudáveis. Ela entra no laudo para que uma
 linha "sem validade estabelecida" possa acrescentar se o gene é ainda assim restrito, e por
 nenhum outro motivo.
+
+## PGS Catalog: 6.972 escores, e as duas coisas que decidem se algum pode ser usado
+
+O PGS Catalog publica 6.972 escores poligênicos em 807 traços mapeados — muito mais traços do
+que a rota do GWAS Catalog alcança. O que ele **não** publica é permissão para aplicar
+qualquer um deles a uma pessoa específica, e dois campos decidem isso. Os dois são
+computados, não estimados.
+
+**A ancestralidade das coortes em que o escore foi construído.** Um escore poligênico é um
+conjunto de pesos ajustado numa população, e sua acurácia cai — muitas vezes pela metade —
+ao ser levado para outra, com frequências alélicas e desequilíbrio de ligação diferentes.
+Para um genoma brasileiro miscigenado isso não é nota de rodapé, é a fonte dominante de erro:
+
+| classe | escores |
+|---|---:|
+| **NÃO TRANSFERÍVEL SEM CALIBRAÇÃO** (coortes ≥90% europeias) | **4.361** |
+| TRANSFERIBILIDADE INCERTA | 2.393 |
+| **PARCIALMENTE TRANSFERÍVEL** (≥20% hispânica/latina, africana ou nativa) | **202** |
+| ancestralidade não declarada pelo catálogo | 16 |
+
+**O número de variantes, contra quantas um array consegue ler.** O escore mediano tem 123.613
+variantes e o maior tem 10,3 milhões; um array de consumo carrega ~700.000 posições no genoma
+inteiro. Somar os pesos das variantes presentes e tratar as ausentes como dose zero é a falha
+por verdade vácua na forma mais pura: produz um número finito, plausível e errado, e nada na
+saída diz que faltava a maior parte do escore. Abaixo de **95%** de cobertura o sistema recusa
+em vez de emitir.
+
+Nenhum peso é copiado para este repositório. Cada escore é citado pela URL do arquivo
+harmonizado e pela **própria licença**, que não é uniforme: 6.879 são de citação, mas 31 são
+CC BY-NC-ND, 7 são só para uso acadêmico e 1 é restrito a pesquisa. Um registro que achatasse
+isso autorizaria um uso que o autor proibiu.
 
 ## O nível de revisão do ClinVar viaja com o alvo
 
