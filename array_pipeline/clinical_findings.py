@@ -33,7 +33,7 @@ from typing import Any
 
 import normative
 from array_pipeline.completeness import INTERPRETABLE, NAO_DETECTADO, NAO_TESTADO
-from array_pipeline.targets import sha256_json
+from array_pipeline.targets import read_manifest_bytes, sha256_json
 
 SCHEMA = "genoma-clinical-findings-v1"
 UNAVAILABLE = "NÃO DISPONÍVEL"
@@ -617,7 +617,11 @@ def build_clinical_findings(
     if matrix.get("schema") != "genoma-genome-completeness-matrix-v1":
         raise ValueError("completeness matrix schema mismatch")
 
-    evidence = json.loads(Path(evidence_path).read_text(encoding="utf-8"))
+    # Through the same content-sniffing reader the manifests use. The bulk evidence file is
+    # 88 MB of JSON and ships compressed; reading it with `read_text` raised a
+    # UnicodeDecodeError about byte 0x8b, which says nothing about the real cause and is why
+    # the expanded evidence could not be made the default in the first place.
+    evidence = json.loads(read_manifest_bytes(Path(evidence_path)))
     if evidence.get("schema") != "genoma-gene-disease-validity-v1":
         raise ClinicalEvidenceError(
             f"unsupported gene-disease evidence schema: {evidence.get('schema')!r}"

@@ -348,6 +348,96 @@ class CompletenessReportTest(unittest.TestCase):
         self.assertEqual(reported, blind)
         self.assertTrue(blind, "fixture must contain at least one blind spot")
 
+    def test_a_panel_scale_blind_spot_list_is_bounded_and_nothing_is_lost(self):
+        """55,916 targets against a chip that reaches 4% is ~53,900 blind spots.
+
+        Listing each one individually produced a 275 MB payload no renderer can turn into a
+        document, and a report that names every blind spot names none of them. The cap is
+        only honest if the remainder is still counted exactly and still points at the
+        artifact that holds it, so both are asserted here.
+        """
+        import json as _json
+
+        from scripts.build_completeness_report import (
+            MAX_ENUMERATED_BLIND_SPOTS,
+            build_payload,
+        )
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            matrix, matrix_path, qc_path = self._artifacts(root)
+            extra = MAX_ENUMERATED_BLIND_SPOTS + 120
+            matrix["entries"].extend(
+                {
+                    "rsid": f"rs{8_000_000 + i}",
+                    "gene": f"GENE{i % 37}",
+                    "scope": "CURIOSIDADE" if i % 5 else "CLINICO",
+                    "classification": NAO_TESTADO,
+                    "basis": "ausente do array nesta simulação",
+                    "interpretable": False,
+                    "genotype": None,
+                    "genotype_withheld": True,
+                }
+                for i in range(extra)
+            )
+            blind_total = sum(1 for e in matrix["entries"] if not e["interpretable"])
+            matrix["totals"]["targets"] = len(matrix["entries"])
+            matrix["totals"][f"class_{NAO_TESTADO}"] = blind_total
+            matrix_path.write_text(
+                _json.dumps(matrix, ensure_ascii=False), encoding="utf-8"
+            )
+            payload = build_payload(matrix_path, qc_path)
+
+        individual = [f for f in payload["findings"] if f["id"] != "GCM-RESTANTE"]
+        aggregate = [f for f in payload["findings"] if f["id"] == "GCM-RESTANTE"]
+        self.assertEqual(len(individual), MAX_ENUMERATED_BLIND_SPOTS)
+        self.assertEqual(len(aggregate), 1, "the remainder must be reported, not dropped")
+
+        remainder = blind_total - MAX_ENUMERATED_BLIND_SPOTS
+        self.assertIn(str(remainder), aggregate[0]["observed_data"])
+        # And it must say where the ones it did not name can be found.
+        self.assertIn("completeness-matrix:", aggregate[0]["evidence_refs"])
+
+    def test_the_bounded_list_names_the_clinical_loci_first(self):
+        # A curiosity locus displacing a clinical one from the enumeration would make the cap
+        # a loss of information rather than a change of presentation.
+        import json as _json
+
+        from scripts.build_completeness_report import (
+            MAX_ENUMERATED_BLIND_SPOTS,
+            build_payload,
+        )
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            matrix, matrix_path, qc_path = self._artifacts(root)
+            matrix["entries"].extend(
+                {
+                    "rsid": f"rs{7_000_000 + i}",
+                    "gene": f"CURIO{i}",
+                    "scope": "CURIOSIDADE",
+                    "classification": NAO_TESTADO,
+                    "basis": "ausente do array nesta simulação",
+                    "interpretable": False,
+                    "genotype": None,
+                    "genotype_withheld": True,
+                }
+                for i in range(MAX_ENUMERATED_BLIND_SPOTS * 2)
+            )
+            clinical = {
+                e["rsid"] for e in matrix["entries"]
+                if not e["interpretable"] and e.get("scope") == "CLINICO"
+            }
+            matrix["totals"]["targets"] = len(matrix["entries"])
+            matrix_path.write_text(
+                _json.dumps(matrix, ensure_ascii=False), encoding="utf-8"
+            )
+            payload = build_payload(matrix_path, qc_path)
+
+        named = {f["id"].removeprefix("GCM-") for f in payload["findings"]}
+        self.assertTrue(clinical, "fixture must contain clinical blind spots")
+        self.assertTrue(clinical <= named, "a clinical blind spot was displaced by a curiosity")
+
     def test_a_hand_edited_count_is_refused_at_render_time(self):
         """The headline number is the one most worth faking; it is anchored."""
         from reporting.engine import ReportReleaseError, render_document

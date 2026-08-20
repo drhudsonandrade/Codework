@@ -10,8 +10,28 @@
 | `targets_gwas_traits.json` | **733** | GWAS Catalog, termos declarados |
 | `targets_merged_panel.json.gz` | **55.916** | união dos quatro |
 
-Genes cobertos: de 16 para **3.082**, dos quais **2.776** têm relação gene-doença
-estabelecida em nível Definitivo ou Forte por ClinGen ou GenCC.
+Genes cobertos: de 16 para **3.082**, dos quais **2.965** têm relação gene-doença
+estabelecida por ao menos um registro curado — eram 2.776 com ClinGen e GenCC apenas.
+Restam **117** genes sem nenhum registro que os estabeleça, e o sistema não converte variante
+em achado clínico em nenhum deles.
+
+| quem sustentou o gene | genes |
+|---|---:|
+| ClinGen + GenCC + PanelApp | 1.455 |
+| GenCC + PanelApp | 859 |
+| ClinGen + GenCC + PanelApp + ClinGen Dosage | 344 |
+| **PanelApp sozinho** | **188** |
+| ClinGen + PanelApp | 63 |
+| GenCC + PanelApp + ClinGen Dosage | 46 |
+| outros arranjos | 10 |
+| **nenhum** | **117** |
+
+Em 2.704 genes o PanelApp coincide com o GenCC. Isso está marcado, não somado: o export do
+GenCC já agrega as submissões do PanelApp, então dois nomes ali são um corpo de curadoria
+aparecendo duas vezes. A curadoria de dosagem do ClinGen não estabeleceu nenhum gene sozinho
+— ela contribui modo de herança com citação em 1.111 genes, que é o que se pediu dela. A
+restrição populacional do gnomAD cobre 2.811 genes, dos quais 690 são intolerantes a perda de
+função (pLI ≥ 0,90), e não estabelece nenhum.
 
 ## Os registros curados que decidem o que vira achado
 
@@ -144,12 +164,36 @@ detectado" é ambíguo quando duas variantes clinicamente distintas ocupam uma p
 
 ## Escala medida
 
-Cadeia completa sobre um array de 700.000 SNPs contra o painel de 55.916 alvos:
+Cadeia completa — QC, matriz de completude, passaporte PGx, junção clínica e os dez payloads
+— sobre um array de 700.000 SNPs contra o painel de 55.916 alvos, com o registro expandido
+como padrão:
 
 ```
-tempo: 11 s   |   pico de memória: 803 MB
-matriz de completude: 25 MB   |   junção clínica: 68 MB
+14 de 14 etapas OK, nenhuma bloqueada
+tempo: 20,5 s   |   pico de memória: 676 MB
+matriz de completude: 23 MB   |   junção clínica: 59 MB
 ```
+
+Chegar aí exigiu três correções que só a escala expôs, e as três eram defeitos reais:
+
+**O arquivo de evidência não era legível.** `build_clinical_findings` lia a evidência com
+`read_text`, e o arquivo em massa tem 88 MB e viaja comprimido. O erro era um
+`UnicodeDecodeError` sobre o byte `0x8b` — que não diz nada sobre a causa, e é a razão de o
+registro expandido nunca ter sido o padrão. Agora passa pelo mesmo leitor que decide
+compressão pelo número mágico do próprio arquivo.
+
+**O relatório 05 estava bloqueado em toda execução orquestrada.** `probe_path` é posicional
+em `build_payload` e o orquestrador não o passava: um `TypeError` na chamada, lido como
+recusa do relatório. A sonda de proveniência é opcional — sua ausência é um relatório mais
+fraco, não um relatório bloqueado.
+
+**O relatório 09 gerava 275 MB.** Ele emite um achado por locus não interpretável, e um array
+de consumo alcança ~4% de 55.916 alvos: são ~53.900 achados individuais, com 592.624 campos
+de proveniência. Um relatório que nomeia cada ponto cego não torna nenhum visível, e nenhum
+renderizador transforma isso num documento. Agora enumera 250, ordenados por escopo — do
+clínico ao de curiosidade —, e o restante vira **um** achado que declara a contagem exata, a
+quebra por escopo, os genes envolvidos e o SHA-256 da matriz que lista todos. Resumido,
+nunca descartado: 275 MB → 1,4 MB.
 
 A primeira versão da junção clínica custava **391 MB e 2,8 GB de pico**, porque o bloco de
 validade de cada gene era copiado em cada locus e loci nunca interrogados carregavam detalhe

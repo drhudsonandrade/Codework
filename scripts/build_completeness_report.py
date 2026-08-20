@@ -47,13 +47,60 @@ def _percent(value: float) -> str:
     return f"{value * 100:.1f}%"
 
 
+#: How many uncovered loci are listed one by one before the rest become a counted aggregate.
+#: The panel holds 55,916 targets and a consumer array reaches about four percent of them, so
+#: an unbounded list is roughly 53,900 individual findings — a report that names every blind
+#: spot individually makes none of them visible, and produced a 275 MB payload that no
+#: renderer can turn into a document. The remainder is never dropped: it is counted exactly,
+#: broken down by scope, and the matrix that holds every one of them is cited by SHA-256.
+MAX_ENUMERATED_BLIND_SPOTS = 250
+
+#: Priority for that enumeration. A clinical locus in a gene with curated validity is the one
+#: worth naming; a curiosity locus is not.
+_SCOPE_PRIORITY = {"CLINICO": 0, "PREDISPOSICAO": 1, "PESQUISA": 2, "CURIOSIDADE": 3}
+
+
+def _blind_spot_order(item: tuple[int, dict]) -> tuple:
+    _index, entry = item
+    return (
+        _SCOPE_PRIORITY.get(str(entry.get("scope") or ""), 9),
+        str(entry.get("gene") or "￿"),
+        str(entry.get("rsid") or ""),
+    )
+
+
 def _by_gene(entries: list) -> str:
-    """Group the coverage classes by gene, so a partly-covered gene is visible as such."""
+    """Group the coverage classes by gene, so a partly-covered gene is visible as such.
+
+    Only genes this sample actually reached. A gene whose every locus is NÃO TESTADO says
+    nothing about the person and, at panel scale, there are thousands of them; listing them
+    here buried the partly-covered genes that are the point of the table. The count of the
+    others is stated beside it rather than left to be inferred.
+    """
     grouped: dict[str, list[str]] = {}
+    untouched: set[str] = set()
     for entry in entries:
         gene = str(entry.get("gene") or "sem gene declarado")
-        grouped.setdefault(gene, []).append(f"{entry['rsid']}={entry['classification']}")
-    return "; ".join(f"{gene}: {', '.join(sorted(loci))}" for gene, loci in sorted(grouped.items()))
+        if entry.get("interpretable"):
+            grouped.setdefault(gene, []).append(f"{entry['rsid']}={entry['classification']}")
+        else:
+            untouched.add(gene)
+    untouched -= set(grouped)
+    body = "; ".join(
+        f"{gene}: {', '.join(sorted(loci))}" for gene, loci in sorted(grouped.items())
+    )
+    if not grouped:
+        return (
+            f"Nenhum gene do painel foi alcançado por este array; {len(untouched)} genes "
+            "permanecem inteiramente não testados."
+        )
+    if untouched:
+        body += (
+            f". Outros {len(untouched)} genes do painel não têm nenhum locus interpretável "
+            "nesta amostra e por isso não aparecem acima; a matriz de completude citada nas "
+            "fontes lista todos."
+        )
+    return body
 
 
 def build_payload(matrix_path: Path, qc_path: Path) -> dict:
@@ -168,9 +215,11 @@ def build_payload(matrix_path: Path, qc_path: Path) -> dict:
     # One structured finding per non-interpretable locus. These are the blind spots the
     # report exists to make visible; each is anchored to its own entry in the matrix.
     entries = matrix.payload.get("entries", [])
-    for index, entry in enumerate(entries):
-        if entry.get("interpretable"):
-            continue
+    blind_spots = [(i, e) for i, e in enumerate(entries) if not e.get("interpretable")]
+    blind_spots.sort(key=_blind_spot_order)
+    enumerated = blind_spots[:MAX_ENUMERATED_BLIND_SPOTS]
+    remainder = blind_spots[MAX_ENUMERATED_BLIND_SPOTS:]
+    for index, entry in enumerated:
         rsid = str(entry["rsid"])
         builder = compiler.finding(f"GCM-{rsid}", basis="entrada da matriz de completude")
         builder.derived(
@@ -207,6 +256,83 @@ def build_payload(matrix_path: Path, qc_path: Path) -> dict:
         builder.unavailable("evidence_refs", basis="nenhuma evidência externa foi recuperada para um locus não interpretável")
         builder.unavailable("uncertainties", basis="a própria classe de cobertura é a incerteza")
         builder.unavailable("confirmation", basis="nenhuma confirmação foi executada nesta execução")
+        builder.add()
+
+    if remainder:
+        # The loci that were not listed one by one. Counted exactly, broken down by scope,
+        # and pointed at the artifact that holds every one of them — summarised, never
+        # dropped, and never left for the reader to infer from a list that simply stops.
+        by_scope: dict[str, int] = {}
+        genes: set[str] = set()
+        for _index, entry in remainder:
+            by_scope[str(entry.get("scope") or "NÃO DISPONÍVEL")] = (
+                by_scope.get(str(entry.get("scope") or "NÃO DISPONÍVEL"), 0) + 1
+            )
+            if entry.get("gene"):
+                genes.add(str(entry["gene"]))
+        breakdown = ", ".join(f"{scope} {count}" for scope, count in sorted(by_scope.items()))
+        builder = compiler.finding(
+            "GCM-RESTANTE", basis="agregado dos loci não interpretáveis não enumerados um a um"
+        )
+        builder.stated(
+            "domain", f"{len(genes)} genes", kind="case_control",
+            basis="genes distintos entre os loci agregados", status="VERIFICADO",
+        )
+        builder.derived(
+            "nature", artifact="completeness-matrix", locator="totals",
+            status=status, kind="computed",
+            basis="totais por classe de cobertura, lidos da própria matriz",
+            transform=lambda totals: (
+                "NÃO TESTADO "
+                f"{totals.get('class_NÃO TESTADO', 0)}, NO-CALL {totals.get('class_NO-CALL', 0)}, "
+                f"NÃO REPORTÁVEL {totals.get('class_NÃO REPORTÁVEL', 0)}"
+            ),
+        )
+        builder.stated(
+            "observed_data",
+            f"{len(remainder)} loci adicionais sem genótipo interpretável ({breakdown})",
+            kind="case_control", basis="contagem exata dos loci agregados", status="VERIFICADO",
+        )
+        builder.derived(
+            "qc", artifact="completeness-matrix", locator="totals.interpretable_fraction",
+            status=status, kind="computed",
+            basis="fração do painel que esta amostra interroga",
+            transform=lambda fraction: _percent(float(fraction or 0.0)),
+        )
+        builder.stated(
+            "status", "NÃO TESTADO", kind="case_control",
+            basis="classe de cobertura predominante entre os loci agregados", status="VERIFICADO",
+        )
+        builder.stated(
+            "priority", min(by_scope, key=lambda s: _SCOPE_PRIORITY.get(s, 9)),
+            kind="case_control", basis="escopo mais alto presente entre os loci agregados",
+            status="VERIFICADO",
+        )
+        builder.stated(
+            "interpretation",
+            f"Estes {len(remainder)} loci são pontos cegos como os listados acima e não "
+            f"sustentam afirmação de presença nem de ausência. Os {MAX_ENUMERATED_BLIND_SPOTS} "
+            "enumerados individualmente foram escolhidos por escopo, do clínico ao de "
+            "curiosidade; nada aqui foi descartado, e a matriz de completude citada nas fontes "
+            "lista cada um deles.",
+            kind="case_control", basis="consequência direta da classe de cobertura",
+            status="VERIFICADO",
+        )
+        builder.derived(
+            "evidence_refs", artifact="completeness-matrix", locator="sha256",
+            status=status, kind="computed",
+            basis="artefato que contém os loci agregados, citado por conteúdo",
+            transform=lambda sha: f"completeness-matrix:{sha}",
+        )
+        builder.stated(
+            "uncertainties",
+            "A agregação é de apresentação, não de análise: cada locus foi classificado "
+            "individualmente e a contagem vem dos totais da própria matriz.",
+            kind="case_control", basis="escopo declarado da agregação", status="VERIFICADO",
+        )
+        builder.unavailable(
+            "confirmation", basis="nenhuma confirmação foi executada nesta execução"
+        )
         builder.add()
 
     compiler.state(

@@ -28,10 +28,14 @@ from array_pipeline.clinical_findings import build_clinical_findings, write_find
 from array_pipeline.completeness import build_completeness_matrix, write_matrix
 from array_pipeline.pharmacogenomics import build_pharmacogenomic_passport, write_passport
 
-DEFAULT_TARGETS = ROOT / "config/partial_genome_annotation_targets.json"
+# The merged panel and the bulk evidence file, not the twenty-nine hand-curated loci. The
+# expanded registry is only an expansion if the default run uses it; leaving the defaults
+# pointing at the small registry would have shipped a system that *can* interrogate 55,916
+# loci and interrogates 29. The small pair remains selectable with --targets/--evidence.
+DEFAULT_TARGETS = ROOT / "config/targets_merged_panel.json.gz"
 DEFAULT_PGX_REGISTRY = ROOT / "config/pgx_allele_definitions.json"
 DEFAULT_PGX_PANEL = ROOT / "config/pgx_panel_targets.json"
-DEFAULT_EVIDENCE = ROOT / "docs/evidence/GENE_DISEASE_VALIDITY.json"
+DEFAULT_EVIDENCE = ROOT / "docs/evidence/GENE_DISEASE_VALIDITY_BULK.json.gz"
 DEFAULT_ASSESSED = ROOT / "docs/evidence/ASSESSED_ALLELES_CLINVAR.json"
 DEFAULT_ANCESTRY_PANEL = ROOT / "config/ancestry_reference_panel.json.gz"
 
@@ -64,6 +68,7 @@ def run(
     ancestry_panel: Path | None,
     template_dir: Path | None,
     dossier: Path | None,
+    probe_path: Path | None = None,
 ) -> dict[str, Any]:
     outdir.mkdir(parents=True, exist_ok=True)
     results: dict[str, Any] = {}
@@ -138,7 +143,11 @@ def run(
     from scripts.build_pharmacogenomic_report import build_payload as p06
     from scripts.build_technical_report import build_payload as p05
 
-    payload("05", lambda: p05(qc_path, matrix_path))
+    # The provenance probe is optional and its absence is a weaker report, not a blocked one.
+    # `probe_path` is positional in build_payload, so omitting it raised a TypeError that
+    # blocked report 05 in every orchestrated run — a failure of the call, read as a failure
+    # of the report.
+    payload("05", lambda: p05(qc_path, matrix_path, probe_path))
     if passport_path:
         payload("06", lambda: p06(passport_path, matrix_path))
     payload("09", lambda: p09(matrix_path, qc_path))
@@ -218,6 +227,10 @@ def main() -> int:
         default=str(DEFAULT_ANCESTRY_PANEL),
         help="population reference panel; without it report 02 measures feasibility only",
     )
+    parser.add_argument(
+        "--probe",
+        help="provenance-probe.json; without it report 05 states the probe was not run",
+    )
     parser.add_argument("--template-dir", help="installed v3.0 template pack; renders PDFs")
     parser.add_argument("--dossier", help="case dossier JSON, bound to the analysed case")
     args = parser.parse_args()
@@ -234,6 +247,7 @@ def main() -> int:
         ancestry_panel=Path(args.ancestry_panel) if args.ancestry_panel else None,
         template_dir=Path(args.template_dir) if args.template_dir else None,
         dossier=Path(args.dossier) if args.dossier else None,
+        probe_path=Path(args.probe) if args.probe else None,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if not result["blocked"] else 2
