@@ -234,5 +234,65 @@ class UnqueriedLocusTest(unittest.TestCase):
         self.assertIn("não foram consultados", text)
 
 
+class ClinicalSectionBoundsTest(unittest.TestCase):
+    """Report 01's negative lists must not grow with the registry."""
+
+    def _module(self):
+        import importlib.util
+
+        path = ROOT / "scripts" / "build_clinical_report.py"
+        spec = importlib.util.spec_from_file_location("_clin", path)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        return module
+
+    def _payload(self, untested: int):
+        from array_pipeline.clinical_findings import NAO_INTERROGADO
+
+        return {
+            "negative_statement_policy": "política",
+            "findings": [
+                {
+                    "rsid": f"rs{i}", "gene": "GENE", "interpretation": NAO_INTERROGADO,
+                    "genotype": None, "clinvar": {"conditions": []},
+                }
+                for i in range(untested)
+            ],
+        }
+
+    def test_the_untested_list_is_capped_and_the_remainder_counted(self):
+        # The defect: naming all 124,546 loci the array never carried produced a 2.3 MB
+        # section. The count was already in the label, so the list added nothing.
+        module = self._module()
+        text = module._predisposition_text(self._payload(5000))
+        self.assertIn("Não interrogados (5000)", text)
+        self.assertIn("não listados individualmente", text)
+        self.assertLess(len(text), 6000, "the section grew with the registry again")
+
+    def test_a_short_list_is_named_in_full(self):
+        module = self._module()
+        text = module._predisposition_text(self._payload(3))
+        self.assertIn("Não interrogados (3)", text)
+        self.assertNotIn("não listados individualmente", text)
+
+    def test_the_one_star_tier_is_named_rather_than_folded_in(self):
+        # The wider default registry is only safe because the report says which findings rest
+        # on a single submitter.
+        from array_pipeline.clinical_findings import ACHADO_PRELIMINAR
+
+        module = self._module()
+        payload = self._payload(0)
+        payload["findings"].append(
+            {
+                "rsid": "rs99", "gene": "CAV3", "interpretation": ACHADO_PRELIMINAR,
+                "genotype": "AG", "clinvar": {"conditions": []},
+            }
+        )
+        text = module._predisposition_text(payload)
+        self.assertIn("Achados preliminares, revisão de uma estrela (1)", text)
+        self.assertIn("rs99", text)
+
+
 if __name__ == "__main__":
     unittest.main()

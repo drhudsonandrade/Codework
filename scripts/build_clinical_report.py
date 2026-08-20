@@ -30,6 +30,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from array_pipeline.clinical_findings import (
+    ACHADO_PRELIMINAR,
     ACIONAVEL,
     GENOTIPO_DE_RISCO,
     NAO_INTERROGADO,
@@ -98,20 +99,40 @@ def _findings_text(payload: dict[str, Any]) -> str:
     return "; ".join(_describe(f) for f in items)
 
 
+#: How many loci each negative category names before the rest become a count. The count is
+#: already in every label, so capping the list loses no information — while an uncapped list
+#: reached 2.3 MB in one section, naming all 124,000 loci the array never carried.
+MAX_LOCI_NAMED = 60
+
+
+def _named(loci: list[dict[str, Any]]) -> str:
+    """Up to MAX_LOCI_NAMED locus identifiers, with the remainder counted rather than listed."""
+    if not loci:
+        return "nenhum"
+    names = ", ".join(f"{f['gene'] or '-'} {f['rsid']}" for f in loci[:MAX_LOCI_NAMED])
+    if len(loci) > MAX_LOCI_NAMED:
+        names += f" (+{len(loci) - MAX_LOCI_NAMED} não listados individualmente)"
+    return names
+
+
 def _predisposition_text(payload: dict[str, Any]) -> str:
     predisposition = [f for f in payload["findings"] if f["interpretation"] == PREDISPOSICAO]
+    preliminary = [f for f in payload["findings"] if f["interpretation"] == ACHADO_PRELIMINAR]
     negative = [f for f in payload["findings"] if f["interpretation"] == NEGATIVO]
     uninterpreted = [f for f in payload["findings"] if f["interpretation"] == SEM_INTERPRETACAO]
     untested = [f for f in payload["findings"] if f["interpretation"] == NAO_INTERROGADO]
     parts = [
         "Predisposição: "
         + ("; ".join(_describe(f) for f in predisposition) if predisposition else "nenhum locus"),
-        f"Interrogados e sem o alelo avaliado ({len(negative)}): "
-        + (", ".join(f"{f['gene'] or '-'} {f['rsid']}" for f in negative) or "nenhum"),
+        f"Interrogados e sem o alelo avaliado ({len(negative)}): " + _named(negative),
         f"Observados sem interpretação estabelecida ({len(uninterpreted)}): "
-        + (", ".join(f"{f['gene'] or '-'} {f['rsid']}" for f in uninterpreted) or "nenhum"),
-        f"Não interrogados ({len(untested)}): "
-        + (", ".join(f"{f['gene'] or '-'} {f['rsid']}" for f in untested) or "nenhum"),
+        + _named(uninterpreted),
+        f"Não interrogados ({len(untested)}): " + _named(untested),
+        # The one-star tier lands here, and it is named rather than folded into the
+        # predisposition list: a single-submitter assertion is one laboratory's opinion, and
+        # the whole reason the wider registry is safe to default to is that the report says so.
+        f"Achados preliminares, revisão de uma estrela ({len(preliminary)}): "
+        + _named(preliminary),
         payload["negative_statement_policy"],
     ]
     return " | ".join(parts)
@@ -124,7 +145,7 @@ def _confirmation_text(payload: dict[str, Any], matrix: dict[str, Any]) -> str:
         "ortogonal antes de qualquer mudança de conduta. Classes não resolvidas por array em "
         f"nenhum locus: {spots}. "
         f"{payload['totals']['genes_without_established_validity']} genes do registro não têm "
-        "relação gene-doença estabelecida por ClinGen nem por GenCC, o que impede converter "
+        "relação gene-doença estabelecida por nenhum registro curado, o que impede converter "
         "variante em achado ainda que o ClinVar a classifique. Reanálise é indicada quando "
         "essas curadorias mudarem."
     )
