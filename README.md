@@ -10,7 +10,7 @@ Private, reproducible genomics execution repository governed by the canonical GE
 - `main.nf`, `nextflow.config`, `Dockerfile` — scientific data/runtime scaffold.
 - `normative/sealed/` — inactive byte-exact transport of the canonical v3.4 TXT; plaintext is materialized only at runtime and mounted read-only.
 - `mcp/` — optional interface only; not a source of truth and not required by the policy engine.
-- `adapters/` — optional Cloudflare/Temporal/Supabase/Vercel/microfn/OpenAI integration contracts.
+- `adapters/` — optional optional ingress, orchestration, projection, UI and agent-interface contracts.
 - `manifests/` — integrity/reference manifests.
 - `docs/NORMATIVE_V3.4.md` — the vigent norm: identity, uniqueness rule, section-258 gates and the POST-DEPLOYMENT criterion.
 - `docs/PRODUCTION_CEREMONY.md` — exact live-deployment and section-260 evidence procedure.

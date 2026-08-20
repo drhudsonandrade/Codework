@@ -13,6 +13,6 @@ Key properties:
 - Dedicated build-harmonization and ClinVar-conflict gates cover section-260 cases 3 and 4 explicitly.
 - Canonical v3.4 bytes are activated from an inactive sealed transport only at runtime and mounted read-only.
 - Independent regression smoke and live post-deployment section-260 smoke are distinct; only the latter can satisfy `POST_DEPLOYMENT_GATE`.
-- CLI and HTTP work without ChatGPT, OpenAI keys, Cloudflare, Temporal, Supabase or any other external service.
+- CLI and HTTP work without any agent client, external API key or third-party managed service.
 
 See root `docs/PRODUCTION_CEREMONY.md` and `docs/PORTABILITY_MATRIX.md`.

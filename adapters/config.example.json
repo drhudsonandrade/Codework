@@ -8,5 +8,5 @@
   "supabase": {"enabled": false, "role": "optional Evidence Plane projection/index; never canonical evidence store"},
   "vercel": {"enabled": false, "role": "optional web UI"},
   "microfn": {"enabled": false, "role": "optional stateless glue/health adapter"},
-  "openai_chatgpt": {"enabled": false, "role": "optional natural-language/MCP interface; never source of truth"}
+  "agent_interface": {"enabled": false, "role": "optional natural-language/MCP interface; never source of truth"}
 }

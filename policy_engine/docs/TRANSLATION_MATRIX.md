@@ -6,4 +6,4 @@ Cada seção `0–262` é compilada em `GENOMA-V3.4-S000` … `GENOMA-V3.4-S262`
 
 Há três formas de execução: **gate determinístico** para invariantes verificáveis; **attestation estruturada** para regras que dependem de curadoria/evidência/contexto, exigindo status, evidência, justificativa e rastreabilidade; e **bloqueio por indisponibilidade**, sem converter ausência de recurso/fonte em PASS.
 
-O sistema é executável sem ChatGPT, mas automação não substitui avaliação clínica ou dados ausentes.
+O sistema é executável sem qualquer cliente de agente, mas automação não substitui avaliação clínica ou dados ausentes.

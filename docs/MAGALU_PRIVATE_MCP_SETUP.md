@@ -12,20 +12,20 @@ The external ruleset manifest is `manifests/RULESET_V3.4.sha256`. Its SHA-256 wa
 scripts/verify_ruleset.sh /secure/project-sources/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt
 ```
 
-This confirms the hash and the `VIGENTE`/`v3.4`/`17/08/2026` header but deliberately leaves deployment pending. In the ChatGPT Project, manually remove or mark older active rulesets obsolete, retain only the canonical v3.4 source, copy its **BOOTSTRAP CURTO** into Project Instructions, and only then run the 15 live prompts in section 260.
+This confirms the hash and the `VIGENTE`/`v3.4`/`17/08/2026` header but deliberately leaves deployment pending. In the client project, manually remove or mark older active rulesets obsolete, retain only the canonical v3.4 source, copy its **BOOTSTRAP CURTO** into Project Instructions, and only then run the 15 live prompts in section 260.
 
 ## 1. GitHub access
 
 You do not need to create folders in advance. Git creates paths such as `.github/workflows` when files are committed.
 
 1. Open <https://github.com/settings/installations> while signed in to the GitHub account that owns the private `Codework` repository.
-2. Locate the ChatGPT/OpenAI GitHub App and choose **Configure**.
+2. Locate the connector's GitHub App and choose **Configure**.
 3. Under repository access, choose **Only select repositories** and select `Codework`, or choose all repositories if that broader scope is intentional.
 4. Confirm the requested permissions include repository contents and pull requests. GitHub App permissions are defined by the app; if write permissions are not requested, reconnecting cannot upgrade them.
 5. Open the repository's **Settings → Actions** page and allow Actions for the repository.
 6. Before attaching any self-hosted runner, make the repository private. Never execute workflows from untrusted forks on the genomic VM.
 
-If ChatGPT still shows the repository but calls return `Unknown tool`, start a new ChatGPT conversation after reconnecting. If GitHub returns `403 Resource not accessible by integration`, re-open the installation page and verify that `Codework` is selected; this is an installation-scope problem, not a missing repository folder.
+If the client still shows the repository but calls return `Unknown tool`, start a new client conversation after reconnecting. If GitHub returns `403 Resource not accessible by integration`, re-open the installation page and verify that `Codework` is selected; this is an installation-scope problem, not a missing repository folder.
 
 ## 2. Target VM and persistent storage
 
@@ -35,7 +35,7 @@ Recommended starting point for full GRCh38 indexing and one WGS at a time:
 - 12–24 vCPU.
 - 1–2 TiB encrypted NVMe/block storage mounted at `/srv/genome`.
 - Ubuntu 24.04 LTS or another supported Linux distribution.
-- Object storage for encrypted raw FASTQ/archive copies; do not route 60+ GiB genomic files through ChatGPT.
+- Object storage for encrypted raw FASTQ/archive copies; do not route 60+ GiB genomic files through an agent client.
 
 Create a dedicated `genome` system user and persistent directories:
 
@@ -137,14 +137,14 @@ sudo systemctl enable --now genome-mcp.service
 curl --fail http://127.0.0.1:3000/healthz
 ```
 
-Inspect `http://127.0.0.1:3000/mcp` with MCP Inspector before connecting ChatGPT.
+Inspect `http://127.0.0.1:3000/mcp` with MCP Inspector before connecting a client.
 
-## 8. OpenAI Secure MCP Tunnel
+## 8. the MCP tunnel provider
 
-1. In OpenAI Platform tunnel settings, create a tunnel and associate both the Platform organization and the target ChatGPT workspace.
+1. In the tunnel provider's settings, create a tunnel and associate both the Platform organization and the target client workspace.
 2. Grant the operator **Tunnels Read + Use**; creating or editing the tunnel also needs **Read + Manage**.
 3. Download the current public `tunnel-client` release from the Platform page; do not hard-code a floating binary URL in automation.
-4. Enter the runtime API key directly in the VM secret store or `/etc/codework/tunnel-client.env` with mode `0600`. Never paste it into ChatGPT, GitHub, logs or command arguments.
+4. Enter the runtime API key directly in the VM secret store or `/etc/codework/tunnel-client.env` with mode `0600`. Never paste it into a client, GitHub, logs or command arguments.
 5. Initialize the HTTP profile using the real tunnel id and local MCP URL:
 
 ```bash
@@ -156,14 +156,14 @@ tunnel-client doctor --profile codework-genome --explain
 ```
 
 6. Install `deploy/tunnel-client.service.example` as a reviewed systemd service and keep `tunnel-client run --profile codework-genome` healthy.
-7. In ChatGPT web, enable **Settings → Security and login → Developer mode**. Go to ChatGPT Plugins, choose **+**, select **Tunnel**, and select or paste the `tunnel_id`.
+7. In the client, enable developer mode. Go to its plugin/connector list, choose **+**, select **Tunnel**, and select or paste the `tunnel_id`.
 8. Review the four discovered tools and keep confirmation enabled for `run_synthetic_canary`.
 
 The private tunnel is for developer-mode/internal use, not public plugin-directory submission.
 
 ## 9. Personal WGS arrival
 
-Upload FASTQ/BAM/CRAM directly to encrypted object or block storage using resumable transfer. Store only object keys and checksums in job metadata; never upload a 60+ GiB WGS through ChatGPT. Before calling variants, confirm input type, sample model, GRCh38 compatibility, read groups, sex/ploidy assumptions, known-sites resources, coverage and contamination/QC requirements.
+Upload FASTQ/BAM/CRAM directly to encrypted object or block storage using resumable transfer. Store only object keys and checksums in job metadata; never upload a 60+ GiB WGS through an agent client. Before calling variants, confirm input type, sample model, GRCh38 compatibility, read groups, sex/ploidy assumptions, known-sites resources, coverage and contamination/QC requirements.
 
 For a full clinical-grade workflow, add and validate `nf-core/sarek`/GATK gVCF/BQSR/joint-calling and a GIAB benchmark in a separate reviewed change. The synthetic canary is not a substitute.
 

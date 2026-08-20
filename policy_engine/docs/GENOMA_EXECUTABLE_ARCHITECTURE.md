@@ -22,7 +22,7 @@ The engine emits deterministic reports and an optional tamper-evident JSONL hash
 
 ## Optional interfaces
 
-CLI, HTTP and OCI are first-class. MCP/ChatGPT, web UIs, Cloudflare Tunnel, Temporal, Supabase or future providers are adapters only. Their disappearance must not prevent local policy execution.
+CLI, HTTP and OCI are first-class. MCP clients, web UIs, tunnels, orchestrators, projections or future providers are adapters only. Their disappearance must not prevent local policy execution.
 
 ## Failure behavior
 

@@ -41,9 +41,9 @@ git push -u origin codex/genome-runtime-mcp
 
 ## GitHub App access
 
-Open <https://github.com/settings/installations>. Choose **Configure** for the ChatGPT/OpenAI GitHub App. Under **Repository access**, select `Codework` and save. Reauthorizing the user identity alone is not enough: the App must appear as an installation. The App itself must request repository-content and pull-request write permissions; selecting a repository cannot add permissions the App did not request.
+Open <https://github.com/settings/installations>. Choose **Configure** for the connector's GitHub App. Under **Repository access**, select `Codework` and save. Reauthorizing the user identity alone is not enough: the App must appear as an installation. The App itself must request repository-content and pull-request write permissions; selecting a repository cannot add permissions the App did not request.
 
-If the connector still returns `Unknown tool`, close and start a new ChatGPT conversation after reconnecting. If it returns `403 Resource not accessible by integration`, revisit the app installation and repository selection.
+If the connector still returns `Unknown tool`, close and start a new client conversation after reconnecting. If it returns `403 Resource not accessible by integration`, revisit the app installation and repository selection.
 
 ## Actions policy
 

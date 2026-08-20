@@ -300,7 +300,7 @@ def main() -> None:
     print("PASS\tevidence_adapter_contract\tClinVar/ClinGen/CPIC/ClinPGx/gnomAD/PGS Catalog")
     print("PASS\tsupply_chain_contract\tworkflow/action/container lock paths present")
     print("PASS\treporting_contract\t11-model deterministic renderer and reference identities")
-    print("PASS\toptional_adapters\tcore has no Cloudflare/Temporal/Supabase/OpenAI runtime dependency")
+    print("PASS\toptional_adapters\tcore has no ingress, orchestration, projection or agent-interface runtime dependency")
 
 
 if __name__ == "__main__":

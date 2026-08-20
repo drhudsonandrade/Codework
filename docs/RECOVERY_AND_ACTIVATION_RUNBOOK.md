@@ -19,8 +19,8 @@ suite passes 15/15 with no critical failure.
 | Executable environment | `ghcr.io/<github-owner>/codework-genome` pinned by digest | Retained under the repository owner's package policy | Pull the exact tested container without resolving packages again |
 | Build/test evidence | Recovery bundle in the project's persistent document store | Retained until the owner deletes it or an account/workspace policy removes it | Preserve the synthetic canary ZIP, checksums and release evidence beyond Actions retention |
 | GitHub Actions artifacts | `synthetic-canary-*` and `ghcr-image-reference-*` | Requested retention: 90 days, capped by repository/org policy | Convenient CI evidence only; never the sole backup |
-| Future genomic data | Encrypted VM block/object storage plus an independent encrypted backup | Provider lifecycle policy controlled by the owner | Store FASTQ/BAM/CRAM/VCF and GRCh38; never commit or upload them through ChatGPT |
-| Work scratch filesystem | Temporary ChatGPT Work runtime | May be reclaimed after inactivity | Build staging only; never a durable source of truth |
+| Future genomic data | Encrypted VM block/object storage plus an independent encrypted backup | Provider lifecycle policy controlled by the owner | Store FASTQ/BAM/CRAM/VCF and GRCh38; never commit or upload them through an agent client |
+| Work scratch filesystem | Temporary agent-session runtime | May be reclaimed after inactivity | Build staging only; never a durable source of truth |
 
 No hosted service can honestly be promised to remain available forever. Durability comes from
 keeping at least two independent copies and retaining the manifests needed to verify them.
@@ -97,14 +97,14 @@ After the future VM exists:
 
 1. Start `deploy/docker-compose.yml` with a digest-pinned `GENOME_IMAGE`.
 2. Verify `GET http://127.0.0.1:3000/healthz` and inspect `/mcp` locally.
-3. Create the OpenAI Secure MCP Tunnel and associate the correct Platform organization and ChatGPT
+3. Create the MCP tunnel and associate the correct provider organization and client
    workspace.
 4. Run `tunnel-client doctor --profile codework-genome --explain`.
-5. In ChatGPT developer mode, add a Tunnel connection and review exactly four tools.
+5. In the client's developer mode, add a Tunnel connection and review exactly four tools.
 6. Run a canary with a bounded request id and record tool, redacted arguments, result and sanitized
    error in `/srv/genome/audit`.
 
-ChatGPT plugins are installed in ChatGPT, not in GitHub. Fallow is also represented in GitHub by the
+Connectors are installed in the client, not in GitHub. Fallow is also represented in GitHub by the
 pinned `fallow-rs/fallow@v3.16.0` Action. Cloudflare, Supabase, Temporal, Flower, Vercel and research
 connectors are not dependencies of the genomic data plane and therefore are not copied into the
 repository or container.
@@ -121,7 +121,7 @@ These steps are deliberately blocked until the high-memory target host is provis
 5. Run `scripts/validate_grch38.sh`; require 9/9, approved checksums, compatible contigs, five BWA
    index files, a 101-base `samtools faidx` result and a functional `bcftools query` result.
 6. Transfer the WGS directly to encrypted block/object storage with resumable transfer. Do not send a
-   60+ GiB file through ChatGPT.
+   60+ GiB file through an agent client.
 7. Record the WGS object key, size and SHA-256 in restricted job metadata; keep a second encrypted
    copy under a separate lifecycle policy.
 8. Run the validated germline WGS workflow and a Genome in a Bottle benchmark before interpreting

@@ -31,7 +31,7 @@ The independent `genoma-policy smoke` suite remains separate and can never grant
 
 ## 4. Bootstrap attestation
 
-`deploy/attestations/bootstrap-project-v3.4.json` is a structured record of the v3.4 bootstrap verified in the current ChatGPT Project Instructions. It is intentionally explicit that GitHub cannot introspect future ChatGPT configuration. The core does not depend on ChatGPT; this attestation only closes the project-specific bootstrap criterion and must be renewed when Project Instructions change.
+`deploy/attestations/bootstrap-project-v3.4.json` is a structured record of the v3.4 bootstrap verified in the current client project instructions. It is intentionally explicit that GitHub cannot introspect future client configuration. The core does not depend on the client; this attestation only closes the project-specific bootstrap criterion and must be renewed when Project Instructions change.
 
 ## 5. Evidence package
 

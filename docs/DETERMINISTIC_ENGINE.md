@@ -60,4 +60,4 @@ Container deployment and the canonical 15-case live ceremony are documented in `
 
 ## Optional services
 
-ChatGPT/MCP, Cloudflare, Temporal, Supabase, Vercel and microfn are optional adapters. The core has no OpenAI/LLM dependency and can run from Python/OCI on any compatible host.
+MCP clients, ingress, orchestration, projection, UI and glue services are optional adapters. The core has no LLM dependency and can run from Python/OCI on any compatible host.
