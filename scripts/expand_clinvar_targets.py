@@ -60,12 +60,21 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from array_pipeline.clinical_findings import normalised_moi
+from array_pipeline.clinical_findings import (
+    AUTOSOMAL_DOMINANT as AUTOSOMAL_DOMINANT_ABBR,
+    AUTOSOMAL_RECESSIVE as AUTOSOMAL_RECESSIVE_ABBR,
+    normalised_moi,
+)
 from array_pipeline.targets import load_target_manifest, sha256_json
 
 CLINVAR_BULK_URL = "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.txt.gz"
 CLINGEN_CSV = "https://search.clinicalgenome.org/kb/gene-validity/download"
 GENCC_TSV = "https://search.thegencc.org/download/action/submissions-export-tsv"
+CLINGEN_DOSAGE_TSV = "https://ftp.clinicalgenome.org/ClinGen_gene_curation_list_GRCh38.tsv"
+GNOMAD_CONSTRAINT_TSV = (
+    "https://storage.googleapis.com/gcp-public-data--gnomad/release/4.1/constraint/"
+    "gnomad.v4.1.constraint_metrics.tsv"
+)
 
 DEFAULT_TARGETS_OUT = ROOT / "config/targets_clinvar_plp.json.gz"
 DEFAULT_EVIDENCE_OUT = ROOT / "docs/evidence/GENE_DISEASE_VALIDITY_BULK.json.gz"
@@ -81,6 +90,19 @@ PATHOGENIC = frozenset(
         "Pathogenic/Likely pathogenic/Pathogenic, low penetrance",
     }
 )
+#: ClinVar's review-status ladder, in stars. Anything not listed is zero: an unrecognised
+#: status must not accidentally clear a threshold.
+REVIEW_STARS = {
+    "practice guideline": 4,
+    "reviewed by expert panel": 3,
+    "criteria provided, multiple submitters, no conflicts": 2,
+    "criteria provided, conflicting classifications": 1,
+    "criteria provided, single submitter": 1,
+    "no assertion criteria provided": 0,
+    "no classification provided": 0,
+    "no classifications from unflagged records": 0,
+    "no classification for the single variant": 0,
+}
 #: ClinVar review statuses worth two stars or more.
 TWO_STAR_OR_BETTER = frozenset(
     {
@@ -89,6 +111,11 @@ TWO_STAR_OR_BETTER = frozenset(
         "practice guideline",
     }
 )
+
+
+def review_stars(status: str) -> int:
+    """Stars for a review status, defaulting to zero for anything unrecognised."""
+    return REVIEW_STARS.get(str(status or "").strip().lower(), 0)
 ESTABLISHED_VALIDITY = frozenset({"Definitive", "Strong"})
 MIN_GENCC_SUBMITTERS = 2
 
@@ -169,12 +196,232 @@ def read_gencc(raw: bytes) -> dict[str, list[dict[str, Any]]]:
     return dict(out)
 
 
+def read_panelapp(path: Path | None) -> dict[str, dict[str, Any]]:
+    """Load the PanelApp curation artefact produced by ``scripts/curate_panelapp.py``.
+
+    Absent is absent: an empty index makes every gene report `NÃO DISPONÍVEL` for PanelApp,
+    which is true, rather than silently dropping the registry from `established_by` while the
+    method text still claims three sources.
+    """
+    if path is None:
+        return {}
+    if not path.is_file():
+        raise FileNotFoundError(f"PanelApp curation not found: {path}")
+    raw = gzip.decompress(path.read_bytes()) if path.suffix == ".gz" else path.read_bytes()
+    payload = json.loads(raw.decode("utf-8"))
+    if payload.get("schema") != "genoma-panelapp-curation-v1":
+        raise ValueError(f"unexpected PanelApp schema: {payload.get('schema')!r}")
+    return payload.get("genes") or {}
+
+
+#: ClinGen's dosage-sensitivity scale. 3 is the only score that asserts the mechanism; 30 and
+#: 40 are not points on the same scale at all — they are notes the curators attach instead of
+#: a score, and reading either as "higher than 3" would invert the meaning.
+DOSAGE_SUFFICIENT = "3"
+DOSAGE_AUTOSOMAL_RECESSIVE = "30"
+DOSAGE_UNLIKELY = "40"
+DOSAGE_LABELS = {
+    "0": "sem evidência",
+    "1": "evidência mínima",
+    "2": "evidência emergente",
+    "3": "evidência suficiente para patogenicidade por dosagem",
+    "30": "gene associado a fenótipo autossômico recessivo",
+    "40": "dosagem improvável de ser sensível",
+}
+
+
+def read_clingen_dosage(path: Path | None) -> dict[str, dict[str, Any]]:
+    """ClinGen's haploinsufficiency and triplosensitivity curation, one row per gene.
+
+    This is a second, independent ClinGen product and not a restatement of the gene–disease
+    validity download: validity asks whether the relationship is real, dosage asks whether
+    *losing or gaining a copy* is the mechanism. It matters here for one concrete reason —
+    a haploinsufficiency score of 3 is an expert panel saying one broken copy is enough, and
+    a score of 30 is an expert panel saying the gene's phenotype is recessive. Both are
+    mode-of-inheritance statements with a citation, for genes the validity download often
+    does not carry.
+
+    The file's header is a comment line, and its scores are not ordinal: 30 and 40 are
+    annotations, not "more than 3".
+    """
+    if path is None:
+        return {}
+    if not path.is_file():
+        raise FileNotFoundError(f"ClinGen dosage list not found: {path}")
+    text = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    header: list[str] | None = None
+    rows: list[str] = []
+    for line in text:
+        if line.startswith("#"):
+            fields = line.lstrip("#").split("\t")
+            if len(fields) > 5 and fields[0].strip() == "Gene Symbol":
+                header = [f.strip() for f in fields]
+            continue
+        if line.strip():
+            rows.append(line)
+    if header is None:
+        raise ValueError(f"ClinGen dosage list has no recognisable header: {path}")
+
+    out: dict[str, dict[str, Any]] = {}
+    for row in csv.DictReader(rows, fieldnames=header, delimiter="\t"):
+        gene = (row.get("Gene Symbol") or "").strip()
+        if not gene:
+            continue
+        haplo = (row.get("Haploinsufficiency Score") or "").strip()
+        triplo = (row.get("Triplosensitivity Score") or "").strip()
+        modes: list[str] = []
+        if haplo == DOSAGE_SUFFICIENT:
+            # One broken copy suffices — that is what haploinsufficiency means.
+            modes.append(AUTOSOMAL_DOMINANT_ABBR)
+        if haplo == DOSAGE_AUTOSOMAL_RECESSIVE:
+            modes.append(AUTOSOMAL_RECESSIVE_ABBR)
+        pmids = sorted(
+            {
+                (row.get(f"{prefix} PMID{n}") or "").strip()
+                for prefix in ("Haploinsufficiency", "Triplosensitivity")
+                for n in range(1, 7)
+            }
+            - {""}
+        )
+        established = DOSAGE_SUFFICIENT in (haplo, triplo)
+        out[gene] = {
+            "status": "VERIFICADO" if established else UNAVAILABLE,
+            "source": "ClinGen Dosage Sensitivity curation",
+            "established": established,
+            "haploinsufficiency_score": haplo,
+            "haploinsufficiency": DOSAGE_LABELS.get(haplo, haplo or UNAVAILABLE),
+            "triplosensitivity_score": triplo,
+            "triplosensitivity": DOSAGE_LABELS.get(triplo, triplo or UNAVAILABLE),
+            "modes_of_inheritance": modes,
+            "diseases": sorted(
+                {
+                    (row.get(f"{prefix} Disease ID") or "").strip()
+                    for prefix in ("Haploinsufficiency", "Triplosensitivity")
+                }
+                - {""}
+            ),
+            "pmids": pmids,
+            "last_evaluated": (row.get("Date Last Evaluated") or "").strip() or None,
+            "genomic_location_grch38": (row.get("Genomic Location") or "").strip() or None,
+        }
+    return out
+
+
+def _float(text: str) -> float | None:
+    try:
+        value = float(text)
+    except (TypeError, ValueError):
+        return None
+    return value if value == value else None  # NaN is absence, not a number
+
+
+def read_gnomad_constraint(path: Path | None) -> dict[str, dict[str, Any]]:
+    """Per-gene loss-of-function and missense constraint from the gnomAD v4.1 release.
+
+    Constraint is *not* gene–disease validity and is never allowed to establish a
+    relationship: a gene can be exquisitely intolerant of loss of function and have no curated
+    disease, and a gene can be Definitive and unconstrained (CFTR's pLI is ~0 because carriers
+    are common and healthy). It is carried because it answers a different question — how
+    tolerant the gene is of being broken in a population that was not ascertained for disease —
+    and because a report that says "no established validity" is more useful when it can add
+    whether the gene is nonetheless constrained.
+
+    One row per gene: the MANE Select transcript where there is one, otherwise the canonical
+    transcript. The release lists each transcript twice, keyed by Ensembl and by NCBI id, with
+    identical metrics; the Ensembl row is taken so the transcript identifier is stable.
+    """
+    if path is None:
+        return {}
+    if not path.is_file():
+        raise FileNotFoundError(f"gnomAD constraint table not found: {path}")
+    opener = gzip.open if path.suffix == ".gz" else open
+    best: dict[str, tuple[int, dict[str, Any]]] = {}
+    with opener(path, "rt", encoding="utf-8", newline="") as handle:  # type: ignore[operator]
+        for row in csv.DictReader(handle, delimiter="\t"):
+            gene = (row.get("gene") or "").strip()
+            if not gene:
+                continue
+            mane = (row.get("mane_select") or "").strip().lower() == "true"
+            canonical = (row.get("canonical") or "").strip().lower() == "true"
+            if not (mane or canonical):
+                continue
+            ensembl = (row.get("gene_id") or "").startswith("ENSG")
+            # Rank: MANE beats canonical, and within a tier the Ensembl-keyed row wins.
+            rank = (2 if mane else 1) * 2 + (1 if ensembl else 0)
+            if gene in best and best[gene][0] >= rank:
+                continue
+            best[gene] = (
+                rank,
+                {
+                    "status": "VERIFICADO",
+                    "source": "gnomAD v4.1 constraint metrics",
+                    "transcript": (row.get("transcript") or "").strip() or None,
+                    "transcript_basis": "MANE Select" if mane else "canônico",
+                    "pli": _float(row.get("lof.pLI", "")),
+                    "loeuf": _float(row.get("lof.oe_ci.upper", "")),
+                    "lof_oe": _float(row.get("lof.oe", "")),
+                    "missense_z": _float(row.get("mis.z_score", "")),
+                    "flags": (row.get("constraint_flags") or "").strip() or None,
+                },
+            )
+    return {gene: record for gene, (_, record) in best.items()}
+
+
+def _panelapp_block(gene: str, panelapp: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    record = panelapp.get(gene)
+    if not record:
+        return {
+            "status": UNAVAILABLE,
+            "source": "Genomics England PanelApp e PanelApp Australia",
+            "established": False,
+            "established_by": [],
+            "green_panel_count": 0,
+            "modes_of_inheritance": [],
+            "reason": (
+                f"{gene} não aparece como gene verde em nenhum painel diagnóstico das duas "
+                "instâncias do PanelApp"
+                if panelapp
+                else "curadoria PanelApp não fornecida a esta execução"
+            ),
+        }
+    return {
+        "status": "VERIFICADO" if record.get("established") else UNAVAILABLE,
+        "source": "Genomics England PanelApp e PanelApp Australia",
+        "established": bool(record.get("established")),
+        "established_by": list(record.get("established_by") or []),
+        "green_panel_count": int(record.get("green_panel_count") or 0),
+        "modes_of_inheritance": list(record.get("modes_of_inheritance") or []),
+        "mode_of_inheritance_conflict": bool(record.get("mode_of_inheritance_conflict")),
+        "phenotypes": list(record.get("phenotypes") or []),
+        "publications": list(record.get("publications") or []),
+    }
+
+
+def _dosage_block(gene: str, dosage: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    record = dosage.get(gene)
+    if record:
+        return record
+    return {
+        "status": UNAVAILABLE,
+        "source": "ClinGen Dosage Sensitivity curation",
+        "established": False,
+        "modes_of_inheritance": [],
+        "reason": (
+            f"{gene} não consta na lista de curadoria de dosagem do ClinGen"
+            if dosage
+            else "curadoria de dosagem do ClinGen não fornecida a esta execução"
+        ),
+    }
+
+
 def gene_validity(
     gene: str,
     clingen: dict[str, list[dict[str, Any]]],
     gencc: dict[str, list[dict[str, Any]]],
+    panelapp: dict[str, dict[str, Any]] | None = None,
+    dosage: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """One gene's validity, from both registries, kept apart and never merged."""
+    """One gene's validity, from every registry, kept apart and never merged."""
     curations = clingen.get(gene, [])
     established_clingen = [
         c for c in curations if str(c.get("classification")) in ESTABLISHED_VALIDITY
@@ -228,12 +475,26 @@ def gene_validity(
             modes_by_disease[str(group["disease"]).lower()].add(group["mode_of_inheritance"])
     conflicting = sorted(d for d, modes in modes_by_disease.items() if len(modes) > 1)
 
+    panel = _panelapp_block(gene, panelapp or {})
+    dose = _dosage_block(gene, dosage or {})
     established_by = [
         name
-        for name, present in (("ClinGen", established_clingen), ("GenCC", established_gencc))
+        for name, present in (
+            ("ClinGen", established_clingen),
+            ("GenCC", established_gencc),
+            ("PanelApp", [panel] if panel["established"] else []),
+            ("ClinGen Dosage", [dose] if dose["established"] else []),
+        )
         if present
     ]
     return {
+        "panelapp": panel,
+        "clingen_dosage": dose,
+        # PanelApp is not independent of GenCC: GenCC's export includes submissions from both
+        # PanelApp instances. Where both establish a gene, that is one body of curation
+        # counted twice, and the flag says so rather than letting a reader read two
+        # registries agreeing.
+        "panelapp_overlaps_gencc": bool(panel["established"] and established_gencc),
         "clingen": {
             "status": "VERIFICADO" if curations else UNAVAILABLE,
             "source": "ClinGen Gene-Disease Validity",
@@ -268,9 +529,23 @@ def gene_validity(
                 if c.get("mode_of_inheritance")
             }
             | {g["mode_of_inheritance"] for g in established_gencc}
+            | set(panel["modes_of_inheritance"])
+            # Dosage contributes a mode whenever the curators scored the gene, even at a
+            # score that does not establish: 30 means "this gene's phenotype is autosomal
+            # recessive", which is a curated statement about inheritance regardless of
+            # whether haploinsufficiency was demonstrated.
+            | set(dose["modes_of_inheritance"])
         ),
         "mode_of_inheritance_conflict": bool(conflicting),
         "conflicting_diseases": conflicting,
+        # PanelApp states a mode per panel, not per MONDO disease, so a mode it contributes
+        # cannot be checked against the condition ClinVar names for a given variant. Those
+        # modes are listed here so the gap is visible instead of being inferred from the
+        # absence of a per-disease entry.
+        "modes_without_disease_anchor": sorted(
+            (set(panel["modes_of_inheritance"]) | set(dose["modes_of_inheritance"]))
+            - {mode for modes in modes_by_disease.values() for mode in modes}
+        ),
         "diseases": sorted(
             {str(c["disease"]) for c in established_clingen if c.get("disease")}
             | {str(g["disease"]) for g in established_gencc if g.get("disease")}
@@ -314,6 +589,8 @@ def _conditions(phenotype_list: str, phenotype_ids: str) -> list[dict[str, Any]]
 
 def scan_clinvar(
     raw_path: Path,
+    *,
+    min_review_stars: int = 2,
 ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, int], dict[str, dict[str, int]]]:
     """Group every qualifying ClinVar record by rsid, and count each gene's whole catalogue.
 
@@ -327,7 +604,12 @@ def scan_clinvar(
     by_rsid: dict[str, list[dict[str, Any]]] = defaultdict(list)
     stats: dict[str, int] = defaultdict(int)
     gene_counts: dict[str, dict[str, int]] = defaultdict(
-        lambda: {"pathogenic_any": 0, "pathogenic_two_star": 0, "pathogenic_two_star_snv_rsid": 0}
+        lambda: {
+            "pathogenic_any": 0,
+            "pathogenic_two_star": 0,
+            "pathogenic_two_star_snv_rsid": 0,
+            "pathogenic_at_threshold_snv_rsid": 0,
+        }
     )
     with gzip.open(raw_path, "rt", encoding="utf-8", errors="replace") as fh:
         header = fh.readline().rstrip("\n").split("\t")
@@ -362,10 +644,12 @@ def scan_clinvar(
             if classification not in PATHOGENIC:
                 continue
             stats["pathogenic"] += 1
-            if review not in TWO_STAR_OR_BETTER:
-                stats["below_two_star"] += 1
+            stars = review_stars(review)
+            if stars < min_review_stars:
+                stats["below_review_threshold"] += 1
                 continue
-            stats["two_star"] += 1
+            stats["at_or_above_review_threshold"] += 1
+            stats[f"stars_{stars}"] += 1
             rs = row[idx["RS# (dbSNP)"]].strip()
             if rs in ("", "-"):
                 stats["no_rsid"] += 1
@@ -377,7 +661,9 @@ def scan_clinvar(
                 continue
             stats["kept"] += 1
             for symbol in row_genes:
-                gene_counts[symbol]["pathogenic_two_star_snv_rsid"] += 1
+                gene_counts[symbol]["pathogenic_at_threshold_snv_rsid"] += 1
+                if stars >= 2:
+                    gene_counts[symbol]["pathogenic_two_star_snv_rsid"] += 1
 
             variation_id = row[idx["VariationID"]].strip()
             genes = sorted(set(row_genes))
@@ -388,6 +674,7 @@ def scan_clinvar(
                     "name": row[idx["Name"]].strip(),
                     "classification": classification,
                     "review_status": review,
+                    "review_stars": stars,
                     "submitters": int(row[idx["NumberSubmitters"]] or 0),
                     "last_evaluated": row[idx["LastEvaluated"]].strip(),
                     "genes": genes,
@@ -448,13 +735,23 @@ def build_targets(by_rsid: dict[str, list[dict[str, Any]]]) -> tuple[list[dict[s
             "clinvar_accessions": accession,
             "clinvar_classifications": classifications,
             "clinvar_review_statuses": reviews,
+            # The star level travels with the target rather than being implied by membership.
+            # A registry that mixes tiers and does not say which is which turns a single
+            # laboratory's opinion into the same object as a practice guideline; downstream,
+            # `array_pipeline.clinical_findings` reads this back and a one-star locus can only
+            # ever reach ACHADO PRELIMINAR.
+            "clinvar_review_stars": max(r["review_stars"] for r in records),
+            "clinvar_review_stars_min": min(r["review_stars"] for r in records),
             "clinvar_conditions": conditions[:6],
             "clinvar_submitters": max(r["submitters"] for r in records),
             "reference_allele": records[0]["reference_allele"],
         }
+        stats[f"tier_{target['clinvar_review_stars']}_star"] += 1
         if len(alternates) == 1:
             target["assessed_allele"] = alternates[0]
-            target["assessed_allele_source"] = "ClinVar variant_summary (GRCh38, 2★+)"
+            target["assessed_allele_source"] = (
+                f"ClinVar variant_summary (GRCh38, {target['clinvar_review_stars']}★)"
+            )
             target["assessed_allele_status"] = "VERIFICADO"
             target["assessed_allele_reason"] = (
                 f"única base alternativa que o ClinVar assere como patogênica nesta coordenada "
@@ -478,17 +775,35 @@ def build(
     *,
     clingen_path: Path | None = None,
     gencc_path: Path | None = None,
+    panelapp_path: Path | None = None,
+    gnomad_constraint_path: Path | None = None,
+    clingen_dosage_path: Path | None = None,
+    min_review_stars: int = 2,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    by_rsid, scan_stats, gene_counts = scan_clinvar(clinvar_path)
+    by_rsid, scan_stats, gene_counts = scan_clinvar(
+        clinvar_path, min_review_stars=min_review_stars
+    )
     targets, target_stats = build_targets(by_rsid)
 
     clingen = read_clingen(_local_or_fetch(clingen_path, CLINGEN_CSV))
     gencc = read_gencc(_local_or_fetch(gencc_path, GENCC_TSV))
+    panelapp = read_panelapp(panelapp_path)
+    constraint = read_gnomad_constraint(gnomad_constraint_path)
+    dosage = read_clingen_dosage(clingen_dosage_path)
 
     genes = sorted({g for t in targets for g in t["genes"]})
     validity = {}
     for gene in genes:
-        block = gene_validity(gene, clingen, gencc)
+        block = gene_validity(gene, clingen, gencc, panelapp, dosage)
+        block["gnomad_constraint"] = constraint.get(gene) or {
+            "status": UNAVAILABLE,
+            "source": "gnomAD v4.1 constraint metrics",
+            "reason": (
+                f"{gene} não tem transcrito MANE Select nem canônico na tabela de restrição"
+                if constraint
+                else "tabela de restrição do gnomAD não fornecida a esta execução"
+            ),
+        }
         counts = gene_counts.get(gene, {})
         # The carrier-screening denominator, from the same release the targets came from.
         block["clinvar_variant_counts"] = {
@@ -496,7 +811,9 @@ def build(
             "gene": gene,
             "pathogenic": counts.get("pathogenic_any"),
             "pathogenic_two_star": counts.get("pathogenic_two_star"),
-            "representable_in_registry": counts.get("pathogenic_two_star_snv_rsid"),
+            "representable_in_registry": counts.get("pathogenic_at_threshold_snv_rsid"),
+            "representable_two_star": counts.get("pathogenic_two_star_snv_rsid"),
+            "review_star_threshold": min_review_stars,
             "basis": (
                 "contagem de variantes P/LP do gene no release do ClinVar; contagem de "
                 "variantes, não de frequência alélica, portanto limita quanto do catálogo foi "
@@ -509,21 +826,43 @@ def build(
     sources = [
         f"NCBI ClinVar variant_summary.txt.gz, {CLINVAR_BULK_URL}, lido em {generated}. "
         "Filtros: GRCh38, single nucleotide variant, classificação P/LP exata, review status "
-        "de duas estrelas ou mais, rsid presente, alelos bialélicos ACGT.",
+        f"de {min_review_stars} estrela(s) ou mais, rsid presente, alelos bialélicos ACGT. "
+        "Cada alvo carrega o próprio nível de estrelas.",
         f"ClinGen Gene-Disease Validity, {CLINGEN_CSV}",
         f"GenCC submissions export, {GENCC_TSV}",
     ]
+    if panelapp:
+        sources.append(
+            "Genomics England PanelApp e PanelApp Australia, via "
+            "scripts/curate_panelapp.py; apenas genes verdes (grau diagnóstico) contam como "
+            f"estabelecidos. {len(panelapp)} genes indexados, "
+            f"{sum(1 for g in panelapp.values() if g.get('established'))} verdes."
+        )
+    if dosage:
+        sources.append(
+            f"ClinGen Dosage Sensitivity, {CLINGEN_DOSAGE_TSV}, {len(dosage)} genes curados; "
+            "escore 3 de haploinsuficiência ou triplossensibilidade estabelece, escore 30 "
+            "registra fenótipo autossômico recessivo e não estabelece."
+        )
+    if constraint:
+        sources.append(
+            f"gnomAD v4.1 constraint metrics, {GNOMAD_CONSTRAINT_TSV}, transcrito MANE Select "
+            f"quando existe e canônico caso contrário; {len(constraint)} genes. Restrição não "
+            "estabelece relação gene-doença e nunca entra em `established_by`."
+        )
 
     manifest = {
         "schema": "genoma-partial-genome-targets-v1",
-        "id": "GENOMA-CLINVAR-PLP-2STAR",
+        "id": f"GENOMA-CLINVAR-PLP-{min_review_stars}STAR",
         "version": generated[:10].replace("-", "") + ".1",
         "description": (
             "Toda variante de nucleotídeo único que o ClinVar classifica como patogênica ou "
-            "provavelmente patogênica com revisão de duas estrelas ou mais, em GRCh38, com "
-            "rsid e alelos bialélicos. Presença aqui autoriza apenas interrogação de "
-            "cobertura: não estabelece significado clínico, diplótipo, fase nem completude. "
-            "Reproduzir com scripts/expand_clinvar_targets.py."
+            f"provavelmente patogênica com revisão de {min_review_stars} estrela(s) ou mais, "
+            "em GRCh38, com rsid e alelos bialélicos. Cada alvo declara o próprio nível de "
+            "revisão em `clinvar_review_stars`, e um alvo de uma estrela nunca sustenta achado "
+            "acionável — a interpretação o rebaixa a ACHADO PRELIMINAR. Presença aqui autoriza "
+            "apenas interrogação de cobertura: não estabelece significado clínico, diplótipo, "
+            "fase nem completude. Reproduzir com scripts/expand_clinvar_targets.py."
         ),
         "sources": sources,
         "generated_at": generated,
@@ -531,7 +870,10 @@ def build(
             "assembly": "GRCh38",
             "variant_type": "single nucleotide variant",
             "classifications": sorted(PATHOGENIC),
-            "review_statuses": sorted(TWO_STAR_OR_BETTER),
+            "min_review_stars": min_review_stars,
+            "review_statuses": sorted(
+                status for status, stars in REVIEW_STARS.items() if stars >= min_review_stars
+            ),
             "requires_rsid": True,
             "requires_biallelic_acgt": True,
         },
@@ -546,9 +888,17 @@ def build(
         "curated_at": generated,
         "sources": sources,
         "method": (
-            "Validade gene-doença do ClinGen e do GenCC, mantidas separadas, com "
+            "Validade gene-doença do ClinGen, do GenCC e do PanelApp, mantidas separadas, com "
             f"{MIN_GENCC_SUBMITTERS} submetentes independentes em nível Definitive ou Strong "
-            "exigidos para o GenCC estabelecer. Registros de variante vêm do dump do ClinVar: "
+            "exigidos para o GenCC estabelecer e apenas painéis verdes para o PanelApp. "
+            "PanelApp responde uma pergunta diferente das outras duas — se um serviço de saúde "
+            "testa o gene na prática, não se a relação é biologicamente estabelecida — e não é "
+            "independente do GenCC, que já agrega as submissões das duas instâncias do "
+            "PanelApp; `panelapp_overlaps_gencc` marca cada gene em que as duas coincidem, "
+            "para que não sejam lidas como dois votos. A restrição populacional do gnomAD é "
+            "anexada por gene e nunca estabelece relação: um gene pode ser intolerante a perda "
+            "de função sem doença curada, e um gene Definitivo pode ser irrestrito. "
+            "Registros de variante vêm do dump do ClinVar: "
             "acesso, classificação, status de revisão, condições e coordenada GRCh38 são "
             "campos da mesma linha, portanto não há junção entre fontes a errar e cada "
             "registro carrega a própria coordenada para conferência."
@@ -568,6 +918,7 @@ def build(
                             "title": r["name"],
                             "classification": r["classification"],
                             "review_status": r["review_status"],
+                            "review_stars": r["review_stars"],
                             "last_evaluated": r["last_evaluated"],
                             "conditions": r["conditions"],
                             "genes": r["genes"],
@@ -585,6 +936,29 @@ def build(
             "genes_with_established_validity": sum(1 for v in validity.values() if v["established"]),
             "genes_established_by_gencc_only": sum(
                 1 for v in validity.values() if v["established_by"] == ["GenCC"]
+            ),
+            "genes_established_by_panelapp_only": sum(
+                1 for v in validity.values() if v["established_by"] == ["PanelApp"]
+            ),
+            "genes_green_in_panelapp": sum(
+                1 for v in validity.values() if v["panelapp"]["established"]
+            ),
+            "genes_where_panelapp_overlaps_gencc": sum(
+                1 for v in validity.values() if v["panelapp_overlaps_gencc"]
+            ),
+            "genes_established_by_clingen_dosage_only": sum(
+                1 for v in validity.values() if v["established_by"] == ["ClinGen Dosage"]
+            ),
+            "genes_with_dosage_curation": sum(
+                1 for v in validity.values() if v["clingen_dosage"].get("haploinsufficiency_score")
+            ),
+            "genes_with_gnomad_constraint": sum(
+                1 for v in validity.values() if v["gnomad_constraint"]["status"] == "VERIFICADO"
+            ),
+            "genes_lof_intolerant_pli_090": sum(
+                1
+                for v in validity.values()
+                if (v["gnomad_constraint"].get("pli") or 0) >= 0.9
             ),
             "genes_with_mode_of_inheritance_conflict": sum(
                 1 for v in validity.values() if v["mode_of_inheritance_conflict"]
@@ -611,6 +985,19 @@ def main() -> int:
     parser.add_argument("--clinvar-bulk", required=True, help="variant_summary.txt.gz")
     parser.add_argument("--clingen", help="local copy of the ClinGen gene-validity CSV")
     parser.add_argument("--gencc", help="local copy of the GenCC submissions TSV")
+    parser.add_argument("--panelapp", help="PanelApp curation from scripts/curate_panelapp.py")
+    parser.add_argument("--gnomad-constraint", help="gnomAD v4.1 constraint metrics TSV")
+    parser.add_argument("--clingen-dosage", help="ClinGen dosage-sensitivity curation TSV")
+    parser.add_argument(
+        "--min-review-stars",
+        type=int,
+        default=2,
+        choices=[1, 2, 3, 4],
+        help=(
+            "lowest ClinVar review level admitted. 2 is the curated-consensus registry; 1 adds "
+            "single-submitter assertions, which the interpretation caps at ACHADO PRELIMINAR"
+        ),
+    )
     parser.add_argument("--targets-out", default=str(DEFAULT_TARGETS_OUT))
     parser.add_argument("--evidence-out", default=str(DEFAULT_EVIDENCE_OUT))
     args = parser.parse_args()
@@ -619,6 +1006,12 @@ def main() -> int:
         Path(args.clinvar_bulk),
         clingen_path=Path(args.clingen) if args.clingen else None,
         gencc_path=Path(args.gencc) if args.gencc else None,
+        panelapp_path=Path(args.panelapp) if args.panelapp else None,
+        gnomad_constraint_path=(
+            Path(args.gnomad_constraint) if args.gnomad_constraint else None
+        ),
+        clingen_dosage_path=Path(args.clingen_dosage) if args.clingen_dosage else None,
+        min_review_stars=args.min_review_stars,
     )
     targets_out = _write(manifest, Path(args.targets_out))
     evidence_out = _write(evidence, Path(args.evidence_out))

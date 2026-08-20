@@ -17,8 +17,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from array_pipeline.clinical_findings import (
+    ACHADO_PRELIMINAR,
     ACIONAVEL,
     GENOTIPO_DE_RISCO,
+    MOI_UNKNOWN,
     NAO_INTERROGADO,
     NEGATIVO,
     PORTADOR,
@@ -58,8 +60,16 @@ def _validity(
     *,
     clingen=(),
     gencc=(),
+    panelapp=None,
+    constraint=None,
 ):
+    extra: dict = {}
+    if panelapp is not None:
+        extra["panelapp"] = panelapp
+    if constraint is not None:
+        extra["gnomad_constraint"] = constraint
     return {
+        **extra,
         "clingen": {
             "status": "VERIFICADO" if clingen else "NÃO DISPONÍVEL",
             "curations": list(clingen),
@@ -255,7 +265,9 @@ class InterpretationTest(unittest.TestCase):
         )
         finding = result["findings"][0]
         self.assertEqual(finding["interpretation"], SEM_INTERPRETACAO)
-        self.assertIn("nem o ClinGen nem o GenCC", finding["interpretation_basis"])
+        self.assertIn("nenhum dos registros curados", finding["interpretation_basis"])
+        for registry in ("ClinGen", "GenCC", "PanelApp"):
+            self.assertIn(registry, finding["interpretation_basis"])
 
     def test_gencc_alone_can_establish_validity(self):
         # The bug this pins: `_gencc_summary` once returned no `established` key, so the
@@ -380,6 +392,160 @@ class ContractTest(unittest.TestCase):
         self.assertEqual(totals[f"kind_{NEGATIVO}"], 1)
         self.assertEqual(totals[f"kind_{NAO_INTERROGADO}"], 1)
         self.assertEqual(totals["confirmation_required"], 1)
+
+
+class ReviewLevelTest(unittest.TestCase):
+    """One submitter is one laboratory's opinion, whatever the gene's validity."""
+
+    def _run_with_review(self, review: str):
+        return _run(
+            [_entry("rs1", "HFE", genotype="AG")],
+            {"HFE": _validity(clingen=AR_CLINGEN)},
+            [_locus("rs1", "HFE", [
+                _record("V1", "Pathogenic",
+                        [("hemochromatosis type 1", "MONDO:0021001")], review=review)
+            ])],
+            _assessed("rs1", ["V1"]),
+        )["findings"][0]
+
+    def test_two_stars_or_better_can_become_a_carrier_finding(self):
+        for review in (
+            "criteria provided, multiple submitters, no conflicts",
+            "reviewed by expert panel",
+            "practice guideline",
+        ):
+            with self.subTest(review=review):
+                finding = self._run_with_review(review)
+                self.assertEqual(finding["interpretation"], PORTADOR)
+                self.assertTrue(finding["clinvar"]["meets_review_threshold"])
+
+    def test_one_star_is_preliminary_and_never_a_carrier_finding(self):
+        # The negative control for the whole one-star expansion: without this the registry
+        # would report tens of thousands of single-submitter assertions as carrier findings.
+        for review in (
+            "criteria provided, single submitter",
+            "criteria provided, conflicting classifications",
+        ):
+            with self.subTest(review=review):
+                finding = self._run_with_review(review)
+                self.assertEqual(finding["interpretation"], ACHADO_PRELIMINAR)
+                self.assertFalse(finding["clinvar"]["meets_review_threshold"])
+                self.assertIn("submetente único", finding["interpretation_basis"])
+
+    def test_no_assertion_criteria_scores_zero_stars(self):
+        finding = self._run_with_review("no assertion criteria provided")
+        self.assertEqual(finding["clinvar"]["review_stars"], 0)
+        self.assertEqual(finding["interpretation"], ACHADO_PRELIMINAR)
+
+    def test_an_unrecognised_review_status_scores_zero_rather_than_passing(self):
+        finding = self._run_with_review("reviewed by a friend")
+        self.assertEqual(finding["clinvar"]["review_stars"], 0)
+        self.assertEqual(finding["clinvar"]["unrecognised_review_statuses"], ["reviewed by a friend"])
+        self.assertEqual(finding["interpretation"], ACHADO_PRELIMINAR)
+
+    def test_a_well_reviewed_benign_record_does_not_lend_its_stars_to_a_weak_pathogenic_one(self):
+        # Stars are taken from the records that assert pathogenicity. A four-star benign
+        # record says nothing about how well reviewed the pathogenic claim is.
+        finding = _run(
+            [_entry("rs1", "HFE", genotype="AG")],
+            {"HFE": _validity(clingen=AR_CLINGEN)},
+            [_locus("rs1", "HFE", [
+                _record("V1", "Pathogenic", [("hemochromatosis type 1", "MONDO:0021001")],
+                        review="criteria provided, single submitter"),
+                _record("V2", "Benign", [], review="practice guideline"),
+            ])],
+            _assessed("rs1", ["V1", "V2"]),
+        )["findings"][0]
+        self.assertEqual(finding["clinvar"]["review_stars"], 1)
+        self.assertEqual(finding["interpretation"], ACHADO_PRELIMINAR)
+
+    def test_a_preliminary_finding_still_requires_confirmation(self):
+        finding = self._run_with_review("criteria provided, single submitter")
+        self.assertTrue(finding["confirmation_required"])
+
+
+GREEN_PANELAPP = {
+    "status": "VERIFICADO",
+    "established": True,
+    "established_by": ["Genomics England PanelApp"],
+    "green_panel_count": 2,
+    "modes_of_inheritance": ["AR"],
+}
+AMBER_PANELAPP = {
+    "status": "NÃO DISPONÍVEL",
+    "established": False,
+    "established_by": [],
+    "green_panel_count": 0,
+    "modes_of_inheritance": [],
+}
+
+
+class PanelAppAndConstraintTest(unittest.TestCase):
+    """A third registry may establish a gene; a constraint metric may not."""
+
+    def _run_with(self, validity):
+        return _run(
+            [_entry("rs1", "HFE", genotype="AG")],
+            {"HFE": validity},
+            [_locus("rs1", "HFE", [
+                _record("V1", "Pathogenic", [("hemochromatosis type 1", "MONDO:0021001")])
+            ])],
+            _assessed("rs1", ["V1"]),
+        )["findings"][0]
+
+    def test_a_panelapp_green_gene_carries_a_carrier_call_on_its_own(self):
+        finding = self._run_with(_validity(panelapp=GREEN_PANELAPP))
+        self.assertEqual(finding["validity"]["established_by"], ["PanelApp"])
+        self.assertEqual(finding["interpretation"], PORTADOR)
+        # No MONDO-anchored disease came from PanelApp, so the basis must say the mode is the
+        # gene-level union rather than implying a matched condition.
+        self.assertIn("união do gene", finding["interpretation_basis"])
+
+    def test_an_amber_gene_does_not_carry_anything(self):
+        finding = self._run_with(_validity(panelapp=AMBER_PANELAPP))
+        self.assertEqual(finding["validity"]["established_by"], [])
+        self.assertEqual(finding["interpretation"], SEM_INTERPRETACAO)
+
+    def test_the_registry_is_named_in_the_basis_text(self):
+        finding = self._run_with(_validity(panelapp=GREEN_PANELAPP))
+        self.assertIn("PanelApp", finding["interpretation_basis"])
+
+    def test_constraint_alone_establishes_nothing(self):
+        # The failure this guards against: a pLI of 1.0 is a population observation about a
+        # gene rarely broken in healthy people, not an assertion that this variant means
+        # something. Letting it establish would convert every constrained gene into a report.
+        finding = self._run_with(
+            _validity(constraint={"status": "VERIFICADO", "pli": 1.0, "loeuf": 0.08})
+        )
+        self.assertEqual(finding["validity"]["established_by"], [])
+        self.assertFalse(finding["validity"]["established"])
+        self.assertEqual(finding["interpretation"], SEM_INTERPRETACAO)
+        # Carried anyway, so a "no established validity" line can still say the gene is
+        # constrained.
+        self.assertEqual(finding["validity"]["gnomad_constraint"]["pli"], 1.0)
+
+    def test_the_gencc_overlap_reaches_the_finding(self):
+        gencc = ({"disease": "hemochromatosis type 1", "disease_curie": "MONDO:0021001",
+                  "mode_of_inheritance": "AR", "classification": "Definitive",
+                  "submitters": ["Ambry", "Labcorp"], "established": True},)
+        validity = _validity(gencc=gencc, panelapp=GREEN_PANELAPP)
+        validity["panelapp_overlaps_gencc"] = True
+        finding = self._run_with(validity)
+        self.assertEqual(finding["validity"]["established_by"], ["GenCC", "PanelApp"])
+        self.assertTrue(finding["validity"]["panelapp_overlaps_gencc"])
+
+    def test_a_gene_with_no_registry_at_all_still_reports_a_shape(self):
+        finding = self._run_with(_validity())
+        self.assertEqual(finding["validity"]["panelapp_green_panels"], 0)
+        self.assertEqual(finding["validity"]["gnomad_constraint"]["status"], "NÃO DISPONÍVEL")
+
+    def test_a_panelapp_mode_of_unknown_shape_does_not_license_a_carrier_call(self):
+        # DESCONHECIDO must not equal AR. If it did, every gene PanelApp lists with an
+        # unparsed mode would produce carrier findings.
+        panel = dict(GREEN_PANELAPP, modes_of_inheritance=["mode we do not recognise"])
+        finding = self._run_with(_validity(panelapp=panel))
+        self.assertEqual(finding["validity"]["modes_of_inheritance"], [MOI_UNKNOWN])
+        self.assertEqual(finding["interpretation"], GENOTIPO_DE_RISCO)
 
 
 if __name__ == "__main__":

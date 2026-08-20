@@ -13,6 +13,64 @@
 Genes cobertos: de 16 para **3.082**, dos quais **2.776** têm relação gene-doença
 estabelecida em nível Definitivo ou Forte por ClinGen ou GenCC.
 
+## Os registros curados que decidem o que vira achado
+
+Nenhum deles é o ClinVar. O ClinVar diz o que uma **variante** é; estes dizem se o **gene**
+tem relação estabelecida com doença — e sem isso o sistema não converte variante em achado
+clínico.
+
+| registro | o que afirma | conta como estabelecido quando |
+|---|---|---|
+| ClinGen Gene-Disease Validity | painel de especialistas curou a relação | classificação Definitive ou Strong |
+| GenCC | vários curadores submeteram a mesma relação | ≥2 submetentes independentes em Definitive/Strong |
+| **PanelApp** (Genomics England + Austrália) | um serviço de saúde testa o gene na prática | gene **verde** em ao menos um painel diagnóstico |
+| **ClinGen Dosage Sensitivity** | perder ou ganhar uma cópia é o mecanismo | escore 3 de haploinsuficiência ou triplossensibilidade |
+| gnomAD v4.1 constraint | quão intolerante o gene é a perda de função | **nunca** — restrição não é relação gene-doença |
+
+Cada gene registra qual deles o sustentou em `established_by`. "Definitivo por painel de
+especialistas do ClinGen" e "verde num painel do NHS" são afirmações de pesos diferentes, e
+achatá-las num booleano esconderia qual foi.
+
+**PanelApp não é independente do GenCC.** O export do GenCC já agrega as submissões das duas
+instâncias do PanelApp. Onde os dois estabelecem o mesmo gene, é um corpo de curadoria
+aparecendo duas vezes, não duas fontes concordando: `panelapp_overlaps_gencc` marca esses
+genes e o relatório 01 escreve a ressalva na seção de incertezas.
+
+**Verde, e só verde.** Âmbar é evidência insuficiente para reportar e vermelho é gene
+considerado e rejeitado pelos próprios curadores. Ler âmbar como evidência colocaria num
+laudo um gene que o painel explicitamente recusou endossar. Os dois são retidos no artefato;
+apenas verde estabelece.
+
+**Os escores de dosagem não são uma escala.** 30 e 40 são maiores que 3 como número e não
+como evidência: 3 é "evidência suficiente para patogenicidade por dosagem", 30 é o curador
+escrevendo "gene associado a fenótipo autossômico recessivo" *em vez* de pontuar, e 40 é
+"dosagem improvável de ser sensível". Tratar 30 como acima de 3 estabeleceria 599 genes que o
+ClinGen nunca afirmou. Aqui 3 estabelece, 30 contribui o modo de herança AR sem estabelecer, e
+40 não contribui nada.
+
+**Restrição populacional é carregada e nunca estabelece.** Um gene pode ser exigentemente
+intolerante a perda de função sem doença curada, e um gene Definitivo pode ser irrestrito — o
+pLI do CFTR é ~0 porque portadores são comuns e saudáveis. Ela entra no laudo para que uma
+linha "sem validade estabelecida" possa acrescentar se o gene é ainda assim restrito, e por
+nenhum outro motivo.
+
+## O nível de revisão do ClinVar viaja com o alvo
+
+O registro pode ser construído a partir de 2★ (consenso curado) ou de 1★ (submetente único),
+e cada alvo declara o próprio `clinvar_review_stars`. Isso é o que torna o segundo seguro:
+
+| corte | rsids | genes | genes só alcançáveis nesse corte |
+|---|---:|---:|---:|
+| 2★+ | 54.801 | 3.081 | — |
+| 1★ | 74.161 | 4.166 | 1.328 |
+| união | **123.541** | **4.409** | |
+
+Um locus de uma estrela **nunca** vira achado acionável nem estado de portador: a
+interpretação o rebaixa a `ACHADO PRELIMINAR`, com o texto dizendo que uma asserção de
+submetente único é a opinião de um laboratório e não consenso curado. Sem esse rebaixamento,
+baixar o corte reportaria dezenas de milhares de opiniões únicas como achados — que é
+exatamente o motivo de o corte padrão continuar sendo 2★.
+
 ## Por que o release em massa, e não a API
 
 Curar 3.137 genes via E-utilities são ~10 mil requisições, uma hora de tráfego limitado, e
@@ -115,7 +173,15 @@ sobre quanto do risco foi. O texto do relatório diz isso em toda emissão.
 
 ```bash
 curl -O https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.txt.gz
-python3 scripts/expand_clinvar_targets.py --clinvar-bulk variant_summary.txt.gz
+curl -O https://ftp.clinicalgenome.org/ClinGen_gene_curation_list_GRCh38.tsv
+curl -O https://storage.googleapis.com/gcp-public-data--gnomad/release/4.1/constraint/gnomad.v4.1.constraint_metrics.tsv
+python3 scripts/curate_panelapp.py            # varre as duas instâncias; recusa leitura curta
+python3 scripts/expand_clinvar_targets.py \
+    --clinvar-bulk variant_summary.txt.gz \
+    --panelapp docs/evidence/PANELAPP_CURATION.json.gz \
+    --clingen-dosage ClinGen_gene_curation_list_GRCh38.tsv \
+    --gnomad-constraint gnomad.v4.1.constraint_metrics.tsv \
+    --min-review-stars 2                      # 1 inclui o nível de submetente único
 python3 scripts/build_trait_targets.py \
     --associations gwas-catalog-associations_ontology-annotated-full.zip \
     --ancestries gwas-catalog-download-ancestries-v1.0.3.1.txt

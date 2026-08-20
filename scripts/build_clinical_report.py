@@ -252,7 +252,20 @@ def build_payload(findings_path: Path, matrix_path: Path, qc_path: Path) -> dict
                 f"Validade estabelecida por {', '.join(v.get('established_by') or []) or 'nenhuma fonte'}; "
                 f"modos de herança curados {', '.join(v.get('modes_of_inheritance') or []) or UNAVAILABLE}"
                 + ("; há divergência de modo de herança entre fontes" if v.get("mode_of_inheritance_conflict") else "")
-                + ". Penetrância e expressividade não são estabelecidas por genótipo."
+                # GenCC aggregates the PanelApp submissions, so two names in `established_by`
+                # can be one body of curation. Saying so here keeps the reader from counting
+                # it as corroboration.
+                + ("; GenCC e PanelApp coincidem neste gene e não são votos independentes"
+                   if v.get("panelapp_overlaps_gencc") else "")
+                + (
+                    "; restrição populacional gnomAD pLI="
+                    f"{v['gnomad_constraint']['pli']:.2f}"
+                    if isinstance((v.get("gnomad_constraint") or {}).get("pli"), (int, float))
+                    else ""
+                )
+                + ". Restrição populacional descreve tolerância do gene a perda de função e "
+                "não estabelece relação gene-doença. "
+                "Penetrância e expressividade não são estabelecidas por genótipo."
             ),
         )
         builder.stated(

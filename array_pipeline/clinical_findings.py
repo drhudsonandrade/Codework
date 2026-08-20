@@ -52,6 +52,24 @@ UNCERTAIN_CLASSIFICATIONS = frozenset(
     {"Uncertain significance", "Conflicting classifications of pathogenicity", "not provided"}
 )
 
+#: ClinVar's review status, as a star count. The registry now carries a one-star tier as well
+#: as the two-star one, which multiplies the loci available — and would multiply the false
+#: findings just as fast if both were read the same way. One submitter asserting
+#: pathogenicity is one laboratory's opinion; the two-star statuses mean either several
+#: submitters agreed with no conflict, or an expert panel or practice guideline ruled.
+REVIEW_STARS = {
+    "practice guideline": 4,
+    "reviewed by expert panel": 3,
+    "criteria provided, multiple submitters, no conflicts": 2,
+    "criteria provided, conflicting classifications": 1,
+    "criteria provided, single submitter": 1,
+    "no assertion criteria provided": 0,
+    "no classification provided": 0,
+    "no classification for the single variant": 0,
+}
+#: Stars required before a variant may become an actionable or carrier finding.
+MIN_STARS_FOR_FINDING = 2
+
 #: ClinGen validity classifications strong enough for a report to speak of the gene–disease
 #: relationship as established.
 ESTABLISHED_VALIDITY = frozenset({"Definitive", "Strong"})
@@ -96,6 +114,7 @@ _normalised_moi = normalised_moi
 #: What a locus is reported as. These are not severities; they are different *kinds* of
 #: statement, and collapsing them is how a carrier finding becomes a diagnosis.
 ACIONAVEL = "ACHADO ACIONÁVEL"
+ACHADO_PRELIMINAR = "ACHADO PRELIMINAR"
 PORTADOR = "PORTADOR"
 GENOTIPO_DE_RISCO = "GENÓTIPO DE RISCO"
 PREDISPOSICAO = "PREDISPOSIÇÃO"
@@ -187,6 +206,23 @@ def _clinvar_for(
             ),
         }
     classifications = sorted({str(r.get("classification")) for r in records})
+    # The best review level among the records that actually assert pathogenicity — a benign
+    # record reviewed by an expert panel says nothing about how well-reviewed the pathogenic
+    # claim is.
+    pathogenic_records = [
+        r for r in records if str(r.get("classification")) in PATHOGENIC_CLASSIFICATIONS
+    ]
+    stars = max(
+        (REVIEW_STARS.get(str(r.get("review_status") or "").strip(), 0) for r in pathogenic_records),
+        default=0,
+    )
+    unrecognised_reviews = sorted(
+        {
+            str(r.get("review_status"))
+            for r in pathogenic_records
+            if str(r.get("review_status") or "").strip() not in REVIEW_STARS
+        }
+    )
     conditions = sorted(
         {
             str(condition.get("name"))
@@ -220,6 +256,11 @@ def _clinvar_for(
         # Surfaced rather than absorbed: a ClinVar vocabulary this module does not know must
         # not be silently treated as "not pathogenic" without the reader being told.
         "unrecognised_classifications": unrecognised,
+        # An unrecognised review status scores zero stars rather than being waved through,
+        # so a ClinVar vocabulary change cannot promote a finding by accident.
+        "unrecognised_review_statuses": unrecognised_reviews,
+        "review_stars": stars,
+        "meets_review_threshold": stars >= MIN_STARS_FOR_FINDING,
         "accessions_discarded_by_coordinate": discarded,
         # Which route admitted the records, so a reader can tell a coordinate-native release
         # row from a text search checked against an allowlist.
@@ -231,10 +272,15 @@ def _clinvar_for(
 def _validity_for(gene: str | None, evidence: dict[str, Any]) -> dict[str, Any]:
     """Gene–disease validity and mode of inheritance, from whichever registry established it.
 
-    ClinGen and GenCC are read as two registries, not one: `established_by` says which
-    carried the gene, because "Definitive by a ClinGen expert panel" and "Strong by two
-    clinical laboratories in GenCC" are the same word for different weights and a report
-    that hides the difference is overstating one of them.
+    ClinGen, GenCC and PanelApp are read as three registries, not one: `established_by` says
+    which carried the gene, because "Definitive by a ClinGen expert panel", "Strong by two
+    clinical laboratories in GenCC" and "green on an NHS diagnostic panel" are the same word
+    for different weights and a report that hides the difference is overstating one of them.
+
+    gnomAD constraint travels with the gene but is deliberately kept out of `established_by`:
+    intolerance to loss of function is a population-genetic observation, not a gene–disease
+    assertion, and letting it establish anything would convert "this gene is rarely broken in
+    healthy people" into "this variant means something", which is a different claim.
     """
     validity = (evidence.get("gene_validity") or {}).get(str(gene or ""), None)
     if not validity:
@@ -248,6 +294,9 @@ def _validity_for(gene: str | None, evidence: dict[str, Any]) -> dict[str, Any]:
             "recessive_diseases": [],
             "dominant_diseases": [],
             "mode_of_inheritance_conflict": False,
+            "panelapp_green_panels": 0,
+            "clingen_dosage": {"status": UNAVAILABLE},
+            "gnomad_constraint": {"status": UNAVAILABLE},
             "reason": (
                 "gene ausente do arquivo de validade curada"
                 if gene
@@ -263,6 +312,10 @@ def _validity_for(gene: str | None, evidence: dict[str, Any]) -> dict[str, Any]:
         if str(c.get("classification")) in ESTABLISHED_VALIDITY
     ]
     established_gencc = [g for g in gencc.get("established_groups", []) if g.get("established")]
+    panelapp = validity.get("panelapp") or {}
+    established_panelapp = bool(panelapp.get("established"))
+    dosage = validity.get("clingen_dosage") or {}
+    established_dosage = bool(dosage.get("established"))
     # `established` is recomputed from the curations rather than read from the evidence
     # file's own summary field, for the same reason `provenance_blockers` recomputes its
     # status floor: a stored aggregate that disagrees with the records it summarises would
@@ -270,7 +323,12 @@ def _validity_for(gene: str | None, evidence: dict[str, Any]) -> dict[str, Any]:
     # clinical finding.
     established_by = [
         name
-        for name, present in (("ClinGen", established_clingen), ("GenCC", established_gencc))
+        for name, present in (
+            ("ClinGen", established_clingen),
+            ("GenCC", established_gencc),
+            ("PanelApp", established_panelapp),
+            ("ClinGen Dosage", established_dosage),
+        )
         if present
     ]
 
@@ -299,6 +357,18 @@ def _validity_for(gene: str | None, evidence: dict[str, Any]) -> dict[str, Any]:
             for g in established_gencc
             if g.get("mode_of_inheritance")
         }
+        # PanelApp contributes a mode only where it is green. An amber gene's mode is a
+        # curator's provisional note on a relationship the panel declined to endorse.
+        | (
+            {normalised_moi(m) for m in (panelapp.get("modes_of_inheritance") or [])}
+            if established_panelapp
+            else set()
+        )
+        # Dosage contributes its mode whenever the curators scored the gene. A score of 30 —
+        # "gene associated with autosomal recessive phenotype" — does not establish the
+        # relationship, but it is still an expert panel stating the inheritance, and the mode
+        # is only ever consulted for a gene some registry already established.
+        | {normalised_moi(m) for m in (dosage.get("modes_of_inheritance") or [])}
     )
     # Per-disease MONDO index. A gene can be dominant for one condition and recessive for
     # another — F5 is dominant for thrombophilia and recessive for factor V deficiency — so
@@ -340,7 +410,27 @@ def _validity_for(gene: str | None, evidence: dict[str, Any]) -> dict[str, Any]:
         "classifications": sorted(
             set(clingen.get("classifications", []))
             | {c for g in gencc.get("groups", []) for c in g.get("classifications", [])}
+            | (
+                {f"PanelApp verde em {panelapp.get('green_panel_count', 0)} painel(éis)"}
+                if established_panelapp
+                else set()
+            )
+            | (
+                {f"ClinGen dosagem: {dosage.get('haploinsufficiency', '')}".strip(": ")}
+                if established_dosage
+                else set()
+            )
         ),
+        "clingen_dosage": dosage or {"status": UNAVAILABLE},
+        "panelapp_green_panels": int(panelapp.get("green_panel_count") or 0),
+        "panelapp_instances": list(panelapp.get("established_by") or []),
+        # True where GenCC and PanelApp both carry the gene. GenCC's export already includes
+        # the PanelApp submissions, so that is one body of curation appearing twice, not two
+        # registries agreeing, and `established_by` must not be read as two votes.
+        "panelapp_overlaps_gencc": bool(validity.get("panelapp_overlaps_gencc")),
+        "modes_without_disease_anchor": list(validity.get("modes_without_disease_anchor") or []),
+        # Carried, displayed, and never permitted to establish anything.
+        "gnomad_constraint": validity.get("gnomad_constraint") or {"status": UNAVAILABLE},
         "diseases": sorted(
             {str(c["disease"]) for c in established_clingen if c.get("disease")}
             | {str(g["disease"]) for g in established_gencc if g.get("disease")}
@@ -423,12 +513,30 @@ def _interpretation(
             ),
         }
 
+    # Review level is checked before validity, because a single-submitter assertion in a
+    # gene with Definitive validity is still a single-submitter assertion. Expanding the
+    # registry to ClinVar's one-star tier multiplied the loci available; reading both tiers
+    # the same way would have multiplied the findings just as fast.
+    if not clinvar.get("meets_review_threshold"):
+        return {
+            "kind": ACHADO_PRELIMINAR if validity["established"] else SEM_INTERPRETACAO,
+            "basis": (
+                "o ClinVar assere patogenicidade nesta coordenada, mas com revisão de "
+                f"{clinvar.get('review_stars', 0)} estrela(s) — abaixo das "
+                f"{MIN_STARS_FOR_FINDING} exigidas. Uma asserção de submetente único é a "
+                "opinião de um laboratório, não consenso curado, e não sustenta achado "
+                "acionável nem estado de portador. Confirmação por método ortogonal e "
+                "reavaliação quando o nível de revisão mudar."
+            ),
+        }
+
     if not validity["established"]:
         return {
             "kind": SEM_INTERPRETACAO,
             "basis": (
-                "o ClinVar assere patogenicidade, mas nem o ClinGen nem o GenCC estabelecem a "
-                "relação gene-doença em nível Definitivo ou Forte "
+                "o ClinVar assere patogenicidade, mas nenhum dos registros curados — ClinGen, "
+                "GenCC, PanelApp ou a curadoria de dosagem do ClinGen — estabelece a relação "
+                "gene-doença "
                 f"({', '.join(validity['classifications']) or 'sem curadoria'}); sem validade "
                 "gene-doença estabelecida este sistema não converte a variante em achado clínico"
             ),
@@ -598,12 +706,12 @@ def build_clinical_findings(
                 "validity": validity,
                 "gwas": locus_evidence.get("gwas") or {"status": UNAVAILABLE, "traits": []},
                 "confirmation_required": interpretation["kind"]
-                in (ACIONAVEL, PORTADOR, GENOTIPO_DE_RISCO),
+                in (ACIONAVEL, ACHADO_PRELIMINAR, PORTADOR, GENOTIPO_DE_RISCO),
             }
         )
 
     kinds = (
-        ACIONAVEL, PORTADOR, GENOTIPO_DE_RISCO, PREDISPOSICAO,
+        ACIONAVEL, ACHADO_PRELIMINAR, PORTADOR, GENOTIPO_DE_RISCO, PREDISPOSICAO,
         SEM_INTERPRETACAO, NEGATIVO, NAO_INTERROGADO,
     )
     now = evaluated_at or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -654,6 +762,32 @@ def build_clinical_findings(
                     if f.get("validity", {}).get("established_by") == ["GenCC"] and f["gene"]
                 }
             ),
+            "genes_established_by_panelapp_only": len(
+                {
+                    f["gene"]
+                    for f in findings
+                    if f.get("validity", {}).get("established_by") == ["PanelApp"] and f["gene"]
+                }
+            ),
+            # Genes both GenCC and PanelApp carry. GenCC aggregates the PanelApp submissions,
+            # so this is the count of genes where `established_by` lists two names for one
+            # body of curation.
+            "genes_where_panelapp_overlaps_gencc": len(
+                {
+                    f["gene"]
+                    for f in findings
+                    if f.get("validity", {}).get("panelapp_overlaps_gencc") and f["gene"]
+                }
+            ),
+            "genes_with_gnomad_constraint": len(
+                {
+                    f["gene"]
+                    for f in findings
+                    if f.get("validity", {}).get("gnomad_constraint", {}).get("status")
+                    == "VERIFICADO"
+                    and f["gene"]
+                }
+            ),
             "genes_with_mode_of_inheritance_conflict": len(
                 {
                     f["gene"]
@@ -668,6 +802,9 @@ def build_clinical_findings(
             "Genótipo não é diagnóstico. Achado acionável exige variante com patogenicidade "
             "asserida no ClinVar na coordenada verificada E relação gene-doença estabelecida em "
             "nível Definitivo ou Forte pelo ClinGen ou pelo GenCC com submetentes independentes. "
+            "Achado acionável e estado de portador exigem ainda revisão do ClinVar de duas "
+            f"estrelas ou mais ({MIN_STARS_FOR_FINDING}+): submetente único é opinião de um "
+            "laboratório, e o registro carrega também a camada de uma estrela. "
             "Estado de portador exige modo de herança autossômico recessivo curado e sem "
             "divergência entre fontes. Homozigose para variante patogênica é genótipo de risco, "
             "nunca condição estabelecida: penetrância é incompleta. Toda conclusão exige "

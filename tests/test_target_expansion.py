@@ -376,5 +376,294 @@ class ShippedRegistryTest(unittest.TestCase):
                 self.assertEqual(unsourced[:5], [], f"{path.name}: assessed allele with no source")
 
 
+class ReviewStarTierTest(unittest.TestCase):
+    """Admitting one-star variants only helps if every one of them stays labelled as such."""
+
+    def test_the_ladder_scores_the_statuses_clinvar_actually_writes(self):
+        for status, expected in (
+            ("practice guideline", 4),
+            ("reviewed by expert panel", 3),
+            ("criteria provided, multiple submitters, no conflicts", 2),
+            ("criteria provided, single submitter", 1),
+            ("no assertion criteria provided", 0),
+        ):
+            with self.subTest(status=status):
+                self.assertEqual(EXPAND.review_stars(status), expected)
+
+    def test_an_unrecognised_status_scores_zero_rather_than_passing(self):
+        # The fail-open shape this guards against: a status NCBI adds later defaulting to a
+        # number that clears the threshold would admit it silently.
+        for status in ("", None, "reviewed by a friend", "criteria provided, whatever"):
+            with self.subTest(status=status):
+                self.assertEqual(EXPAND.review_stars(status), 0)
+                self.assertLess(EXPAND.review_stars(status), 2)
+
+    def test_the_default_threshold_still_rejects_a_single_submitter(self):
+        _by, stats, _counts = _scan([_row(ReviewStatus="criteria provided, single submitter")])
+        self.assertEqual(stats.get("kept", 0), 0)
+        self.assertEqual(stats["below_review_threshold"], 1)
+
+    def test_lowering_the_threshold_admits_it_and_records_one_star(self):
+        by_rsid, stats, counts = EXPAND.scan_clinvar(
+            _bulk([_row(ReviewStatus="criteria provided, single submitter")]),
+            min_review_stars=1,
+        )
+        self.assertEqual(stats["kept"], 1)
+        self.assertEqual(by_rsid["rs1800562"][0]["review_stars"], 1)
+        # Admitted into the registry, still absent from the two-star denominator.
+        self.assertEqual(counts["HFE"]["pathogenic_at_threshold_snv_rsid"], 1)
+        self.assertEqual(counts["HFE"]["pathogenic_two_star_snv_rsid"], 0)
+
+    def test_a_one_star_target_carries_its_star_level(self):
+        by_rsid, _stats, _counts = EXPAND.scan_clinvar(
+            _bulk([_row(ReviewStatus="criteria provided, single submitter")]),
+            min_review_stars=1,
+        )
+        targets, _tstats = EXPAND.build_targets(by_rsid)
+        self.assertEqual(targets[0]["clinvar_review_stars"], 1)
+        self.assertIn("1★", targets[0]["assessed_allele_source"])
+
+    def test_a_locus_asserted_at_two_levels_reports_both_ends(self):
+        by_rsid, _stats, _counts = EXPAND.scan_clinvar(
+            _bulk(
+                [
+                    _row(ReviewStatus="criteria provided, single submitter", VariationID="9"),
+                    _row(ReviewStatus="reviewed by expert panel", VariationID="10"),
+                ]
+            ),
+            min_review_stars=1,
+        )
+        targets, _tstats = EXPAND.build_targets(by_rsid)
+        self.assertEqual(targets[0]["clinvar_review_stars"], 3)
+        self.assertEqual(targets[0]["clinvar_review_stars_min"], 1)
+
+
+def _panelapp(**genes):
+    return {gene: record for gene, record in genes.items()}
+
+
+class PanelAppRegistryTest(unittest.TestCase):
+    """PanelApp is a third registry, not a third way of saying the same thing."""
+
+    GREEN = {
+        "established": True,
+        "established_by": ["Genomics England PanelApp"],
+        "green_panel_count": 3,
+        "modes_of_inheritance": ["AR"],
+        "phenotypes": ["Hemochromatosis"],
+        "publications": ["10000001"],
+    }
+    AMBER_ONLY = {
+        "established": False,
+        "established_by": [],
+        "green_panel_count": 0,
+        "modes_of_inheritance": [],
+    }
+
+    def test_a_green_gene_establishes_and_says_which_registry_did(self):
+        block = EXPAND.gene_validity("HFE", {}, {}, _panelapp(HFE=self.GREEN))
+        self.assertEqual(block["established_by"], ["PanelApp"])
+        self.assertTrue(block["established"])
+        self.assertEqual(block["modes_of_inheritance"], ["AR"])
+
+    def test_an_amber_only_gene_does_not_establish(self):
+        # The failure this guards against: reading amber as evidence would report a gene the
+        # curators explicitly declined to endorse.
+        block = EXPAND.gene_validity("HFE", {}, {}, _panelapp(HFE=self.AMBER_ONLY))
+        self.assertEqual(block["established_by"], [])
+        self.assertFalse(block["panelapp"]["established"])
+        self.assertEqual(block["panelapp"]["status"], "NÃO DISPONÍVEL")
+
+    def test_a_gene_absent_from_panelapp_says_so_rather_than_failing_open(self):
+        block = EXPAND.gene_validity("HFE", {}, {}, _panelapp(CFTR=self.GREEN))
+        self.assertFalse(block["panelapp"]["established"])
+        self.assertIn("não aparece como gene verde", block["panelapp"]["reason"])
+
+    def test_no_panelapp_file_is_reported_as_missing_input_not_as_a_negative(self):
+        block = EXPAND.gene_validity("HFE", {}, {}, None)
+        self.assertIn("não fornecida", block["panelapp"]["reason"])
+
+    def test_the_gencc_overlap_is_flagged_rather_than_counted_twice(self):
+        gencc = {
+            "HFE": [
+                {
+                    "disease": "hemochromatosis type 1",
+                    "disease_curie": "MONDO:0021001",
+                    "mode_of_inheritance": "AR",
+                    "mode_of_inheritance_reported": "Autosomal recessive",
+                    "classification": "Definitive",
+                    "submitter": submitter,
+                }
+                for submitter in ("Ambry", "Labcorp")
+            ]
+        }
+        block = EXPAND.gene_validity("HFE", {}, gencc, _panelapp(HFE=self.GREEN))
+        self.assertEqual(block["established_by"], ["GenCC", "PanelApp"])
+        self.assertTrue(
+            block["panelapp_overlaps_gencc"],
+            "GenCC aggregates the PanelApp submissions; two names here is one body of curation",
+        )
+
+    def test_a_panelapp_mode_with_no_disease_anchor_is_listed_as_such(self):
+        block = EXPAND.gene_validity("HFE", {}, {}, _panelapp(HFE=self.GREEN))
+        self.assertEqual(block["modes_without_disease_anchor"], ["AR"])
+
+    def test_the_curation_schema_is_checked_before_it_is_trusted(self):
+        directory = Path(tempfile.mkdtemp())
+        path = directory / "panelapp.json"
+        path.write_text(json.dumps({"schema": "something-else", "genes": {}}), encoding="utf-8")
+        with self.assertRaises(ValueError):
+            EXPAND.read_panelapp(path)
+
+    def test_a_missing_file_is_an_error_not_an_empty_registry(self):
+        with self.assertRaises(FileNotFoundError):
+            EXPAND.read_panelapp(Path(tempfile.mkdtemp()) / "absent.json.gz")
+
+
+DOSAGE_HEADER = (
+    "#Gene Symbol\tGene ID\tcytoBand\tGenomic Location\tHaploinsufficiency Score\t"
+    "Haploinsufficiency Description\tHaploinsufficiency PMID1\tHaploinsufficiency PMID2\t"
+    "Haploinsufficiency PMID3\tHaploinsufficiency PMID4\tHaploinsufficiency PMID5\t"
+    "Haploinsufficiency PMID6\tTriplosensitivity Score\tTriplosensitivity Description\t"
+    "Triplosensitivity PMID1\tTriplosensitivity PMID2\tTriplosensitivity PMID3\t"
+    "Triplosensitivity PMID4\tTriplosensitivity PMID5\tTriplosensitivity PMID6\t"
+    "Date Last Evaluated\tHaploinsufficiency Disease ID\tTriplosensitivity Disease ID"
+)
+
+
+def _dosage_file(rows: list[tuple[str, str, str]]) -> Path:
+    """Rows of (gene, haploinsufficiency score, triplosensitivity score)."""
+    path = Path(tempfile.mkdtemp()) / "dosage.tsv"
+    lines = ["#ClinGen Gene Curation Results", "#19 Aug,2026", DOSAGE_HEADER]
+    for gene, haplo, triplo in rows:
+        cells = [gene, "1", "1q1", "chr1:1-2", haplo, "desc"] + [""] * 6
+        cells += [triplo, "desc"] + [""] * 6 + ["2026-01-01", "MONDO:0000001", ""]
+        lines.append("\t".join(cells))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+class ClinGenDosageTest(unittest.TestCase):
+    """ClinGen's dosage scores are labels, not a ranking — 30 is not more than 3."""
+
+    def test_a_haploinsufficiency_score_of_three_establishes_and_reads_dominant(self):
+        table = EXPAND.read_clingen_dosage(_dosage_file([("HFE", "3", "0")]))
+        self.assertTrue(table["HFE"]["established"])
+        self.assertEqual(table["HFE"]["modes_of_inheritance"], ["AD"])
+        block = EXPAND.gene_validity("HFE", {}, {}, {}, table)
+        self.assertEqual(block["established_by"], ["ClinGen Dosage"])
+
+    def test_score_thirty_records_recessive_inheritance_without_establishing(self):
+        # The trap: 30 sorts above 3 as a number and reads as "even more evidence". It is not
+        # a score at all — it is the curators writing "this gene's phenotype is recessive"
+        # instead of scoring dosage, and treating it as establishment would report hundreds
+        # of genes ClinGen never asserted a dosage mechanism for.
+        table = EXPAND.read_clingen_dosage(_dosage_file([("HFE", "30", "0")]))
+        self.assertFalse(table["HFE"]["established"])
+        self.assertEqual(table["HFE"]["modes_of_inheritance"], ["AR"])
+        block = EXPAND.gene_validity("HFE", {}, {}, {}, table)
+        self.assertEqual(block["established_by"], [])
+        self.assertEqual(block["modes_of_inheritance"], ["AR"])
+
+    def test_score_forty_neither_establishes_nor_contributes_a_mode(self):
+        table = EXPAND.read_clingen_dosage(_dosage_file([("HFE", "40", "0")]))
+        self.assertFalse(table["HFE"]["established"])
+        self.assertEqual(table["HFE"]["modes_of_inheritance"], [])
+
+    def test_the_partial_scores_do_not_establish(self):
+        for score in ("0", "1", "2"):
+            with self.subTest(score=score):
+                table = EXPAND.read_clingen_dosage(_dosage_file([("HFE", score, "0")]))
+                self.assertFalse(table["HFE"]["established"])
+
+    def test_triplosensitivity_alone_can_establish(self):
+        table = EXPAND.read_clingen_dosage(_dosage_file([("HFE", "0", "3")]))
+        self.assertTrue(table["HFE"]["established"])
+
+    def test_a_gene_absent_from_the_list_says_so(self):
+        table = EXPAND.read_clingen_dosage(_dosage_file([("CFTR", "3", "0")]))
+        block = EXPAND.gene_validity("HFE", {}, {}, {}, table)
+        self.assertIn("não consta", block["clingen_dosage"]["reason"])
+
+    def test_a_file_with_no_recognisable_header_is_refused(self):
+        path = Path(tempfile.mkdtemp()) / "broken.tsv"
+        path.write_text("#comment only\nHFE\t1\n", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            EXPAND.read_clingen_dosage(path)
+
+
+CONSTRAINT_COLUMNS = [
+    "gene", "gene_id", "transcript", "canonical", "mane_select",
+    "lof.pLI", "lof.oe", "lof.oe_ci.upper", "mis.z_score", "constraint_flags",
+]
+
+
+def _constraint_file(rows: list[dict[str, str]]) -> Path:
+    path = Path(tempfile.mkdtemp()) / "constraint.tsv"
+    lines = ["\t".join(CONSTRAINT_COLUMNS)]
+    for row in rows:
+        lines.append("\t".join(str(row.get(c, "")) for c in CONSTRAINT_COLUMNS))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+class GnomadConstraintTest(unittest.TestCase):
+    """Constraint is carried, displayed, and never allowed to establish anything."""
+
+    def test_the_mane_select_transcript_wins_over_the_canonical_one(self):
+        table = EXPAND.read_gnomad_constraint(
+            _constraint_file(
+                [
+                    {"gene": "HFE", "gene_id": "ENSG1", "transcript": "ENST_CANON",
+                     "canonical": "true", "mane_select": "false", "lof.pLI": "0.10"},
+                    {"gene": "HFE", "gene_id": "ENSG1", "transcript": "ENST_MANE",
+                     "canonical": "false", "mane_select": "true", "lof.pLI": "0.90"},
+                ]
+            )
+        )
+        self.assertEqual(table["HFE"]["transcript"], "ENST_MANE")
+        self.assertEqual(table["HFE"]["transcript_basis"], "MANE Select")
+
+    def test_the_ensembl_keyed_row_wins_the_tie(self):
+        table = EXPAND.read_gnomad_constraint(
+            _constraint_file(
+                [
+                    {"gene": "HFE", "gene_id": "3077", "transcript": "NM_000410.4",
+                     "canonical": "true", "mane_select": "true", "lof.pLI": "0.5"},
+                    {"gene": "HFE", "gene_id": "ENSG00000010704", "transcript": "ENST00000357618",
+                     "canonical": "true", "mane_select": "true", "lof.pLI": "0.5"},
+                ]
+            )
+        )
+        self.assertEqual(table["HFE"]["transcript"], "ENST00000357618")
+
+    def test_a_row_that_is_neither_mane_nor_canonical_is_skipped(self):
+        table = EXPAND.read_gnomad_constraint(
+            _constraint_file(
+                [{"gene": "HFE", "gene_id": "ENSG1", "transcript": "ENST_ALT",
+                  "canonical": "false", "mane_select": "false", "lof.pLI": "0.99"}]
+            )
+        )
+        self.assertEqual(table, {})
+
+    def test_an_unparseable_metric_becomes_absent_not_zero(self):
+        # A pLI of NaN read as 0.0 would say "tolerant of loss of function" about a gene the
+        # release declined to score, which is a claim rather than a gap.
+        table = EXPAND.read_gnomad_constraint(
+            _constraint_file(
+                [{"gene": "HFE", "gene_id": "ENSG1", "transcript": "T", "canonical": "true",
+                  "mane_select": "true", "lof.pLI": "NaN", "lof.oe_ci.upper": ""}]
+            )
+        )
+        self.assertIsNone(table["HFE"]["pli"])
+        self.assertIsNone(table["HFE"]["loeuf"])
+
+    def test_constraint_never_appears_in_established_by(self):
+        block = EXPAND.gene_validity("HFE", {}, {}, {})
+        block["gnomad_constraint"] = {"status": "VERIFICADO", "pli": 1.0, "loeuf": 0.05}
+        self.assertEqual(block["established_by"], [])
+        self.assertFalse(block["established"])
+
+
 if __name__ == "__main__":
     unittest.main()
