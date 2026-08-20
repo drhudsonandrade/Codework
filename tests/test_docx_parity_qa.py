@@ -25,7 +25,21 @@ from scripts.run_docx_parity_qa import (
     _compare,
 )
 
-EVIDENCE = ROOT / "docs/evidence/EDITORIAL_V3_DOCX_PARITY_150DPI_2026-08-18.json"
+def _newest_evidence(pattern: str) -> Path:
+    """The most recent matching evidence artefact, not a hard-coded date.
+
+    Pinning a filename means the test keeps validating evidence for a template pack that may
+    no longer exist: re-running the QA writes a new dated artefact and the assertions stay on
+    the old one, which then passes while describing something that is not shipped. The names
+    carry ISO dates, so lexicographic order is chronological.
+    """
+    found = sorted((ROOT / "docs/evidence").glob(pattern))
+    if not found:
+        raise AssertionError(f"no evidence artefact matches {pattern}")
+    return found[-1]
+
+
+EVIDENCE = _newest_evidence("EDITORIAL_V3_DOCX_PARITY_150DPI_*.json")
 
 
 def _doc(width=595.3, height=841.9, fill=None, pages=1):

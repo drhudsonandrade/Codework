@@ -23,6 +23,7 @@ import io
 import json
 import lzma
 import tarfile
+from datetime import datetime, timezone
 import zipfile
 from pathlib import Path
 
@@ -65,7 +66,23 @@ def load_pack(source: Path) -> dict[str, bytes]:
     return members
 
 
-def verify_against_pinned_identity(members: dict[str, bytes]) -> dict:
+def verify_against_pinned_identity(
+    members: dict[str, bytes],
+    *,
+    amend: tuple[str, ...] = (),
+    reason: str = "",
+) -> dict:
+    """Refuse any pack that is not the approved one, unless a change is named and justified.
+
+    The guard exists because a template is the page a clinical report is printed on: a
+    silently substituted one changes every future document. It stays absolute for anything
+    the caller did not name — `--amend 11` permits report 11 to differ and still fails on a
+    difference in report 03.
+
+    An amendment is recorded, not just allowed. The previous hash, the new hash, the reason
+    and the date go into the manifest, because after this the pack is no longer byte-identical
+    to the externally supplied models and a reader has to be able to see that and why.
+    """
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     reference = json.loads(REFERENCE.read_text(encoding="utf-8"))
     reports = manifest["reports"]
@@ -76,18 +93,63 @@ def verify_against_pinned_identity(members: dict[str, bytes]) -> dict:
         extra = sorted(set(members) - expected_names)
         raise TemplateSealError(f"pack member set mismatch; missing={missing} unexpected={extra}")
 
+    unknown = sorted(set(amend) - set(reports))
+    if unknown:
+        raise TemplateSealError(f"--amend names reports that do not exist: {unknown}")
+    if amend and not reason.strip():
+        raise TemplateSealError(
+            "--amend requires --reason: an unexplained change to an approved template is "
+            "indistinguishable from a substituted one"
+        )
+
     failures: list[str] = []
+    amendments: list[dict] = []
     for rid in sorted(reports):
         meta = reports[rid]
         ref = reference["reports"].get(rid, {})
         data = members[meta["filename"]]
         digest = sha256_bytes(data)
-        if digest != meta["sha256"] or len(data) != meta["size_bytes"]:
+        changed = digest != meta["sha256"] or len(data) != meta["size_bytes"]
+        if changed and rid in amend:
+            amendments.append(
+                {
+                    "report": rid,
+                    "filename": meta["filename"],
+                    "previous_sha256": meta["sha256"],
+                    "previous_size_bytes": meta["size_bytes"],
+                    "sha256": digest,
+                    "size_bytes": len(data),
+                    "reason": reason.strip(),
+                    "amended_at": datetime.now(timezone.utc)
+                    .isoformat()
+                    .replace("+00:00", "Z"),
+                }
+            )
+            continue
+        if changed:
             failures.append(f"{rid}: differs from template_store identity ({digest})")
         if digest != ref.get("sha256") or len(data) != ref.get("size_bytes"):
             failures.append(f"{rid}: differs from reporting reference identity ({digest})")
     if failures:
         raise TemplateSealError("approved template identity mismatch:\n  " + "\n  ".join(failures))
+
+    for entry in amendments:
+        rid = entry["report"]
+        reports[rid]["sha256"] = entry["sha256"]
+        reports[rid]["size_bytes"] = entry["size_bytes"]
+        reference["reports"][rid]["sha256"] = entry["sha256"]
+        reference["reports"][rid]["size_bytes"] = entry["size_bytes"]
+        print(f"  amendment {rid}: {entry['previous_sha256'][:12]} -> {entry['sha256'][:12]}")
+    if amendments:
+        manifest.setdefault("amendments", []).extend(amendments)
+        # The pack no longer *is* the attached models, and the manifest must stop saying so.
+        manifest["source"] = (
+            "exact user-attached GENOMA v3.0 PDF models, with recorded amendments; "
+            "see `amendments`"
+        )
+        REFERENCE.write_text(
+            json.dumps(reference, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
     return manifest
 
 
@@ -129,10 +191,21 @@ def write_parts(encoded: bytes) -> list[dict]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True, help="directory or zip holding the 11 approved PDFs")
+    parser.add_argument(
+        "--amend",
+        action="append",
+        default=[],
+        metavar="REPORT_ID",
+        help="permit this report to differ from the pinned identity, and repin it. Any "
+        "report not named here still fails on any difference.",
+    )
+    parser.add_argument("--reason", default="", help="why the amended template changed")
     args = parser.parse_args()
 
     members = load_pack(Path(args.input))
-    manifest = verify_against_pinned_identity(members)
+    manifest = verify_against_pinned_identity(
+        members, amend=tuple(args.amend), reason=args.reason
+    )
     print(f"approved template identity: {len(members)}/11 VERIFICADO")
 
     archive = deterministic_archive(members)

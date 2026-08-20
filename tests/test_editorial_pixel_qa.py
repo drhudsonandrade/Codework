@@ -94,8 +94,24 @@ class PixelComparisonTest(unittest.TestCase):
         self.assertLessEqual(MASK_PADDING_PT, 2.0)
 
 
+
+
+def _newest_evidence(pattern: str) -> Path:
+    """The most recent matching evidence artefact, not a hard-coded date.
+
+    Pinning a filename means the test keeps validating evidence for a template pack that may
+    no longer exist: re-running the QA writes a new dated artefact and the assertions stay on
+    the old one, which then passes while describing something that is not shipped. The names
+    carry ISO dates, so lexicographic order is chronological.
+    """
+    found = sorted((ROOT / "docs/evidence").glob(pattern))
+    if not found:
+        raise AssertionError(f"no evidence artefact matches {pattern}")
+    return found[-1]
+
+
 class PixelQaEvidenceTest(unittest.TestCase):
-    EVIDENCE = ROOT / "docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_2026-08-18.json"
+    EVIDENCE = _newest_evidence("EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_*.json")
 
     def test_committed_evidence_is_a_real_measured_pass(self):
         payload = json.loads(self.EVIDENCE.read_text(encoding="utf-8"))

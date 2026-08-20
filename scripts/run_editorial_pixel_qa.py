@@ -16,6 +16,7 @@ therefore: zero changed pixels outside every declared dynamic/control mask, on e
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import sys
@@ -33,7 +34,8 @@ if str(ROOT) not in sys.path:
 from reporting.editorial_v3 import _verified_coordinate_manifest
 from reporting.engine import render_document
 from reporting.provenance import fixture_payload
-from reporting.template_v3 import render_pdf_from_template, verify_template_pack
+from reporting import template_v3 as _template_v3
+from reporting.template_v3 import verify_template_pack
 
 DEFAULT_DPI = 200
 # Rasterisation of vector text is not exact at mask edges: a glyph that touches a mask
@@ -148,6 +150,17 @@ def _compare_page(
     }
 
 
+@contextlib.contextmanager
+def _template_v3_manifest(detailed: dict[str, Any]):
+    """Bind load_reference_manifest to the verified detailed inventory for one render."""
+    previous = _template_v3.load_reference_manifest
+    _template_v3.load_reference_manifest = lambda *args, **kwargs: detailed
+    try:
+        yield
+    finally:
+        _template_v3.load_reference_manifest = previous
+
+
 def run(template_dir: Path, *, dpi: int = DEFAULT_DPI) -> dict[str, Any]:
     pack = verify_template_pack(template_dir)
     detailed, coordinate_hashes = _verified_coordinate_manifest(template_dir)
@@ -164,7 +177,15 @@ def run(template_dir: Path, *, dpi: int = DEFAULT_DPI) -> dict[str, Any]:
             rendered_pdf = Path(work) / f"{report_id}.pdf"
 
             rendered = render_document(report_id, _fixture_payload(report_id, detailed), mode="FINAL")
-            render_pdf_from_template(rendered, rendered_pdf, template_dir, strict=True)
+            # Bound to the already hash-verified detailed inventory, exactly as
+            # reporting.editorial_v3 does for a real render. Calling
+            # template_v3.render_pdf_from_template directly makes it call
+            # load_reference_manifest() with no path, which returns the summary manifest —
+            # zero coordinates, so strict mode refuses and the QA cannot run at all.
+            with _template_v3_manifest(detailed):
+                _template_v3.render_pdf_from_template(
+                    rendered, rendered_pdf, template_dir, strict=True
+                )
 
             ref_doc = fitz.open(template_pdf)
             out_doc = fitz.open(rendered_pdf)

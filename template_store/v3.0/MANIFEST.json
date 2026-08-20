@@ -2,15 +2,15 @@
   "schema": "genoma-private-template-store-v1",
   "version": "v3.0",
   "visibility_requirement": "private repository only",
-  "source": "exact user-attached GENOMA v3.0 PDF models",
+  "source": "exact user-attached GENOMA v3.0 PDF models, with recorded amendments; see `amendments`",
   "storage": {
     "mode": "sealed-tar-xz-base64-chunks",
     "parts_dir": "template_store/v3.0/sealed/parts",
-    "part_count": 48,
+    "part_count": 49,
     "decoded_archive": "GENOMA_V3_TEMPLATE_PACK.tar.xz",
-    "decoded_archive_size_bytes": 1724228,
-    "decoded_archive_sha256": "f0d77bc1f1077cfbb5b01e5cbfa1096454443a3c6f07d88a82b90972c32cc9da",
-    "base64_size_bytes": 2298972,
+    "decoded_archive_size_bytes": 1729196,
+    "decoded_archive_sha256": "6b65bed7679a591be88ee7d0eb60a49d8ce0b4b472e4fb5eae5db6abcfbe66e4",
+    "base64_size_bytes": 2305596,
     "materialized_dir": "template_store/v3.0/materialized",
     "transport_encoding": "base64(xz(tar(USTAR, sorted, mtime=0, uid/gid=0), preset=9e, check=CRC64))",
     "transport_writer": "scripts/seal_template_store.py",
@@ -79,8 +79,8 @@
     },
     "11": {
       "filename": "11_GUIA_EDITORIAL_MATRIZ_PREENCHIMENTO_v3.0.pdf",
-      "sha256": "d68fce73aeb7fd7bb6e0eb27679b167a3899cce92eb20b64ad5bb15352031fea",
-      "size_bytes": 327388,
+      "sha256": "169fe6c0b86697443b4cf6727fa106e42c5e8daa1f2d5a0dfffa335adafa49c6",
+      "size_bytes": 319248,
       "page_count": 12
     }
   },
@@ -298,32 +298,49 @@
     {
       "name": "tplpart-042",
       "size_bytes": 48000,
-      "sha256": "5f2a91c41e445a697d5c703a665379dfb8d203c1a275eefd041d2fa32b755c09"
+      "sha256": "addc85c7dda8c4dd6efb8ce9b84e6daa03c710f682104b71a335687a14d25288"
     },
     {
       "name": "tplpart-043",
       "size_bytes": 48000,
-      "sha256": "0a57f8d4b6029c4b4e6ce6b646e40d30536476e85ba1dfe7e00821c7f68b6135"
+      "sha256": "2bee7fff4e497114df2e9bf1fe932e11ef21473a7ef168962ca23402eef87453"
     },
     {
       "name": "tplpart-044",
       "size_bytes": 48000,
-      "sha256": "887dbe8c6d84d827567218fb62a9c087f49fccc3457dc5b65ffc31188ee28bb0"
+      "sha256": "1f70d5de710b672b46b403101ec1711fc325694e42b3a9825ea571383f5804f3"
     },
     {
       "name": "tplpart-045",
       "size_bytes": 48000,
-      "sha256": "603e2a3e171d30064b4fe160956c657e0dbbbfd0a9067df8e3bcdaa216455faf"
+      "sha256": "7553eecc25e90b526776b5e6b8c01e3eb7b8b98244739f63e91596ba890d856f"
     },
     {
       "name": "tplpart-046",
       "size_bytes": 48000,
-      "sha256": "1bf20c6d648a5b0d07537e4de72abed3af6edc0c9487e46febf4e5572eb8cc09"
+      "sha256": "d19911f25ee0bbd5104eb2ad6b37d60cda261cc759c60711c5998c000b2295ce"
     },
     {
       "name": "tplpart-047",
-      "size_bytes": 42972,
-      "sha256": "74943a7c1a4b8e93ecccceb848228aabf54b14b2592a1f2824fa826b8b534781"
+      "size_bytes": 48000,
+      "sha256": "4d9201c6e3809fb43c1b34b3a4190610f46238d9efe70e8e0dbc745cc248a227"
+    },
+    {
+      "name": "tplpart-048",
+      "size_bytes": 1596,
+      "sha256": "b15a7ea6e307a6589f46e6d695f8b579741ccfac6272183e5d0fb641b6819f02"
+    }
+  ],
+  "amendments": [
+    {
+      "report": "11",
+      "filename": "11_GUIA_EDITORIAL_MATRIZ_PREENCHIMENTO_v3.0.pdf",
+      "previous_sha256": "d68fce73aeb7fd7bb6e0eb27679b167a3899cce92eb20b64ad5bb15352031fea",
+      "previous_size_bytes": 327388,
+      "sha256": "169fe6c0b86697443b4cf6727fa106e42c5e8daa1f2d5a0dfffa335adafa49c6",
+      "size_bytes": 319248,
+      "reason": "Removidas as duas últimas entradas de bibliografia da página 11 e seus dois links externos: eram referências a documentação de fornecedor de ferramenta, não fontes científicas, e as outras dez referências da lista são. Glifos removidos por redação, não cobertos por retângulo — texto coberto continua extraível. Nenhuma outra entrada é citada no corpo do documento, as doze páginas permanecem, e 11 das 12 renderizam byte a byte idênticas a 150 dpi; a única diferença está na faixa redigida da página 11.",
+      "amended_at": "2026-08-20T10:58:07.280946Z"
     }
   ]
 }
