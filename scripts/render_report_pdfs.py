@@ -23,7 +23,7 @@ if str(ROOT) not in sys.path:
 
 from reporting.case_dossier import load_dossier
 from reporting.editorial_v3 import _verified_coordinate_manifest
-from reporting.engine import render_document
+from reporting.engine import render_document, sha256_path
 from reporting.template_fill import build_template_fields
 from reporting.template_v3 import TemplateV3Error, render_pdf_from_template
 import reporting.template_v3 as _template_v3
@@ -88,6 +88,10 @@ def render(
     return {
         "report_id": report_id,
         "pdf": str(out_path),
+        # The delivered artifact's own digest. The bundle manifest hashed the markdown and
+        # the HTML and never the PDF, so the file a recipient actually opens was the one
+        # file nothing could verify.
+        "pdf_sha256": sha256_path(out_path),
         "size_bytes": out_path.stat().st_size,
         "page_count": result.get("page_count"),
         "replaced_fields": result.get("replaced_fields"),

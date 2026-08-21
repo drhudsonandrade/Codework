@@ -1,3 +1,23 @@
+"""Annotation over a two-row fixture whose provenance is written down.
+
+An external audit noted that the fixture's (rsid, chromosome, position, genotype) tuple also
+appears in personal datasets and asked for the fixture's origin to be recorded. The overlap
+is expected rather than evidence of copying: rs1799807 at 3:165548529 is the published BCHE
+coordinate — reference data, the same in every file that carries the locus — and CT is one of
+three possible calls there, so any carrier matches. What the audit is right about is that
+nothing in the repository said where these rows came from.
+
+Provenance, stated so the question does not need to be asked again:
+
+* `rs1799807` — identifier and GRCh37 coordinate read from the target registry at
+  `config/partial_genome_annotation_targets.json`; the genotype `CT` is written here to
+  exercise the heterozygous branch and is chosen by this test, not copied from a subject.
+* `rs999999` — an identifier that exists in no catalogue, at chr1:100, to exercise the
+  "absent from the registry" branch. Nothing about it can match a person.
+
+No row here is derived from any individual's data. The audit's content scanner in
+`scripts/genoma_audit.py` enforces the general rule this note documents for one file.
+"""
 from __future__ import annotations
 
 import gzip

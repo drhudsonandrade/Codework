@@ -156,5 +156,82 @@ class PlaneAggregationTest(unittest.TestCase):
                 self.assertIn(name, emitted, f"{plane} requires {name}")
 
 
+class PersonalGenotypeScannerTest(unittest.TestCase):
+    """The scanner matched file *names*, so a real export named innocuously walked past it.
+
+    An external audit found that a fixture tuple coincided with personal datasets and that
+    the check could not have caught it either way: four substrings tested against the path,
+    nothing tested against the content. These pin the content test, and pin that the scanner
+    never reports the data it finds.
+    """
+
+    def _rows(self, path):
+        from scripts.genoma_audit import _genotype_table_rows
+
+        return _genotype_table_rows(path)
+
+    def _write(self, root, name, text, *, gz=False):
+        import gzip as _gzip
+
+        path = root / name
+        if gz:
+            with _gzip.open(path, "wt", encoding="utf-8", newline="") as fh:
+                fh.write(text)
+        else:
+            path.write_text(text, encoding="utf-8")
+        return path
+
+    def _table(self, rows):
+        head = "RSID,CHROMOSOME,POSITION,CONSENSUS_RESULT\n"
+        return head + "".join(f"rs{i},1,{1000+i},AA\n" for i in range(rows))
+
+    def test_a_genotype_table_is_recognised_and_counted(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self.assertEqual(self._rows(self._write(root, "a.csv", self._table(7))), 7)
+
+    def test_a_gzipped_genotype_table_is_recognised(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self.assertEqual(self._rows(self._write(root, "a.csv.gz", self._table(9), gz=True)), 9)
+
+    def test_a_coordinate_list_without_calls_is_not_personal_data(self):
+        # Reference data: identifiers and positions are the same in every file that carries
+        # the locus. Flagging them would make the check fire on the target registry.
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            text = "RSID,CHROMOSOME,POSITION\n" + "".join(f"rs{i},1,{i}\n" for i in range(500))
+            self.assertIsNone(self._rows(self._write(root, "coords.csv", text)))
+
+    def test_prose_and_json_are_not_mistaken_for_tables(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self.assertIsNone(self._rows(self._write(root, "a.txt", "rsid e genotype num texto\n")))
+            self.assertIsNone(self._rows(self._write(root, "b.txt", '{"rsid": "rs1", "genotype": "AA"}')))
+
+    def test_an_empty_file_is_not_a_table(self):
+        with tempfile.TemporaryDirectory() as td:
+            self.assertIsNone(self._rows(self._write(Path(td), "e.csv", "")))
+
+    def test_the_fixture_ceiling_sits_between_a_test_and_an_export(self):
+        from scripts.genoma_audit import MAX_FIXTURE_GENOTYPE_ROWS
+
+        self.assertGreater(MAX_FIXTURE_GENOTYPE_ROWS, 10)
+        self.assertLess(MAX_FIXTURE_GENOTYPE_ROWS, 10_000)
+
+    def test_the_repository_as_committed_carries_no_genotype_export(self):
+        from scripts.genoma_audit import _personal_genotype_candidates
+
+        self.assertEqual(_personal_genotype_candidates(), [])
+
+    def test_the_scanner_never_returns_the_genotypes_it_reads(self):
+        # A scanner that quoted the matching row to prove its point would publish exactly
+        # the data it exists to keep out.
+        from scripts.genoma_audit import _personal_genotype_candidates
+
+        for entry in _personal_genotype_candidates():
+            self.assertNotRegex(entry, r"\b[ACGT]{2}\b")
+
+
 if __name__ == "__main__":
     unittest.main()

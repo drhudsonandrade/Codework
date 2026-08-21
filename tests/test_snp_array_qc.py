@@ -201,5 +201,67 @@ class AssemblyBoundsTest(unittest.TestCase):
                 self.assertEqual(kb, -(-GRCH37[chromosome] // 1000))
 
 
+class InputHardeningTest(unittest.TestCase):
+    """Reading the input must be bounded and exact, because everything downstream trusts it.
+
+    An external audit found two ways a malformed input passed as data: a ZIP member's
+    declared sizes were never checked, so one member could ask the decompressor for any
+    amount, and all three openers decoded with errors="replace", so an undecodable byte
+    became U+FFFD and was parsed as content.
+    """
+
+    def _zip(self, root: Path, payload: str, name: str = "array.csv") -> Path:
+        import zipfile
+
+        path = root / "in.zip"
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(name, payload)
+        return path
+
+    def _rows(self, n: int) -> str:
+        return "RSID,CHROMOSOME,POSITION,RESULT\n" + "rs1,1,100,AA\n" * n
+
+    def test_a_decompression_bomb_is_refused_before_it_is_read(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = self._zip(Path(td), self._rows(4_000_000))
+            with self.assertRaises(ValueError) as caught:
+                inspect_array(path, case_id="T")
+        self.assertIn("compression ratio", str(caught.exception))
+
+    def test_an_ordinary_zip_export_still_opens(self):
+        # Measured genotype exports run about 5:1; the ceiling must not argue with them.
+        with tempfile.TemporaryDirectory() as td:
+            path = self._zip(Path(td), "RSID,CHROMOSOME,POSITION,RESULT\n" + "".join(
+                f"rs{i},1,{1000 + i},AA\n" for i in range(500)
+            ))
+            self.assertEqual(inspect_array(path, case_id="T")["metrics"]["rows"], 500)
+
+    def test_the_ceilings_leave_room_above_a_real_export(self):
+        from array_pipeline.qc import MAX_COMPRESSION_RATIO, MAX_UNCOMPRESSED_BYTES
+
+        self.assertGreater(MAX_COMPRESSION_RATIO, 20)
+        self.assertGreater(MAX_UNCOMPRESSED_BYTES, 100 * 1024 * 1024)
+
+    def test_invalid_utf8_is_refused_and_the_refusal_names_the_file(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "x.csv.gz"
+            with gzip.open(path, "wb") as fh:
+                fh.write(b"RSID,CHROMOSOME,POSITION,RESULT\nrs17\xff\xfe99,3,165548529,CT\n")
+            with self.assertRaises(ValueError) as caught:
+                inspect_array(path, case_id="T")
+        message = str(caught.exception)
+        self.assertIn("x.csv.gz", message)
+        self.assertIn("not valid UTF-8", message)
+
+    def test_a_replaced_byte_can_no_longer_reach_the_join(self):
+        # The failure this closes: U+FFFD in an rsid still joins, against the wrong key, and
+        # the run reports a clean call rate over a file it did not read as written.
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "y.csv"
+            path.write_bytes(b"RSID,CHROMOSOME,POSITION,RESULT\nrs1,1,100,AA\nrs\xff2,1,200,CC\n")
+            with self.assertRaises(ValueError):
+                inspect_array(path, case_id="T")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -81,11 +81,51 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+#: Largest uncompressed size a member of an input ZIP may declare. A 700k-marker consumer
+#: array is about 30 MB of text; this leaves two orders of magnitude of room and still bounds
+#: what a declared size can ask the runner to read.
+MAX_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
+
+#: Largest compression ratio a member may declare. Measured genotype CSVs run about 5:1, so
+#: this is twenty times the real figure; a zip bomb runs three orders of magnitude higher.
+#: The member count was checked before this and the sizes were not, so one member declaring
+#: fifty gigabytes passed as "exactly one data file".
+MAX_COMPRESSION_RATIO = 100.0
+
+
+def _check_zip_member(member: zipfile.ZipInfo) -> None:
+    """Refuse a member whose declared sizes are outside what a genotype export can be.
+
+    Checked before `open`, because the point is not to discover the problem while the
+    decompressor is already writing it into memory.
+    """
+    if member.file_size > MAX_UNCOMPRESSED_BYTES:
+        raise ValueError(
+            f"ZIP member {member.filename!r} declares {member.file_size:,} uncompressed bytes, "
+            f"above the {MAX_UNCOMPRESSED_BYTES:,}-byte ceiling for an array export"
+        )
+    if member.compress_size > 0:
+        ratio = member.file_size / member.compress_size
+        if ratio > MAX_COMPRESSION_RATIO:
+            raise ValueError(
+                f"ZIP member {member.filename!r} declares a {ratio:,.0f}:1 compression ratio, "
+                f"above the {MAX_COMPRESSION_RATIO:,.0f}:1 ceiling; measured genotype exports "
+                "run about 5:1 and this shape is a decompression bomb"
+            )
+
+
 def _text_stream(path: Path) -> tuple[TextIO, SourceInfo]:
-    """Open plain/gzip/zip CSV text. ZIP must contain exactly one regular data file."""
+    """Open plain/gzip/zip CSV text. ZIP must contain exactly one regular data file.
+
+    Decoding is strict. With `errors="replace"` an undecodable byte became U+FFFD and was
+    parsed as data: a mangled rsid or chromosome still joined, just against the wrong key,
+    and nothing anywhere reported that the file had not been read as written. A caller
+    cannot tell a repaired file from an intact one, so the repair is not offered — the
+    refusal names the file and the byte instead.
+    """
     lower = path.name.lower()
     if lower.endswith(".gz"):
-        fh = gzip.open(path, "rt", encoding="utf-8-sig", errors="replace", newline="")
+        fh = gzip.open(path, "rt", encoding="utf-8-sig", errors="strict", newline="")
         return fh, SourceInfo("gzip", None, {})
     if lower.endswith(".zip"):
         zf = zipfile.ZipFile(path)
@@ -93,11 +133,16 @@ def _text_stream(path: Path) -> tuple[TextIO, SourceInfo]:
         if len(members) != 1:
             zf.close()
             raise ValueError(f"ZIP must contain exactly one data file; found {len(members)}")
+        try:
+            _check_zip_member(members[0])
+        except ValueError:
+            zf.close()
+            raise
         raw = zf.open(members[0], "r")
-        text = io.TextIOWrapper(raw, encoding="utf-8-sig", errors="replace", newline="")
+        text = io.TextIOWrapper(raw, encoding="utf-8-sig", errors="strict", newline="")
         text._genoma_zipfile = zf  # type: ignore[attr-defined]
         return text, SourceInfo("zip", members[0].filename, {})
-    return path.open("rt", encoding="utf-8-sig", errors="replace", newline=""), SourceInfo("plain", None, {})
+    return path.open("rt", encoding="utf-8-sig", errors="strict", newline=""), SourceInfo("plain", None, {})
 
 
 def _read_header_and_metadata(fh: TextIO) -> tuple[list[str], dict[str, str]]:
@@ -390,6 +435,16 @@ def inspect_array(
                     "orientation_operational_status": orientation_status,
                     "orientation_basis": orientation_basis,
                 }
+    except UnicodeDecodeError as exc:
+        # Named, with the file and the offending byte, instead of the bare codec error the
+        # strict decoder raises. The operator has to know which file to re-export.
+        raise ValueError(
+            f"{path.name} is not valid UTF-8: byte {exc.object[exc.start:exc.start + 1]!r} at "
+            f"position {exc.start}. Genotype rows are read strictly, because a replaced byte "
+            "in an rsid or a chromosome still joins — against the wrong key — and nothing "
+            "downstream can tell a repaired file from an intact one. Re-export the file or "
+            "convert it to UTF-8 before running QC."
+        ) from exc
     finally:
         fh.close()
 

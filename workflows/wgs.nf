@@ -253,13 +253,21 @@ process BUILD_CURATED_MANIFEST {
     test -s '${input_qc}'
     test -s '${evidence_snapshot}'
     mkdir -p curation
+    # `input_qc` and `evidence_snapshot` were staged and proved non-empty above, then never
+    # handed to the builder: the manifest reported zero sources and a constant qc_verified on
+    # every run. Checking that a file exists is not the same as reading it.
     python3 '${workflow.projectDir}/scripts/build_wgs_curated_manifest.py' \
       --case-id '${case_id}' \
       --sample-id '${sample_id}' \
       --vcf '${normalized_vcf}' \
       --runtime-gate '${pre_call_gate}' \
+      --input-qc '${input_qc}' \
+      --evidence '${evidence_snapshot}' \
       --output curation/analysis-manifest.json
     jq -e '.unsupported_variant_classes | index("CNV") and index("SV") and index("CYP2D6")' curation/analysis-manifest.json >/dev/null
+    # The evidence must arrive by hash, and POST-DEPLOYMENT is never granted by a pipeline step.
+    jq -e '.sources | length > 0' curation/analysis-manifest.json >/dev/null
+    jq -e '.post_deployment_status == "PENDENTE"' curation/analysis-manifest.json >/dev/null
     """
 }
 

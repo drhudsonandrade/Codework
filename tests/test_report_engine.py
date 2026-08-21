@@ -80,10 +80,68 @@ class ReportEngineTest(unittest.TestCase):
         rendered = render_document("01", data, mode="FINAL")
         with tempfile.TemporaryDirectory() as td:
             paths = write_bundle(rendered, Path(td), stem="case-001-genoma-clinico")
-            self.assertEqual(set(paths), {"json", "markdown", "html"})
+            self.assertEqual(set(paths), {"json", "markdown", "html", "checksums"})
             self.assertTrue(all(path.is_file() for path in paths.values()))
             self.assertNotIn("[[", paths["markdown"].read_text(encoding="utf-8"))
             self.assertIn("POST-DEPLOYMENT: PENDENTE", paths["markdown"].read_text(encoding="utf-8"))
+
+    def test_the_checksum_sidecar_covers_every_file_written_including_the_json(self):
+        """`artifact_sha256` covered the markdown and the HTML and stopped there.
+
+        Not the JSON written on the next line, and not the PDF a separate renderer produces
+        from the same payload. A manifest that omits the artifacts actually delivered cannot
+        be used to verify a delivery, which is the only thing it is for.
+        """
+        import hashlib
+        import tempfile
+        from pathlib import Path
+
+        from reporting.engine import render_document, write_bundle
+        from reporting.provenance import fixture_payload
+
+        data = fixture_payload(
+            case_id="CASE-002", report_id="01", summary="fixture", basis="fixture"
+        )
+        with tempfile.TemporaryDirectory() as td:
+            paths = write_bundle(render_document("01", data, mode="FINAL"), Path(td), stem="c2")
+            recorded = {}
+            for line in paths["checksums"].read_text(encoding="utf-8").splitlines():
+                digest, _, name = line.partition("  ")
+                recorded[name] = digest
+
+            self.assertEqual(set(recorded), {"c2.json", "c2.md", "c2.html"})
+            for key in ("json", "markdown", "html"):
+                with self.subTest(artifact=key):
+                    self.assertEqual(
+                        recorded[paths[key].name],
+                        hashlib.sha256(paths[key].read_bytes()).hexdigest(),
+                        "the sidecar must describe the bytes on disk, not the strings in memory",
+                    )
+
+    def test_the_sidecar_accepts_an_artifact_added_by_a_later_renderer(self):
+        # The PDF is produced by a different entry point, so one manifest can only cover
+        # both if the second writer can extend it rather than replace it.
+        import tempfile
+        from pathlib import Path
+
+        from reporting.engine import render_document, write_bundle, write_checksums
+        from reporting.provenance import fixture_payload
+
+        data = fixture_payload(
+            case_id="CASE-003", report_id="01", summary="fixture", basis="fixture"
+        )
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            paths = write_bundle(render_document("01", data, mode="FINAL"), root, stem="c3")
+            later = root / "GENOMA-01.pdf"
+            later.write_bytes(b"%PDF-1.4 fixture")
+            write_checksums(root, "c3", [later])
+            names = {
+                line.partition("  ")[2]
+                for line in paths["checksums"].read_text(encoding="utf-8").splitlines()
+                if line
+            }
+        self.assertEqual(names, {"c3.json", "c3.md", "c3.html", "GENOMA-01.pdf"})
 
     def test_final_report_records_the_governing_ruleset_in_its_execution_manifest(self):
         """A published report must be auditable without CI logs (prompt-fonte 2.4)."""

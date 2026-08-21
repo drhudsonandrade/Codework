@@ -1,10 +1,26 @@
 #!/usr/bin/env python3
+"""Write the fail-closed curation manifest for a WGS run.
+
+Three states in this file were constants rather than measurements: `post_deployment_status`
+was the literal "PASS", which only the live Production Witness may grant and which the
+four-plane audit refuses to grant even to itself; `qc_verified` was the literal True while
+every other publication criterion was False; and the plane states were declared rather than
+evaluated. The workflow also staged an evidence snapshot, checked it was non-empty, and then
+never passed it, so `sources` came out empty on every run.
+"""
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
+import sys
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import normative
 
 
 def sha256_file(path: Path) -> str:
@@ -16,13 +32,25 @@ def sha256_file(path: Path) -> str:
 
 
 def count_vcf_records(path: Path) -> int:
+    """Count variant records, refusing a file that is not valid UTF-8.
+
+    `errors="replace"` turned undecodable bytes into U+FFFD and counted the line anyway, so a
+    truncated or corrupt VCF produced a plausible record count instead of an error. A caller
+    cannot tell a real count from a repaired one, so the repair is not offered.
+    """
     import gzip
     opener = gzip.open if path.suffix == ".gz" else open
     count = 0
-    with opener(path, "rt", encoding="utf-8", errors="replace") as handle:
-        for line in handle:
-            if line and not line.startswith("#"):
-                count += 1
+    try:
+        with opener(path, "rt", encoding="utf-8", errors="strict") as handle:
+            for line in handle:
+                if line and not line.startswith("#"):
+                    count += 1
+    except UnicodeDecodeError as exc:
+        raise SystemExit(
+            f"NÃO DISPONÍVEL: {path.name} is not valid UTF-8 ({exc}); a record count read "
+            "over replaced bytes would describe a file that does not exist"
+        ) from exc
     return count
 
 
@@ -33,6 +61,11 @@ def main() -> int:
     p.add_argument("--vcf", required=True)
     p.add_argument("--runtime-gate", required=True)
     p.add_argument("--evidence", action="append", default=[])
+    p.add_argument(
+        "--input-qc",
+        help="QC artifact for the same sample; qc_verified is derived from it and is "
+        "NÃO DISPONÍVEL without it",
+    )
     p.add_argument("--output", required=True)
     args = p.parse_args()
 
@@ -40,11 +73,39 @@ def main() -> int:
     runtime = json.loads(Path(args.runtime_gate).read_text(encoding="utf-8"))
     if runtime.get("ready_for_real_calling") is not True or runtime.get("status") != "EXECUTADO":
         raise SystemExit("NÃO DISPONÍVEL: current-session Runtime/Resource Gate is not fully EXECUTADO")
+
     sources = []
+    rejected_evidence: list[str] = []
     for value in args.evidence:
         snapshot = json.loads(Path(value).read_text(encoding="utf-8"))
         if snapshot.get("status") == "VERIFICADO":
             sources.append(snapshot)
+        else:
+            # Counted rather than dropped: "no sources" and "sources that failed
+            # verification" are different situations and used to look identical.
+            rejected_evidence.append(f"{Path(value).name}: status={snapshot.get('status')!r}")
+
+    # The workflow staged an evidence snapshot and never passed it, so this list was empty on
+    # every run and nothing said so. A curation manifest that cites nothing is not curation.
+    if not sources:
+        raise SystemExit(
+            "NÃO DISPONÍVEL: no VERIFICADO evidence snapshot was supplied via --evidence; "
+            "a curation manifest with zero sources records no curation. "
+            + (f"Rejected: {'; '.join(rejected_evidence)}" if rejected_evidence else "")
+        )
+
+    # Derived from the QC artifact bound to this run, never a constant. Without the artifact
+    # the honest value is that QC was not verified here, not that it was.
+    qc_verified = False
+    qc_basis = "NÃO DISPONÍVEL: nenhum artefato de QC foi fornecido a esta execução"
+    if args.input_qc:
+        qc_path = Path(args.input_qc)
+        qc = json.loads(qc_path.read_text(encoding="utf-8"))
+        qc_verified = qc.get("operational_status") == "VERIFICADO" and qc.get("passed") is not False
+        qc_basis = (
+            f"{qc_path.name} sha256={sha256_file(qc_path)} "
+            f"operational_status={qc.get('operational_status')!r}"
+        )
 
     capability_matrix = {
         "SNV": {"status": "EXECUTADO", "method": "GATK HaplotypeCaller + bcftools normalization"},
@@ -61,7 +122,9 @@ def main() -> int:
         "schema": "genoma-wgs-curation-manifest-v1",
         "case_id": args.case_id,
         "sample_id": args.sample_id,
-        "ruleset": {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026"},
+        # Read from the sealed transport rather than restated here: a constant copy of the
+        # normative identity is a copy that can fall behind the norm it names.
+        "ruleset": normative.attested_ruleset_block(),
         "summary": "Pipeline técnico executado para SNV/indel. Interpretação clínica e publicação final permanecem bloqueadas até curadoria, Evidence Gate e Final Audit.",
         "wgs_artifacts": {
             "normalized_vcf": str(vcf),
@@ -71,6 +134,7 @@ def main() -> int:
         "capability_matrix": capability_matrix,
         "unsupported_variant_classes": [name for name, item in capability_matrix.items() if item["status"] == "NÃO DISPONÍVEL"],
         "sources": sources,
+        "rejected_evidence": rejected_evidence,
         "claims": [],
         "findings": [],
         "sections": {},
@@ -83,21 +147,31 @@ def main() -> int:
         "publication_gate": {
             "passed": False,
             "consent_verified": False,
-            "qc_verified": True,
+            "qc_verified": qc_verified,
+            "qc_basis": qc_basis,
             "evidence_verified": False,
             "placeholders_resolved": False,
         },
         "policy_evaluation": {
             "ready_for_requested_operation": False,
+            # This script runs no policy engine, so it reports the planes as unevaluated
+            # rather than declaring two of them PASS. A state written by whoever did not
+            # measure it is the same failure as the PASS below.
             "planes": {
-                "policy_control": {"state": "PASS"},
-                "scientific_data": {"state": "PASS"},
-                "evidence": {"state": "PENDING"},
-                "audit": {"state": "PENDING"},
+                plane: {"state": "PENDING", "basis": "not evaluated by this script"}
+                for plane in ("policy_control", "scientific_data", "evidence", "audit")
             },
             "gates": [{"gate": "FINAL_AUDIT_GATE", "state": "PENDING", "blocking": True}],
         },
-        "post_deployment_status": "PASS",
+        # PENDENTE, never PASS. Only the independent live Production Witness on the exact
+        # deployed commit may grant POST-DEPLOYMENT, and the four-plane audit refuses to
+        # grant it even to itself. A pipeline step writing PASS here handed out the one
+        # verdict the project reserves for an external observer.
+        "post_deployment_status": "PENDENTE",
+        "post_deployment_note": (
+            "POST-DEPLOYMENT não é concedido por este script nem por nenhum passo do "
+            "pipeline; depende do Production Witness ao vivo no commit implantado."
+        ),
         "runtime_gate": runtime,
     }
     out = Path(args.output)

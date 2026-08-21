@@ -33,7 +33,56 @@ class AuditGates:
             if number < 0 or number >= len(self.ruleset.sections): reasons.append(f"unknown section attestation {number}"); continue
             reasons.extend(validate_section_attestation(item, self.ruleset.sections[number], evidence_ids))
             if item.get("applicability") == "UNRESOLVED" or item.get("decision") in {"UNRESOLVED", "BLOCKED"}: reasons.append(f"section {number} is not resolved as satisfied/not-applicable")
+        reasons.extend(self._blanket_not_applicable_reasons(by_section))
         return _gate("RULE_COVERAGE_GATE", not reasons, reasons)
+
+    #: The rule that governs every relevant genetic analysis by its own text. Section 0 is the
+    #: execution bootstrap — "antes de qualquer análise genética relevante" — so an operation
+    #: that declares itself analysis-relevant cannot also declare this rule inapplicable. The
+    #: number is not a judgement call by this engine; it is where the ruleset puts its own
+    #: precondition, and the ruleset is pinned by SHA-256.
+    BOOTSTRAP_SECTION = 0
+
+    def _blanket_not_applicable_reasons(self, by_section: dict[int, dict[str, Any]]) -> list[str]:
+        """Refuse the blanket declaration that no rule applies to a genetic analysis.
+
+        An external audit reached ready_for_requested_operation=true by attesting all 263
+        rules NOT_APPLICABLE with one boilerplate justification, no sources and no claims.
+        Every individual attestation was well-formed; nothing looked at them as a set. These
+        three checks look at the set, and each one alone breaks that manifest.
+        """
+        reasons: list[str] = []
+        if not by_section:
+            return reasons
+
+        bootstrap = by_section.get(self.BOOTSTRAP_SECTION)
+        if bootstrap is not None and bootstrap.get("applicability") == "NOT_APPLICABLE":
+            reasons.append(
+                f"section {self.BOOTSTRAP_SECTION} is the execution bootstrap and applies to "
+                "every analysis-relevant operation by its own text; it cannot be attested "
+                "NOT_APPLICABLE"
+            )
+
+        applicable = [i for i in by_section.values() if i.get("applicability") == "APPLICABLE"]
+        if not applicable:
+            reasons.append(
+                f"no rule of {len(by_section)} was attested APPLICABLE to an analysis-relevant "
+                "operation; a genetic analysis to which the entire ruleset is inapplicable is "
+                "a contradiction, not a triage result"
+            )
+
+        # Grouping several rules under one honest reason is normal — "this operation performs
+        # no reproductive analysis" answers the reproductive rules together. One string
+        # answering *every* rule answers none of them; it is a placeholder in the shape of a
+        # justification.
+        not_applicable = [i for i in by_section.values() if i.get("applicability") == "NOT_APPLICABLE"]
+        justifications = {str(i.get("justification") or "").strip() for i in not_applicable}
+        if len(not_applicable) > 1 and len(justifications) == 1:
+            reasons.append(
+                f"all {len(not_applicable)} NOT_APPLICABLE attestations share a single "
+                "justification; one text cannot be the reason each distinct rule does not apply"
+            )
+        return reasons
 
     def _plane_summary(self, gates: list[GateResult]) -> dict[str, Any]:
         by_name = {gate.gate: gate for gate in gates}
@@ -64,7 +113,64 @@ class AuditGates:
         if operation.get("output") != "FINAL_AUDITED_REPORT": return _gate("FINAL_AUDIT_GATE", True)
         audit = manifest.get("final_audit", {}) if isinstance(manifest.get("final_audit"), dict) else {}
         reasons = [f"final audit criterion missing/false: {key}" for key in CRITICAL_FINAL_AUDIT_KEYS if audit.get(key) is not True]
+        reasons.extend(self._final_audit_substance_reasons(manifest, audit))
         return _gate("FINAL_AUDIT_GATE", not reasons, reasons)
+
+    def _final_audit_substance_reasons(self, manifest: dict[str, Any], audit: dict[str, Any]) -> list[str]:
+        """Check the criteria the engine can see, instead of taking the manifest's word.
+
+        Every criterion above was a boolean the manifest set about itself, so a final audited
+        report could be declared complete over zero sources and zero findings. Only some of
+        the fifteen are mechanically checkable from the manifest; those are checked here, and
+        a criterion asserted while its own evidence is absent is a false declaration rather
+        than an unverifiable one.
+        """
+        reasons: list[str] = []
+        sources = _get_list(manifest, "sources")
+        claims = _get_list(manifest, "claims")
+        sections = _get_list(manifest, "sections")
+
+        # A final audited report over nothing is the shape the bypass took.
+        if not sources:
+            reasons.append("FINAL_AUDITED_REPORT declares no source; a final report cites what it read")
+        if not claims:
+            reasons.append("FINAL_AUDITED_REPORT declares no claim; there is nothing for the audit to be about")
+
+        if audit.get("no_accidental_empty_sections") is True and not sections:
+            reasons.append("no_accidental_empty_sections asserted while the manifest declares no section at all")
+        if audit.get("critical_sources_versioned") is True:
+            unversioned = [
+                s.get("id") for s in sources
+                if isinstance(s, dict) and _as_bool(s.get("mutable")) and not s.get("version")
+            ]
+            if unversioned:
+                reasons.append(f"critical_sources_versioned asserted while mutable sources carry no version: {unversioned[:5]}")
+        if audit.get("qc_documented") is True:
+            qc = manifest.get("qc", {}) if isinstance(manifest.get("qc"), dict) else {}
+            if not qc.get("evidence_refs"):
+                reasons.append("qc_documented asserted while QC carries no evidence_refs")
+        if audit.get("domains_separated") is True:
+            undomained = [
+                idx for idx, c in enumerate(claims)
+                if not isinstance(c, dict) or not c.get("domain")
+            ]
+            if undomained:
+                reasons.append(f"domains_separated asserted while claims carry no domain: {undomained[:5]}")
+        if audit.get("numbering_integrity") is True:
+            considered = {
+                item.get("section") for item in _get_list(manifest, "section_attestations")
+                if isinstance(item, dict)
+            }
+            if len(considered) != len(self.ruleset.sections):
+                reasons.append(
+                    f"numbering_integrity asserted while {len(considered)} of "
+                    f"{len(self.ruleset.sections)} rules were considered"
+                )
+        if audit.get("remaining_gaps_listed") is True and not manifest.get("remaining_gaps"):
+            reasons.append("remaining_gaps_listed asserted while the manifest lists no gap")
+        if audit.get("master_database_query_manifest") is True and not manifest.get("database_query_manifest"):
+            reasons.append("master_database_query_manifest asserted while no query manifest is present")
+        return reasons
 
     def _post_deployment_gate(self, manifest: dict[str, Any]):
         pd = manifest.get("post_deployment", {}) if isinstance(manifest.get("post_deployment"), dict) else {}

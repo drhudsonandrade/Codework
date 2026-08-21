@@ -21,6 +21,83 @@ def run(cmd: list[str]) -> tuple[int, str]:
     return p.returncode, p.stdout[-12000:]
 
 
+#: Columns that together mean a file is a genotype table rather than prose about one. An
+#: identifier and a call are the minimum: a coordinate list is reference data, and a list of
+#: rsids is a query plan, but an rsid carrying a genotype is a person's data.
+GENOTYPE_ID_COLUMNS = ("rsid", "rs_id", "snp", "identifier")
+GENOTYPE_CALL_COLUMNS = ("result", "genotype", "consensus_result", "allele1", "alleles", "call")
+
+#: Data rows a tracked genotype table may carry before it is treated as an export rather
+#: than a fixture. Inline fixtures in this repository run to a handful of rows; a consumer
+#: array runs to hundreds of thousands. The bar sits far above the first and far below the
+#: second, so it never argues with a legitimate test and never lets a real file through.
+MAX_FIXTURE_GENOTYPE_ROWS = 100
+
+
+def _genotype_table_rows(path: Path) -> int | None:
+    """Row count if this file is a genotype table, otherwise None.
+
+    Reads at most a bounded prefix: the question is whether the file is an export, and an
+    export answers that in its first few hundred lines. Nothing read here is returned or
+    logged — a scanner that printed the matching genotype to prove its point would publish
+    the very data it exists to keep out.
+    """
+    import csv
+    import gzip
+    import io
+
+    opener = gzip.open if path.suffix == ".gz" else open
+    try:
+        with opener(path, "rt", encoding="utf-8", errors="strict", newline="") as handle:
+            head = handle.read(2_000_000)
+    except (OSError, UnicodeDecodeError, EOFError):
+        return None
+    if not head:
+        return None
+    try:
+        reader = csv.reader(io.StringIO(head))
+        header = next(reader, None)
+    except csv.Error:
+        return None
+    if not header or len(header) < 3:
+        return None
+    names = {str(cell).strip().strip('"').lower() for cell in header}
+    if not (names & set(GENOTYPE_ID_COLUMNS)) or not (names & set(GENOTYPE_CALL_COLUMNS)):
+        return None
+    return sum(1 for row in reader if row)
+
+
+def _personal_genotype_candidates() -> list[str]:
+    """Tracked files that are genotype tables large enough to be somebody's data.
+
+    The previous check matched four substrings against the *file name*, so a real export
+    committed as `fixture.csv` passed it. Name patterns are kept — they still catch a file
+    named after its origin — and the content test is what makes the check mean anything.
+    """
+    name_patterns = ("dados dna", "dna_harmonizado", "myheritage_raw", "genera_raw")
+    flagged: list[str] = []
+    code, listing = run(["git", "ls-files", "-z"])
+    tracked = [item for item in listing.split("\0") if item] if code == 0 else []
+    for relative in tracked:
+        path = ROOT / relative
+        if not path.is_file():
+            continue
+        low = relative.lower().replace("_", " ").replace("-", " ")
+        if any(pattern in low for pattern in name_patterns):
+            flagged.append(f"{relative}: name matches a known personal-export pattern")
+            continue
+        if path.suffix not in (".csv", ".tsv", ".txt", ".gz"):
+            continue
+        rows = _genotype_table_rows(path)
+        if rows is not None and rows > MAX_FIXTURE_GENOTYPE_ROWS:
+            # The count is reported; the content never is.
+            flagged.append(
+                f"{relative}: genotype table with {rows} data rows, above the "
+                f"{MAX_FIXTURE_GENOTYPE_ROWS}-row fixture ceiling"
+            )
+    return flagged
+
+
 def check(name: str, ok: bool, evidence: str, *, blocking: bool = True, status_if_ok: str = "VERIFICADO") -> dict:
     return {
         "id": name,
@@ -175,14 +252,19 @@ def audit(*, allow_template_sealed_only: bool = False) -> dict:
     strategy = ROOT / "docs/GRCH38_COMPUTE_STRATEGY.md"
     checks.append(check("GRCH38_NO_PERMANENT_HIGHMEM_STRATEGY", prebuilt.is_file() and strategy.is_file(), "prebuilt checksum-locked index verifier + explicit ephemeral/self-hosted fallback", blocking=False))
 
-    personal_patterns = ("dados dna", "dna_harmonizado", "myheritage_raw", "genera_raw")
-    tracked_like = []
-    for p in ROOT.rglob("*"):
-        if p.is_file():
-            low = str(p.relative_to(ROOT)).lower().replace("_", " ").replace("-", " ")
-            if any(x in low for x in personal_patterns):
-                tracked_like.append(str(p.relative_to(ROOT)))
-    checks.append(check("NO_PERSONAL_GENOTYPE_FIXTURES", not tracked_like, json.dumps(tracked_like)))
+    tracked_like = _personal_genotype_candidates()
+    checks.append(
+        check(
+            "NO_PERSONAL_GENOTYPE_FIXTURES",
+            not tracked_like,
+            json.dumps(tracked_like, ensure_ascii=False)
+            + (
+                " | scanned tracked file contents for genotype tables, not only file names"
+                if not tracked_like
+                else ""
+            ),
+        )
+    )
 
     planes = _aggregate_planes(checks)
     blocking_failures = [c["id"] for c in checks if c["blocking"] and c["state"] != "PASS"]

@@ -289,6 +289,15 @@ def render_document(report_id: str, data: dict[str, Any], *, mode: str = "MODEL"
 
 
 def write_bundle(rendered: dict[str, Any], output_dir: Path, *, stem: str | None = None) -> dict[str, Path]:
+    """Write the bundle and a checksum sidecar covering every file it wrote.
+
+    `artifact_sha256` covered the markdown and the HTML and stopped there — not the JSON
+    written on the next line, and not the PDF a separate renderer produces from the same
+    payload. A manifest that omits the artifacts actually delivered cannot be used to verify
+    a delivery, which is the only thing it is for. The sidecar is written last, over the
+    bytes on disk rather than over the strings in memory, so it describes what a recipient
+    will actually receive.
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
     metadata = rendered["metadata"]
     stem = stem or f"{metadata['report_id']}-{metadata['slug']}"
@@ -304,8 +313,47 @@ def write_bundle(rendered: dict[str, Any], output_dir: Path, *, stem: str | None
             "markdown": hashlib.sha256(rendered["markdown"].encode("utf-8")).hexdigest(),
             "html": hashlib.sha256(rendered["html"].encode("utf-8")).hexdigest(),
         },
+        # Named here so a reader of the JSON alone knows the JSON's own digest, and the
+        # PDF's, live in the sidecar rather than concluding they were never computed.
+        "artifact_sha256_note": (
+            f"digests of every written file, including this JSON and any PDF rendered from "
+            f"the same payload, are in {stem}.SHA256SUMS"
+        ),
     }
     paths["json"].write_text(json.dumps(bundle_json, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     paths["markdown"].write_text(rendered["markdown"] + "\n", encoding="utf-8")
     paths["html"].write_text(rendered["html"] + "\n", encoding="utf-8")
+
+    paths["checksums"] = write_checksums(output_dir, stem, [paths[k] for k in ("json", "markdown", "html")])
     return paths
+
+
+def sha256_path(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def write_checksums(output_dir: Path, stem: str, files: list[Path]) -> Path:
+    """Write (or extend) the sidecar so it names every delivered file exactly once.
+
+    Extending rather than overwriting lets the PDF renderer add its output to the same
+    manifest after the fact, which is the only way one file can cover artifacts produced by
+    two entry points.
+    """
+    sidecar = output_dir / f"{stem}.SHA256SUMS"
+    existing: dict[str, str] = {}
+    if sidecar.is_file():
+        for line in sidecar.read_text(encoding="utf-8").splitlines():
+            digest, _, name = line.partition("  ")
+            if digest and name:
+                existing[name] = digest
+    for path in files:
+        if path.is_file():
+            existing[path.name] = sha256_path(path)
+    sidecar.write_text(
+        "".join(f"{existing[name]}  {name}\n" for name in sorted(existing)), encoding="utf-8"
+    )
+    return sidecar
