@@ -418,6 +418,24 @@ class PayloadCompiler:
         for required in ("summary", "sources", "limitations"):
             if required not in self._anchors:
                 raise ProvenanceError(f"{required!r} must be anchored before compiling")
+        # Anchored here rather than left to each builder: they are compiler identity, not
+        # measurements, and a builder that forgot one would reintroduce exactly the hole
+        # this closes. `case_control` because that is what they are — the run's own context,
+        # never a reading from a scientific artifact.
+        self.state(
+            "case_id",
+            self.case_id,
+            kind="case_control",
+            basis="identificador do caso com que este payload foi compilado",
+            status="VERIFICADO",
+        )
+        self.state(
+            "post_deployment_status",
+            post_deployment_status,
+            kind="case_control",
+            basis="estado POST-DEPLOYMENT no momento da compilação; nunca concedido aqui",
+            status="VERIFICADO",
+        )
         data: dict[str, Any] = {
             "case_id": self.case_id,
             "report_id": self.report_id,
@@ -438,6 +456,20 @@ class PayloadCompiler:
             },
         }
         if extra:
+            # `extra` writes into the payload after every anchor is fixed, so it could
+            # silently replace an anchored value with something the provenance block still
+            # describes in its old terms. For summary/sources/limitations the render-time
+            # gate caught that; for `case_id` and `post_deployment_status` nothing did, and
+            # a test fixture was in fact using it to stamp POST-DEPLOYMENT PASS on a payload
+            # compiled as PENDENTE. Refused at the source rather than only at render, so a
+            # caller learns immediately which field it may not reach this way.
+            overwritten = sorted(key for key in extra if key in self._anchors)
+            if overwritten:
+                raise ProvenanceError(
+                    f"extra may not overwrite anchored fields {overwritten}; pass the value "
+                    "through the anchor that records it, so the payload and its provenance "
+                    "cannot disagree"
+                )
             data.update(extra)
         data["provenance"] = provenance_block(self._anchors)
         return data
@@ -518,6 +550,14 @@ class FindingBuilder:
 
 #: Top-level payload keys that are printed verbatim in a FINAL report.
 SCALAR_FIELDS = ("summary", "sources", "limitations")
+
+#: Printed on the face of every FINAL report and, until this existed, anchored by nothing.
+#: Editing `case_id` after compilation produced a report about a different person with zero
+#: blockers — the exact hand-edit this module exists to catch, on the one field that binds a
+#: genomic report to a human being. `FindingBuilder` had already reasoned that "the id is
+#: itself printed, so it is anchored like any other value"; the same sentence applies here
+#: and was not applied.
+IDENTITY_FIELDS = ("case_id", "post_deployment_status")
 #: Per-finding keys printed verbatim by `reporting.engine._final_markdown`.
 FINDING_FIELDS = (
     "domain", "nature", "priority", "observed_data", "qc",
@@ -540,6 +580,7 @@ def fixture_payload(
     summary: str,
     sections: dict[str, Any] | None = None,
     basis: str,
+    post_deployment_status: str = "PENDENTE",
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a fully-anchored payload for layout QA and tests.
@@ -570,6 +611,9 @@ def fixture_payload(
             "gates": [{"gate": "FINAL_AUDIT_GATE", "state": "PASS", "blocking": True}],
         },
         execution_manifest={"status": UNAVAILABLE, "nature": basis},
+        # Passed to `compile` so it is anchored, rather than smuggled through `extra` where
+        # the payload would say one thing and its provenance another.
+        post_deployment_status=post_deployment_status,
         extra=extra,
     )
 
@@ -618,7 +662,7 @@ def provenance_blockers(data: dict[str, Any]) -> list[str]:
             # edited after compilation, or the anchor was copied from another field.
             blockers.append(f"provenance:mismatch:{name}")
 
-    for name in SCALAR_FIELDS:
+    for name in SCALAR_FIELDS + IDENTITY_FIELDS:
         check(name, data.get(name))
 
     sections = data.get("sections") if isinstance(data.get("sections"), dict) else {}

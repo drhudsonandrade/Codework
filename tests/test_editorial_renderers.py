@@ -26,8 +26,11 @@ def final_data():
         summary="Conteúdo rastreável para teste editorial.",
         sections={"Resumo clínico executivo": "Teste de conteúdo sem interpretação genética nova."},
         basis="fixture editorial; não representa paciente",
+        # Passed to the compiler so the value is anchored. It used to arrive through
+        # `extra`, which writes into the payload after the anchors are fixed — the payload
+        # then said PASS while its provenance still recorded PENDENTE, and nothing checked.
+        post_deployment_status="PASS",
         extra={
-            "post_deployment_status": "PASS",
             # No approved v3.0 template pack is mounted in CI, so this fixture renders
             # through the programmatic fallback. That has to be acknowledged explicitly.
             "allow_programmatic_final": True,

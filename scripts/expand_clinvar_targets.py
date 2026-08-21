@@ -48,6 +48,7 @@ import csv
 import gzip
 import io
 import json
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -63,6 +64,7 @@ if str(ROOT) not in sys.path:
 from array_pipeline.clinical_findings import (
     AUTOSOMAL_DOMINANT as AUTOSOMAL_DOMINANT_ABBR,
     AUTOSOMAL_RECESSIVE as AUTOSOMAL_RECESSIVE_ABBR,
+    X_LINKED as X_LINKED_ABBR,
     normalised_moi,
 )
 from array_pipeline.targets import load_target_manifest, sha256_json
@@ -219,6 +221,24 @@ def read_panelapp(path: Path | None) -> dict[str, dict[str, Any]]:
 #: a score, and reading either as "higher than 3" would invert the meaning.
 DOSAGE_SUFFICIENT = "3"
 DOSAGE_AUTOSOMAL_RECESSIVE = "30"
+
+#: Parses the chromosome out of the dosage file's own locus columns. `Genomic Location`
+#: reads "chrX:153724856-153744755" and `cytoBand` reads "Xq28"; either answers the only
+#: question asked of them, which is whether the gene is on a sex chromosome.
+_DOSAGE_LOCATION = re.compile(r"^chr([0-9]{1,2}|X|Y|MT?)\b", re.IGNORECASE)
+_DOSAGE_CYTOBAND = re.compile(r"^([0-9]{1,2}|X|Y)[pq]", re.IGNORECASE)
+
+
+def _dosage_chromosome(row: dict[str, Any]) -> str | None:
+    for column, pattern in (
+        ("Genomic Location", _DOSAGE_LOCATION),
+        ("cytoBand", _DOSAGE_CYTOBAND),
+    ):
+        match = pattern.match((row.get(column) or "").strip())
+        if match:
+            value = match.group(1).upper()
+            return "MT" if value == "M" else value
+    return None
 DOSAGE_UNLIKELY = "40"
 DOSAGE_LABELS = {
     "0": "sem evidência",
@@ -269,12 +289,27 @@ def read_clingen_dosage(path: Path | None) -> dict[str, dict[str, Any]]:
             continue
         haplo = (row.get("Haploinsufficiency Score") or "").strip()
         triplo = (row.get("Triplosensitivity Score") or "").strip()
+        # Haploinsufficiency says one broken copy is enough. On an autosome that reads as
+        # dominant inheritance; on the X it reads as a hemizygous male being affected, which
+        # is not autosomal anything. Emitting AD regardless put a spurious AD on 107
+        # established X-linked genes — ABCD1, BTK, ATP7A, AR among them — against ClinGen
+        # validity, GenCC and PanelApp all saying XL for the same gene, and the disagreement
+        # then knocked those genes out of the X-linked reading downstream.
+        #
+        # The file carries the locus, so the chromosome is read rather than assumed. A gene
+        # whose location cannot be parsed contributes no mode at all: dosage is a statement
+        # about mechanism, and turning it into an inheritance mode nobody curated is what
+        # caused this.
+        chromosome = _dosage_chromosome(row)
         modes: list[str] = []
-        if haplo == DOSAGE_SUFFICIENT:
-            # One broken copy suffices — that is what haploinsufficiency means.
-            modes.append(AUTOSOMAL_DOMINANT_ABBR)
-        if haplo == DOSAGE_AUTOSOMAL_RECESSIVE:
-            modes.append(AUTOSOMAL_RECESSIVE_ABBR)
+        if chromosome == "X":
+            if haplo in (DOSAGE_SUFFICIENT, DOSAGE_AUTOSOMAL_RECESSIVE):
+                modes.append(X_LINKED_ABBR)
+        elif chromosome and chromosome not in ("Y", "MT"):
+            if haplo == DOSAGE_SUFFICIENT:
+                modes.append(AUTOSOMAL_DOMINANT_ABBR)
+            if haplo == DOSAGE_AUTOSOMAL_RECESSIVE:
+                modes.append(AUTOSOMAL_RECESSIVE_ABBR)
         pmids = sorted(
             {
                 (row.get(f"{prefix} PMID{n}") or "").strip()

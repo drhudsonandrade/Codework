@@ -202,7 +202,7 @@ class RenderTimeBindingTest(unittest.TestCase):
         data = compiler.compile(publication_gate={}, policy_evaluation={})
         distribution = data["provenance"]["status_distribution"]
         self.assertEqual(data["provenance"]["operational_status_floor"], "NÃO DISPONÍVEL")
-        self.assertEqual(distribution["VERIFICADO"], 2)
+        self.assertEqual(distribution["VERIFICADO"], 4)
         self.assertEqual(distribution["NÃO DISPONÍVEL"], 1)
 
     def test_a_fixture_anchor_promoted_after_the_fact_is_caught(self):

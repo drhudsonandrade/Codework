@@ -39,6 +39,23 @@ from array_pipeline.targets import load_target_manifest, sha256_json
 #: Strongest first. A locus present in two registries keeps the stronger scope.
 SCOPE_RANK = ("CLINICO", "PREDISPOSICAO", "PESQUISA", "CURIOSIDADE")
 
+
+def _scope_rank(target: dict, rsid: str) -> int:
+    """Rank of this target's scope, refusing a value the ranking does not know.
+
+    Ranking by `.index` is right — the order is the point — but an unlisted or null scope
+    reached it and raised a bare ValueError naming a tuple. Defaulting instead would be
+    worse: the fallback was CURIOSIDADE, the weakest rank, so an unrecognised scope would
+    have quietly demoted a locus rather than stopped the merge.
+    """
+    scope = target.get("scope")
+    if scope in SCOPE_RANK:
+        return SCOPE_RANK.index(scope)
+    raise ValueError(
+        f"{rsid}: scope {scope!r} is not one of {list(SCOPE_RANK)}; the merge ranks loci by "
+        "scope and cannot place a value it does not know"
+    )
+
 #: Fields that describe which allele the locus is scored against. They are decided only by
 #: the explicit conflict logic, never by the generic field-carry-over.
 ASSESSED_ALLELE_FIELDS = frozenset(
@@ -104,8 +121,13 @@ def merge(paths: list[Path]) -> dict[str, Any]:
                     if incoming.get(key) is not None:
                         existing[key] = incoming[key]
 
-            existing_rank = SCOPE_RANK.index(str(existing.get("scope", "CURIOSIDADE")))
-            incoming_rank = SCOPE_RANK.index(str(incoming.get("scope", "CURIOSIDADE")))
+            # `.index` on an unlisted scope raised a bare ValueError naming a tuple, and the
+            # `.get` default only covered a *missing* key — a scope present but null, or a
+            # value this ranking has never seen, still reached it. Refused with the gene and
+            # the value named, because silently defaulting an unknown scope to the lowest
+            # rank would demote a clinical target to a curiosity.
+            existing_rank = _scope_rank(existing, rsid)
+            incoming_rank = _scope_rank(incoming, rsid)
             if incoming_rank < existing_rank:
                 existing["scope"] = incoming["scope"]
             # Keep whichever fields the other registry supplied and this one lacks, so a

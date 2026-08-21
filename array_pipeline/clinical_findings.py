@@ -570,6 +570,34 @@ def _interpretation(
     # None of this can be decided from the genotype: this system does not call sex
     # chromosomes. It comes from the dossier, and without it the interpretation is refused
     # rather than defaulted — defaulting to female would call an affected boy a carrier.
+    # A gene whose curated modes include X-linked *and* something else does not enter the
+    # branch below, and the autosomal reading that follows never mentions the X at all. That
+    # was silent for 107 established genes — ABCD1, BTK, ATP7A, AR among them — because the
+    # ClinGen dosage reader turned haploinsufficiency into "AD" for X-linked genes too. The
+    # reader is fixed at the source; this says the remaining case out loud instead of
+    # letting a real XL/autosomal disagreement print as a generic "divergent mode".
+    #
+    # It deliberately does not resolve the disagreement. Picking the X-linked reading for a
+    # male would decide he is affected rather than a carrier on the strength of one registry
+    # disagreeing with another, which is the arbitration sections 4 and 7 forbid.
+    if X_LINKED in modes and modes != {X_LINKED}:
+        return {
+            "kind": GENOTIPO_DE_RISCO,
+            "basis": (
+                f"variante patogênica em gene cujos modos curados divergem: "
+                f"{', '.join(sorted(modes))} ({condition_note}). Um dos modos é ligado ao X, "
+                "e no X o sexo ao nascer decide entre hemizigoto afetado e heterozigota "
+                "portadora — "
+                + (
+                    f"o dossiê registra {sex_at_birth}, mas a divergência entre registros "
+                    "curados não é resolvida por este sistema"
+                    if sex_at_birth in (SEX_MALE, SEX_FEMALE)
+                    else "e o dossiê não registra o sexo ao nascer"
+                )
+                + ". Confirmação por método ortogonal e revisão da curadoria gene-doença "
+                "antes de qualquer conduta"
+            ),
+        }
     if modes == {X_LINKED}:
         if sex_at_birth == SEX_MALE:
             return {

@@ -357,7 +357,10 @@ def render_pdf_from_template(rendered: dict[str, Any], path: Path, template_dir:
     unresolved: list[str] = []
     replaced_fields = 0
     replaced_controls = 0
-    min_font = 99.0
+    # `None` means "nothing was rendered", which is what the caller needs to know. The
+    # sentinel used to be 99.0 and was compared back with `==`, so a field genuinely
+    # rendered at 99pt would have reported "no text rendered" instead of its size.
+    min_font: float | None = None
     for page_no, page in enumerate(reader.pages, 1):
         w = float(page.mediabox.width); h = float(page.mediabox.height)
         overlay = io.BytesIO(); c = canvas.Canvas(overlay, pagesize=(w, h)); changed = False
@@ -371,7 +374,7 @@ def render_pdf_from_template(rendered: dict[str, Any], path: Path, template_dir:
             fsize = float(value["font_size_pt"] or item.get("font_size_pt") or 7.0)
             fname = fonts["bold"] if value["bold"] else fonts["regular"]
             used = _draw_fit_text(c, value["value"], x=x0, y_top=y0, max_width=max(8.0, x1 - x0), max_height=max(8.0, y1 - y0 + 3.0), font_size=fsize, font_name=fname, color=value["color"], page_height=h)
-            min_font = min(min_font, used); changed = True; replaced_controls += 1
+            min_font = used if min_font is None else min(min_font, used); changed = True; replaced_controls += 1
         for item in by_page_fields.get(page_no, []):
             if item.get("guidance_only"):
                 continue
@@ -388,7 +391,7 @@ def render_pdf_from_template(rendered: dict[str, Any], path: Path, template_dir:
             fsize = float(value["font_size_pt"] or item.get("font_size_pt") or 7.0)
             fname = fonts["bold"] if value["bold"] else fonts["regular"]
             used = _draw_fit_text(c, value["value"], x=dx0, y_top=dy0, max_width=max(8.0, dx1 - dx0), max_height=max(8.0, dy1 - dy0), font_size=fsize, font_name=fname, color=value["color"], page_height=h)
-            min_font = min(min_font, used); changed = True; replaced_fields += 1
+            min_font = used if min_font is None else min(min_font, used); changed = True; replaced_fields += 1
         c.save()
         if changed:
             overlay.seek(0); page.merge_page(PdfReader(overlay).pages[0])
@@ -425,7 +428,7 @@ def render_pdf_from_template(rendered: dict[str, Any], path: Path, template_dir:
         "replaced_controlled_spans": replaced_controls,
         "unresolved_fields": unresolved,
         "strict": strict,
-        "minimum_rendered_font_pt": None if min_font == 99.0 else round(min_font, 2),
+        "minimum_rendered_font_pt": None if min_font is None else round(min_font, 2),
         "static_pixel_contract": "reference pixels outside declared dynamic/controlled regions are preserved",
     }
 
