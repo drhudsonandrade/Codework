@@ -68,11 +68,37 @@ def _gene_layer(genes: list) -> str:
 
 def _anesthesia_text(card: dict) -> str:
     if card.get("status") == UNAVAILABLE and not card.get("observations"):
-        return f"{UNAVAILABLE} — {card.get('reason', 'cartão não emitido')}. {card.get('clearance_policy', '')}".strip()
+        gaps = _anesthesia_gaps(card)
+        reason = card.get("reason") or card.get("status_reason") or "cartão não emitido"
+        return f"{UNAVAILABLE} — {reason}. {gaps}{card.get('clearance_policy', '')}".strip()
     observations = "; ".join(
         f"{o['gene']} {_locus_text(o)}" for o in card.get("observations", [])
     )
-    return f"Observações: {observations}. {card.get('clearance_policy', '')}".strip()
+    return (
+        f"Observações: {observations}. {_anesthesia_gaps(card)}{card.get('clearance_policy', '')}"
+    ).strip()
+
+
+def _anesthesia_gaps(card: dict) -> str:
+    """The genes the card could not interrogate, named before the observations are read.
+
+    Left implicit, an anaesthesia card that reads cleanly on BCHE is indistinguishable from
+    one that covered the whole guideline — and the genes missing from this one are the two
+    CPIC rates level A for exactly the drugs the card is consulted about.
+    """
+    missing = card.get("not_interrogated") or []
+    if not missing:
+        return ""
+    parts = [
+        f"{entry['gene']} (CPIC nível {entry.get('cpic_level', UNAVAILABLE)}: "
+        f"{', '.join(entry.get('drugs') or []) or UNAVAILABLE})"
+        for entry in missing
+    ]
+    return (
+        f"NÃO INTERROGADO — {'; '.join(parts)}. Nenhuma posição destes genes foi ensaiada e "
+        "nada neste relatório fala sobre eles; ausência de achado aqui é ausência de exame, "
+        "não ausência de risco. "
+    )
 
 
 def build_payload(passport_path: Path, matrix_path: Path) -> dict:

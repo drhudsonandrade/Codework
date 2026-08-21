@@ -53,6 +53,11 @@ PGX_EVIDENCE_SOURCES = frozenset({"clinpgx", "cpic"})
 #: yield a diplotype for them however many SNPs are covered.
 STRUCTURALLY_UNRESOLVED_GENES = frozenset({"CYP2D6"})
 
+#: Characters a defining allele may be. Presence is decided by asking whether this character
+#: appears in the genotype call, so anything wider than one character silently answers "not
+#: present" for every carrier.
+DEFINING_ALLELE_ALPHABET = frozenset("ACGTID")
+
 
 class PgxRegistryError(ValueError):
     """The supplied allele-definition registry is unusable."""
@@ -86,6 +91,23 @@ def load_pgx_registry(path: Path) -> dict[str, Any]:
             for item in defining:
                 if not isinstance(item, dict) or not item.get("rsid") or not item.get("allele"):
                     raise PgxRegistryError(f"{gene} {allele}: each defining position needs rsid and allele")
+                base = str(item["allele"]).strip().upper()
+                if base not in DEFINING_ALLELE_ALPHABET:
+                    # `_allele_findings` decides presence by asking whether the defining
+                    # allele appears among the genotype's characters, so a multi-character
+                    # allele — an indel spelled out, say — can never match and every carrier
+                    # of it would read NÃO DETECTADO: a false negative with no signal that
+                    # anything went wrong. The registry is refused here rather than answered
+                    # wrongly there. `build_pgx_registry.py` already keeps such alleles out
+                    # of the definitions and lists them under
+                    # `alleles_without_usable_snp_definition`; this is the same rule enforced
+                    # at the boundary, for a registry this project did not build.
+                    raise PgxRegistryError(
+                        f"{gene} {allele}: defining allele {item['allele']!r} at "
+                        f"{item['rsid']} is not a single genotype character "
+                        f"({''.join(sorted(DEFINING_ALLELE_ALPHABET))}); presence at this "
+                        "position cannot be decided from an array genotype"
+                    )
     return payload
 
 
@@ -167,12 +189,29 @@ def _allele_findings(
             )
         # Zygosity decides whether a detected allele occupies one chromosome or both, which
         # is what turns a list of detected alleles into a two-element diplotype.
+        #
+        # It is read only from diploid calls. `len(set(genotype)) == 1` is also true of a
+        # single-character call — a half-read, or a hemizygous position — and calling that
+        # HOMOZIGOTO turns one observed allele into two, which is how `*2/*2` gets inferred
+        # from evidence for a single `*2`. A call this function cannot read zygosity from
+        # leaves it None, and `_diplotype_for` refuses rather than defaulting to heterozygous.
         zygosity = None
+        zygosity_basis = None
         if interrogable and detected:
-            homozygous = all(
-                len(set(str(p["genotype"] or "").upper())) == 1 for p in positions
+            calls = [str(p["genotype"] or "").upper() for p in positions]
+            non_diploid = sorted(
+                {p["rsid"] for p, call in zip(positions, calls) if len(call) != 2}
             )
-            zygosity = "HOMOZIGOTO" if homozygous else "HETEROZIGOTO"
+            if non_diploid:
+                zygosity_basis = (
+                    f"zigosidade não legível: {len(non_diploid)} posição(ões) definidora(s) "
+                    f"sem chamada diploide ({', '.join(non_diploid[:5])}); um alelo lido uma "
+                    "vez não é evidência de dois"
+                )
+            else:
+                homozygous = all(len(set(call)) == 1 for call in calls)
+                zygosity = "HOMOZIGOTO" if homozygous else "HETEROZIGOTO"
+                zygosity_basis = "todas as posições definidoras têm chamada diploide"
 
         if interrogable:
             status = "DETECTADO" if detected else NAO_DETECTADO
@@ -191,6 +230,7 @@ def _allele_findings(
                 "status": status,
                 "basis": basis,
                 "zygosity": zygosity,
+                "zygosity_basis": zygosity_basis,
                 "positions": positions,
             }
         )
@@ -291,6 +331,17 @@ def _diplotype_for(
             )
 
     detected_findings = [f for f in allele_findings if f["status"] == "DETECTADO"]
+    unreadable_zygosity = [f for f in detected_findings if not f.get("zygosity")]
+    if unreadable_zygosity:
+        # A diplotype has two elements and this decides which. Defaulting to heterozygous
+        # would put the reference haplotype on the other chromosome on no evidence at all.
+        reasons.append(
+            "zigosidade não legível em "
+            f"{', '.join(sorted(f['allele'] for f in unreadable_zygosity))}: "
+            + "; ".join(
+                sorted({str(f.get("zygosity_basis") or "base não registrada") for f in unreadable_zygosity})
+            )
+        )
     if len(detected_findings) > 1:
         # Two defined alleles in one gene are a compound genotype; which chromosome carries
         # which is a phase question an array cannot answer.
@@ -648,6 +699,23 @@ def _anesthesia_card(gene_records: list[dict[str, Any]], registry: dict[str, Any
     Which genes belong on the card is a clinical judgement, so it is read from the curated
     registry rather than hardcoded here. Without a registry the card reports that its
     relevance list was never declared instead of guessing one.
+
+    The card also has to say what it *cannot* answer, and this is where it failed. Its status
+    used to be VERIFICADO whenever a single locus of a single relevant gene came back
+    interpretable, and `build_one_page_summary` prints that one word — "cartão de anestesia
+    VERIFICADO" — in the document most likely to reach a clinician. The only gene this
+    registry carries anaesthesia definitions for is BCHE, which CPIC rates level B/C. The two
+    genes CPIC rates level A for anaesthesia, RYR1 and CACNA1S, are absent from the knowledge
+    base entirely, so nothing anywhere in the report mentioned that susceptibility to
+    malignant hyperthermia had never been interrogated — under a heading an anaesthetist
+    reads before choosing succinylcholine and a volatile agent, the exact drugs that decision
+    concerns.
+
+    So: the guideline's scope comes from the registry (fetched from CPIC's pair table by
+    `scripts/build_pgx_registry.py`), every gene in it that this registry cannot interrogate
+    is reported as NÃO INTERROGADO by name, and the card is VERIFICADO only when its declared
+    scope was actually covered. On a consumer array that never happens — which is the honest
+    answer, not a defect in this function.
     """
     if not registry:
         return {
@@ -655,6 +723,8 @@ def _anesthesia_card(gene_records: list[dict[str, Any]], registry: dict[str, Any
             "reason": "registro curado não fornecido; a relevância anestésica não foi declarada por fonte citável",
             "genes": [],
             "observations": [],
+            "not_interrogated": [],
+            "scope": UNAVAILABLE,
         }
 
     relevant = [
@@ -677,12 +747,70 @@ def _anesthesia_card(gene_records: list[dict[str, Any]], registry: dict[str, Any
             )
 
     usable = [o for o in observations if o["interpretable"]]
+    covered = {record["gene"] for record in relevant}
+
+    scope = registry.get("anesthesia_scope") or {}
+    scope_genes = scope.get("genes") or []
+    not_interrogated: list[dict[str, Any]] = []
+    for entry in scope_genes:
+        gene = str(entry.get("gene") or "").strip()
+        if not gene or gene in covered:
+            continue
+        drugs = ", ".join(entry.get("drugs") or []) or UNAVAILABLE
+        not_interrogated.append(
+            {
+                "gene": gene,
+                "classification": "NÃO INTERROGADO",
+                "cpic_level": entry.get("cpic_level") or UNAVAILABLE,
+                "drugs": entry.get("drugs") or [],
+                "basis": (
+                    f"{gene} consta da diretriz CPIC {scope.get('guideline_name') or UNAVAILABLE} "
+                    f"(nível {entry.get('cpic_level') or UNAVAILABLE}) para {drugs}, e este "
+                    "registro não traz definições de alelo para ele: nenhuma posição deste gene "
+                    "foi interrogada e nada neste relatório fala sobre ele. Ausência de achado "
+                    "aqui não é ausência de risco — é ausência de exame."
+                ),
+            }
+        )
+
+    if not scope_genes:
+        scope_state = UNAVAILABLE
+        scope_reason = (
+            "o registro não declara o escopo anestésico (anesthesia_scope); sem ele o cartão "
+            "não sabe quais genes deveria cobrir e não pode afirmar que os cobriu"
+        )
+    elif not_interrogated:
+        scope_state = "INCOMPLETO"
+        scope_reason = (
+            f"{len(not_interrogated)} de {len(scope_genes)} genes do escopo declarado não foram "
+            f"interrogados ({', '.join(entry['gene'] for entry in not_interrogated)})"
+        )
+    else:
+        scope_state = "COMPLETO"
+        scope_reason = "todos os genes do escopo declarado foram interrogados"
+
     return {
-        # The card describes observations; it never states that anaesthesia is safe.
-        "status": "VERIFICADO" if usable else UNAVAILABLE,
-        "genes": sorted({r["gene"] for r in relevant}),
+        # The card describes observations; it never states that anaesthesia is safe. And it
+        # is only VERIFICADO when it covered what it is for: a card silent on the level-A
+        # genes is a partial reading, whatever the loci it did read came back as.
+        "status": "VERIFICADO" if usable and scope_state == "COMPLETO" else UNAVAILABLE,
+        "status_reason": (
+            "observações interpretáveis e escopo anestésico declarado integralmente coberto"
+            if usable and scope_state == "COMPLETO"
+            else scope_reason
+            if scope_state != "COMPLETO"
+            else "nenhuma observação interpretável nos genes anestésicos deste registro"
+        ),
+        "genes": sorted(covered),
         "observations": sorted(observations, key=lambda x: (x["gene"], x["rsid"])),
         "interpretable_observations": len(usable),
+        "scope": {
+            "state": scope_state,
+            "guideline": scope.get("guideline_name") or UNAVAILABLE,
+            "source": scope.get("source") or UNAVAILABLE,
+            "genes_declared": sorted(str(entry.get("gene")) for entry in scope_genes),
+        },
+        "not_interrogated": not_interrogated,
         "clearance_policy": (
             "Este cartão não libera nem contraindica anestesia. Genótipo observado não substitui "
             "dosagem de atividade enzimática nem avaliação pré-anestésica, e ausência de achado "

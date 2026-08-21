@@ -68,6 +68,19 @@ ANAESTHESIA_RELEVANT = {
     ),
 }
 
+#: The CPIC guideline that defines what an anaesthesia-facing card is *for*. Its two genes
+#: carry CPIC level A — the highest evidence level CPIC assigns — while BCHE, the only
+#: anaesthesia gene this registry holds definitions for, is level B/C.
+#:
+#: Naming the guideline here is what lets the card state the gap instead of being silent
+#: about it. Before this, `anesthesia_card` reported VERIFICADO whenever a single BCHE locus
+#: was interpretable, and the one-page summary printed that word alone — with nothing
+#: anywhere saying that susceptibility to malignant hyperthermia had never been interrogated
+#: and is not in the knowledge base at all. Succinylcholine and every volatile agent are
+#: precisely the drugs that decision concerns.
+ANAESTHESIA_GUIDELINE_ID = 100427
+ANAESTHESIA_GUIDELINE_NAME = "RYR1, CACNA1S and Volatile anesthetic agents and Succinylcholine"
+
 
 class CpicError(RuntimeError):
     pass
@@ -368,6 +381,52 @@ def fetch_gene(symbol: str) -> dict[str, Any]:
     return record
 
 
+def fetch_anaesthesia_scope(built: dict[str, Any]) -> dict[str, Any]:
+    """What CPIC says an anaesthesia card must cover, and which of it this registry holds.
+
+    Read from the CPIC pair table rather than written here, so the scope cannot drift away
+    from the guideline it claims to follow. A gene CPIC lists that this registry carries no
+    definitions for is recorded with `definitions_available: false` — the card then names it
+    as NÃO INTERROGADO instead of leaving the reader to notice the absence.
+    """
+    pairs = _get("pair", guidelineid=f"eq.{ANAESTHESIA_GUIDELINE_ID}")
+    time.sleep(REQUEST_INTERVAL_SECONDS)
+    drugs: dict[str, str] = {}
+    genes: dict[str, dict[str, Any]] = {}
+    for pair in pairs:
+        symbol = str(pair.get("genesymbol") or "").strip()
+        if not symbol:
+            continue
+        entry = genes.setdefault(symbol, {"gene": symbol, "cpic_level": pair.get("cpiclevel"), "drugs": set()})
+        drug_id = pair.get("drugid")
+        if drug_id and drug_id not in drugs:
+            found = _get("drug", drugid=f"eq.{drug_id}")
+            time.sleep(REQUEST_INTERVAL_SECONDS)
+            drugs[drug_id] = str(found[0]["name"]) if found else str(drug_id)
+        if drug_id:
+            entry["drugs"].add(drugs[drug_id])
+
+    return {
+        "guideline_id": ANAESTHESIA_GUIDELINE_ID,
+        "guideline_name": ANAESTHESIA_GUIDELINE_NAME,
+        "source": f"CPIC pair table, guidelineid={ANAESTHESIA_GUIDELINE_ID}",
+        "genes": sorted(
+            (
+                {
+                    "gene": entry["gene"],
+                    "cpic_level": entry["cpic_level"],
+                    "drugs": sorted(entry["drugs"]),
+                    # The whole point of the record: this registry holds no allele
+                    # definitions for RYR1 or CACNA1S, and an array does not resolve them.
+                    "definitions_available": bool((built.get(entry["gene"]) or {}).get("alleles")),
+                }
+                for entry in genes.values()
+            ),
+            key=lambda item: item["gene"],
+        ),
+    }
+
+
 def build(genes: tuple[str, ...] = DEFAULT_GENES) -> dict[str, Any]:
     retrieved = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     built = {symbol: fetch_gene(symbol) for symbol in genes}
@@ -391,6 +450,7 @@ def build(genes: tuple[str, ...] = DEFAULT_GENES) -> dict[str, Any]:
             "variação estrutural são excluídos das definições porque genotipagem em array "
             "não os resolve, e ficam listados em structural_alleles_excluded."
         ),
+        "anesthesia_scope": fetch_anaesthesia_scope(built),
         "genes": built,
     }
 

@@ -1,4 +1,39 @@
 {
+  "anesthesia_scope": {
+    "genes": [
+      {
+        "cpic_level": "A",
+        "definitions_available": false,
+        "drugs": [
+          "desflurane",
+          "enflurane",
+          "halothane",
+          "isoflurane",
+          "methoxyflurane",
+          "sevoflurane",
+          "succinylcholine"
+        ],
+        "gene": "CACNA1S"
+      },
+      {
+        "cpic_level": "A",
+        "definitions_available": false,
+        "drugs": [
+          "desflurane",
+          "enflurane",
+          "halothane",
+          "isoflurane",
+          "methoxyflurane",
+          "sevoflurane",
+          "succinylcholine"
+        ],
+        "gene": "RYR1"
+      }
+    ],
+    "guideline_id": 100427,
+    "guideline_name": "RYR1, CACNA1S and Volatile anesthetic agents and Succinylcholine",
+    "source": "CPIC pair table, guidelineid=100427"
+  },
   "genes": {
     "BCHE": {
       "alleles": {

@@ -71,12 +71,21 @@ def _pgx_line(passport: dict[str, Any] | None) -> str:
     if not passport:
         return f"{UNAVAILABLE} — nenhum passaporte farmacogenômico foi compilado nesta execução"
     totals = passport["totals"]
-    card = passport["anesthesia_card"]["status"]
+    card = passport["anesthesia_card"]
+    # The status word alone was the whole sentence here. On a card whose declared scope is
+    # uncovered that word is the most misleading thing on the page, so the gap travels with
+    # it: this is the line a clinician is most likely to read and least likely to follow up.
+    missing = [entry["gene"] for entry in card.get("not_interrogated") or []]
+    gap = (
+        f" ({', '.join(missing)} não interrogado(s): nenhuma posição ensaiada)"
+        if missing
+        else ""
+    )
     return (
         f"{totals['interrogated_loci']}/{totals['loci']} loci farmacogenômicos interpretáveis; "
         f"diplótipos estabelecidos {totals['genes_with_diplotype']}, "
         f"fenótipos emitidos {totals['genes_with_phenotype']}; "
-        f"cartão de anestesia {card}."
+        f"cartão de anestesia {card['status']}{gap}."
     )
 
 

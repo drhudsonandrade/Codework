@@ -362,6 +362,47 @@ class RegistryValidationTest(unittest.TestCase):
             with self.assertRaises(PgxRegistryError):
                 load_pgx_registry(path)
 
+    def test_a_multi_character_defining_allele_is_refused_at_load(self):
+        """Presence is decided by character membership, so a wider allele never matches.
+
+        Left accepted, every carrier of such an allele reads NÃO DETECTADO — a false negative
+        with nothing anywhere indicating the comparison could not be made.
+        """
+        bad = json.loads(json.dumps(REGISTRY))
+        bad["genes"]["BCHE"]["alleles"]["BCHE*2"]["defining"] = [
+            {"rsid": "rs1799807", "allele": "AG"}
+        ]
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "r.json"
+            path.write_text(json.dumps(bad), encoding="utf-8")
+            with self.assertRaises(PgxRegistryError) as ctx:
+                load_pgx_registry(path)
+        self.assertIn("rs1799807", str(ctx.exception))
+        self.assertIn("single genotype character", str(ctx.exception))
+
+    def test_an_indel_code_is_a_usable_defining_allele(self):
+        """The refusal is about width, not about SNPs: I and D are single characters."""
+        ok = json.loads(json.dumps(REGISTRY))
+        ok["genes"]["BCHE"]["alleles"]["BCHE*2"]["defining"] = [
+            {"rsid": "rs1799807", "allele": "D"}
+        ]
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "r.json"
+            path.write_text(json.dumps(ok), encoding="utf-8")
+            self.assertIn("BCHE", load_pgx_registry(path)["genes"])
+
+    def test_the_shipped_registry_carries_only_single_character_alleles(self):
+        registry = json.loads(
+            (ROOT / "config/pgx_allele_definitions.json").read_text(encoding="utf-8")
+        )
+        for gene, spec in registry["genes"].items():
+            for allele, definition in (spec.get("alleles") or {}).items():
+                for item in definition["defining"]:
+                    self.assertIn(
+                        str(item["allele"]).upper(), set("ACGTID"),
+                        f"{gene} {allele} {item['rsid']}",
+                    )
+
     def test_a_wrong_schema_is_refused(self):
         bad = json.loads(json.dumps(REGISTRY))
         bad["schema"] = "something-else"
@@ -401,6 +442,102 @@ class AnesthesiaCardTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             _matrix, passport, _root = _artifacts(Path(td), rows, registry=REGISTRY)
         self.assertEqual(passport["anesthesia_card"]["status"], "NÃO DISPONÍVEL")
+
+
+class AnesthesiaScopeTest(unittest.TestCase):
+    """A card that cannot speak to malignant hyperthermia must say so, not read VERIFICADO.
+
+    The only anaesthesia gene this registry carries definitions for is BCHE, which CPIC rates
+    level B/C. RYR1 and CACNA1S — level A for succinylcholine and every volatile agent — are
+    absent from the knowledge base entirely. The card used to report VERIFICADO on a clean
+    BCHE read, and `build_one_page_summary` printed that single word to a clinician with
+    nothing anywhere saying MH susceptibility had never been interrogated.
+    """
+
+    REAL_REGISTRY = json.loads(
+        (ROOT / "config/pgx_allele_definitions.json").read_text(encoding="utf-8")
+    )
+
+    def _card(self, registry):
+        with tempfile.TemporaryDirectory() as td:
+            _matrix, passport, _root = _artifacts(Path(td), CLEAN_ROWS, registry=registry)
+        return passport
+
+    def test_a_clean_bche_read_is_not_a_verified_anaesthesia_card(self):
+        passport = self._card(self.REAL_REGISTRY)
+        card = passport["anesthesia_card"]
+        # The BCHE loci really were read: this is not a refusal for lack of data.
+        self.assertEqual(card["genes"], ["BCHE"])
+        self.assertGreater(card["interpretable_observations"], 0)
+        # ...and the card is still not VERIFICADO, because it did not cover its own scope.
+        self.assertEqual(card["status"], "NÃO DISPONÍVEL")
+        self.assertEqual(card["scope"]["state"], "INCOMPLETO")
+
+    def test_the_uninterrogated_level_a_genes_are_named_with_their_drugs(self):
+        card = self._card(self.REAL_REGISTRY)["anesthesia_card"]
+        missing = {entry["gene"]: entry for entry in card["not_interrogated"]}
+        self.assertEqual(set(missing), {"RYR1", "CACNA1S"})
+        for gene, entry in missing.items():
+            self.assertEqual(entry["cpic_level"], "A")
+            self.assertEqual(entry["classification"], "NÃO INTERROGADO")
+            self.assertIn("succinylcholine", entry["drugs"])
+            self.assertIn("sevoflurane", entry["drugs"])
+            self.assertIn("ausência de exame", entry["basis"])
+
+    def test_the_report_line_states_the_gap_next_to_the_observations(self):
+        from scripts.build_pharmacogenomic_report import _anesthesia_text
+
+        text = _anesthesia_text(self._card(self.REAL_REGISTRY)["anesthesia_card"])
+        self.assertIn("NÃO INTERROGADO", text)
+        self.assertIn("RYR1", text)
+        self.assertIn("CACNA1S", text)
+        self.assertIn("succinylcholine", text)
+        self.assertIn("não libera nem contraindica", text)
+
+    def test_the_one_page_summary_never_prints_the_status_word_alone(self):
+        from scripts.build_one_page_summary import _pgx_line
+
+        line = _pgx_line(self._card(self.REAL_REGISTRY))
+        self.assertIn("cartão de anestesia NÃO DISPONÍVEL", line)
+        self.assertIn("RYR1", line)
+        self.assertIn("CACNA1S", line)
+
+    def test_a_registry_declaring_no_scope_cannot_claim_to_have_covered_one(self):
+        """Silence about the scope is not evidence that the scope was met."""
+        card = self._card(REGISTRY)["anesthesia_card"]
+        self.assertEqual(card["scope"]["state"], "NÃO DISPONÍVEL")
+        self.assertEqual(card["status"], "NÃO DISPONÍVEL")
+        self.assertIn("não declara o escopo", card["status_reason"])
+
+    def test_the_shipped_registry_still_declares_its_anaesthesia_scope(self):
+        """A regeneration that dropped the scope would restore the old silent card."""
+        scope = self.REAL_REGISTRY.get("anesthesia_scope") or {}
+        genes = {entry["gene"]: entry for entry in scope.get("genes") or []}
+        self.assertEqual(set(genes), {"RYR1", "CACNA1S"})
+        self.assertIn("Succinylcholine", scope["guideline_name"])
+        for entry in genes.values():
+            self.assertEqual(entry["cpic_level"], "A")
+            # If this ever flips to True the card is entitled to speak about the gene, and
+            # the definitions had better be in the registry to back it.
+            self.assertFalse(entry["definitions_available"])
+            self.assertNotIn(entry["gene"], self.REAL_REGISTRY["genes"])
+
+    def test_a_fully_covered_scope_still_yields_a_verified_card(self):
+        """The refusal has to be about the gap, not a blanket downgrade."""
+        registry = json.loads(json.dumps(REGISTRY))
+        registry["anesthesia_scope"] = {
+            "guideline_id": 1,
+            "guideline_name": "fixture",
+            "source": "fixture",
+            "genes": [
+                {"gene": "BCHE", "cpic_level": "B/C", "drugs": ["succinylcholine"],
+                 "definitions_available": True}
+            ],
+        }
+        card = self._card(registry)["anesthesia_card"]
+        self.assertEqual(card["scope"]["state"], "COMPLETO")
+        self.assertEqual(card["not_interrogated"], [])
+        self.assertEqual(card["status"], "VERIFICADO")
 
 
 class ReportIntegrationTest(unittest.TestCase):
@@ -726,6 +863,50 @@ class NoCallIsNotHomozygousTest(unittest.TestCase):
         for value in ("--", "-", "", None, "NA", "N/A", "NULL", ".", "00", "A-", "??"):
             with self.subTest(uncalled=value):
                 self.assertFalse(_is_called_genotype(value))
+
+
+class OneAlleleIsNotTwoTest(unittest.TestCase):
+    """A single-character call is one observed allele, not a homozygote.
+
+    Zygosity was `len(set(genotype)) == 1`, which is also true of a one-character call — a
+    half-read, or a hemizygous position. That turned one observed allele into two and put
+    `*2/*2` into a diplotype on evidence for a single `*2`, with the finding's own basis
+    reading "todas as posições definidoras foram interrogadas e carregam o alelo definidor".
+    """
+
+    SPEC = {
+        "complete_panel": True,
+        "reference_allele": "TEST*1",
+        "alleles": {"TEST*2": {"defining": [{"rsid": "rs1", "allele": "A"}]}},
+    }
+
+    def _run(self, genotype):
+        from array_pipeline.pharmacogenomics import _allele_findings, _diplotype_for
+
+        locus = {"rsid": "rs1", "classification": "OBSERVADO", "genotype": genotype,
+                 "interpretable": True}
+        findings, gaps = _allele_findings("TEST", self.SPEC, {"rs1": locus})
+        return findings[0], _diplotype_for("TEST", self.SPEC, [locus], findings, gaps)
+
+    def test_a_half_read_yields_no_zygosity_and_no_diplotype(self):
+        finding, diplotype = self._run("A")
+        self.assertEqual(finding["status"], "DETECTADO")
+        self.assertIsNone(finding["zygosity"])
+        self.assertIn("sem chamada diploide", finding["zygosity_basis"])
+        self.assertEqual(diplotype["status"], "NÃO DISPONÍVEL")
+        self.assertIsNone(diplotype["value"])
+        self.assertIn("zigosidade não legível", " ".join(diplotype["reasons"]))
+
+    def test_a_real_homozygote_still_diplotypes(self):
+        finding, diplotype = self._run("AA")
+        self.assertEqual(finding["zygosity"], "HOMOZIGOTO")
+        self.assertEqual(diplotype["status"], "INFERIDO")
+        self.assertEqual(diplotype["value"], "TEST*2/TEST*2")
+
+    def test_a_heterozygote_pairs_with_the_named_reference(self):
+        finding, diplotype = self._run("AG")
+        self.assertEqual(finding["zygosity"], "HETEROZIGOTO")
+        self.assertEqual(diplotype["value"], "TEST*1/TEST*2")
 
 
 if __name__ == "__main__":
