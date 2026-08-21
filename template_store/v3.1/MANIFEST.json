@@ -1,17 +1,17 @@
 {
   "schema": "genoma-private-template-store-v1",
-  "version": "v3.0",
+  "version": "v3.1",
   "visibility_requirement": "private repository only",
-  "source": "exact user-attached GENOMA v3.0 PDF models, with recorded amendments; see `amendments`",
+  "source": "GENOMA v3.1 template pack, descended from v3.0: 1 of 11 reports differ from the originally approved v3.0 models (11). See `lineage`.",
   "storage": {
     "mode": "sealed-tar-xz-base64-chunks",
-    "parts_dir": "template_store/v3.0/sealed/parts",
+    "parts_dir": "template_store/v3.1/sealed/parts",
     "part_count": 49,
     "decoded_archive": "GENOMA_V3_TEMPLATE_PACK.tar.xz",
     "decoded_archive_size_bytes": 1729196,
     "decoded_archive_sha256": "6b65bed7679a591be88ee7d0eb60a49d8ce0b4b472e4fb5eae5db6abcfbe66e4",
     "base64_size_bytes": 2305596,
-    "materialized_dir": "template_store/v3.0/materialized",
+    "materialized_dir": "template_store/v3.1/materialized",
     "transport_encoding": "base64(xz(tar(USTAR, sorted, mtime=0, uid/gid=0), preset=9e, check=CRC64))",
     "transport_writer": "scripts/seal_template_store.py",
     "transport_reader": "scripts/verify_template_store.py"
@@ -331,21 +331,39 @@
       "sha256": "b15a7ea6e307a6589f46e6d695f8b579741ccfac6272183e5d0fb641b6819f02"
     }
   ],
-  "amendments": [
-    {
-      "report": "11",
-      "filename": "11_GUIA_EDITORIAL_MATRIZ_PREENCHIMENTO_v3.0.pdf",
-      "previous_sha256": "d68fce73aeb7fd7bb6e0eb27679b167a3899cce92eb20b64ad5bb15352031fea",
-      "previous_size_bytes": 327388,
-      "sha256": "169fe6c0b86697443b4cf6727fa106e42c5e8daa1f2d5a0dfffa335adafa49c6",
-      "size_bytes": 319248,
-      "reason": "Removidas as duas últimas entradas de bibliografia da página 11 e seus dois links externos: eram referências a documentação de fornecedor de ferramenta, não fontes científicas, e as outras dez referências da lista são. Glifos removidos por redação, não cobertos por retângulo — texto coberto continua extraível. Nenhuma outra entrada é citada no corpo do documento, as doze páginas permanecem, e 11 das 12 renderizam byte a byte idênticas a 150 dpi; a única diferença está na faixa redigida da página 11.",
-      "amended_at": "2026-08-20T10:58:07.280946Z"
-    }
-  ],
-  "superseded_by": {
-    "suite": "v3.1",
-    "manifest": "template_store/v3.1/MANIFEST.json",
-    "reason": "a emenda de 2026-08-20 no relatório 11 exigia, pelo contrato deste store, uma nova versão de suíte; foi repinada aqui por defeito da ferramenta de selagem e está agora registrada como linhagem da v3.1"
+  "lineage": {
+    "descends_from": "v3.0",
+    "reason": "O relatório 11 foi alterado em 2026-08-20 (remoção das duas últimas entradas de bibliografia da página 11 e seus links). O contrato do store exige que uma alteração de bytes se torne nova versão de suíte; a ferramenta repinou sob v3.0, deixando dois conjuntos de bytes com o mesmo rótulo. Esta suíte é o pacote efetivamente em uso, rotulado pelo que é.",
+    "sealed_at": "2026-08-21T19:07:45.316854Z",
+    "reports_changed": [],
+    "reports_unchanged": [
+      "01",
+      "02",
+      "03",
+      "04",
+      "05",
+      "06",
+      "07",
+      "08",
+      "09",
+      "10",
+      "11"
+    ],
+    "changes": [],
+    "inherited_amendments": [
+      {
+        "report": "11",
+        "filename": "11_GUIA_EDITORIAL_MATRIZ_PREENCHIMENTO_v3.0.pdf",
+        "previous_sha256": "d68fce73aeb7fd7bb6e0eb27679b167a3899cce92eb20b64ad5bb15352031fea",
+        "previous_size_bytes": 327388,
+        "sha256": "169fe6c0b86697443b4cf6727fa106e42c5e8daa1f2d5a0dfffa335adafa49c6",
+        "size_bytes": 319248,
+        "reason": "Removidas as duas últimas entradas de bibliografia da página 11 e seus dois links externos: eram referências a documentação de fornecedor de ferramenta, não fontes científicas, e as outras dez referências da lista são. Glifos removidos por redação, não cobertos por retângulo — texto coberto continua extraível. Nenhuma outra entrada é citada no corpo do documento, as doze páginas permanecem, e 11 das 12 renderizam byte a byte idênticas a 150 dpi; a única diferença está na faixa redigida da página 11.",
+        "amended_at": "2026-08-20T10:58:07.280946Z"
+      }
+    ],
+    "differs_from_base_original": [
+      "11"
+    ]
   }
 }

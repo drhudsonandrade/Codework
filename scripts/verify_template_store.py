@@ -12,7 +12,10 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-STORE = ROOT / "template_store" / "v3.0"
+STORE_ROOT = ROOT / "template_store"
+DEFAULT_SUITE = "v3.0"
+#: Kept for callers that still address the default suite directly.
+STORE = STORE_ROOT / DEFAULT_SUITE
 MANIFEST = STORE / "MANIFEST.json"
 REFERENCE = ROOT / "reporting" / "reference_v3_manifest.json"
 PART_NAME = re.compile(r"tplpart-\d{3}")
@@ -30,17 +33,34 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def verify(*, materialize: Path | None = None, allow_sealed_only: bool = False) -> dict:
-    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+def verify(
+    *,
+    materialize: Path | None = None,
+    allow_sealed_only: bool = False,
+    suite: str = DEFAULT_SUITE,
+) -> dict:
+    # Parameterised by suite, because the store may now hold more than one: the contract
+    # requires a byte-level change to become a new suite version rather than a repin, so a
+    # verifier that could only read v3.0 could not check the version that superseded it.
+    store = STORE_ROOT / suite
+    manifest = json.loads((store / "MANIFEST.json").read_text(encoding="utf-8"))
     reference = json.loads(REFERENCE.read_text(encoding="utf-8"))
     reports = manifest.get("reports", {})
     if set(reports) != {f"{i:02d}" for i in range(1, 12)}:
         raise ValueError("template store must define exactly reports 01..11")
     if set(reference.get("reports", {})) != set(reports):
         raise ValueError("reference manifest report IDs differ from template store")
+    # The reference manifest pins what the *renderer* consumes. A suite the renderer has not
+    # been moved to is expected to differ from it, and saying so is the point of having more
+    # than one suite; the filename and page count must still agree, because those are the
+    # document's shape rather than its version.
+    renderer_suite = str(reference.get("reference_suite", "")).split()[-1]
+    identity_fields = ("filename", "sha256", "size_bytes", "page_count")
+    if suite != renderer_suite:
+        identity_fields = ("filename", "page_count")
     for rid, meta in reports.items():
         ref = reference["reports"][rid]
-        for field in ("filename", "sha256", "size_bytes", "page_count"):
+        for field in identity_fields:
             if meta.get(field) != ref.get(field):
                 raise ValueError(f"report {rid} {field} differs from verified reference identity")
 
@@ -146,9 +166,14 @@ def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--materialize")
     p.add_argument("--allow-sealed-only", action="store_true")
+    p.add_argument("--suite", default=DEFAULT_SUITE, help="suite version to verify, e.g. v3.1")
     args = p.parse_args()
     try:
-        result = verify(materialize=Path(args.materialize) if args.materialize else None, allow_sealed_only=args.allow_sealed_only)
+        result = verify(
+            materialize=Path(args.materialize) if args.materialize else None,
+            allow_sealed_only=args.allow_sealed_only,
+            suite=args.suite,
+        )
     except Exception as exc:
         print(f"NÃO DISPONÍVEL: {type(exc).__name__}: {exc}")
         return 2
