@@ -28,7 +28,10 @@ EXPECTED_TOOLS = {
     "java": ("17.", ["java", "-version"]),
     "samtools": ("1.24", ["samtools", "--version"]),
     "bcftools": ("1.24", ["bcftools", "--version"]),
-    "bwa-mem2": ("2.2.1", ["bwa-mem2", "version"]),
+    # Kept equal to environment.yml and locks/runtime-lock.json. They pinned 2.3 while
+    # this gate demanded 2.2.1, so the official environment was refused by the
+    # official gate — a disagreement neither side could detect on its own.
+    "bwa-mem2": ("2.3", ["bwa-mem2", "version"]),
     "gatk": ("4.6.2.0", ["gatk", "--version"]),
     "nextflow": ("26.04.6", ["nextflow", "-version"]),
     "snakemake": ("7.32.4", ["snakemake", "--version"]),

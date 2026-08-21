@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from tests.attestations import policy_evaluation_file
 from array_pipeline.completeness import build_completeness_matrix, write_matrix
 from array_pipeline.pharmacogenomics import (
     PgxRegistryError,
@@ -561,7 +562,7 @@ class ConditionalLayerReachesTheReportTest(unittest.TestCase):
 
         matrix_path, passport, _ = _artifacts(root, CLEAN_ROWS, registry=self.REAL_REGISTRY)
         passport_path = write_passport(passport, root / "passport.json")
-        return build_payload(passport_path, matrix_path)["sections"], passport
+        return build_payload(passport_path, matrix_path, policy_evaluation_file(root))["sections"], passport
 
     def test_a_conditional_phenotype_in_the_passport_appears_in_the_report(self):
         with tempfile.TemporaryDirectory() as td:
@@ -616,7 +617,7 @@ class ReportIntegrationTest(unittest.TestCase):
 
         matrix_path, passport, _ = _artifacts(root, rows, registry=registry)
         passport_path = write_passport(passport, root / "passport.json")
-        return build_payload(passport_path, matrix_path), passport
+        return build_payload(passport_path, matrix_path, policy_evaluation_file(root)), passport
 
     def test_the_compiled_payload_passes_the_provenance_gate(self):
         from reporting.provenance import provenance_blockers

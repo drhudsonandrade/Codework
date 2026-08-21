@@ -47,10 +47,19 @@ class CoreGates:
                 verify_external_manifest(self.ruleset, self.external_manifest)
         except RulesetError as exc:
             reasons.append(str(exc))
+        # A manifest must declare the normative identity it was produced under, in full.
+        # The test was `not in (None, canonical)`, so an omitted version or SHA-256 passed:
+        # the gate could only catch a *wrong* declaration, never a missing one, and a
+        # manifest bound to no ruleset at all was indistinguishable from one bound to this
+        # ruleset. Absence is now its own reason.
         declared = manifest.get("ruleset", {}) if isinstance(manifest.get("ruleset"), dict) else {}
-        if declared:
-            if declared.get("version") not in (None, self.ruleset.version): reasons.append("manifest ruleset version differs from canonical v3.4")
-            if declared.get("sha256") not in (None, self.ruleset.sha256): reasons.append("manifest ruleset SHA-256 differs from canonical ruleset")
+        if not declared:
+            reasons.append("manifest declares no ruleset block; the normative identity it was produced under is unstated")
+        else:
+            for field, canonical in (("version", self.ruleset.version), ("sha256", self.ruleset.sha256)):
+                value = declared.get(field)
+                if value is None: reasons.append(f"manifest ruleset {field} is missing; a manifest must name the ruleset it is bound to")
+                elif value != canonical: reasons.append(f"manifest ruleset {field} differs from the canonical ruleset")
         return _gate("RULESET_GATE", not reasons, reasons)
 
     def _taxonomy_gate(self, manifest: dict[str, Any]):

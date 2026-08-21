@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from tests.attestations import policy_evaluation_file
 from array_pipeline.completeness import build_completeness_matrix, write_matrix
 from array_pipeline.qc import inspect_array
 
@@ -106,7 +107,25 @@ class TechnicalReportTest(unittest.TestCase):
         if probe is not None:
             probe_path = root / "probe.json"
             probe_path.write_text(json.dumps(probe), encoding="utf-8")
-        return build_payload(qc_path, matrix_path, probe_path)
+        # The verdict now comes from the policy engine, so a run whose QC did not pass
+        # carries an engine verdict that says so — the builder no longer decides. This
+        # mirrors what `genoma_policy` returns for the same manifest.
+        verdict = None
+        if not evidence:
+            verdict = {
+                "ready_for_requested_operation": False,
+                "planes": {
+                    "policy_control": {"state": "PASS"}, "scientific_data": {"state": "FAIL"},
+                    "evidence": {"state": "PASS"}, "audit": {"state": "PASS"},
+                },
+                "gates": [
+                    {"gate": "QC_GATE", "state": "FAIL", "blocking": True},
+                    {"gate": "FINAL_AUDIT_GATE", "state": "BLOCKED", "blocking": True},
+                ],
+            }
+        return build_payload(
+            qc_path, matrix_path, probe_path, policy_evaluation_file(qc_path.parent, verdict)
+        )
 
     def _probe(self):
         return {

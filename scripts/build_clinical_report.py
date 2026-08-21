@@ -216,7 +216,7 @@ def _confirmation_text(payload: dict[str, Any], matrix: dict[str, Any]) -> str:
     )
 
 
-def build_payload(findings_path: Path, matrix_path: Path, qc_path: Path) -> dict:
+def build_payload(findings_path: Path, matrix_path: Path, qc_path: Path, policy_evaluation: Path | None = None) -> dict:
     findings = Artifact.from_path("clinical-findings", findings_path)
     matrix = Artifact.from_path("completeness-matrix", matrix_path)
     qc = Artifact.from_path("array-qc", qc_path)
@@ -227,7 +227,7 @@ def build_payload(findings_path: Path, matrix_path: Path, qc_path: Path) -> dict
         raise ValueError("QC artifact and completeness matrix describe different inputs")
 
     case_id = findings.payload.get("case_id") or UNAVAILABLE
-    compiler = PayloadCompiler(case_id=str(case_id), report_id=REPORT_ID)
+    compiler = PayloadCompiler(case_id=str(case_id), report_id=REPORT_ID, policy_evaluation=policy_evaluation)
     compiler.register(findings)
     compiler.register(matrix)
     compiler.register(qc)
@@ -453,23 +453,6 @@ def build_payload(findings_path: Path, matrix_path: Path, qc_path: Path) -> dict
     )
 
     return compiler.compile(
-        publication_gate={
-            "passed": verified,
-            "consent_verified": bool(findings.payload.get("case_id")),
-            "qc_verified": bool(matrix.payload.get("qc_gate_passed")),
-            "evidence_verified": True,
-            "placeholders_resolved": True,
-        },
-        policy_evaluation={
-            "ready_for_requested_operation": verified,
-            "planes": {
-                k: {"state": "PASS" if verified else "BLOCKED"}
-                for k in ("policy_control", "scientific_data", "evidence", "audit")
-            },
-            "gates": [
-                {"gate": "FINAL_AUDIT_GATE", "state": "PASS" if verified else "BLOCKED", "blocking": True}
-            ],
-        },
         execution_manifest={
             "status": findings.payload.get("operational_status", UNAVAILABLE),
             "CLINICAL_FINDINGS_SHA256": findings.sha256,

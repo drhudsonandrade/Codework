@@ -163,13 +163,13 @@ def _reproducibility_text(qc: dict, matrix: dict, probe: dict | None) -> str:
     return " ".join(parts)
 
 
-def build_payload(qc_path: Path, matrix_path: Path, probe_path: Path | None) -> dict:
+def build_payload(qc_path: Path, matrix_path: Path, probe_path: Path | None, policy_evaluation: Path | None = None) -> dict:
     qc = Artifact.from_path("array-qc", qc_path)
     matrix = Artifact.from_path("completeness-matrix", matrix_path)
     probe = Artifact.from_path("provenance-probe", probe_path) if probe_path else None
 
     case_id = qc.payload.get("case_id") or UNAVAILABLE
-    compiler = PayloadCompiler(case_id=str(case_id), report_id=REPORT_ID)
+    compiler = PayloadCompiler(case_id=str(case_id), report_id=REPORT_ID, policy_evaluation=policy_evaluation)
     compiler.register(qc)
     compiler.register(matrix)
     if probe:
@@ -306,21 +306,6 @@ def build_payload(qc_path: Path, matrix_path: Path, probe_path: Path | None) -> 
     )
 
     return compiler.compile(
-        publication_gate={
-            "passed": qc_verified,
-            "consent_verified": bool(qc.payload.get("case_id")),
-            "qc_verified": qc_verified,
-            "evidence_verified": True,
-            "placeholders_resolved": True,
-        },
-        policy_evaluation={
-            "ready_for_requested_operation": qc_verified,
-            "planes": {
-                k: {"state": "PASS" if qc_verified else "BLOCKED"}
-                for k in ("policy_control", "scientific_data", "evidence", "audit")
-            },
-            "gates": [{"gate": "FINAL_AUDIT_GATE", "state": "PASS" if qc_verified else "BLOCKED", "blocking": True}],
-        },
         execution_manifest={
             "status": qc.payload.get("operational_status", UNAVAILABLE),
             "ARRAY_QC_SHA256": qc.sha256,

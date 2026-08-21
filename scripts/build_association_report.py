@@ -315,7 +315,7 @@ def _summary(report_id: str, loci: list[dict[str, Any]], findings: dict[str, Any
     )
 
 
-def build_payload(report_id: str, findings_path: Path, matrix_path: Path) -> dict:
+def build_payload(report_id: str, findings_path: Path, matrix_path: Path, policy_evaluation: Path | None = None) -> dict:
     if report_id not in REPORT_SCOPES:
         raise ValueError(f"unsupported association report: {report_id!r}")
 
@@ -445,23 +445,6 @@ def build_payload(report_id: str, findings_path: Path, matrix_path: Path) -> dic
     )
 
     return compiler.compile(
-        publication_gate={
-            "passed": verified,
-            "consent_verified": bool(findings.payload.get("case_id")),
-            "qc_verified": bool(matrix.payload.get("qc_gate_passed")),
-            "evidence_verified": True,
-            "placeholders_resolved": True,
-        },
-        policy_evaluation={
-            "ready_for_requested_operation": verified,
-            "planes": {
-                k: {"state": "PASS" if verified else "BLOCKED"}
-                for k in ("policy_control", "scientific_data", "evidence", "audit")
-            },
-            "gates": [
-                {"gate": "FINAL_AUDIT_GATE", "state": "PASS" if verified else "BLOCKED", "blocking": True}
-            ],
-        },
         execution_manifest={
             "status": findings.payload.get("operational_status", UNAVAILABLE),
             "CLINICAL_FINDINGS_SHA256": findings.sha256,

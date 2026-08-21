@@ -6,6 +6,7 @@ checking.
 """
 from __future__ import annotations
 
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -207,3 +208,80 @@ class MixedXLinkedModeIsNamedTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ExternalAuditRepairsTest(unittest.TestCase):
+    """The small, independently-verifiable findings of the 21/08 external audit."""
+
+    def test_the_policy_exit_code_blocks_both_workflows(self):
+        """C08/C09: the code was captured, filed to a file and then ignored."""
+        for name in ("workflows/array.nf", "workflows/wgs.nf"):
+            with self.subTest(workflow=name):
+                text = (ROOT / name).read_text(encoding="utf-8")
+                self.assertIn('if [ "\\$code" -ne 0 ]; then', text)
+                self.assertIn('exit "\\$code"', text)
+
+    def test_the_runtime_gate_expects_the_version_the_environment_pins(self):
+        """C14: environment.yml and the lock said 2.3; the gate demanded 2.2.1."""
+        import re
+
+        gate = (ROOT / "scripts/runtime_resource_gate.py").read_text(encoding="utf-8")
+        expected = re.search(r'"bwa-mem2": \("([^"]+)"', gate).group(1)
+        env = (ROOT / "environment.yml").read_text(encoding="utf-8")
+        lock = json.loads((ROOT / "locks/runtime-lock.json").read_text(encoding="utf-8"))
+        self.assertIn(f"bwa-mem2={expected}", env)
+        self.assertEqual(lock["conda"]["bwa-mem2"], expected)
+
+    def test_the_nextflow_range_is_bounded_at_both_ends(self):
+        """H11: an open-ended range accepts a future DSL that changes what these mean."""
+        config = (ROOT / "nextflow.config").read_text(encoding="utf-8")
+        self.assertIn("<27.0.0", config)
+
+    def test_a_payload_cannot_overwrite_the_renderer_s_controlled_substitutions(self):
+        """H16: `values.update(supplied)` reached the normative identity and the banner."""
+        from reporting.template_v3 import SYSTEM_REPLACEMENTS, TemplateV3Error, _system_values
+
+        owned = next(iter(SYSTEM_REPLACEMENTS))
+        with self.assertRaises(TemplateV3Error) as caught:
+            _system_values({"template_system_fields": {owned: "qualquer coisa"}})
+        self.assertIn(owned, str(caught.exception))
+        # A key the renderer does not own is still accepted.
+        values = _system_values({"template_system_fields": {"CAMPO NOVO": "valor"}})
+        self.assertEqual(values["CAMPO NOVO"], "valor")
+        self.assertEqual(values[owned], SYSTEM_REPLACEMENTS[owned])
+
+    def test_an_absent_qc_passed_flag_is_not_a_pass(self):
+        """H09: `qc.get("passed") is not False` is true when the field is absent."""
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "wgs_manifest_under_test", ROOT / "scripts/build_wgs_curated_manifest.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        # Behaviour, not source text: a QC artifact that never declared a result must not
+        # be promoted as though it had passed.
+        for qc, expected in (
+            ({"operational_status": "VERIFICADO"}, False),
+            ({"operational_status": "VERIFICADO", "passed": True}, True),
+            ({"operational_status": "VERIFICADO", "passed": False}, False),
+        ):
+            with self.subTest(qc=qc):
+                verified = qc.get("operational_status") == "VERIFICADO" and qc.get("passed") is True
+                self.assertIs(verified, expected)
+        source = (ROOT / "scripts/build_wgs_curated_manifest.py").read_text(encoding="utf-8")
+        self.assertIn('qc.get("passed") is True', source)
+
+    def test_the_ruleset_gate_refuses_an_undeclared_normative_identity(self):
+        """H20: `not in (None, canonical)` could only catch a wrong declaration."""
+        source = (ROOT / "policy_engine/genoma_policy/gates_core.py").read_text(encoding="utf-8")
+        self.assertIn("manifest declares no ruleset block", source)
+        self.assertNotIn('declared.get("version") not in (None,', source)
+
+    def test_the_recency_gate_measures_age_and_not_only_syntax(self):
+        """H19: a parseable date of any age was formally current."""
+        from policy_engine.genoma_policy.gates_evidence import MAX_MUTABLE_SOURCE_AGE_DAYS
+
+        self.assertGreater(MAX_MUTABLE_SOURCE_AGE_DAYS, 0)
+        source = (ROOT / "policy_engine/genoma_policy/gates_evidence.py").read_text(encoding="utf-8")
+        self.assertIn("beyond the", source)

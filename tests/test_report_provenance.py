@@ -35,9 +35,24 @@ ARTIFACT = {
 }
 
 
+#: The verdict a real run reads from the policy engine. Tests that need a publishable
+#: payload register it as an artifact, exactly as `run_full_case` does — a test cannot
+#: hand `compile` a PASS any more than a builder can.
+POLICY_PASS = {
+    "ready_for_requested_operation": True,
+    "planes": {k: {"state": "PASS"} for k in ("policy_control", "scientific_data", "evidence", "audit")},
+    "gates": [
+        {"gate": "FINAL_AUDIT_GATE", "state": "PASS", "blocking": True},
+        {"gate": "CONSENT_GATE", "state": "PASS", "blocking": True},
+        {"gate": "QC_GATE", "state": "PASS", "blocking": True},
+    ],
+}
+
+
 def _compiler() -> PayloadCompiler:
     compiler = PayloadCompiler(case_id="CASE-PROV", report_id="09")
     compiler.register(Artifact.from_payload("array-qc", ARTIFACT))
+    compiler.register(Artifact.from_payload("policy-evaluation", POLICY_PASS))
     return compiler
 
 
@@ -51,17 +66,7 @@ def _minimal(compiler: PayloadCompiler) -> dict:
     )
     compiler.state("sources", ["array-qc"], kind="case_control", basis="artifact set", status="VERIFICADO")
     compiler.state("limitations", "Somente loci ensaiados.", kind="case_control", basis="scope", status="VERIFICADO")
-    return compiler.compile(
-        publication_gate={
-            "passed": True, "consent_verified": True, "qc_verified": True,
-            "evidence_verified": True, "placeholders_resolved": True,
-        },
-        policy_evaluation={
-            "ready_for_requested_operation": True,
-            "planes": {k: {"state": "PASS"} for k in ("policy_control", "scientific_data", "evidence", "audit")},
-            "gates": [{"gate": "FINAL_AUDIT_GATE", "state": "PASS", "blocking": True}],
-        },
-    )
+    return compiler.compile()
 
 
 class CompileTimeBindingTest(unittest.TestCase):
@@ -127,7 +132,7 @@ class CompileTimeBindingTest(unittest.TestCase):
         compiler = _compiler()
         compiler.derive("summary", artifact="array-qc", locator="metrics.rows", status="VERIFICADO", basis="rows")
         with self.assertRaises(ProvenanceError) as ctx:
-            compiler.compile(publication_gate={}, policy_evaluation={})
+            compiler.compile()
         self.assertIn("sources", str(ctx.exception))
 
 
@@ -174,7 +179,7 @@ class RenderTimeBindingTest(unittest.TestCase):
         compiler.derive("summary", artifact="array-qc", locator="metrics.call_rate", status="VERIFICADO", basis="qc")
         compiler.state("sources", ["array-qc"], kind="case_control", basis="set", status="VERIFICADO")
         compiler.unavailable("limitations", basis="não declaradas")
-        data = compiler.compile(publication_gate={}, policy_evaluation={})
+        data = compiler.compile()
         self.assertEqual(data["operational_status"], "NÃO DISPONÍVEL")
         data["operational_status"] = "EXECUTADO"
         self.assertIn("provenance:status_above_floor", provenance_blockers(data))
@@ -184,7 +189,7 @@ class RenderTimeBindingTest(unittest.TestCase):
         compiler.derive("summary", artifact="array-qc", locator="metrics.call_rate", status="VERIFICADO", basis="qc")
         compiler.state("sources", ["array-qc"], kind="case_control", basis="set", status="VERIFICADO")
         compiler.unavailable("limitations", basis="não declaradas")
-        data = compiler.compile(publication_gate={}, policy_evaluation={})
+        data = compiler.compile()
         data["provenance"]["operational_status_floor"] = "VERIFICADO"
         blockers = provenance_blockers(data)
         self.assertIn("provenance:floor_mismatch", blockers)
@@ -199,7 +204,7 @@ class RenderTimeBindingTest(unittest.TestCase):
         compiler.derive("summary", artifact="array-qc", locator="metrics.call_rate", status="VERIFICADO", basis="qc")
         compiler.state("sources", ["array-qc"], kind="case_control", basis="set", status="VERIFICADO")
         compiler.unavailable("limitations", basis="não declaradas")
-        data = compiler.compile(publication_gate={}, policy_evaluation={})
+        data = compiler.compile()
         distribution = data["provenance"]["status_distribution"]
         self.assertEqual(data["provenance"]["operational_status_floor"], "NÃO DISPONÍVEL")
         self.assertEqual(distribution["VERIFICADO"], 4)

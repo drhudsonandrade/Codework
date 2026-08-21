@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tests.attestations import provenance_for
+from tests.attestations import policy_evaluation_file, provenance_for
 from array_pipeline.completeness import (
     CLASSES,
     NAO_DETECTADO,
@@ -297,7 +297,7 @@ class CompletenessReportTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as td:
             _matrix, matrix_path, qc_path = self._artifacts(Path(td))
-            payload = build_payload(matrix_path, qc_path)
+            payload = build_payload(matrix_path, qc_path, policy_evaluation_file(Path(td)))
         self.assertEqual(provenance_blockers(payload), [])
 
     def test_the_report_renders_and_states_the_real_counts(self):
@@ -306,7 +306,7 @@ class CompletenessReportTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as td:
             matrix, matrix_path, qc_path = self._artifacts(Path(td))
-            payload = build_payload(matrix_path, qc_path)
+            payload = build_payload(matrix_path, qc_path, policy_evaluation_file(Path(td)))
             rendered = render_document("09", payload, mode="FINAL")
 
         markdown = rendered["markdown"]
@@ -324,7 +324,7 @@ class CompletenessReportTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as td:
             matrix, matrix_path, qc_path = self._artifacts(Path(td))
-            payload = build_payload(matrix_path, qc_path)
+            payload = build_payload(matrix_path, qc_path, policy_evaluation_file(Path(td)))
 
         blind = {e["rsid"] for e in matrix["entries"] if not e["interpretable"]}
         reported = {f["id"].removeprefix("GCM-") for f in payload["findings"]}
@@ -369,7 +369,7 @@ class CompletenessReportTest(unittest.TestCase):
             matrix_path.write_text(
                 _json.dumps(matrix, ensure_ascii=False), encoding="utf-8"
             )
-            payload = build_payload(matrix_path, qc_path)
+            payload = build_payload(matrix_path, qc_path, policy_evaluation_file(Path(td)))
 
         individual = [f for f in payload["findings"] if f["id"] != "GCM-RESTANTE"]
         aggregate = [f for f in payload["findings"] if f["id"] == "GCM-RESTANTE"]
@@ -415,7 +415,7 @@ class CompletenessReportTest(unittest.TestCase):
             matrix_path.write_text(
                 _json.dumps(matrix, ensure_ascii=False), encoding="utf-8"
             )
-            payload = build_payload(matrix_path, qc_path)
+            payload = build_payload(matrix_path, qc_path, policy_evaluation_file(Path(td)))
 
         named = {f["id"].removeprefix("GCM-") for f in payload["findings"]}
         self.assertTrue(clinical, "fixture must contain clinical blind spots")
@@ -428,7 +428,7 @@ class CompletenessReportTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as td:
             _matrix, matrix_path, qc_path = self._artifacts(Path(td))
-            payload = build_payload(matrix_path, qc_path)
+            payload = build_payload(matrix_path, qc_path, policy_evaluation_file(Path(td)))
             payload["summary"] = "5 de 5 alvos do registro são interpretáveis (100.0%)."
             with self.assertRaises(ReportReleaseError) as ctx:
                 render_document("09", payload, mode="FINAL")
@@ -453,11 +453,40 @@ class CompletenessReportTest(unittest.TestCase):
             targets_path.write_text(json.dumps(TARGETS), encoding="utf-8")
             matrix = build_completeness_matrix(array, qc_path, targets_path)
             matrix_path = write_matrix(matrix, root / "completeness.json")
-            payload = build_payload(matrix_path, qc_path)
+            # An unverified matrix is refused by the policy engine's BUILD/QC gates, not
+            # by the builder — that authority moved. The verdict here is what the engine
+            # returns for a run whose array provenance was never established.
+            blocked = {
+                "ready_for_requested_operation": False,
+                "planes": {
+                    "policy_control": {"state": "PASS"}, "scientific_data": {"state": "FAIL"},
+                    "evidence": {"state": "PASS"}, "audit": {"state": "PASS"},
+                },
+                "gates": [
+                    {"gate": "QC_GATE", "state": "FAIL", "blocking": True},
+                    {"gate": "FINAL_AUDIT_GATE", "state": "BLOCKED", "blocking": True},
+                ],
+            }
+            payload = build_payload(matrix_path, qc_path, policy_evaluation_file(Path(td), blocked))
 
             self.assertEqual(payload["operational_status"], "NÃO DISPONÍVEL")
             with self.assertRaises(ReportReleaseError):
                 render_document("09", payload, mode="FINAL")
+
+    def test_a_payload_with_no_policy_evaluation_cannot_publish(self):
+        """The default is refusal: a builder that registers no verdict grants none."""
+        from reporting.engine import ReportReleaseError, render_document
+        from scripts.build_completeness_report import build_payload
+
+        with tempfile.TemporaryDirectory() as td:
+            _matrix, matrix_path, qc_path = self._artifacts(Path(td))
+            payload = build_payload(matrix_path, qc_path)
+        self.assertIs(payload["publication_gate"]["passed"], False)
+        self.assertEqual(payload["policy_evaluation"]["source"]["status"], "NÃO DISPONÍVEL")
+        for plane in payload["policy_evaluation"]["planes"].values():
+            self.assertEqual(plane["state"], "BLOCKED")
+        with self.assertRaises(ReportReleaseError):
+            render_document("09", payload, mode="FINAL")
 
     def test_the_sections_match_the_catalogue_for_report_09(self):
         from reporting.engine import load_catalog

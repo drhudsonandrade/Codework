@@ -228,8 +228,11 @@ def validate(root: Path, facts: dict[str, str] | None = None) -> list[str]:
                 errors.append(f"NGS gate missing current-session readiness contract: {token}")
 
     nextflow_cfg = root / "nextflow.config"
-    if nextflow_cfg.is_file() and "nextflowVersion = '!>=26.04.6'" not in nextflow_cfg.read_text(encoding="utf-8"):
-        errors.append("Nextflow manifest must permit tested forward versions while enforcing minimum 26.04.6")
+    # Both bounds. The contract used to require the lower one only, so an open-ended range
+    # satisfied it — and a future major release whose DSL changed would be accepted by the
+    # very check meant to pin the runtime.
+    if nextflow_cfg.is_file() and "nextflowVersion = '!>=26.04.6, <27.0.0'" not in nextflow_cfg.read_text(encoding="utf-8"):
+        errors.append("Nextflow manifest must pin both bounds: minimum 26.04.6 and below 27.0.0")
 
     adapters = root / "evidence_adapters/__init__.py"
     if adapters.is_file():

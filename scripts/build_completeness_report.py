@@ -103,13 +103,13 @@ def _by_gene(entries: list) -> str:
     return body
 
 
-def build_payload(matrix_path: Path, qc_path: Path) -> dict:
+def build_payload(matrix_path: Path, qc_path: Path, policy_evaluation: Path | None = None) -> dict:
     """Anchor every printed value of report 09 to the artifact it came from."""
     matrix = Artifact.from_path("completeness-matrix", matrix_path)
     qc = Artifact.from_path("array-qc", qc_path)
 
     case_id = matrix.payload.get("case_id") or "NÃO DISPONÍVEL"
-    compiler = PayloadCompiler(case_id=str(case_id), report_id=REPORT_ID)
+    compiler = PayloadCompiler(case_id=str(case_id), report_id=REPORT_ID, policy_evaluation=policy_evaluation)
     compiler.register(matrix)
     compiler.register(qc)
 
@@ -356,27 +356,6 @@ def build_payload(matrix_path: Path, qc_path: Path) -> dict:
     )
 
     return compiler.compile(
-        publication_gate={
-            "passed": matrix_status == "VERIFICADO",
-            "consent_verified": bool(qc.payload.get("case_id")),
-            "qc_verified": bool(matrix.payload.get("qc_gate_passed")),
-            "evidence_verified": True,
-            "placeholders_resolved": True,
-        },
-        policy_evaluation={
-            "ready_for_requested_operation": matrix_status == "VERIFICADO",
-            "planes": {
-                k: {"state": "PASS" if matrix_status == "VERIFICADO" else "BLOCKED"}
-                for k in ("policy_control", "scientific_data", "evidence", "audit")
-            },
-            "gates": [
-                {
-                    "gate": "FINAL_AUDIT_GATE",
-                    "state": "PASS" if matrix_status == "VERIFICADO" else "BLOCKED",
-                    "blocking": True,
-                }
-            ],
-        },
         execution_manifest={
             "status": matrix_status,
             "COMPLETENESS_MATRIX_SHA256": matrix.sha256,

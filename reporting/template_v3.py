@@ -273,9 +273,27 @@ def _replacement_geometry(item: dict[str, Any], page_width: float, page_items: l
 
 
 def _system_values(data: dict[str, Any]) -> dict[str, Any]:
+    """The renderer's controlled substitutions, which a payload may extend but not replace.
+
+    `values.update(supplied)` let `template_system_fields` overwrite any of them — including
+    the normative identity the renderer stamps over the template's own, and the banner that
+    turns "MODELO — NÃO É RESULTADO GENÉTICO" into a controlled publication. A payload could
+    therefore point the ruleset identity anywhere, or restore the model banner onto a real
+    result, using a field meant for supplying values the renderer does not define.
+
+    Keys the renderer owns now win. A payload supplying one is refused rather than ignored:
+    silently discarding it would leave the caller believing a substitution took effect.
+    """
     values = dict(SYSTEM_REPLACEMENTS)
     supplied = data.get("template_system_fields")
     if isinstance(supplied, dict):
+        overwritten = sorted(key for key in supplied if key in SYSTEM_REPLACEMENTS)
+        if overwritten:
+            raise TemplateV3Error(
+                "template_system_fields may not overwrite the renderer's controlled "
+                f"substitutions {overwritten}; these carry the normative identity and the "
+                "publication banner, and are not the payload's to set"
+            )
         values.update(supplied)
     return values
 
@@ -307,7 +325,7 @@ def _redact_placeholder_text(
     try:
         import fitz
     except ImportError:
-        return template, 0
+        fitz = None
 
     boxes: list[tuple[int, tuple[float, float, float, float], str]] = []
     for item in meta.get("fields", []):
@@ -320,6 +338,20 @@ def _redact_placeholder_text(
         boxes.append((int(item["page"]), tuple(float(v) for v in item["bbox"]), str(item["background"])))
     if not boxes:
         return template, 0
+
+    if fitz is None:
+        # Without PyMuPDF the glyphs stay in the content stream under the overlay, so the
+        # published PDF *looks* filled while copy-and-paste, indexing, screen readers and
+        # text extraction still recover the template scaffolding beside the real value. That
+        # is a document whose visible and machine-readable contents disagree, which this
+        # project does not publish. Returning the template unchanged reported
+        # `redacted_placeholder_boxes: 0` and left the decision to whoever read that number.
+        raise TemplateV3Error(
+            f"{len(boxes)} placeholder box(es) must be redacted before publication and "
+            "PyMuPDF is not installed; the overlay would hide the template text visually "
+            "while leaving it extractable from the PDF. Install PyMuPDF (fitz) or render "
+            "in MODEL mode."
+        )
 
     document = fitz.open(str(template))
     try:

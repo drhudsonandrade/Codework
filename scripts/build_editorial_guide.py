@@ -225,7 +225,7 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def build_payload(rows: list[dict[str, Any]], manifest: dict[str, Any], guide: str) -> dict:
+def build_payload(rows: list[dict[str, Any]], manifest: dict[str, Any], guide: str, policy_evaluation: Path | None = None) -> dict:
     """Report 11's payload, anchored to the guide this same run produced.
 
     The guide is registered as an artifact and every section reads a locator out of it, so
@@ -249,7 +249,7 @@ def build_payload(rows: list[dict[str, Any]], manifest: dict[str, Any], guide: s
         "coordinate_manifest_reports": sorted((manifest.get("reports") or {})),
     }
     artifact = Artifact.from_payload("editorial-analysis", analysis)
-    compiler = PayloadCompiler(case_id="SUITE-EDITORIAL", report_id=REPORT_ID)
+    compiler = PayloadCompiler(case_id="SUITE-EDITORIAL", report_id=REPORT_ID, policy_evaluation=policy_evaluation)
     compiler.register(artifact)
 
     titles = section_titles(REPORT_ID)
@@ -367,18 +367,6 @@ def build_payload(rows: list[dict[str, Any]], manifest: dict[str, Any], guide: s
     )
 
     return compiler.compile(
-        publication_gate={
-            "passed": True, "consent_verified": True, "qc_verified": True,
-            "evidence_verified": True, "placeholders_resolved": True,
-        },
-        policy_evaluation={
-            "ready_for_requested_operation": True,
-            "planes": {
-                k: {"state": "PASS"}
-                for k in ("policy_control", "scientific_data", "evidence", "audit")
-            },
-            "gates": [{"gate": "FINAL_AUDIT_GATE", "state": "PASS", "blocking": True}],
-        },
         execution_manifest={
             "status": "VERIFICADO",
             "EDITORIAL_ANALYSIS_SHA256": artifact.sha256,

@@ -296,6 +296,13 @@ process POLICY_EVALUATE {
     set -e
     test -s policy/evaluation.json
     printf '%s\n' "\$code" > policy/evaluation.exit-code
+    # The exit code is the verdict, not a note about it. It was captured, written to a file
+    # and then ignored, so a refused evaluation still emitted evaluation.json and the channel
+    # carried it straight into report generation. Non-zero fails the process here.
+    if [ "\$code" -ne 0 ]; then
+      echo "NAO DISPONIVEL: policy evaluation refused this manifest (exit \$code)" >&2
+      exit "\$code"
+    fi
     """
 }
 

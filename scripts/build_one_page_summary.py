@@ -89,12 +89,12 @@ def _pgx_line(passport: dict[str, Any] | None) -> str:
     )
 
 
-def build_payload(matrix_path: Path, passport_path: Path | None) -> dict:
+def build_payload(matrix_path: Path, passport_path: Path | None, policy_evaluation: Path | None = None) -> dict:
     matrix = Artifact.from_path("completeness-matrix", matrix_path)
     passport = Artifact.from_path("pgx-passport", passport_path) if passport_path else None
 
     case_id = matrix.payload.get("case_id") or UNAVAILABLE
-    compiler = PayloadCompiler(case_id=str(case_id), report_id=REPORT_ID)
+    compiler = PayloadCompiler(case_id=str(case_id), report_id=REPORT_ID, policy_evaluation=policy_evaluation)
     compiler.register(matrix)
     if passport:
         compiler.register(passport)
@@ -160,21 +160,6 @@ def build_payload(matrix_path: Path, passport_path: Path | None) -> dict:
     )
 
     return compiler.compile(
-        publication_gate={
-            "passed": verified, "consent_verified": bool(matrix.payload.get("case_id")),
-            "qc_verified": bool(matrix.payload.get("qc_gate_passed")),
-            "evidence_verified": True, "placeholders_resolved": True,
-        },
-        policy_evaluation={
-            "ready_for_requested_operation": verified,
-            "planes": {
-                k: {"state": "PASS" if verified else "BLOCKED"}
-                for k in ("policy_control", "scientific_data", "evidence", "audit")
-            },
-            "gates": [
-                {"gate": "FINAL_AUDIT_GATE", "state": "PASS" if verified else "BLOCKED", "blocking": True}
-            ],
-        },
         execution_manifest={
             "status": matrix.payload.get("operational_status", UNAVAILABLE),
             "COMPLETENESS_MATRIX_SHA256": matrix.sha256,

@@ -62,6 +62,14 @@ _STATUS_RANK = {
 
 UNAVAILABLE = "NÃO DISPONÍVEL"
 
+#: The artifact a builder must register for its payload to carry a normative verdict at all.
+#: It is the policy engine's own `evaluation.json`; nothing else may stand in for it.
+POLICY_EVALUATION_ARTIFACT = "policy-evaluation"
+
+#: The four planes every payload must account for. Mirrored in `reporting.engine`, which
+#: checks them at render time; kept here so the verdict is shaped the same way it is read.
+REQUIRED_PLANES = ("policy_control", "scientific_data", "evidence", "audit")
+
 #: A locator is a dotted/bracketed path into the artifact, e.g.
 #: ``observations[rs1799807].records[0].genotype`` or ``metrics.call_rate``.
 _LOCATOR_STEP = re.compile(r"([^.\[\]]+)|\[([^\]]*)\]")
@@ -251,7 +259,13 @@ class PayloadCompiler:
     passing one would let a caller print something other than what was measured.
     """
 
-    def __init__(self, *, case_id: str, report_id: str) -> None:
+    def __init__(
+        self,
+        *,
+        case_id: str,
+        report_id: str,
+        policy_evaluation: "Path | str | None" = None,
+    ) -> None:
         if not str(case_id).strip():
             raise ProvenanceError("case_id is required")
         self.case_id = str(case_id)
@@ -261,6 +275,14 @@ class PayloadCompiler:
         self._values: dict[str, Any] = {}
         self._sections: dict[str, Any] = {}
         self._findings: list[dict[str, Any]] = []
+        # Registered here rather than by each builder, so a builder cannot forget it and
+        # silently produce a payload whose verdict came from nowhere. Absent, `compile`
+        # writes a refusal — which is the correct payload for a run the policy engine never
+        # judged.
+        if policy_evaluation is not None:
+            self.register(
+                Artifact.from_path(POLICY_EVALUATION_ARTIFACT, Path(policy_evaluation))
+            )
 
     # -- artifacts ---------------------------------------------------------------
 
@@ -400,11 +422,89 @@ class PayloadCompiler:
     def status_floor(self) -> str:
         return weakest_status(self._anchors.values())
 
+    def policy_verdict(self) -> dict[str, Any]:
+        """The single normative verdict, read from a registered policy-engine evaluation.
+
+        Every report builder used to pass its own `publication_gate` and `policy_evaluation`
+        into `compile`, and nine of them did: `consent_verified` was `bool(case_id)`,
+        `evidence_verified` was the literal `True`, and all four planes plus
+        FINAL_AUDIT_GATE went to PASS whenever a local variable called `verified` was true.
+        The component that produced the report also declared the report authorised — which
+        makes "authorised" a statement about the builder's own opinion, not about the policy
+        engine's 21 gates.
+
+        Measured on a real case, the two disagreed exactly as one would expect: the engine
+        returned `ready_for_requested_operation: False` for the same run whose payloads all
+        carried `True`.
+
+        So the verdict is no longer a parameter. It is copied from the artifact a policy run
+        produced, with that artifact's SHA-256 recorded beside it, and when no such artifact
+        was registered this returns a refusal. A builder can still decline to register one;
+        what it can no longer do is invent the answer.
+        """
+        artifact = self._artifacts.get(POLICY_EVALUATION_ARTIFACT)
+        if artifact is None:
+            return {
+                "ready_for_requested_operation": False,
+                "planes": {name: {"state": "BLOCKED"} for name in REQUIRED_PLANES},
+                "gates": [{"gate": "FINAL_AUDIT_GATE", "state": "BLOCKED", "blocking": True}],
+                "source": {
+                    "status": UNAVAILABLE,
+                    "reason": (
+                        f"nenhuma avaliação do policy engine foi registrada como artefato "
+                        f"{POLICY_EVALUATION_ARTIFACT!r}; sem veredicto da autoridade "
+                        "normativa este payload não declara autorização alguma"
+                    ),
+                },
+            }
+        evaluated = artifact.payload if isinstance(artifact.payload, dict) else {}
+        planes = evaluated.get("planes") if isinstance(evaluated.get("planes"), dict) else {}
+        return {
+            "ready_for_requested_operation": evaluated.get("ready_for_requested_operation") is True,
+            "planes": {
+                name: {
+                    "state": str(
+                        (planes.get(name) or {}).get("state", "BLOCKED")
+                        if isinstance(planes.get(name), dict)
+                        else "BLOCKED"
+                    )
+                }
+                for name in REQUIRED_PLANES
+            },
+            "gates": [g for g in (evaluated.get("gates") or []) if isinstance(g, dict)],
+            "source": {
+                "status": "VERIFICADO",
+                "artifact": POLICY_EVALUATION_ARTIFACT,
+                "sha256": artifact.sha256,
+                "path": artifact.path,
+            },
+        }
+
+    def publication_gate(self, verdict: dict[str, Any]) -> dict[str, Any]:
+        """Derive the publication gate from the verdict, never from the builder.
+
+        `consent_verified` was `bool(case_id)` — having an identifier for a case is not a
+        consent instrument, its version, its purpose or its scope. `evidence_verified` was
+        written as the literal `True`. Both are now read from the gates the policy engine
+        actually evaluated, so the report cannot claim a permission the engine withheld.
+
+        `placeholders_resolved` stays False here: it is a property of the rendered document,
+        not of the payload, and `render_document` measures it against the real text.
+        """
+        by_gate = {str(g.get("gate")): str(g.get("state")) for g in verdict.get("gates") or []}
+        planes = verdict.get("planes") or {}
+        return {
+            "passed": verdict.get("ready_for_requested_operation") is True,
+            "consent_verified": by_gate.get("CONSENT_GATE") == "PASS",
+            "qc_verified": by_gate.get("QC_GATE") == "PASS",
+            "evidence_verified": (planes.get("evidence") or {}).get("state") == "PASS",
+            "placeholders_resolved": False,
+            "derived_from": verdict.get("source"),
+        }
+
     def compile(
         self,
         *,
-        publication_gate: dict[str, Any],
-        policy_evaluation: dict[str, Any],
         execution_manifest: dict[str, Any] | None = None,
         post_deployment_status: str = "PENDENTE",
         extra: dict[str, Any] | None = None,
@@ -413,8 +513,11 @@ class PayloadCompiler:
 
         Sections and findings come from what was actually anchored during compilation, not
         from a parameter: accepting them here would let a caller pass content that was
-        never bound to an artifact.
+        never bound to an artifact. The publication gate and the policy evaluation are
+        derived for the same reason — see `policy_verdict`.
         """
+        policy_evaluation = self.policy_verdict()
+        publication_gate = self.publication_gate(policy_evaluation)
         for required in ("summary", "sources", "limitations"):
             if required not in self._anchors:
                 raise ProvenanceError(f"{required!r} must be anchored before compiling")
@@ -597,19 +700,27 @@ def fixture_payload(
     compiler.state("limitations", basis, kind="fixture", basis=basis, status=UNAVAILABLE)
     for title, value in (sections or {}).items():
         compiler.section_stated(title, value, kind="fixture", basis=basis, status=UNAVAILABLE)
+    # Layout QA has to render a FINAL document to measure it, so it registers a verdict —
+    # but a *fixture* one, carrying its own nature in `source`, and every value in the
+    # payload is still anchored as `fixture`, which floors the operational status at
+    # NÃO DISPONÍVEL and prints that on the document's face. The fixture verdict is a
+    # payload-level object here, never a file a real run could pick up by accident.
+    compiler.register(
+        Artifact.from_payload(
+            POLICY_EVALUATION_ARTIFACT,
+            {
+                "ready_for_requested_operation": True,
+                "planes": {name: {"state": "PASS"} for name in REQUIRED_PLANES},
+                "gates": [
+                    {"gate": "FINAL_AUDIT_GATE", "state": "PASS", "blocking": True},
+                    {"gate": "CONSENT_GATE", "state": "PASS", "blocking": True},
+                    {"gate": "QC_GATE", "state": "PASS", "blocking": True},
+                ],
+                "nature": "fixture de QA de layout; nenhuma avaliação real de política",
+            },
+        )
+    )
     return compiler.compile(
-        publication_gate={
-            "passed": True,
-            "consent_verified": True,
-            "qc_verified": True,
-            "evidence_verified": True,
-            "placeholders_resolved": True,
-        },
-        policy_evaluation={
-            "ready_for_requested_operation": True,
-            "planes": {k: {"state": "PASS"} for k in ("policy_control", "scientific_data", "evidence", "audit")},
-            "gates": [{"gate": "FINAL_AUDIT_GATE", "state": "PASS", "blocking": True}],
-        },
         execution_manifest={"status": UNAVAILABLE, "nature": basis},
         # Passed to `compile` so it is anchored, rather than smuggled through `extra` where
         # the payload would say one thing and its provenance another.

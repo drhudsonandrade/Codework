@@ -16,6 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from tests.attestations import policy_evaluation_file
+
 from tests.test_genome_completeness import CompletenessMatrixTest
 
 
@@ -41,7 +43,8 @@ class OnePageSummaryTest(unittest.TestCase):
         from scripts.build_one_page_summary import build_payload
 
         matrix_path, passport_path = self._artifacts(root)
-        return build_payload(matrix_path, passport_path if with_passport else None)
+        return build_payload(matrix_path, passport_path if with_passport else None,
+                             policy_evaluation_file(matrix_path.parent))
 
     def test_the_sections_match_the_catalogue_for_report_10(self):
         from reporting.engine import load_catalog
@@ -92,7 +95,7 @@ class OnePageSummaryTest(unittest.TestCase):
             tampered["input_sha256"] = "0" * 64
             passport_path.write_text(json.dumps(tampered, ensure_ascii=False), encoding="utf-8")
             with self.assertRaises(ValueError) as ctx:
-                build_payload(matrix_path, passport_path)
+                build_payload(matrix_path, passport_path, policy_evaluation_file(matrix_path.parent))
         self.assertIn("different inputs", str(ctx.exception))
 
     def test_the_page_renders_and_says_it_does_not_replace_the_full_reports(self):

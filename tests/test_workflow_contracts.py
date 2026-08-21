@@ -58,7 +58,9 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("--orchestration-canary results/nextflow-canary/canary/report.json", workflow)
         self.assertNotIn("results/nextflow-canary/report.json", workflow)
         config = (ROOT / "nextflow.config").read_text(encoding="utf-8")
-        self.assertIn("nextflowVersion = '!>=26.04.6'", config)
+        # Upper bound as well as lower: an open-ended range accepts a future major release
+        # whose DSL changes silently alter what these workflows mean.
+        self.assertIn("nextflowVersion = '!>=26.04.6, <27.0.0'", config)
 
     def test_nextflow_runtime_contains_procps_and_resolve_promote_share_one_contract(self):
         environment = (ROOT / "environment.yml").read_text(encoding="utf-8")

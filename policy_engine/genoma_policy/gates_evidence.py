@@ -1,8 +1,20 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from .gates_common import ALLOWED_OPERATIONAL, _gate, _get_list, _parse_iso_date
+
+#: How old a revisable evidence snapshot may be before it must be retrieved again. ClinVar
+#: releases weekly and ClinGen/CPIC revise continuously, so a snapshot older than a quarter
+#: can carry a classification the source has since changed. The gate validated only that
+#: `checked_at` parsed, which made a snapshot of any age formally current.
+MAX_MUTABLE_SOURCE_AGE_DAYS = 90
+
+
+def _today() -> date:
+    """Isolated so a test can pin the clock instead of depending on the run date."""
+    return date.today()
 
 
 class EvidenceGates:
@@ -27,7 +39,19 @@ class EvidenceGates:
             if source.get("mutable") is True:
                 if source.get("status") != "VERIFICADO": reasons.append(f"mutable source {source_id} not VERIFICADO")
                 if not source.get("version"): reasons.append(f"mutable source {source_id} missing version")
-                if not _parse_iso_date(str(source.get("checked_at", ""))): reasons.append(f"mutable source {source_id} missing valid checked_at date")
+                checked = _parse_iso_date(str(source.get("checked_at", "")))
+                if not checked: reasons.append(f"mutable source {source_id} missing valid checked_at date")
+                else:
+                    # The gate checked only that the date parsed, so a snapshot of any age
+                    # stayed formally valid — which is the opposite of what a *recency* gate
+                    # is for. ClinVar, ClinGen and CPIC all revise classifications; an
+                    # assertion retrieved long enough ago may have been superseded.
+                    age = (_today() - checked).days
+                    if age > MAX_MUTABLE_SOURCE_AGE_DAYS:
+                        reasons.append(
+                            f"mutable source {source_id} was checked {age} days ago, beyond the "
+                            f"{MAX_MUTABLE_SOURCE_AGE_DAYS}-day limit for a revisable source; re-retrieve it"
+                        )
                 if not source.get("locator"): reasons.append(f"mutable source {source_id} missing locator")
                 if not retrieval: reasons.append(f"mutable source {source_id} missing retrieval_evidence")
         for idx, claim in enumerate(_get_list(manifest, "claims")):

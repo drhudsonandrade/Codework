@@ -71,7 +71,13 @@ def _publication_blockers(data: dict[str, Any]) -> list[str]:
             blockers.append(f"ruleset:{key}")
 
     publication = data.get("publication_gate") if isinstance(data.get("publication_gate"), dict) else {}
-    for key in ("passed", "consent_verified", "qc_verified", "evidence_verified", "placeholders_resolved"):
+    # `placeholders_resolved` is deliberately not in this list. It is a property of the
+    # rendered document, and this gate runs before the document exists — so no honest value
+    # for it can be present here, and requiring True forced whoever built the payload to
+    # assert something they could not have measured. The real measurement is the bracket
+    # scan in `_final_markdown`, which refuses the report and names the surviving tokens;
+    # `render_document` writes the measured result back into the payload afterwards.
+    for key in ("passed", "consent_verified", "qc_verified", "evidence_verified"):
         if publication.get(key) is not True:
             blockers.append(f"publication_gate:{key}")
 
@@ -299,6 +305,11 @@ def render_document(report_id: str, data: dict[str, Any], *, mode: str = "MODEL"
             raise ReportReleaseError("publication gate failed: " + ", ".join(blockers))
         data = _stamp_ruleset_into_manifest(data)
         markdown = _final_markdown(report_id, model, data)
+        # Measured, not declared: `_final_markdown` refuses the report if any placeholder
+        # token survived, so reaching this line *is* the evidence. Written back so the
+        # published payload carries the result of the check rather than a builder's promise.
+        data = dict(data)
+        data["publication_gate"] = {**(data.get("publication_gate") or {}), "placeholders_resolved": True}
     else:
         markdown = _model_markdown(report_id, model)
     generated_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")

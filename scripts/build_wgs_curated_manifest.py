@@ -101,7 +101,10 @@ def main() -> int:
     if args.input_qc:
         qc_path = Path(args.input_qc)
         qc = json.loads(qc_path.read_text(encoding="utf-8"))
-        qc_verified = qc.get("operational_status") == "VERIFICADO" and qc.get("passed") is not False
+        # `qc.get("passed") is not False` is true when the field is absent, so a QC artifact
+        # that never declared a result was promoted as though it had passed. An explicit
+        # True is required: silence is not consent here either.
+        qc_verified = qc.get("operational_status") == "VERIFICADO" and qc.get("passed") is True
         qc_basis = (
             f"{qc_path.name} sha256={sha256_file(qc_path)} "
             f"operational_status={qc.get('operational_status')!r}"

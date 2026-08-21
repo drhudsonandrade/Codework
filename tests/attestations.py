@@ -59,3 +59,30 @@ def provenance_for(path: Path, *, build: str = "GRCh37", strand: str = "forward"
         "build_evidence": json.dumps(attestation(sha, build, **kwargs), ensure_ascii=False),
         "strand_evidence": json.dumps(attestation(sha, strand, **kwargs), ensure_ascii=False),
     }
+
+
+#: A policy-engine verdict, as the artifact `PayloadCompiler` reads it. Tests that render a
+#: FINAL document need one, because the builders can no longer grant themselves a PASS: the
+#: verdict is copied from a registered evaluation or the payload refuses.
+POLICY_PASS = {
+    "ready_for_requested_operation": True,
+    "planes": {
+        name: {"state": "PASS"}
+        for name in ("policy_control", "scientific_data", "evidence", "audit")
+    },
+    "gates": [
+        {"gate": "FINAL_AUDIT_GATE", "state": "PASS", "blocking": True},
+        {"gate": "CONSENT_GATE", "state": "PASS", "blocking": True},
+        {"gate": "QC_GATE", "state": "PASS", "blocking": True},
+    ],
+}
+
+
+def policy_evaluation_file(root: Path, verdict: dict[str, Any] | None = None) -> Path:
+    """Write a policy evaluation into `root` and return its path."""
+    path = Path(root) / "policy-evaluation.json"
+    path.write_text(
+        json.dumps(verdict if verdict is not None else POLICY_PASS, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return path
