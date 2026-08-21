@@ -364,9 +364,19 @@ class StampedFieldsAreVerifiedTest(unittest.TestCase):
         self.assertIn("absent from template_fields", str(caught.exception))
 
     @unittest.skipUnless(TEMPLATE_DIR, "set GENOMA_TEMPLATE_DIR to an installed template pack")
-    def test_dossier_fields_are_exempt_because_they_are_not_derivable(self):
-        # They come from the operator's administrative record, not the payload, and are
-        # bound instead by case_id — which the dossier must match and provenance anchors.
+    def test_a_payload_cannot_nominate_its_own_exempt_fields(self):
+        """The first version of this check let the payload name what it need not prove.
+
+        It read the exempt list out of `template_fields_from_dossier`, so a payload able to
+        forge a value could also declare that value dossier-supplied and exempt exactly what
+        it had forged — verified by doing it and getting a PDF. Narrowing the exemption to
+        the closed set of tokens a dossier *can* answer still left those seventeen forgeable.
+        The exemption existed only because the verifier lacked the dossier, so the dossier is
+        passed in and nothing is exempt.
+        """
+        from reporting.case_dossier import DOSSIER_TOKENS
+        from reporting.template_v3 import TemplateV3Error
+
         detailed, payload, fill = self._prepared()
         target = sorted(fill["fields"])[0]
         token = next(
@@ -374,10 +384,39 @@ class StampedFieldsAreVerifiedTest(unittest.TestCase):
             for item in detailed["reports"]["09"]["fields"]
             if item["field_id"] == target
         )
-        changed = {**fill["fields"], target: "VALOR VINDO DO DOSSIÊ"}
-        self.assertGreater(
-            self._render(detailed, payload, changed, from_dossier=[token])["page_count"], 0
-        )
+        forged = {**fill["fields"], target: "TEXTO-FORJADO-COM-ISENCAO"}
+        with self.assertRaises(TemplateV3Error):
+            self._render(detailed, payload, forged, from_dossier=[token])
+        # And the same forgery under a token a dossier genuinely answers.
+        with self.assertRaises(TemplateV3Error):
+            self._render(detailed, payload, forged, from_dossier=sorted(DOSSIER_TOKENS)[:1])
+
+    @unittest.skipUnless(TEMPLATE_DIR, "set GENOMA_TEMPLATE_DIR to an installed template pack")
+    def test_declaring_dossier_fields_without_a_dossier_is_a_contradiction(self):
+        # Told by name, so a caller that forgot to thread the dossier learns that rather
+        # than watching its identity fields fail as mismatches.
+        from reporting.template_v3 import TemplateV3Error
+
+        detailed, payload, fill = self._prepared()
+        with self.assertRaises(TemplateV3Error) as caught:
+            self._render(detailed, payload, dict(fill["fields"]), from_dossier=["DATA_EMISSAO"])
+        self.assertIn("no dossier reached the renderer", str(caught.exception))
+
+    @unittest.skipUnless(TEMPLATE_DIR, "set GENOMA_TEMPLATE_DIR to an installed template pack")
+    def test_the_orchestrated_path_with_a_dossier_still_renders(self):
+        # Negative control: the real path stamps ten dossier fields and must keep working.
+        import tempfile
+
+        from scripts.render_report_pdfs import render
+
+        payload_path = Path(TEMPLATE_DIR).parent / "audit9" / "payload-09.json"
+        dossier_path = Path(TEMPLATE_DIR).parent / "dossie-audit4.json"
+        if not (payload_path.is_file() and dossier_path.is_file()):
+            self.skipTest("no compiled payload and dossier available in this environment")
+        with tempfile.TemporaryDirectory() as td:
+            result = render("09", payload_path, Path(TEMPLATE_DIR), Path(td) / "x.pdf", dossier_path)
+        self.assertTrue(result["from_dossier"])
+        self.assertTrue(result["dossier_supplied"])
 
     @unittest.skipUnless(TEMPLATE_DIR, "set GENOMA_TEMPLATE_DIR to an installed template pack")
     def test_the_pdf_carries_the_governing_ruleset(self):

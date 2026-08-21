@@ -342,6 +342,7 @@ def verify_template_fields(
     data: dict[str, Any],
     fields: dict[str, Any],
     manifest: dict[str, Any],
+    dossier: dict[str, Any] | None = None,
 ) -> None:
     """Every value about to be stamped must be re-derivable from the payload.
 
@@ -355,17 +356,39 @@ def verify_template_fields(
     printed text must still equal what the pipeline derived. Here that is enforced by
     recomputing the fill from the payload and requiring equality.
 
-    Dossier-supplied fields are exempt and listed by name, because they come from the
-    operator's administrative record rather than the payload and cannot be recomputed from
-    it. They are bound instead by `case_id`, which the dossier must match and which the
-    provenance gate now anchors.
+    Nothing is exempt. The first version of this check read an exempt list out of
+    `template_fields_from_dossier`, which meant a payload able to forge a value could also
+    nominate that value as dossier-supplied and exempt exactly what it had forged. Narrowing
+    the exemption to the closed set of tokens a dossier *can* answer still left those
+    seventeen forgeable. The exemption only ever existed because the verifier lacked the
+    dossier, so the dossier is passed in instead and every field is re-derived.
+
+    A payload that claims dossier-supplied fields while no dossier reached this function is
+    a contradiction rather than a licence: it is refused by name, so a caller that forgets
+    to thread the dossier is told, instead of watching its identity fields fail as
+    mismatches.
     """
+    from reporting.case_dossier import DOSSIER_TOKENS
     from reporting.template_fill import build_template_fields
 
-    exempt = {
-        str(token) for token in (data.get("template_fields_from_dossier") or [])
-    }
-    recomputed = build_template_fields(report_id, data, manifest)["fields"]
+    declared = {str(token) for token in (data.get("template_fields_from_dossier") or [])}
+    if declared and dossier is None:
+        raise TemplateV3Error(
+            f"report {report_id}: the payload declares {len(declared)} dossier-supplied "
+            f"field(s) ({', '.join(sorted(declared)[:5])}) but no dossier reached the "
+            "renderer, so none of them can be verified. Pass the dossier used to build the "
+            "fill."
+        )
+    unknown = sorted(declared - set(DOSSIER_TOKENS))
+    if unknown:
+        raise TemplateV3Error(
+            f"report {report_id}: {', '.join(unknown[:5])} is not a token a dossier can "
+            "answer; a field cannot be attributed to the administrative record to avoid "
+            "being re-derived from the payload"
+        )
+
+    exempt: set[str] = set()
+    recomputed = build_template_fields(report_id, data, manifest, dossier)["fields"]
     report = (manifest.get("reports") or {}).get(report_id) or {}
     token_of = {
         str(item["field_id"]): str(item.get("token", "")).strip("[] ").strip()
@@ -393,13 +416,20 @@ def verify_template_fields(
         )
 
 
-def render_pdf_from_template(rendered: dict[str, Any], path: Path, template_dir: Path, *, strict: bool = False) -> dict[str, Any]:
+def render_pdf_from_template(
+    rendered: dict[str, Any],
+    path: Path,
+    template_dir: Path,
+    *,
+    strict: bool = False,
+    dossier: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     report_id = str(rendered["metadata"]["report_id"])
     manifest = load_reference_manifest()
     template, meta = resolve_template_pdf(report_id, template_dir, manifest)
     data = rendered.get("data", {}) if isinstance(rendered.get("data"), dict) else {}
     fields = data.get("template_fields") if isinstance(data.get("template_fields"), dict) else {}
-    verify_template_fields(report_id, data, fields, manifest)
+    verify_template_fields(report_id, data, fields, manifest, dossier)
     systems = _system_values(data)
     fonts = _register_fonts()
     source, redacted_boxes = _redact_placeholder_text(template, meta, fields, systems)

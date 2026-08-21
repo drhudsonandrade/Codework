@@ -198,6 +198,61 @@ class DossierToTemplateTest(unittest.TestCase):
         self.assertGreater(with_dossier["derived_count"], without["derived_count"])
 
 
+class DossierTokenSetTest(unittest.TestCase):
+    """The closed set of tokens a dossier can answer is used as a security boundary.
+
+    The PDF stamp check refuses to attribute a field to the administrative record unless
+    that field is one a dossier is actually capable of answering. If the constant drifts
+    from `dossier_values`, the boundary stops describing reality — either a legitimate field
+    is refused or an arbitrary one becomes attributable.
+    """
+
+    def _full_dossier(self) -> dict:
+        return {
+            "identification": {
+                "pseudonymised_id": "X", "date_of_birth": "1980-01-01",
+                "sex_recorded_at_birth": "feminino", "requesting_professional": "Dr",
+                "requesting_service": "Serviço",
+            },
+            "sample": {
+                "sample_type": "Saliva", "sample_identifier": "S1",
+                "laboratory": "Lab", "platform": "Array", "collection_date": "2026-01-01",
+            },
+            "consent": {
+                "consent_id": "C1", "consent_version": "1", "consent_date": "2026-01-01",
+                "authorised_purposes": ["a"], "authorised_reports": ["01"],
+                "granular_preferences": ["p"], "delivery_preference": "email",
+                "authorised_recipients": ["r"], "retention_policy": "5 anos",
+            },
+            "release": {
+                "responsible_professional": "Dr", "responsible_registration": "CRM",
+                "signature_reference": "sig", "issue_date": "2026-08-20",
+            },
+        }
+
+    def test_the_constant_matches_what_dossier_values_can_produce(self):
+        from reporting.case_dossier import DOSSIER_TOKENS, dossier_values
+
+        produced = set(dossier_values(self._full_dossier()))
+        self.assertEqual(
+            produced,
+            set(DOSSIER_TOKENS),
+            "DOSSIER_TOKENS drifted from dossier_values; the stamp check uses it as a boundary",
+        )
+
+    def test_an_empty_dossier_produces_nothing(self):
+        from reporting.case_dossier import dossier_values
+
+        self.assertEqual(dossier_values(None), {})
+        self.assertEqual(dossier_values({}), {})
+
+    def test_every_produced_token_is_in_the_closed_set(self):
+        from reporting.case_dossier import DOSSIER_TOKENS, dossier_values
+
+        partial = {"identification": {"pseudonymised_id": "X"}}
+        self.assertTrue(set(dossier_values(partial)) <= set(DOSSIER_TOKENS))
+
+
 if __name__ == "__main__":
     unittest.main()
 

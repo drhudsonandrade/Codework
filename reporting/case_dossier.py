@@ -218,6 +218,31 @@ def load_dossier(path: Path, *, expected_case_id: str | None = None) -> dict[str
     }
 
 
+#: Every template token a dossier is capable of answering. Closed and derived from this
+#: module, never from a payload: the PDF stamp check exempts dossier-supplied fields from
+#: re-derivation, and a payload that could nominate its own exempt tokens would exempt
+#: exactly the ones it forged. Kept in sync with `dossier_values` by a test.
+DOSSIER_TOKENS = frozenset({
+    "NOME_OU_ID_PSEUDONIMIZADO",
+    "DATA_NASCIMENTO_OU_NAO_INFORMADA",
+    "SEXO_REGISTRADO_AO_NASCER",
+    "PROFISSIONAL_OU_SERVICO_SOLICITANTE",
+    "TIPO_AMOSTRA_E_IDENTIFICADOR",
+    "LABORATORIO_E_PLATAFORMA",
+    "DATA_COLETA",
+    "ID_VERSAO_DATA_CONSENTIMENTO",
+    "FINALIDADE_E_RELATORIOS_AUTORIZADOS",
+    "PREFERENCIA_GRANULAR",
+    "PREFERENCIA_CANAL_PRAZO",
+    "PESSOAS_SERVICOS_AUTORIZADOS",
+    "POLITICA_E_PRAZO",
+    "RESPONSAVEL",
+    "ASSINATURAS",
+    "DATA_EMISSAO",
+    "NOME_OU_ID_E_DATA_NASCIMENTO",
+})
+
+
 def dossier_values(dossier: dict[str, Any] | None) -> dict[str, Any]:
     """Flatten a dossier into the template tokens it answers.
 

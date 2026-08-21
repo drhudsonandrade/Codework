@@ -89,7 +89,9 @@ def render(
     original = _template_v3.load_reference_manifest
     _template_v3.load_reference_manifest = lambda *a, **k: detailed
     try:
-        result = render_pdf_from_template(rendered, out_path, template_dir, strict=True)
+        result = render_pdf_from_template(
+            rendered, out_path, template_dir, strict=True, dossier=dossier
+        )
     finally:
         _template_v3.load_reference_manifest = original
 
