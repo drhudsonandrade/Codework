@@ -7,7 +7,9 @@ support is now refused rather than published.
 """
 from __future__ import annotations
 
+import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -49,10 +51,18 @@ POLICY_PASS = {
 }
 
 
+def _verdict_file() -> Path:
+    """The verdict must arrive as a file the policy engine wrote — a test cannot compose one
+    in memory any more than a builder can."""
+    directory = tempfile.mkdtemp()
+    path = Path(directory) / "policy-evaluation.json"
+    path.write_text(json.dumps(POLICY_PASS), encoding="utf-8")
+    return path
+
+
 def _compiler() -> PayloadCompiler:
-    compiler = PayloadCompiler(case_id="CASE-PROV", report_id="09")
+    compiler = PayloadCompiler(case_id="CASE-PROV", report_id="09", policy_evaluation=_verdict_file())
     compiler.register(Artifact.from_payload("array-qc", ARTIFACT))
-    compiler.register(Artifact.from_payload("policy-evaluation", POLICY_PASS))
     return compiler
 
 

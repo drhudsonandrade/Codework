@@ -504,3 +504,50 @@ class StaticRulesetConflictTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BrokenResolverIsReportedTest(unittest.TestCase):
+    """A resolver that raises must not be indistinguishable from absent data.
+
+    Both returned None and both printed NÃO DISPONÍVEL, so "this field has no data" and
+    "the code that reads this field is broken" looked identical on the page — and the second
+    could survive any number of runs with nothing to notice it.
+    """
+
+    def _resolve(self, token, resolver=None):
+        from reporting import template_fill as tf
+
+        failures = []
+        if resolver is not None:
+            tf.REPORT_RESOLVERS.setdefault("09", {})[token] = resolver
+            self.addCleanup(tf.REPORT_RESOLVERS["09"].pop, token, None)
+        return tf._resolve("09", token, {}, failures), failures
+
+    def test_a_raising_resolver_is_recorded_with_its_error(self):
+        def boom(_payload):
+            raise KeyError("campo sumiu")
+
+        value, failures = self._resolve("TOKEN_QUEBRADO", boom)
+        self.assertIsNone(value)
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(failures[0]["token"], "TOKEN_QUEBRADO")
+        self.assertIn("KeyError", failures[0]["error"])
+
+    def test_an_absent_token_records_nothing(self):
+        value, failures = self._resolve("TOKEN_INEXISTENTE")
+        self.assertIsNone(value)
+        self.assertEqual(failures, [])
+
+    def test_a_resolver_returning_none_is_not_a_failure(self):
+        """Absent data is the normal case and must stay quiet."""
+        value, failures = self._resolve("TOKEN_VAZIO", lambda _payload: None)
+        self.assertIsNone(value)
+        self.assertEqual(failures, [])
+
+    def test_the_fill_result_always_carries_the_key(self):
+        """Empty on a healthy run, so a missing key can never read as an unrun check."""
+        from reporting.template_fill import build_template_fields
+
+        manifest = {"reports": {"09": {"fields": []}}}
+        result = build_template_fields("09", {"case_id": "X"}, manifest)
+        self.assertEqual(result["resolver_failures"], [])

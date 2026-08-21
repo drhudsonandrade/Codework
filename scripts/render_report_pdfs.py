@@ -157,6 +157,9 @@ def render(
         "total_placeholders": fill["total"],
         "derived_tokens": fill["derived_tokens"],
         "from_dossier": fill["from_dossier"],
+        # Carried out of the fill so a broken resolver is visible in the run rather than
+        # only as one more NÃO DISPONÍVEL on the page.
+        "resolver_failures": fill["resolver_failures"],
         "dossier_supplied": fill["dossier_supplied"],
         # Stated rather than implied: without this line a reader cannot tell a report that
         # was never meant to carry identification from one whose dossier silently failed.

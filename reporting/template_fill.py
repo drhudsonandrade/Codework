@@ -297,14 +297,32 @@ REPORT_RESOLVERS: dict[str, dict[str, Resolver]] = {
 }
 
 
-def _resolve(report_id: str, token: str, payload: dict[str, Any]) -> Any:
+def _resolve(
+    report_id: str,
+    token: str,
+    payload: dict[str, Any],
+    failures: list[dict[str, str]] | None = None,
+) -> Any:
+    """Resolve one token, recording a resolver that broke rather than swallowing it.
+
+    A resolver raising KeyError/TypeError/ValueError returned None, which is exactly what a
+    genuinely absent value returns — so "this field has no data" and "the code that reads
+    this field is broken" printed the same NÃO DISPONÍVEL, and the second could persist
+    through any number of runs with nothing to notice it. The field still degrades to
+    NÃO DISPONÍVEL, because a broken resolver must not take the document down; what changes
+    is that the breakage is now reported beside the value it cost.
+    """
     for table in (REPORT_RESOLVERS.get(report_id, {}), COMMON_RESOLVERS):
         resolver = table.get(token)
         if resolver is None:
             continue
         try:
             value = resolver(payload)
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, TypeError, ValueError) as exc:
+            if failures is not None:
+                failures.append(
+                    {"token": token, "error": f"{type(exc).__name__}: {exc}"[:200]}
+                )
             return None
         # A resolver that reaches a section whose content is itself NÃO DISPONÍVEL has not
         # derived anything. Counting it as derived inflates `derived_count`, and
@@ -339,6 +357,7 @@ def build_template_fields(
     fields: dict[str, Any] = {}
     derived: list[str] = []
     unavailable: list[str] = []
+    failures: list[dict[str, str]] = []
     for item in report.get("fields", []):
         if item.get("guidance_only"):
             continue
@@ -346,7 +365,7 @@ def build_template_fields(
         token = str(item.get("token", "")).strip("[] ").strip()
         value = supplied.get(token)
         if value is None:
-            value = _resolve(report_id, token, payload)
+            value = _resolve(report_id, token, payload, failures)
         if value is None:
             fields[field_id] = UNAVAILABLE
             unavailable.append(token)
@@ -363,6 +382,12 @@ def build_template_fields(
         # Reported, not hidden: a reader must be able to see how much of the document the
         # pipeline could actually answer.
         "unavailable_tokens": sorted(set(unavailable)),
+        # A resolver that raised, named. Empty on a healthy run, so a missing key can never
+        # read as a check that did not happen.
+        "resolver_failures": [
+            {"token": token, "error": error}
+            for token, error in sorted({(f["token"], f["error"]) for f in failures})
+        ],
         "from_dossier": sorted(set(supplied) & set(derived)),
         "dossier_supplied": bool(supplied),
     }

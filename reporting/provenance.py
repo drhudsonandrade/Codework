@@ -279,19 +279,44 @@ class PayloadCompiler:
         # silently produce a payload whose verdict came from nowhere. Absent, `compile`
         # writes a refusal — which is the correct payload for a run the policy engine never
         # judged.
+        self._fixture_verdict = False
         if policy_evaluation is not None:
-            self.register(
+            self._install_verdict(
                 Artifact.from_path(POLICY_EVALUATION_ARTIFACT, Path(policy_evaluation))
             )
 
     # -- artifacts ---------------------------------------------------------------
 
     def register(self, artifact: Artifact) -> Artifact:
+        """Register a pipeline artifact values may be anchored to.
+
+        The policy verdict is not one of them. Moving the verdict out of `compile`'s
+        parameters closed the door a builder used to grant itself a PASS — and left this one
+        open: `register(Artifact.from_payload("policy-evaluation", {...ready: True...}))`
+        installed an invented verdict under the reserved name and published FINAL with
+        `operational_status: VERIFICADO`. Verified by doing it.
+
+        The verdict may only arrive through the constructor, which reads a file the policy
+        engine wrote, or through the fixture path, which can only exist on a payload whose
+        every value is a fixture.
+        """
+        if artifact.name == POLICY_EVALUATION_ARTIFACT:
+            raise ProvenanceError(
+                f"{POLICY_EVALUATION_ARTIFACT!r} is not a registrable artifact: the normative "
+                "verdict is read from the policy engine's own output, via "
+                "PayloadCompiler(policy_evaluation=<path>). Composing one here would be the "
+                "self-granted PASS this indirection exists to prevent."
+            )
         existing = self._artifacts.get(artifact.name)
         if existing is not None and existing.sha256 != artifact.sha256:
             raise ProvenanceError(f"artifact {artifact.name!r} registered twice with different content")
         self._artifacts[artifact.name] = artifact
         return artifact
+
+    def _install_verdict(self, artifact: Artifact, *, fixture: bool = False) -> None:
+        """Install the policy verdict. Private, and the only route that exists."""
+        self._artifacts[POLICY_EVALUATION_ARTIFACT] = artifact
+        self._fixture_verdict = fixture
 
     def artifact(self, name: str) -> Artifact:
         try:
@@ -477,6 +502,9 @@ class PayloadCompiler:
                 "artifact": POLICY_EVALUATION_ARTIFACT,
                 "sha256": artifact.sha256,
                 "path": artifact.path,
+                # Named on the payload, so a reader can tell a verdict the engine wrote from
+                # the layout-QA fixture without inspecting anchors.
+                "origin": "fixture" if self._fixture_verdict else "policy-engine-output",
             },
         }
 
@@ -516,6 +544,20 @@ class PayloadCompiler:
         never bound to an artifact. The publication gate and the policy evaluation are
         derived for the same reason — see `policy_verdict`.
         """
+        if self._fixture_verdict:
+            # The fixture verdict exists so layout QA can render a FINAL document and measure
+            # it. It is safe only while every value on the payload is a fixture, which floors
+            # the operational status at NÃO DISPONÍVEL and prints that on the document's face.
+            # A measured value beside a fixture verdict would publish a real claim on an
+            # invented authorisation.
+            measured = sorted(
+                name for name, anchor in self._anchors.items() if anchor.kind not in FIXTURE_KINDS
+            )
+            if measured:
+                raise ProvenanceError(
+                    f"a fixture policy verdict cannot carry measured values {measured}; "
+                    "compile with a real policy evaluation or anchor these as fixtures"
+                )
         policy_evaluation = self.policy_verdict()
         publication_gate = self.publication_gate(policy_evaluation)
         for required in ("summary", "sources", "limitations"):
@@ -705,7 +747,7 @@ def fixture_payload(
     # payload is still anchored as `fixture`, which floors the operational status at
     # NÃO DISPONÍVEL and prints that on the document's face. The fixture verdict is a
     # payload-level object here, never a file a real run could pick up by accident.
-    compiler.register(
+    compiler._install_verdict(
         Artifact.from_payload(
             POLICY_EVALUATION_ARTIFACT,
             {
@@ -718,7 +760,8 @@ def fixture_payload(
                 ],
                 "nature": "fixture de QA de layout; nenhuma avaliação real de política",
             },
-        )
+        ),
+        fixture=True,
     )
     return compiler.compile(
         execution_manifest={"status": UNAVAILABLE, "nature": basis},

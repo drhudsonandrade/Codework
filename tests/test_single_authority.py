@@ -47,11 +47,18 @@ PASS_VERDICT = {
 }
 
 
+def _verdict_file(verdict: dict) -> Path:
+    path = Path(tempfile.mkdtemp()) / "policy-evaluation.json"
+    path.write_text(json.dumps(verdict), encoding="utf-8")
+    return path
+
+
 def _payload(verdict: dict | None) -> dict:
-    compiler = PayloadCompiler(case_id="CASO-AUT", report_id="09")
+    compiler = PayloadCompiler(
+        case_id="CASO-AUT", report_id="09",
+        policy_evaluation=_verdict_file(verdict) if verdict is not None else None,
+    )
     compiler.register(Artifact.from_payload("array-qc", ARTIFACT))
-    if verdict is not None:
-        compiler.register(Artifact.from_payload(POLICY_EVALUATION_ARTIFACT, verdict))
     compiler.derive(
         "summary", artifact="array-qc", locator="metrics.call_rate",
         status="VERIFICADO", basis="call rate",
@@ -76,6 +83,47 @@ class NoVerdictMeansNoAuthorityTest(unittest.TestCase):
         self.assertEqual(source["status"], "NÃO DISPONÍVEL")
         self.assertIn(POLICY_EVALUATION_ARTIFACT, source["reason"])
 
+    def test_the_reserved_artifact_name_cannot_be_registered(self):
+        """The door the first version of this fix left open.
+
+        Moving the verdict out of `compile`'s parameters closed one route and left another:
+        `register(Artifact.from_payload("policy-evaluation", {...ready: True...}))` installed
+        an invented verdict under the reserved name and published FINAL with
+        `operational_status: VERIFICADO`. Verified by doing it before closing it.
+        """
+        from reporting.provenance import ProvenanceError
+
+        compiler = PayloadCompiler(case_id="CASO-AUT", report_id="09")
+        with self.assertRaises(ProvenanceError) as caught:
+            compiler.register(Artifact.from_payload(POLICY_EVALUATION_ARTIFACT, PASS_VERDICT))
+        message = str(caught.exception)
+        self.assertIn("not a registrable artifact", message)
+        self.assertIn("policy_evaluation=<path>", message)
+
+    def test_a_fixture_verdict_cannot_carry_measured_values(self):
+        """Layout QA may render FINAL; it may not publish a measurement on that authority."""
+        from reporting.provenance import ProvenanceError, fixture_payload
+
+        # The legitimate use: every value a fixture, status floored at NÃO DISPONÍVEL.
+        data = fixture_payload(case_id="CASO-QA", report_id="09", summary="s", basis="qa")
+        self.assertEqual(data["operational_status"], "NÃO DISPONÍVEL")
+        self.assertEqual(data["policy_evaluation"]["source"]["origin"], "fixture")
+
+        compiler = PayloadCompiler(case_id="CASO-QA", report_id="09")
+        compiler._install_verdict(
+            Artifact.from_payload(POLICY_EVALUATION_ARTIFACT, PASS_VERDICT), fixture=True
+        )
+        compiler.register(Artifact.from_payload("array-qc", ARTIFACT))
+        compiler.derive(
+            "summary", artifact="array-qc", locator="metrics.call_rate",
+            status="VERIFICADO", basis="uma medição real",
+        )
+        compiler.state("sources", ["array-qc"], kind="case_control", basis="s", status="VERIFICADO")
+        compiler.state("limitations", "x", kind="case_control", basis="l", status="VERIFICADO")
+        with self.assertRaises(ProvenanceError) as caught:
+            compiler.compile()
+        self.assertIn("fixture policy verdict cannot carry measured values", str(caught.exception))
+
     def test_a_builder_can_no_longer_hand_compile_a_verdict(self):
         compiler = PayloadCompiler(case_id="CASO-AUT", report_id="09")
         with self.assertRaises(TypeError):
@@ -92,9 +140,9 @@ class VerdictIsCopiedNotComposedTest(unittest.TestCase):
         self.assertIs(data["publication_gate"]["qc_verified"], True)
         source = data["policy_evaluation"]["source"]
         self.assertEqual(source["status"], "VERIFICADO")
-        self.assertEqual(
-            source["sha256"], Artifact.from_payload(POLICY_EVALUATION_ARTIFACT, PASS_VERDICT).sha256
-        )
+        self.assertTrue(source["sha256"])
+        self.assertEqual(source["origin"], "policy-engine-output")
+        self.assertTrue(source["path"])
 
     def test_a_refused_verdict_is_carried_verbatim(self):
         """The builder cannot upgrade what the engine withheld."""
