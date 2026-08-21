@@ -66,6 +66,78 @@ def _gene_layer(genes: list) -> str:
     return "; ".join(parts)
 
 
+def _percent_or_unavailable(value) -> str:
+    return f"{value * 100:.1f}%" if isinstance(value, (int, float)) else UNAVAILABLE
+
+
+def _conditional_layer(genes: list) -> str:
+    """The conditional diplotypes and phenotypes, with the residual that qualifies them.
+
+    This layer was computed into the passport and rendered nowhere. The two artifacts of one
+    run therefore disagreed about what had been derived: the report said "Nenhum diplótipo
+    foi estabelecido nesta execução" and printed `fenótipo: NÃO DISPONÍVEL` for CYP2C19,
+    while the passport delivered beside it carried
+    `conditional_phenotype: INFERIDO -> Normal Metabolizer` for the same gene — under a
+    residual of 0.245 in African American/Afro-Caribbean, a quarter of the altered-function
+    allele frequency left unexcluded, and a lower bound at that.
+
+    A phenotype that exists in the machine-readable artifact and not in the document is worse
+    than either publishing it or not computing it: whoever reads the JSON gets the label
+    without the paragraph that qualifies it, and whoever reads the report is told nothing was
+    derived. It is published here, and the residual is not separable from it.
+    """
+    lines: list[str] = []
+    for record in genes:
+        discrimination = record.get("discrimination") or {}
+        diplotype = discrimination.get("conditional_diplotype") or {}
+        if diplotype.get("status") != "INFERIDO":
+            reasons = "; ".join(diplotype.get("reasons") or []) or UNAVAILABLE
+            lines.append(f"{record['gene']}: sem diplótipo condicional — {reasons}")
+            continue
+
+        residual = discrimination.get("residual") or {}
+        phenotype = discrimination.get("conditional_phenotype") or {}
+        altered = _percent_or_unavailable(residual.get("worst_altered"))
+        uncertain = _percent_or_unavailable(residual.get("worst_uncertain"))
+        bound = "" if residual.get("bounded") else " (limite inferior)"
+        phenotype_text = (
+            f"fenótipo condicional {phenotype['value']}"
+            if phenotype.get("status") == "INFERIDO"
+            else f"fenótipo condicional {UNAVAILABLE} — {phenotype.get('reason', UNAVAILABLE)}"
+        )
+        lines.append(
+            f"{record['gene']}: {diplotype['value']} "
+            f"({diplotype['alleles_tested']} alelos testados, "
+            f"{diplotype['alleles_not_excluded']} não excluídos); {phenotype_text}. "
+            f"Risco residual{bound}: função alterada {altered} em "
+            f"{residual.get('worst_population') or UNAVAILABLE}, função incerta {uncertain} em "
+            f"{residual.get('worst_uncertain_population') or UNAVAILABLE}."
+        )
+    return " | ".join(lines) if lines else "nenhum gene com camada condicional nesta execução"
+
+
+def _requisition_text(requisitions: list) -> str:
+    if not requisitions:
+        return (
+            "Nenhuma requisição de sequenciamento foi proposta: ou nenhum gene tem alelos de "
+            "função alterada ou incerta por excluir, ou não há registro sobre o qual calcular."
+        )
+    parts = [
+        f"{r['gene']}: {r['position_count']} posições resolvem "
+        f"{len(r.get('alleles_resolved') or [])} alelos"
+        + (
+            f"; {len(r['alleles_unresolvable'])} permanecem indiscrimináveis"
+            if r.get("alleles_unresolvable")
+            else ""
+        )
+        for r in requisitions
+    ]
+    return (
+        "PROPOSTO (não executado): " + "; ".join(parts) + ". "
+        + (requisitions[0].get("scope_note") or "")
+    ).strip()
+
+
 def _anesthesia_text(card: dict) -> str:
     if card.get("status") == UNAVAILABLE and not card.get("observations"):
         gaps = _anesthesia_gaps(card)
@@ -146,7 +218,22 @@ def build_payload(passport_path: Path, matrix_path: Path) -> dict:
         basis="estado de diplótipo por gene",
         kind="computed",
         transform=lambda genes: (
-            "Nenhum diplótipo foi estabelecido nesta execução. "
+            # Qualified: the unconditional diplotype is one of two things this run derives,
+            # and the flat sentence read as "nothing was derived" while the passport carried
+            # conditional diplotypes and a metabolizer label for the same genes.
+            (
+                "Nenhum diplótipo incondicional foi estabelecido nesta execução"
+                + (
+                    "; a camada condicional abaixo registra o que foi derivado sob suposição "
+                    "declarada e o risco residual dela. "
+                    if any(
+                        ((g.get("discrimination") or {}).get("conditional_diplotype") or {}).get("status")
+                        == "INFERIDO"
+                        for g in genes
+                    )
+                    else ", e nenhum diplótipo condicional foi derivado. "
+                )
+            )
             if all(g["diplotype"]["status"] == UNAVAILABLE for g in genes)
             else ""
         )
@@ -176,6 +263,29 @@ def build_payload(passport_path: Path, matrix_path: Path) -> dict:
         basis="loci, classificações e estado de diplótipo/fenótipo por gene",
         kind="computed",
         transform=_gene_layer,
+    )
+
+    compiler.section_derived(
+        "Diplótipo condicional e risco residual",
+        artifact="pgx-passport",
+        locator="genes",
+        status=status,
+        basis=(
+            "diplótipo condicionado ao conjunto de alelos discriminável nesta amostra, com o "
+            "risco residual dos alelos não excluídos por grupo biogeográfico"
+        ),
+        kind="computed",
+        transform=_conditional_layer,
+    )
+
+    compiler.section_derived(
+        "Requisição de sequenciamento",
+        artifact="pgx-passport",
+        locator="sequencing_requisitions",
+        status=status,
+        basis="posições que tornariam discrimináveis os alelos de função alterada ou incerta",
+        kind="computed",
+        transform=_requisition_text,
     )
 
     compiler.section_derived(

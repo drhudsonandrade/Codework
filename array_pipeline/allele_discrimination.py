@@ -532,6 +532,20 @@ def conditional_diplotype(
             f"fase não resolvida: {len(heterozygous_positions)} posições definidoras "
             f"heterozigotas ({', '.join(sorted(heterozygous_positions))}) admitem mais de um diplótipo"
         )
+    unreadable = [f for f in detected if not f.get("zygosity")]
+    if unreadable:
+        # The branch below reads zygosity to decide whether the second chromosome carries the
+        # same allele or none of the tested ones. With zygosity unreadable — a defining
+        # position called with a single character, one allele observed rather than two —
+        # neither statement is supported, and falling through to the heterozygous branch
+        # would assert the stronger of the two.
+        reasons.append(
+            "zigosidade não legível em "
+            f"{', '.join(sorted(f['allele'] for f in unreadable))}: "
+            + "; ".join(
+                sorted({str(f.get("zygosity_basis") or "base não registrada") for f in unreadable})
+            )
+        )
 
     if reasons:
         return {"status": UNAVAILABLE, "value": None, "reasons": reasons}
@@ -640,15 +654,20 @@ def conditional_phenotype(
     unpriced = len(residual.get("unpriced_altered") or []) + len(
         residual.get("unpriced_uncertain") or []
     )
+    # Both axes. The caveat priced only the altered-function alleles, and `residual_risk`
+    # computes the uncertain-function ones separately *and from a different population* — the
+    # two maxima rarely coincide. A gene whose altered residual is small and whose uncertain
+    # residual is not would have carried a reassuring sentence next to the metabolizer label.
     caveat = (
         f"Fenótipo condicional: vale se nenhum dos {diplotype.get('alleles_not_excluded')} "
         f"alelos não interrogados estiver presente. Frequência somada dos alelos de função "
         f"alterada não excluídos: {residual.get('worst_altered')} no grupo "
-        f"{residual.get('worst_population')}"
+        f"{residual.get('worst_population')}; de função incerta: "
+        f"{residual.get('worst_uncertain')} no grupo {residual.get('worst_uncertain_population')}"
         + (
             "."
             if bounded
-            else f"; este valor é um limite inferior, porque {unpriced} alelos não excluídos não "
+            else f"; ambos são limites inferiores, porque {unpriced} alelos não excluídos não "
             "têm frequência publicada pelo CPIC."
         )
     )
@@ -667,6 +686,8 @@ def conditional_phenotype(
                 "residual_bounded": bounded,
                 "residual_worst_altered": residual.get("worst_altered"),
                 "residual_worst_population": residual.get("worst_population"),
+                "residual_worst_uncertain": residual.get("worst_uncertain"),
+                "residual_worst_uncertain_population": residual.get("worst_uncertain_population"),
                 "residual_unpriced_alleles": unpriced,
                 "applies_if": diplotype.get("conditional_on"),
                 "caveat": caveat,

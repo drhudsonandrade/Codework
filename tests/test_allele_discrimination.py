@@ -253,6 +253,27 @@ class ConditionalDiplotypeTest(unittest.TestCase):
         self.assertEqual(diplotype["status"], UNAVAILABLE)
         self.assertTrue(any("nenhum alelo do CPIC" in r for r in diplotype["reasons"]))
 
+    def test_an_unreadable_zygosity_blocks_the_call_instead_of_defaulting(self):
+        """One observed allele is not evidence about the second chromosome.
+
+        The branch reads zygosity to choose between "both chromosomes carry this allele" and
+        "the other carries none of the tested ones". With zygosity unreadable — a defining
+        position called with a single character — neither holds, and falling through to the
+        else branch asserts the stronger of the two.
+        """
+        half_read = dict(
+            FINDING_DETECTED_HET,
+            zygosity=None,
+            zygosity_basis="zigosidade não legível: 1 posição(ões) definidora(s) sem chamada diploide (rs1)",
+            positions=[{"rsid": "rs1", "genotype": "G", "interrogable": True}],
+        )
+        result = _analyse({"rs1": "OBSERVADO"}, [half_read], [])
+        diplotype = result["conditional_diplotype"]
+        self.assertEqual(diplotype["status"], UNAVAILABLE)
+        self.assertIsNone(diplotype["value"])
+        self.assertTrue(any("zigosidade não legível" in r for r in diplotype["reasons"]))
+        self.assertTrue(any("G*2" in r for r in diplotype["reasons"]))
+
     def test_two_heterozygous_defining_positions_block_the_call(self):
         result = _analyse({"rs1": "OBSERVADO", "rs2": "OBSERVADO"}, [FINDING_ABSENT], ["rs1", "rs2"])
         diplotype = result["conditional_diplotype"]
@@ -342,7 +363,9 @@ class ConditionalPhenotypeTest(unittest.TestCase):
         self.assertEqual(phenotype["status"], "INFERIDO")
         self.assertFalse(phenotype["residual_bounded"])
         self.assertEqual(phenotype["residual_unpriced_alleles"], 1)
-        self.assertIn("limite inferior", phenotype["caveat"])
+        self.assertIn("limites inferiores", phenotype["caveat"])
+        # Both axes are priced next to the label, not only the altered one.
+        self.assertIn("função incerta", phenotype["caveat"])
 
     def test_a_diplotype_absent_from_the_table_yields_no_nearest_match(self):
         spec = dict(SPEC, phenotype_map={"*9/*9": {"phenotype": "Poor Metabolizer"}})

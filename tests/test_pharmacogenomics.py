@@ -540,6 +540,76 @@ class AnesthesiaScopeTest(unittest.TestCase):
         self.assertEqual(card["status"], "VERIFICADO")
 
 
+class ConditionalLayerReachesTheReportTest(unittest.TestCase):
+    """The report and the passport must agree about what was derived.
+
+    The conditional layer was computed into the passport and rendered nowhere. For the same
+    run and the same gene, the report said "Nenhum diplótipo foi estabelecido nesta execução"
+    and printed `fenótipo: NÃO DISPONÍVEL`, while the passport delivered beside it carried
+    `conditional_phenotype: INFERIDO -> Normal Metabolizer` under a residual of 0.245 in
+    African American/Afro-Caribbean — and a lower bound at that. A metabolizer label that
+    exists in the machine-readable artifact and not in the document reaches its reader
+    stripped of the paragraph that qualifies it.
+    """
+
+    REAL_REGISTRY = json.loads(
+        (ROOT / "config/pgx_allele_definitions.json").read_text(encoding="utf-8")
+    )
+
+    def _sections(self, root: Path):
+        from scripts.build_pharmacogenomic_report import build_payload
+
+        matrix_path, passport, _ = _artifacts(root, CLEAN_ROWS, registry=self.REAL_REGISTRY)
+        passport_path = write_passport(passport, root / "passport.json")
+        return build_payload(passport_path, matrix_path)["sections"], passport
+
+    def test_a_conditional_phenotype_in_the_passport_appears_in_the_report(self):
+        with tempfile.TemporaryDirectory() as td:
+            sections, passport = self._sections(Path(td))
+        cyp = next(g for g in passport["genes"] if g["gene"] == "CYP2C19")
+        phenotype = cyp["discrimination"]["conditional_phenotype"]
+        self.assertEqual(phenotype["status"], "INFERIDO")
+
+        section = sections["Diplótipo condicional e risco residual"]
+        self.assertIn(str(phenotype["value"]), section)
+        self.assertIn("CYP2C19", section)
+
+    def test_the_residual_is_not_separable_from_the_label(self):
+        with tempfile.TemporaryDirectory() as td:
+            sections, passport = self._sections(Path(td))
+        residual = next(
+            g for g in passport["genes"] if g["gene"] == "CYP2C19"
+        )["discrimination"]["residual"]
+        section = sections["Diplótipo condicional e risco residual"]
+        self.assertIn(f"{residual['worst_altered'] * 100:.1f}%", section)
+        self.assertIn(str(residual["worst_population"]), section)
+        self.assertIn("função incerta", section)
+        self.assertIn("limite inferior", section)
+
+    def test_the_summary_no_longer_reads_as_nothing_was_derived(self):
+        with tempfile.TemporaryDirectory() as td:
+            sections, _passport = self._sections(Path(td))
+        summary = sections["Resumo farmacogenômico"]
+        self.assertIn("incondicional", summary)
+        self.assertIn("camada condicional", summary)
+
+    def test_the_sequencing_requisition_reaches_the_page_as_proposto(self):
+        with tempfile.TemporaryDirectory() as td:
+            sections, passport = self._sections(Path(td))
+        section = sections["Requisição de sequenciamento"]
+        self.assertIn("PROPOSTO", section)
+        self.assertIn("não executado", section)
+        for requisition in passport["sequencing_requisitions"]:
+            self.assertIn(requisition["gene"], section)
+            self.assertIn(str(requisition["position_count"]), section)
+
+    def test_a_gene_without_a_conditional_diplotype_says_why(self):
+        with tempfile.TemporaryDirectory() as td:
+            sections, _passport = self._sections(Path(td))
+        section = sections["Diplótipo condicional e risco residual"]
+        self.assertIn("BCHE: sem diplótipo condicional", section)
+
+
 class ReportIntegrationTest(unittest.TestCase):
     def _payload(self, root: Path, rows: str = CLEAN_ROWS, registry: dict | None = REGISTRY):
         from scripts.build_pharmacogenomic_report import build_payload
