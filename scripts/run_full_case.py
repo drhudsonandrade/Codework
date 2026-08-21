@@ -24,6 +24,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import os
+import subprocess
+
 from array_pipeline.clinical_findings import build_clinical_findings, write_findings
 from array_pipeline.completeness import build_completeness_matrix, write_matrix
 from array_pipeline.homozygosity import analyse_array as analyse_homozygosity
@@ -46,6 +49,76 @@ DEFAULT_PGX_PANEL = ROOT / "config/pgx_panel_targets.json"
 DEFAULT_EVIDENCE = ROOT / "docs/evidence/GENE_DISEASE_VALIDITY_1STAR.json.gz"
 DEFAULT_ASSESSED = ROOT / "docs/evidence/ASSESSED_ALLELES_CLINVAR.json"
 DEFAULT_ANCESTRY_PANEL = ROOT / "config/ancestry_reference_panel.json.gz"
+
+
+def evaluate_policy(
+    input_path: Path, qc_path: Path, outdir: Path, *, consent: Path | None
+) -> tuple[Path | None, str]:
+    """Run the policy engine on this case and return its evaluation.
+
+    This entrypoint had no policy plane at all: it produced every report from its own
+    builders, each of which granted itself the verdict. The audit called that a second
+    execution authority, and it was — the engine was never asked, so it could never disagree.
+
+    It is asked here. The refusal a caller now sees is the engine's, with its reasons, rather
+    than the absence of one; and when the engine cannot be run the evaluation is simply
+    missing, which `PayloadCompiler` already treats as "no authorisation".
+    """
+    annotation = outdir / "annotation.json"
+    manifest = outdir / "case-manifest.json"
+    evaluation = outdir / "policy-evaluation.json"
+    ruleset_dir = outdir / "normative"
+    try:
+        subprocess.run(
+            [sys.executable, str(ROOT / "scripts/annotate_partial_genome.py"),
+             "--input", str(input_path), "--qc", str(qc_path),
+             "--mode", "plan-only", "--output", str(annotation)],
+            check=True, capture_output=True, text=True,
+        )
+        command = [sys.executable, str(ROOT / "scripts/build_array_case_manifest.py"),
+                   "--qc", str(qc_path), "--annotation", str(annotation),
+                   "--output", str(manifest)]
+        if consent is not None:
+            command += ["--consent", str(consent)]
+        subprocess.run(command, check=True, capture_output=True, text=True)
+        subprocess.run(
+            [sys.executable, str(ROOT / "scripts/materialize_ruleset.py"),
+             "--output-dir", str(ruleset_dir)],
+            check=True, capture_output=True, text=True,
+        )
+        canonical = next(ruleset_dir.glob("REGRAS_PROJETO_GENOMA_VIGENTE_*.txt"))
+        environment = {
+            **os.environ,
+            "GENOMA_RULESET_PATH": str(canonical),
+            "GENOMA_RULESET_SHA_MANIFEST": str(ROOT / "manifests/RULESET_V3.4.sha256"),
+            "PYTHONPATH": str(ROOT / "policy_engine"),
+        }
+        completed = subprocess.run(
+            [sys.executable, "-m", "genoma_policy", "evaluate", str(manifest),
+             "--output", str(evaluation)],
+            env=environment, capture_output=True, text=True,
+        )
+    except (subprocess.CalledProcessError, OSError, StopIteration) as exc:
+        return None, f"BLOQUEADO: {type(exc).__name__}: {exc}"
+    finally:
+        # The plaintext ruleset is materialised only for the duration of the evaluation.
+        for stale in ruleset_dir.glob("REGRAS_PROJETO_GENOMA_VIGENTE_*.txt"):
+            stale.unlink(missing_ok=True)
+
+    if not evaluation.is_file():
+        return None, f"BLOQUEADO: policy engine produced no evaluation ({completed.stderr.strip()[:200]})"
+    verdict = json.loads(evaluation.read_text(encoding="utf-8"))
+    blocking = [
+        g for g in verdict.get("gates", [])
+        if isinstance(g, dict) and g.get("blocking") and g.get("state") != "PASS"
+    ]
+    detail = "; ".join(
+        f"{g['gate']}: {'; '.join(str(r) for r in (g.get('reasons') or [])[:2])}" for g in blocking
+    )
+    return evaluation, (
+        "READY" if verdict.get("ready_for_requested_operation") is True
+        else f"NÃO AUTORIZADO pelo policy engine — {detail or 'sem razão registrada'}"
+    )
 
 
 def _write_json(payload: dict[str, Any], path: Path) -> Path:
@@ -85,10 +158,22 @@ def run(
     template_dir: Path | None,
     dossier: Path | None,
     probe_path: Path | None = None,
+    consent: Path | None = None,
 ) -> dict[str, Any]:
     outdir.mkdir(parents=True, exist_ok=True)
     results: dict[str, Any] = {}
     payloads: dict[str, Path] = {}
+
+    # Asked before anything is compiled, so every builder receives the same verdict and none
+    # of them composes one. A missing or refusing evaluation does not stop the measurements —
+    # the matrix, the passport and the clinical join are facts about the file either way — it
+    # stops publication, which is the decision the engine owns.
+    policy_path, policy_state = evaluate_policy(input_path, qc_path, outdir, consent=consent)
+    results["policy-evaluation"] = {
+        "status": "OK" if policy_path is not None else "BLOQUEADO",
+        "verdict": policy_state,
+        "path": str(policy_path) if policy_path else None,
+    }
 
     matrix_path = _step(
         results,
@@ -195,22 +280,22 @@ def run(
     # `probe_path` is positional in build_payload, so omitting it raised a TypeError that
     # blocked report 05 in every orchestrated run — a failure of the call, read as a failure
     # of the report.
-    payload("05", lambda: p05(qc_path, matrix_path, probe_path))
+    payload("05", lambda: p05(qc_path, matrix_path, probe_path, policy_path))
     if passport_path:
-        payload("06", lambda: p06(passport_path, matrix_path))
-    payload("09", lambda: p09(matrix_path, qc_path))
+        payload("06", lambda: p06(passport_path, matrix_path, policy_path))
+    payload("09", lambda: p09(matrix_path, qc_path, policy_path))
     if passport_path:
-        payload("10", lambda: p10(matrix_path, passport_path))
+        payload("10", lambda: p10(matrix_path, passport_path, policy_path))
 
     if findings_path:
         from scripts.build_association_report import build_payload as passoc
         from scripts.build_clinical_report import build_payload as p01
         from scripts.build_reproductive_report import build_payload as p03
 
-        payload("01", lambda: p01(findings_path, matrix_path, qc_path))
-        payload("03", lambda: p03(findings_path, matrix_path, homozygosity_path))
+        payload("01", lambda: p01(findings_path, matrix_path, qc_path, policy_path))
+        payload("03", lambda: p03(findings_path, matrix_path, homozygosity_path, policy_path))
         for report_id in ("04", "07", "08"):
-            payload(report_id, (lambda rid: lambda: passoc(rid, findings_path, matrix_path))(report_id))
+            payload(report_id, (lambda rid: lambda: passoc(rid, findings_path, matrix_path, policy_path))(report_id))
 
     from scripts.build_ancestry_report import build_payload as p02
 
@@ -224,6 +309,7 @@ def run(
             qc_path,
             panel_path=ancestry_panel if ancestry_panel and ancestry_panel.is_file() else None,
             input_path=input_path if ancestry_panel and ancestry_panel.is_file() else None,
+            policy_evaluation=policy_path,
         ),
     )
 
@@ -234,7 +320,7 @@ def run(
         def guide() -> dict:
             manifest, _hashes = _verified_coordinate_manifest(template_dir)
             rows = analyse(manifest)
-            return p11(rows, manifest, render(rows, manifest))
+            return p11(rows, manifest, render(rows, manifest), policy_path)
 
         payload("11", guide)
 
@@ -281,6 +367,11 @@ def main() -> int:
     )
     parser.add_argument("--template-dir", help="installed v3.0 template pack; renders PDFs")
     parser.add_argument("--dossier", help="case dossier JSON, bound to the analysed case")
+    parser.add_argument(
+        "--consent",
+        help="operator's consent record (JSON or path): verified, version, "
+        "authorized_domains. Without it CONSENT_GATE fails and no report may publish.",
+    )
     args = parser.parse_args()
 
     result = run(
@@ -296,6 +387,7 @@ def main() -> int:
         template_dir=Path(args.template_dir) if args.template_dir else None,
         dossier=Path(args.dossier) if args.dossier else None,
         probe_path=Path(args.probe) if args.probe else None,
+        consent=Path(args.consent) if args.consent else None,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if not result["blocked"] else 2

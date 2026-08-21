@@ -204,3 +204,25 @@ class ArrayManifestAnswersItsGatesTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OrchestratorAsksTheEngineTest(unittest.TestCase):
+    """`run_full_case` had no policy plane at all — the engine could never disagree."""
+
+    def test_the_entrypoint_runs_the_engine_and_threads_its_verdict(self):
+        source = (ROOT / "scripts/run_full_case.py").read_text(encoding="utf-8")
+        self.assertIn("def evaluate_policy(", source)
+        self.assertIn('"genoma_policy", "evaluate"', source)
+        # Every builder receives the same evaluation; none composes one.
+        for call in ("p05(qc_path, matrix_path, probe_path, policy_path)",
+                     "p09(matrix_path, qc_path, policy_path)",
+                     "p01(findings_path, matrix_path, qc_path, policy_path)"):
+            self.assertIn(call, source)
+
+    def test_the_plaintext_ruleset_is_removed_after_the_evaluation(self):
+        source = (ROOT / "scripts/run_full_case.py").read_text(encoding="utf-8")
+        self.assertIn("stale.unlink(missing_ok=True)", source)
+
+    def test_consent_is_an_input_the_operator_supplies(self):
+        source = (ROOT / "scripts/run_full_case.py").read_text(encoding="utf-8")
+        self.assertIn('"--consent"', source)
