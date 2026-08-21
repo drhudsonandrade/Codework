@@ -47,6 +47,21 @@ MAX_HETEROZYGOTES_PER_TRACT = 1
 #: crossing a region the array did not interrogate, and its homozygosity is unmeasured.
 MAX_GAP_KB = 1000.0
 
+#: How much sparser than the sample's own median spacing a tract's markers may average
+#: before the run stops being a measurement. `MIN_TRACT_MARKERS` bounds the *count* and
+#: never the *density*, so fifty homozygous calls scattered over five megabases satisfied it
+#: — which is what the module's own preamble calls "a 2 Mb gap with four markers in it".
+#:
+#: Measured on the first real array: the two longest tracts averaged 98.7 and 70.1 kb between
+#: markers against a sample median of 2.11 kb — 47x and 33x — and together they were 68% of
+#: the reported F_ROH. Both sat on chromosome 9, over the pericentromeric heterochromatin
+#: that arrays barely tile. They were coverage holes counted as homozygous genome.
+#:
+#: The bound is relative to the sample rather than absolute because array densities differ by
+#: an order of magnitude between platforms, and a threshold in kilobases would be either
+#: vacuous on a dense chip or fatal on a sparse one.
+MAX_TRACT_SPACING_FACTOR = 10.0
+
 #: Below this many called autosomal markers the estimate is refused outright. Array-based
 #: F_ROH is stable in the hundreds of thousands of markers; at low density the windows cannot
 #: resolve tract boundaries and the fraction is dominated by where the markers happen to be.
@@ -90,12 +105,43 @@ def _zygosity(genotype: Any) -> str | None:
     return "HOM" if text[0] == text[1] else "HET"
 
 
-def find_tracts(markers: Iterable[tuple[str, int, str]]) -> list[dict[str, Any]]:
+def median_spacing_kb(markers: Iterable[tuple[str, int, str]]) -> float | None:
+    """The sample's own median distance between consecutive autosomal markers, in kb.
+
+    F_ROH counts a tract's whole span, so how densely that span was actually interrogated
+    decides whether the count means anything. Taken from the sample rather than assumed, so
+    the density bound adapts to the platform instead of encoding one chip's spacing.
+    """
+    by_chromosome: dict[str, list[int]] = {}
+    for chromosome, position, genotype in markers:
+        if _zygosity(genotype) is None:
+            continue
+        by_chromosome.setdefault(str(chromosome), []).append(int(position))
+    gaps: list[float] = []
+    for positions in by_chromosome.values():
+        positions.sort()
+        gaps.extend((b - a) / 1000.0 for a, b in zip(positions, positions[1:]))
+    if not gaps:
+        return None
+    gaps.sort()
+    middle = len(gaps) // 2
+    return gaps[middle] if len(gaps) % 2 else (gaps[middle - 1] + gaps[middle]) / 2.0
+
+
+def find_tracts(
+    markers: Iterable[tuple[str, int, str]],
+    *,
+    max_mean_spacing_kb: float | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Homozygous tracts from (chromosome, position, genotype), one chromosome at a time.
 
     Markers are sorted here rather than assumed sorted: an unsorted input would produce tracts
     that span the whole chromosome and an F_ROH near one, which looks like a dramatic finding
     instead of a bug.
+
+    Returns (tracts, rejected). A run whose markers average further apart than
+    `max_mean_spacing_kb` is rejected rather than dropped silently: it is a region the array
+    did not tile, and a reader has to be able to see that the estimate excluded it and why.
     """
     by_chromosome: dict[str, list[tuple[int, str]]] = {}
     for chromosome, position, genotype in markers:
@@ -105,6 +151,7 @@ def find_tracts(markers: Iterable[tuple[str, int, str]]) -> list[dict[str, Any]]
         by_chromosome.setdefault(str(chromosome), []).append((int(position), state))
 
     tracts: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = []
     for chromosome, entries in by_chromosome.items():
         entries.sort()
         start = 0
@@ -134,19 +181,31 @@ def find_tracts(markers: Iterable[tuple[str, int, str]]) -> list[dict[str, Any]]
             span_kb = (entries[end][0] - entries[start][0]) / 1000.0
             called = end - start + 1
             if span_kb >= MIN_TRACT_KB and called >= MIN_TRACT_MARKERS:
-                tracts.append(
-                    {
-                        "chromosome": chromosome,
-                        "start": entries[start][0],
-                        "end": entries[end][0],
-                        "length_kb": round(span_kb, 1),
-                        "markers": called,
-                        "heterozygotes_tolerated": heterozygotes,
-                    }
-                )
+                # Mean spacing across the run, which is what decides whether its length was
+                # interrogated or merely spanned.
+                spacing_kb = span_kb / max(called - 1, 1)
+                record = {
+                    "chromosome": chromosome,
+                    "start": entries[start][0],
+                    "end": entries[end][0],
+                    "length_kb": round(span_kb, 1),
+                    "markers": called,
+                    "heterozygotes_tolerated": heterozygotes,
+                    "mean_spacing_kb": round(spacing_kb, 2),
+                }
+                if max_mean_spacing_kb is not None and spacing_kb > max_mean_spacing_kb:
+                    record["rejected"] = (
+                        f"marcadores a {spacing_kb:.1f} kb de distância em média, acima do "
+                        f"limite de {max_mean_spacing_kb:.1f} kb para esta amostra; o trecho "
+                        "foi atravessado, não interrogado"
+                    )
+                    rejected.append(record)
+                else:
+                    tracts.append(record)
             start = max(end + 1, start + 1)
     tracts.sort(key=lambda t: (-t["length_kb"], t["chromosome"], t["start"]))
-    return tracts
+    rejected.sort(key=lambda t: (-t["length_kb"], t["chromosome"], t["start"]))
+    return tracts, rejected
 
 
 def analyse(
@@ -208,7 +267,12 @@ def analyse(
             "method": _METHOD,
         }
 
-    tracts = find_tracts(called)
+    # The density bound comes from the sample itself, so it adapts to the platform.
+    median_kb = median_spacing_kb(called)
+    max_spacing_kb = (
+        median_kb * MAX_TRACT_SPACING_FACTOR if median_kb and median_kb > 0 else None
+    )
+    tracts, rejected = find_tracts(called, max_mean_spacing_kb=max_spacing_kb)
     total_kb = sum(t["length_kb"] for t in tracts)
     f_roh = total_kb / AUTOSOME_KB
     if f_roh > 1.0:
@@ -239,6 +303,14 @@ def analyse(
         "longest_tract_kb": tracts[0]["length_kb"] if tracts else 0.0,
         "tracts": tracts[:50],
         "tracts_omitted": max(0, len(tracts) - 50),
+        # Runs the array spanned without interrogating. Reported rather than dropped: they
+        # are the difference between this F_ROH and the one a denser platform would give,
+        # and on the first real array they were 68% of the total before this bound existed.
+        "tracts_rejected_sparse": rejected[:20],
+        "tracts_rejected_sparse_count": len(rejected),
+        "tracts_rejected_sparse_kb": round(sum(t["length_kb"] for t in rejected), 1),
+        "sample_median_spacing_kb": round(median_kb, 2) if median_kb else None,
+        "max_tract_mean_spacing_kb": round(max_spacing_kb, 2) if max_spacing_kb else None,
         "called_markers": len(called),
         "call_rate": round(call_rate, 4),
         "parameters": {
@@ -246,6 +318,7 @@ def analyse(
             "min_tract_markers": MIN_TRACT_MARKERS,
             "max_heterozygotes_per_tract": MAX_HETEROZYGOTES_PER_TRACT,
             "max_gap_kb": MAX_GAP_KB,
+            "max_tract_spacing_factor": MAX_TRACT_SPACING_FACTOR,
         },
         "reference_expectations": list(REFERENCE_EXPECTATIONS),
         "interpretation": _interpretation(f_roh, len(tracts)),
@@ -298,8 +371,11 @@ def _interpretation(f_roh: float, tract_count: int) -> dict[str, Any]:
 _METHOD = (
     "Tratos homozigotos por varredura de janela deslizante sobre genótipos chamados, "
     f"exigindo comprimento >= {MIN_TRACT_KB:.0f} kb, >= {MIN_TRACT_MARKERS} marcadores "
-    f"chamados, no máximo {MAX_HETEROZYGOTES_PER_TRACT} heterozigoto tolerado e nenhum vão "
-    f"acima de {MAX_GAP_KB:.0f} kb. F_ROH é a soma dos tratos dividida por "
+    f"chamados, no máximo {MAX_HETEROZYGOTES_PER_TRACT} heterozigoto tolerado, nenhum vão "
+    f"acima de {MAX_GAP_KB:.0f} kb e espaçamento médio de marcadores dentro do trato até "
+    f"{MAX_TRACT_SPACING_FACTOR:.0f}x a mediana da própria amostra — um trecho mais esparso "
+    "que isso foi atravessado, não interrogado, e é excluído do numerador. F_ROH é a soma "
+    "dos tratos dividida por "
     f"{AUTOSOME_KB:,.0f} kb de autossomos. Estimador de McQuillan et al., Am J Hum Genet "
     "83:359-372 (2008), preferido aos estimadores por frequência alélica porque estes exigem "
     "uma população de referência pareada que um genoma brasileiro miscigenado não tem."
