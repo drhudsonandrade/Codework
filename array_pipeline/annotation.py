@@ -222,6 +222,37 @@ def extract_target_observations(
     return {k: v for k, v in found.items() if v}
 
 
+def _observation_status(rows: list[dict[str, Any]]) -> str:
+    """The status of one locus, from every check that was actually made about it.
+
+    It read the orientation alone. `check_coordinate` was computed per observation, written
+    onto the record — and consumed by nothing: a locus whose coordinate diverged from the
+    registry, which is proof the file is annotated on another assembly, still reached
+    VERIFICADO because its strand happened to be established. On the first real array,
+    rs4307059 was VERIFICADO with `coordinate_operational_status: NÃO DISPONÍVEL` beside it.
+
+    Both must hold. A coordinate the registry could not supply is not a failure of the file,
+    but it is not a verification either: an rsID is a label, and nothing checked that this
+    label sits where the registry means. Such a locus is INFERIDO — usable, and not
+    presented as confirmed.
+    """
+    if len(rows) != 1:
+        # More than one row for one rsid is an unresolved duplicate; choosing between them
+        # would be the arbitration sections 4 and 7 forbid.
+        return "NÃO DISPONÍVEL"
+    row = rows[0]
+    if row.get("orientation_operational_status") != "VERIFICADO":
+        return "INFERIDO"
+    coordinate = row.get("coordinate_operational_status")
+    if coordinate == "VERIFICADO":
+        return "VERIFICADO"
+    # A divergent coordinate is a positive finding of disagreement, not a gap: the rsid
+    # matches and the position does not, so this locus is not the locus the registry means.
+    if coordinate is None:
+        return "INFERIDO"
+    return "INFERIDO" if "não traz coordenada" in str(row.get("coordinate_basis") or "") else "NÃO DISPONÍVEL"
+
+
 def _query_key(source: str, query: dict[str, Any]) -> str:
     return hashlib.sha256(_stable_json({"source": source, "query": query})).hexdigest()
 
@@ -345,7 +376,7 @@ def annotate_partial_genome(
                 "label": meta.get("label"),
                 "gene": meta.get("gene"),
                 "records": rows,
-                "observation_operational_status": "VERIFICADO" if len(rows) == 1 and rows[0]["orientation_operational_status"] == "VERIFICADO" else ("INFERIDO" if len(rows) == 1 else "NÃO DISPONÍVEL"),
+                "observation_operational_status": _observation_status(rows),
                 "interpretation": "not automatically interpreted; evidence snapshot requires curation",
             }
         )

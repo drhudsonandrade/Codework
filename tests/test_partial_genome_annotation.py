@@ -109,3 +109,61 @@ class PartialGenomeAnnotationTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CoordinateReachesTheObservationStatusTest(unittest.TestCase):
+    """The coordinate check was computed, stored, and consumed by nothing.
+
+    `check_coordinate` compares the observed position against the registry's canonical one —
+    an rsID is a label, and a file carrying the right label at the wrong position is annotated
+    on another assembly. The result was written onto every record and
+    `observation_operational_status` read the orientation alone, so a locus whose coordinate
+    diverged still reached VERIFICADO. On the first real array, rs4307059 was VERIFICADO with
+    `coordinate_operational_status: NÃO DISPONÍVEL` beside it.
+    """
+
+    def _status(self, **row):
+        from array_pipeline.annotation import _observation_status
+
+        base = {"orientation_operational_status": "VERIFICADO"}
+        return _observation_status([{**base, **row}])
+
+    def test_both_checks_must_hold_for_verificado(self):
+        self.assertEqual(self._status(coordinate_operational_status="VERIFICADO"), "VERIFICADO")
+
+    def test_a_divergent_coordinate_blocks_the_locus(self):
+        status = self._status(
+            coordinate_operational_status="NÃO DISPONÍVEL",
+            coordinate_basis="coordenada divergente em GRCh37: o arquivo traz chr1:100 e o registro chr1:200",
+        )
+        self.assertEqual(status, "NÃO DISPONÍVEL")
+
+    def test_a_registry_without_a_canonical_coordinate_is_inferido_not_verified(self):
+        """Not the file's fault, and not a verification either."""
+        status = self._status(
+            coordinate_operational_status="NÃO DISPONÍVEL",
+            coordinate_basis="registro não traz coordenada canônica para rs4307059: rsid ausente",
+        )
+        self.assertEqual(status, "INFERIDO")
+
+    def test_an_unchecked_coordinate_is_inferido(self):
+        """No target metadata means nothing established where this rsid sits."""
+        self.assertEqual(self._status(), "INFERIDO")
+
+    def test_an_unverified_orientation_still_blocks_first(self):
+        self.assertEqual(
+            self._status(
+                orientation_operational_status="NÃO DISPONÍVEL",
+                coordinate_operational_status="VERIFICADO",
+            ),
+            "INFERIDO",
+        )
+
+    def test_duplicate_rows_for_one_rsid_are_never_verified(self):
+        from array_pipeline.annotation import _observation_status
+
+        rows = [
+            {"orientation_operational_status": "VERIFICADO", "coordinate_operational_status": "VERIFICADO"},
+            {"orientation_operational_status": "VERIFICADO", "coordinate_operational_status": "VERIFICADO"},
+        ]
+        self.assertEqual(_observation_status(rows), "NÃO DISPONÍVEL")
