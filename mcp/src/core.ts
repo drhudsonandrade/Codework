@@ -8,7 +8,7 @@ export type AuditRecord = {
   requestId: string;
   tool: string;
   arguments: Record<string, unknown>;
-  status: "PASS" | "FAIL";
+  status: "PASS" | "FAIL" | "RUNNING";
   startedAt: string;
   durationMs: number;
   result?: unknown;
@@ -58,6 +58,51 @@ export function sanitizeError(error: unknown): string {
 export async function readAuditRecord(root: string, requestId: string): Promise<AuditRecord> {
   const file = resolveUnderRoot(root, requestId);
   return JSON.parse(await readFile(file, "utf8")) as AuditRecord;
+}
+
+/**
+ * Claim a request id before the operation runs, atomically.
+ *
+ * The idempotency check read the audit record first and wrote it last, so two concurrent
+ * calls carrying the same requestId both found nothing and both executed; only the second
+ * *write* collided, by which point the side effects had happened twice. The write was
+ * atomic and the execution was not.
+ *
+ * Returns undefined when the claim was taken by this caller, or the existing record when
+ * someone else holds it — a finished one to replay, or a RUNNING one that is still in
+ * flight and must not be started again.
+ */
+export async function claimAuditRecord(
+  root: string,
+  reservation: AuditRecord,
+): Promise<AuditRecord | undefined> {
+  const file = resolveUnderRoot(root, reservation.requestId);
+  await mkdir(path.resolve(root), { recursive: true, mode: 0o700 });
+  await chmod(path.resolve(root), 0o700);
+  try {
+    await writeFile(file, `${JSON.stringify(reservation, null, 2)}\n`, {
+      encoding: "utf8",
+      flag: "wx",
+      mode: 0o600,
+    });
+    await chmod(file, 0o600);
+    return undefined;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      throw error;
+    }
+    return await readAuditRecord(root, reservation.requestId);
+  }
+}
+
+/** Replace a claim with the outcome. Only the holder of the claim calls this. */
+export async function settleAuditRecord(root: string, record: AuditRecord): Promise<void> {
+  const file = resolveUnderRoot(root, record.requestId);
+  await writeFile(file, `${JSON.stringify(record, null, 2)}\n`, {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+  await chmod(file, 0o600);
 }
 
 export async function writeAuditRecord(root: string, record: AuditRecord): Promise<void> {

@@ -11,11 +11,12 @@ import type { NextFunction, Request, Response } from "express";
 import { z } from "zod";
 import {
   type AuditRecord,
+  claimAuditRecord,
   readAuditRecord,
   resolveDirectoryUnderRoot,
   sanitizeError,
   sanitizeToolArguments,
-  writeAuditRecord,
+  settleAuditRecord,
 } from "./core.js";
 import { TOOL_DEFINITIONS } from "./toolDefinitions.js";
 
@@ -96,7 +97,8 @@ async function persistOutcome(
   options: GenomeServerOptions,
   record: AuditRecord,
 ): Promise<void> {
-  await writeAuditRecord(options.auditRoot, record);
+  // Settles the claim this caller already holds, so it overwrites rather than colliding.
+  await settleAuditRecord(options.auditRoot, record);
 }
 
 /** @internal Exported for deterministic idempotency and redaction tests. */
@@ -107,17 +109,36 @@ export async function runAudited<T>(
   operation: () => Promise<T>,
 ): Promise<T> {
   const requestId = String(args.requestId);
-  const existing = await loadAuditRecord(options.auditRoot, requestId);
-  const prior = decodePriorResult<T>(existing, tool);
-  if (prior.kind === "pass") {
-    return prior.value;
-  }
-  if (prior.kind === "fail") {
-    throw new Error(prior.error);
-  }
-
   const startedAt = new Date().toISOString();
   const started = Date.now();
+
+  // The claim is taken before the operation runs. Reading first and writing last left a
+  // window in which two concurrent calls with the same requestId both found nothing and
+  // both executed — the write collided, the side effects did not.
+  const held = await claimAuditRecord(options.auditRoot, {
+    requestId,
+    tool,
+    arguments: sanitizeToolArguments({ ...args, requestId }),
+    status: "RUNNING",
+    startedAt,
+    durationMs: 0,
+  });
+  if (held !== undefined) {
+    if (held.status === "RUNNING") {
+      throw new Error(
+        `request id ${requestId} is already in flight for tool ${held.tool}; a second ` +
+          "execution would repeat its effects, so it is refused rather than retried",
+      );
+    }
+    const prior = decodePriorResult<T>(held, tool);
+    if (prior.kind === "pass") {
+      return prior.value;
+    }
+    if (prior.kind === "fail") {
+      throw new Error(prior.error);
+    }
+    throw new Error(`request id ${requestId} already belongs to tool ${held.tool}`);
+  }
   try {
     const result = await operation();
     const record: AuditRecord = {
