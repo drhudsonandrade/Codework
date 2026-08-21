@@ -23,7 +23,7 @@ if str(ROOT) not in sys.path:
 
 from reporting.case_dossier import load_dossier
 from reporting.editorial_v3 import _verified_coordinate_manifest
-from reporting.engine import render_document, sha256_path
+from reporting.engine import _stamp_ruleset_into_manifest, render_document, sha256_path
 from reporting.template_fill import build_template_fields
 from reporting.template_v3 import TemplateV3Error, render_pdf_from_template
 import reporting.template_v3 as _template_v3
@@ -54,6 +54,11 @@ def render(
 ) -> dict:
     detailed, coordinate_hashes = _verified_coordinate_manifest(template_dir)
     payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    # Stamped before the fill, not after. `render_document` adds the governing ruleset to
+    # the execution manifest on its way to FINAL, so a fill built from the un-stamped
+    # payload put a workflow-log field into the PDF that was missing the very identity the
+    # markdown beside it printed — and left the stamped and unstamped copies disagreeing.
+    payload = _stamp_ruleset_into_manifest(payload)
 
     dossier = None
     suite_level = is_suite_level(report_id, payload)
@@ -73,6 +78,9 @@ def render(
     payload["editorial_mode"] = "template-v3"
     payload["template_fields"] = fill["fields"]
     payload["template_fields_complete"] = fill["unavailable_count"] == 0
+    # Named so the stamp-time check knows which fields it cannot recompute: these came from
+    # the operator's dossier, not from the payload. Everything else must be re-derivable.
+    payload["template_fields_from_dossier"] = fill["from_dossier"]
 
     rendered = render_document(report_id, payload, mode="FINAL")
 

@@ -290,5 +290,115 @@ class SuiteLevelDossierTest(unittest.TestCase):
                 render("01", payload_path, Path(TEMPLATE_DIR), root / "out.pdf", dossier_path)
 
 
+class StampedFieldsAreVerifiedTest(unittest.TestCase):
+    """The PDF's own text came from a dict nothing checked.
+
+    The publication gate and the provenance gate both read the payload's summary, sections
+    and findings. Neither reads `template_fields`, which is what actually gets stamped into
+    the delivered document — 83 placeholders per report. A forged value placed there passed
+    both gates and appeared in the PDF while the markdown bundle beside it stayed honest.
+    """
+
+    @unittest.skipUnless(TEMPLATE_DIR, "set GENOMA_TEMPLATE_DIR to an installed template pack")
+    def _prepared(self):
+        from reporting.editorial_v3 import _verified_coordinate_manifest
+        from reporting.engine import _stamp_ruleset_into_manifest
+        from reporting.provenance import fixture_payload
+        from reporting.template_fill import build_template_fields
+
+        detailed, _ = _verified_coordinate_manifest(Path(TEMPLATE_DIR))
+        payload = _stamp_ruleset_into_manifest(
+            fixture_payload(case_id="CASE-STAMP", report_id="09", summary="resumo", basis="fixture")
+        )
+        fill = build_template_fields("09", payload, detailed)
+        return detailed, payload, fill
+
+    def _render(self, detailed, payload, fields, from_dossier=()):
+        import tempfile
+
+        from reporting.engine import render_document
+        from reporting.template_v3 import render_pdf_from_template
+        import reporting.template_v3 as _tv3
+
+        data = dict(payload)
+        data["editorial_mode"] = "template-v3"
+        data["template_fields"] = fields
+        data["template_fields_complete"] = False
+        data["template_fields_from_dossier"] = list(from_dossier)
+        rendered = render_document("09", data, mode="FINAL")
+        original = _tv3.load_reference_manifest
+        _tv3.load_reference_manifest = lambda *a, **k: detailed
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                return render_pdf_from_template(
+                    rendered, Path(td) / "out.pdf", Path(TEMPLATE_DIR), strict=True
+                )
+        finally:
+            _tv3.load_reference_manifest = original
+
+    @unittest.skipUnless(TEMPLATE_DIR, "set GENOMA_TEMPLATE_DIR to an installed template pack")
+    def test_an_untampered_fill_still_stamps(self):
+        detailed, payload, fill = self._prepared()
+        self.assertGreater(self._render(detailed, payload, dict(fill["fields"]))["page_count"], 0)
+
+    @unittest.skipUnless(TEMPLATE_DIR, "set GENOMA_TEMPLATE_DIR to an installed template pack")
+    def test_a_forged_field_is_refused_before_it_reaches_the_pdf(self):
+        from reporting.template_v3 import TemplateV3Error
+
+        detailed, payload, fill = self._prepared()
+        target = sorted(fill["fields"])[0]
+        forged = {**fill["fields"], target: "TEXTO-FORJADO-NUNCA-MEDIDO"}
+        with self.assertRaises(TemplateV3Error) as caught:
+            self._render(detailed, payload, forged)
+        self.assertIn("do not match what the payload derives", str(caught.exception))
+
+    @unittest.skipUnless(TEMPLATE_DIR, "set GENOMA_TEMPLATE_DIR to an installed template pack")
+    def test_a_field_dropped_between_fill_and_stamp_is_refused(self):
+        # A missing field leaves the raw placeholder visible in the delivered document.
+        from reporting.template_v3 import TemplateV3Error
+
+        detailed, payload, fill = self._prepared()
+        target = sorted(fill["fields"])[0]
+        with self.assertRaises(TemplateV3Error) as caught:
+            self._render(detailed, payload, {k: v for k, v in fill["fields"].items() if k != target})
+        self.assertIn("absent from template_fields", str(caught.exception))
+
+    @unittest.skipUnless(TEMPLATE_DIR, "set GENOMA_TEMPLATE_DIR to an installed template pack")
+    def test_dossier_fields_are_exempt_because_they_are_not_derivable(self):
+        # They come from the operator's administrative record, not the payload, and are
+        # bound instead by case_id — which the dossier must match and provenance anchors.
+        detailed, payload, fill = self._prepared()
+        target = sorted(fill["fields"])[0]
+        token = next(
+            str(item.get("token", "")).strip("[] ").strip()
+            for item in detailed["reports"]["09"]["fields"]
+            if item["field_id"] == target
+        )
+        changed = {**fill["fields"], target: "VALOR VINDO DO DOSSIÊ"}
+        self.assertGreater(
+            self._render(detailed, payload, changed, from_dossier=[token])["page_count"], 0
+        )
+
+    @unittest.skipUnless(TEMPLATE_DIR, "set GENOMA_TEMPLATE_DIR to an installed template pack")
+    def test_the_pdf_carries_the_governing_ruleset(self):
+        # The fill used to run before `render_document` stamped the ruleset into the
+        # execution manifest, so the PDF's workflow-log field lacked the identity the
+        # markdown printed.
+        import tempfile
+
+        import fitz
+
+        from scripts.render_report_pdfs import render
+
+        payload_path = Path(TEMPLATE_DIR).parent / "audit9" / "payload-09.json"
+        if not payload_path.is_file():
+            self.skipTest("no compiled payload available in this environment")
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "x.pdf"
+            render("09", payload_path, Path(TEMPLATE_DIR), out)
+            text = "".join(page.get_text() for page in fitz.open(out))
+        self.assertIn("v3.4", text)
+
+
 if __name__ == "__main__":
     unittest.main()

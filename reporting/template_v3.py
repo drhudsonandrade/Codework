@@ -337,12 +337,69 @@ def _redact_placeholder_text(
     return Path(name), len(boxes)
 
 
+def verify_template_fields(
+    report_id: str,
+    data: dict[str, Any],
+    fields: dict[str, Any],
+    manifest: dict[str, Any],
+) -> None:
+    """Every value about to be stamped must be re-derivable from the payload.
+
+    The PDF is the artifact a clinician is handed, and its text comes from
+    `template_fields` — which nothing checked. The publication gate and the provenance gate
+    both read the payload's summary, sections and findings; neither reads this dict. A
+    forged value placed in it passed both gates and appeared in the delivered document while
+    the markdown bundle beside it stayed honest.
+
+    The check is the same contract `reporting.provenance` states for everything else: the
+    printed text must still equal what the pipeline derived. Here that is enforced by
+    recomputing the fill from the payload and requiring equality.
+
+    Dossier-supplied fields are exempt and listed by name, because they come from the
+    operator's administrative record rather than the payload and cannot be recomputed from
+    it. They are bound instead by `case_id`, which the dossier must match and which the
+    provenance gate now anchors.
+    """
+    from reporting.template_fill import build_template_fields
+
+    exempt = {
+        str(token) for token in (data.get("template_fields_from_dossier") or [])
+    }
+    recomputed = build_template_fields(report_id, data, manifest)["fields"]
+    report = (manifest.get("reports") or {}).get(report_id) or {}
+    token_of = {
+        str(item["field_id"]): str(item.get("token", "")).strip("[] ").strip()
+        for item in report.get("fields", [])
+    }
+
+    mismatched = sorted(
+        field_id
+        for field_id, value in fields.items()
+        if token_of.get(field_id) not in exempt and recomputed.get(field_id) != value
+    )
+    if mismatched:
+        raise TemplateV3Error(
+            f"report {report_id}: {len(mismatched)} template field(s) about to be stamped do "
+            f"not match what the payload derives ({', '.join(mismatched[:5])}). The PDF is the "
+            "artifact that gets delivered; a value in it that the payload cannot reproduce is "
+            "not a measurement."
+        )
+    missing = sorted(set(recomputed) - set(fields))
+    if missing:
+        raise TemplateV3Error(
+            f"report {report_id}: {len(missing)} fillable field(s) are absent from "
+            f"template_fields ({', '.join(missing[:5])}); a field dropped between fill and "
+            "stamp leaves the placeholder in the delivered document"
+        )
+
+
 def render_pdf_from_template(rendered: dict[str, Any], path: Path, template_dir: Path, *, strict: bool = False) -> dict[str, Any]:
     report_id = str(rendered["metadata"]["report_id"])
     manifest = load_reference_manifest()
     template, meta = resolve_template_pdf(report_id, template_dir, manifest)
     data = rendered.get("data", {}) if isinstance(rendered.get("data"), dict) else {}
     fields = data.get("template_fields") if isinstance(data.get("template_fields"), dict) else {}
+    verify_template_fields(report_id, data, fields, manifest)
     systems = _system_values(data)
     fonts = _register_fonts()
     source, redacted_boxes = _redact_placeholder_text(template, meta, fields, systems)
