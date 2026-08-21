@@ -19,6 +19,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -437,6 +438,68 @@ class StampedFieldsAreVerifiedTest(unittest.TestCase):
             render("09", payload_path, Path(TEMPLATE_DIR), out)
             text = "".join(page.get_text() for page in fitz.open(out))
         self.assertIn("v3.4", text)
+
+
+
+class StaticRulesetConflictTest(unittest.TestCase):
+    """A ruleset identity printed as fixed page text must not pass unremarked.
+
+    The v3.0 templates were approved under an earlier ruleset and one of them carries that
+    identity as page text rather than a placeholder, so no fill can reach it. The governing
+    identity is stamped correctly elsewhere on the same page, leaving the delivered PDF
+    naming two rulesets with nothing saying which one produced the numbers. The template
+    bytes are immutable by the store's contract, so the check reports rather than blocks —
+    but it reports on every run.
+
+    The superseded identity is built here rather than written out, because a literal copy of
+    it anywhere in the tree is exactly what `test_normative_identity` forbids.
+    """
+
+    SUPERSEDED = "v" + "3.3"
+    SUPERSEDED_LINE = f"{SUPERSEDED}/VIGENTE/14-" + "08-2026"
+
+    def _check(self, *args, **kwargs):
+        from scripts.render_report_pdfs import static_ruleset_conflict
+
+        return static_ruleset_conflict(*args, **kwargs)
+
+    def _pdf(self, text: str) -> Path:
+        from reportlab.pdfgen import canvas
+
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        path = Path(directory.name) / "t.pdf"
+        c = canvas.Canvas(str(path))
+        c.drawString(60, 700, text)
+        c.save()
+        return path
+
+    def test_a_stale_ruleset_line_is_reported_with_both_identities(self):
+        conflict = self._check(
+            self._pdf(f"Ruleset: {self.SUPERSEDED_LINE}. POST-DEPLOYMENT: PENDENTE."),
+            {"version": "v3.4"},
+        )
+        self.assertIsNotNone(conflict)
+        self.assertEqual(conflict["template_states"], self.SUPERSEDED_LINE)
+        self.assertEqual(conflict["run_governed_by"], "v3.4")
+        self.assertIn("imutáveis", conflict["detail"])
+
+    def test_a_matching_ruleset_line_is_not_a_conflict(self):
+        self.assertIsNone(
+            self._check(self._pdf("Ruleset: v3.4/VIGENTE/17-08-2026."), {"version": "v3.4"})
+        )
+
+    def test_a_template_naming_no_ruleset_is_not_a_conflict(self):
+        self.assertIsNone(self._check(self._pdf("sem identidade normativa"), {"version": "v3.4"}))
+
+    def test_an_unreadable_template_does_not_crash_the_render(self):
+        self.assertIsNone(self._check(Path("/nonexistent/none.pdf"), {"version": "v3.4"}))
+
+    def test_a_run_without_a_declared_ruleset_makes_no_claim(self):
+        """No running identity means nothing to disagree with, not a silent pass."""
+        self.assertIsNone(
+            self._check(self._pdf(f"Ruleset: {self.SUPERSEDED_LINE}."), {})
+        )
 
 
 if __name__ == "__main__":

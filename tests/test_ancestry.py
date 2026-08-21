@@ -311,5 +311,51 @@ class ProportionThresholdTest(unittest.TestCase):
         self.assertEqual(required, 1800)
 
 
+class ControlBlockNamesThePanelTest(unittest.TestCase):
+    """The control block and the summary must not disagree about the same page.
+
+    The sentence "Nenhum painel de referência populacional foi registrado" was a constant, so
+    a run that projected the case onto a panel printed it directly beneath a summary reporting
+    EUR/AFR/SAS percentages derived from that panel. The reader had to pick a half to believe,
+    and the discarded half was the panel identity — the only thing that makes the percentages
+    auditable.
+    """
+
+    def _control(self, projection):
+        """The conditional the report builds, exercised without a full pipeline run."""
+        head = "Caso X; entrada SHA-256 a; QC b. "
+        if projection is not None and projection["status"] == "INFERIDO":
+            panel = projection["panel"]
+            return head + (
+                f"Painel de referência {panel['id']} v{panel['version']}, build "
+                f"{panel['build']}, SHA-256 {panel['sha256']}."
+            )
+        return head + "Nenhum painel de referência populacional foi registrado."
+
+    PROJECTION = {
+        "status": "INFERIDO",
+        "panel": {"id": "PANEL-X", "version": "1", "build": "GRCh37", "sha256": "d" * 64},
+    }
+
+    def test_a_projected_case_names_the_panel_it_was_projected_onto(self):
+        text = self._control(self.PROJECTION)
+        self.assertIn("PANEL-X", text)
+        self.assertIn("d" * 64, text)
+        self.assertNotIn("Nenhum painel", text)
+
+    def test_a_run_without_a_panel_still_says_so(self):
+        self.assertIn("Nenhum painel", self._control(None))
+
+    def test_an_unprojected_panel_is_not_claimed_as_used(self):
+        blocked = dict(self.PROJECTION, status="NÃO DISPONÍVEL")
+        self.assertIn("Nenhum painel", self._control(blocked))
+
+    def test_the_report_builder_uses_this_conditional(self):
+        """Guards against the module drifting back to a constant sentence."""
+        source = (ROOT / "scripts/build_ancestry_report.py").read_text(encoding="utf-8")
+        self.assertIn("def _control(", source)
+        self.assertIn("Painel de referência {panel['id']}", source)
+
+
 if __name__ == "__main__":
     unittest.main()

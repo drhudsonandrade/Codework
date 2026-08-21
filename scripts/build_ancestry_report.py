@@ -222,13 +222,29 @@ def build_payload(
             ),
         )
 
+    # The panel sentence is conditional, not a constant. It was written unconditionally, so a
+    # run that *did* project the case onto a panel printed "Nenhum painel de referência
+    # populacional foi registrado" in its control block while the summary two lines above
+    # reported EUR/AFR/SAS percentages derived from that very panel. A reader given both has
+    # to decide which half of the same page to believe, and the identity of the panel — the
+    # one thing that makes the percentages auditable — was the half that was thrown away.
+    def _control(case_id: Any) -> str:
+        head = (
+            f"Caso {case_id}; entrada SHA-256 {matrix.payload.get('input_sha256')}; "
+            f"QC {qc.sha256}. "
+        )
+        if projection is not None and projection["status"] == "INFERIDO":
+            panel = projection["panel"]
+            return head + (
+                f"Painel de referência {panel['id']} v{panel['version']}, build "
+                f"{panel['build']}, SHA-256 {panel['sha256']}."
+            )
+        return head + "Nenhum painel de referência populacional foi registrado."
+
     compiler.section_derived(
         titles[0], artifact="array-qc", locator="case_id", status=status,
         basis="identificador do caso e integridade da entrada", kind="qc_metric",
-        transform=lambda cid: (
-            f"Caso {cid}; entrada SHA-256 {matrix.payload.get('input_sha256')}; "
-            f"QC {qc.sha256}. Nenhum painel de referência populacional foi registrado."
-        ),
+        transform=_control,
     )
     # The origins portrait: derived when a panel was supplied and the case projected onto it,
     # and otherwise refused with the artifact that would change the answer named.

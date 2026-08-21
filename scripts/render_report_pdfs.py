@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -43,6 +44,49 @@ SUITE_LEVEL_REPORTS = frozenset({"11"})
 
 def is_suite_level(report_id: str, payload: dict) -> bool:
     return report_id in SUITE_LEVEL_REPORTS and payload.get("case_id") == SUITE_LEVEL_CASE_ID
+
+
+#: Ruleset identities printed as static text inside a template, which no fill can overwrite.
+_TEMPLATE_RULESET = re.compile(r"[Rr]uleset:?\s*(v\d+\.\d+)\s*/\s*([A-ZÁÉÍÓÚÇ]+)\s*/\s*(\d[\d./-]*\d)")
+
+
+def static_ruleset_conflict(template_path: Path, governing: dict) -> dict | None:
+    """Report a ruleset identity baked into the template that the run no longer matches.
+
+    The v3.0 templates were approved under an earlier ruleset and one of them carries that
+    identity as fixed page text — not a placeholder, so the fill cannot reach it. The system
+    stamps the governing identity correctly elsewhere on the same page, which leaves the
+    delivered PDF naming two different rulesets and no way for a reader to tell which one
+    produced the numbers. (The superseded version is deliberately not spelled out in this
+    tree; it is read from the template at render time and reported in the result.)
+
+    The template store's contract makes the bytes immutable under v3.0: a byte-level change
+    requires a new suite version, so this cannot be repaired by editing the page, and it is
+    not grounds for refusing to publish either — the report's own measurements are unaffected.
+    What it *is* grounds for is saying so on every run, in the render result, rather than
+    leaving it to whoever happens to read that line of that page.
+    """
+    try:
+        from pypdf import PdfReader
+
+        text = "\n".join((page.extract_text() or "") for page in PdfReader(str(template_path)).pages)
+    except Exception:  # noqa: BLE001 - an unreadable template is the renderer's problem, not this check's
+        return None
+    running = str(governing.get("version") or "").strip()
+    for version, state, effective in _TEMPLATE_RULESET.findall(text):
+        if running and version != running:
+            return {
+                "template_states": f"{version}/{state}/{effective}",
+                "run_governed_by": running,
+                "detail": (
+                    f"o template traz '{version}/{state}/{effective}' como texto fixo de página, "
+                    f"que nenhum preenchimento alcança, enquanto esta execução é regida por "
+                    f"{running}. Os modelos v3.0 são imutáveis por contrato do template store, "
+                    "então a correção exige nova versão da suíte; as medições do relatório não "
+                    "dependem dessa linha"
+                ),
+            }
+    return None
 
 
 def render(
@@ -123,6 +167,13 @@ def render(
             else None
         ),
         "operational_status": payload.get("operational_status"),
+        # Never None-by-omission: a run that found no conflict says so, so a missing key can
+        # never be read as a clean check that did not happen.
+        "template_static_ruleset_conflict": static_ruleset_conflict(
+            template_dir
+            / str(((detailed.get("reports") or {}).get(report_id) or {}).get("filename") or ""),
+            payload.get("ruleset") or {},
+        ),
     }
 
 
