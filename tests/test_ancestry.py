@@ -359,3 +359,81 @@ class ControlBlockNamesThePanelTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MinorComponentsBelowTheMeasuredFloorTest(unittest.TestCase):
+    """The panel measures its own noise; the report must not print below it.
+
+    The projection states "componentes abaixo de 20% não são estabelecidos" — a number taken
+    from the panel's validation artefact, where individuals of known origin pick up spurious
+    components. The renderer filtered on a hardcoded 0.5% instead, so on the first real case
+    five of seven components were printed as percentages with tight bootstrap intervals while
+    sitting below the panel's own measured artefact size. A bootstrap interval measures
+    sampling spread over markers and never that systematic artefact, so it understated the
+    uncertainty by an order of magnitude while reading as precision.
+    """
+
+    def _projection(self, floor, proportions, **extra):
+        return {
+            "status": "INFERIDO",
+            "markers_used": 20_000,
+            "overlap_fraction": 0.33,
+            "affinity": [{"population": "EUR", "distance": 1.0}],
+            "minor_component_floor": floor,
+            "proportions": [
+                {"population": name, "proportion": value, "interval_95": [value - 0.01, value + 0.01]}
+                for name, value in proportions
+            ],
+            "proportions_method": "método",
+            **extra,
+        }
+
+    def _text(self, projection):
+        from scripts.build_ancestry_report import _origins_text
+
+        return _origins_text(projection)
+
+    def test_a_component_below_the_floor_is_named_but_not_quoted(self):
+        text = self._text(self._projection(0.1977, [("EUR", 0.60), ("SAS", 0.14)]))
+        self.assertIn("EUR 60.0%", text)
+        self.assertNotIn("SAS 14", text)
+        self.assertIn("Não estabelecidos (abaixo do piso de 20%)", text)
+        self.assertIn("SAS", text)
+
+    def test_the_reason_says_why_the_interval_does_not_rescue_it(self):
+        text = self._text(self._projection(0.1977, [("EUR", 0.60), ("SAS", 0.14)]))
+        self.assertIn("dispersão amostral entre marcadores, não esse artefato", text)
+
+    def test_a_component_above_the_floor_keeps_its_interval(self):
+        text = self._text(self._projection(0.1977, [("EUR", 0.55), ("AFR", 0.45)]))
+        self.assertIn("EUR 55.0%", text)
+        self.assertIn("AFR 45.0%", text)
+        self.assertNotIn("Não estabelecidos", text)
+
+    def test_nothing_above_the_floor_is_said_plainly(self):
+        text = self._text(self._projection(0.30, [("EUR", 0.20), ("AFR", 0.18)]))
+        self.assertIn("Nenhum componente atinge o piso", text)
+        self.assertIn("leia a afinidade", text)
+
+    def test_a_panel_without_a_validation_artefact_emits_no_composition(self):
+        """No measured noise floor means no basis for calling any component established."""
+        text = self._text(self._projection(None, [("EUR", 0.60), ("AFR", 0.40)]))
+        self.assertIn("Nenhuma composição é emitida", text)
+        self.assertNotIn("EUR 60", text)
+
+    def test_a_poor_fit_warning_travels_with_the_composition(self):
+        text = self._text(
+            self._projection(
+                0.1977, [("EUR", 0.60), ("AFR", 0.40)],
+                fit_quality_warning="resíduo de 25% da distância à origem",
+            )
+        )
+        self.assertIn("resíduo de 25%", text)
+
+    def test_the_shipped_panel_publishes_a_measured_floor(self):
+        from array_pipeline.ancestry import load_panel
+
+        panel = load_panel(ROOT / "config/ancestry_reference_panel.json.gz")
+        measured = (panel.get("validation_summary") or {}).get("largest_spurious_component")
+        self.assertIsInstance(measured, float)
+        self.assertGreater(measured, 0)

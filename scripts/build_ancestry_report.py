@@ -130,13 +130,47 @@ def _origins_text(projection: dict[str, Any]) -> str:
         f"Populações de referência mais próximas: {affinity}."
     ]
     if projection.get("proportions"):
-        composition = "; ".join(
-            f"{p['population']} {p['proportion']:.1%} "
-            f"(IC95% {p['interval_95'][0]:.1%}–{p['interval_95'][1]:.1%})"
-            for p in sorted(projection["proportions"], key=lambda x: -x["proportion"])
-            if p["proportion"] >= 0.005
-        )
-        lines.append(f"Composição aproximada: {composition}.")
+        # The floor is the panel's own measured artefact size, not a display threshold. It
+        # was 0.5% here while the projection measured 20%, so components the panel itself
+        # cannot distinguish from noise were printed as numbers with confidence intervals —
+        # and a bootstrap interval measures sampling spread over markers, never the
+        # systematic artefact the validation found, so it understated the uncertainty by an
+        # order of magnitude while looking authoritative.
+        floor = projection.get("minor_component_floor")
+        ordered = sorted(projection["proportions"], key=lambda x: -x["proportion"])
+        if floor is None:
+            lines.append(
+                "Nenhuma composição é emitida: este painel não traz artefato de validação, "
+                "então o tamanho de um componente espúrio não foi medido e não há piso "
+                "abaixo do qual um componente deixe de ser estabelecido."
+            )
+            lines.append(str(projection["proportions_method"]))
+            return " ".join(lines)
+        established = [p for p in ordered if p["proportion"] >= floor]
+        below = [p for p in ordered if p["proportion"] < floor]
+        if established:
+            composition = "; ".join(
+                f"{p['population']} {p['proportion']:.1%} "
+                f"(IC95% {p['interval_95'][0]:.1%}–{p['interval_95'][1]:.1%})"
+                for p in established
+            )
+            lines.append(f"Composição aproximada: {composition}.")
+        else:
+            lines.append(
+                f"Nenhum componente atinge o piso de {floor:.0%} abaixo do qual esta "
+                "projeção não estabelece composição; leia a afinidade acima."
+            )
+        if below:
+            lines.append(
+                f"Não estabelecidos (abaixo do piso de {floor:.0%}): "
+                + ", ".join(p["population"] for p in below)
+                + ". O valor ajustado para cada um está abaixo do maior componente espúrio já "
+                "observado neste painel ao projetar indivíduos de origem conhecida, e o "
+                "intervalo bootstrap mede dispersão amostral entre marcadores, não esse "
+                "artefato — citá-los como percentuais seria dar precisão a ruído."
+            )
+        if projection.get("fit_quality_warning"):
+            lines.append(str(projection["fit_quality_warning"]))
         lines.append(str(projection["proportions_method"]))
     else:
         lines.append(str(projection.get("proportions_reason") or UNAVAILABLE))

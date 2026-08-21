@@ -354,6 +354,14 @@ def project_case(
     # artefact, where individuals of known origin are projected and their spurious components
     # recorded. Without that artefact the floor is unknown and the text says so.
     measured = (panel.get("validation_summary") or {}).get("largest_spurious_component")
+    # Published as a number beside the prose. A consumer that has to parse a sentence to
+    # learn the floor will not apply it, and `build_ancestry_report` did not: it printed
+    # every component above a hardcoded 0.5% while this artefact said 20% — so five of seven
+    # components on the first real case were below the panel's own measured noise and were
+    # printed anyway, with tight bootstrap intervals that read as precision.
+    result["minor_component_floor"] = (
+        round(float(measured), 4) if isinstance(measured, (int, float)) and measured > 0 else None
+    )
     if isinstance(measured, (int, float)) and measured > 0:
         result["minor_component_caveat"] = (
             f"Componentes abaixo de {measured:.0%} não são estabelecidos por esta projeção. "
