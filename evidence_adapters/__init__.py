@@ -113,12 +113,39 @@ class EvidenceAdapter:
         try:
             payload, headers = self.transport(request)
             normalized_headers = {str(k).lower(): str(v) for k, v in headers.items()}
-            json.loads(payload.decode("utf-8"))
+            # The parse result used to be discarded, so any decodable JSON became
+            # VERIFICADO — including `{}` and a provider's own error envelope. Bytes that
+            # parse are not an answer to the question that was asked.
+            document = json.loads(payload.decode("utf-8"))
+            problem = _semantic_problem(self.key, document)
+            if problem:
+                base.update({
+                    "status": "NÃO DISPONÍVEL",
+                    "accessible": True,
+                    "evidence_grade": "NÃO RECUPERADO",
+                    "semantic_refusal": problem,
+                    "retrieval_evidence": {
+                        "method": "HTTPS",
+                        "result_digest": hashlib.sha256(payload).hexdigest(),
+                        "content_type": normalized_headers.get("content-type"),
+                    },
+                })
+                return base
             digest = hashlib.sha256(payload).hexdigest()
             version = normalized_headers.get("etag") or normalized_headers.get("last-modified") or f"snapshot-{checked_at}"
             base.update({
                 "status": "VERIFICADO",
                 "accessible": True,
+                # VERIFICADO here has always meant "these bytes were fetched and parsed",
+                # never "the science in them was reviewed". Saying so in its own field stops
+                # a consumer reading a successful HTTP call as curated evidence.
+                "evidence_grade": "RECUPERAÇÃO VERIFICADA",
+                "evidence_grade_note": (
+                    "recuperação verificada: bytes obtidos, decodificados e conferidos contra "
+                    "um envelope de erro ou resultado vazio. Não é curadoria científica; "
+                    "classificação clínica exige revisão humana registrada."
+                ),
+                "record_count": _record_count(self.key, document),
                 "version": version,
                 "version_kind": "http-etag" if normalized_headers.get("etag") else ("http-last-modified" if normalized_headers.get("last-modified") else "retrieval-snapshot"),
                 "retrieval_evidence": {
@@ -134,6 +161,75 @@ class EvidenceAdapter:
             base["error_class"] = type(exc).__name__
             base["error"] = str(exc)[:300]
             return base
+
+
+#: Keys a provider uses to say "this went wrong" while still returning HTTP 200 and valid
+#: JSON. Checked generically because every provider spells it differently and a response
+#: carrying one of these is a refusal, not a result.
+ERROR_ENVELOPE_KEYS = ("error", "errors", "fault", "exception", "detail")
+
+#: Where each provider puts the records, so "zero results" can be told from "results".
+#: A provider absent from this map is checked only for emptiness of the document itself —
+#: stated rather than silently assumed complete.
+RECORD_CONTAINERS: dict[str, tuple[str, ...]] = {
+    "clinvar": ("esearchresult", "idlist"),
+    "clingen": ("rows",),
+    "cpic": (),
+    "clinpgx": (),
+    "gnomad": ("data",),
+    "pgs_catalog": ("results",),
+}
+
+
+def _walk(document: Any, path: tuple[str, ...]) -> Any:
+    current = document
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+
+def _semantic_problem(key: str, document: Any) -> str | None:
+    """Why this response is not an answer, or None if it is one.
+
+    Deliberately conservative: it refuses an error envelope and an empty document, and it
+    does not attempt to judge whether the content is scientifically right. That distinction
+    is the point — retrieval and curation are different claims, and only the first is
+    something this adapter can make.
+    """
+    if document is None:
+        return "resposta JSON nula"
+    if isinstance(document, (list, dict)) and len(document) == 0:
+        return "resposta vazia: o provedor retornou um documento sem conteúdo"
+    if isinstance(document, dict):
+        for envelope in ERROR_ENVELOPE_KEYS:
+            value = document.get(envelope)
+            if value:
+                return f"envelope de erro do provedor em {envelope!r}: {str(value)[:200]}"
+        # ClinVar reports its failures inside the result object rather than at the top.
+        esearch = document.get("esearchresult")
+        if isinstance(esearch, dict) and esearch.get("ERROR"):
+            return f"erro do ClinVar: {str(esearch['ERROR'])[:200]}"
+    return None
+
+
+def _record_count(key: str, document: Any) -> int | None:
+    """How many records came back, or None when this adapter cannot tell.
+
+    None is not zero. A provider whose container is unknown returns None so that a reader
+    cannot mistake "not counted" for "counted and empty" — the same distinction the rest of
+    this project draws between NÃO INTERROGADO and NEGATIVO.
+    """
+    container = RECORD_CONTAINERS.get(key)
+    if not container:
+        return None
+    value = _walk(document, container)
+    if isinstance(value, (list, tuple)):
+        return len(value)
+    if isinstance(value, dict):
+        return len(value)
+    return None
 
 
 ADAPTERS = {key: spec.name for key, spec in SPECS.items()}

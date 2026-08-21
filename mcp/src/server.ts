@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import type { Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import { z } from "zod";
 import {
   type AuditRecord,
@@ -231,9 +231,57 @@ export function createGenomeMcpServer(options: GenomeServerOptions): McpServer {
   return server;
 }
 
-export function createHttpApp(options: GenomeServerOptions) {
+/**
+ * Hosts for which no authentication is required, because nothing off the machine can
+ * reach them. Anything else is a network listener and is treated as one.
+ */
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost", "[::1]"]);
+
+export function isLoopbackHost(host: string): boolean {
+  const normalized = host.trim().toLowerCase();
+  return LOOPBACK_HOSTS.has(normalized) || normalized.startsWith("127.");
+}
+
+/**
+ * Refuse to start a listener that anyone on the network can reach and nobody has to
+ * authenticate to.
+ *
+ * The route has no auth middleware, which is safe only while the bind stays on loopback —
+ * and the bind is an environment variable. Setting MCP_BIND_HOST=0.0.0.0 turned a private
+ * tool into an open one with no warning and no error. The default is unchanged; what
+ * changes is that leaving loopback now requires saying who may connect.
+ */
+export function assertBindIsSafe(host: string, token: string | undefined): void {
+  if (isLoopbackHost(host)) return;
+  if (token && token.length >= 16) return;
+  throw new Error(
+    `refusing to bind ${host}: a non-loopback listener needs MCP_AUTH_TOKEN set to at ` +
+      `least 16 characters. Bind to 127.0.0.1 for local use, or configure a token and ` +
+      `front the service with TLS for remote use.`,
+  );
+}
+
+export function createHttpApp(options: GenomeServerOptions, authToken?: string) {
   const app = createMcpExpressApp();
   app.get("/healthz", (_req: Request, res: Response) => res.status(200).json({ status: "ok" }));
+  if (authToken) {
+    // Constant-length comparison is not attempted here: the token is compared as a whole
+    // string and the endpoint is not a login form. What matters is that an unauthenticated
+    // request cannot reach the tool surface at all.
+    app.use("/mcp", (req: Request, res: Response, next: NextFunction) => {
+      const header = String(req.headers.authorization ?? "");
+      const presented = header.startsWith("Bearer ") ? header.slice(7) : "";
+      if (presented !== authToken) {
+        res.status(401).json({
+          jsonrpc: "2.0",
+          error: { code: -32001, message: "Unauthorized" },
+          id: null,
+        });
+        return;
+      }
+      next();
+    });
+  }
   app.post("/mcp", async (req: Request, res: Response) => {
     const server = createGenomeMcpServer(options);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
@@ -274,7 +322,14 @@ const options: GenomeServerOptions = {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const port = Number(process.env.PORT ?? "3000");
   const host = process.env.MCP_BIND_HOST ?? "127.0.0.1";
-  createHttpApp(options).listen(port, host, (error?: Error) => {
+  const authToken = process.env.MCP_AUTH_TOKEN;
+  try {
+    assertBindIsSafe(host, authToken);
+  } catch (error) {
+    process.stderr.write(`${sanitizeError(error)}\n`);
+    process.exit(1);
+  }
+  createHttpApp(options, authToken).listen(port, host, (error?: Error) => {
     if (error) {
       process.stderr.write(`${sanitizeError(error)}\n`);
       process.exitCode = 1;

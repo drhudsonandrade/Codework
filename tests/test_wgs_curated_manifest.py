@@ -144,5 +144,69 @@ class WorkflowWiringTest(unittest.TestCase):
         self.assertIn('.post_deployment_status == "PENDENTE"', text)
 
 
+class CapabilityHonestyTest(unittest.TestCase):
+    """A-01/A-02/A-03: "EXECUTADO" said calling ran, not what never ran around it.
+
+    No validated filtering, no per-variant annotation, no duplicate marking, no coverage or
+    callability, no contamination or fingerprint. None of it was implementable and testable
+    here — filtering in particular needs a GIAB benchmark to be worth anything — so each gap
+    is named as NÃO DISPONÍVEL beside the step that did run, rather than left for a reader
+    to infer from "SNV: EXECUTADO".
+    """
+
+    def _built(self, root: Path) -> dict:
+        helper = CuratedManifestTest()
+        vcf = helper._fixture(root)
+        result = helper._run(root, vcf, "--evidence", str(root / "ev.json"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads((root / "out.json").read_text(encoding="utf-8"))
+
+    def test_every_missing_capability_is_named(self):
+        with tempfile.TemporaryDirectory() as td:
+            matrix = self._built(Path(td))["capability_matrix"]
+        for capability in (
+            "variant_filtering", "per_variant_annotation", "duplicate_marking",
+            "coverage_and_callability", "contamination_and_fingerprint",
+        ):
+            with self.subTest(capability=capability):
+                self.assertEqual(matrix[capability]["status"], "NÃO DISPONÍVEL")
+                self.assertTrue(matrix[capability]["reason"].strip())
+
+    def test_calling_carries_its_limitation_rather_than_standing_alone(self):
+        with tempfile.TemporaryDirectory() as td:
+            matrix = self._built(Path(td))["capability_matrix"]
+        for kind in ("SNV", "small_indel"):
+            with self.subTest(kind=kind):
+                self.assertEqual(matrix[kind]["status"], "EXECUTADO")
+                self.assertEqual(matrix[kind]["filtering"], "NÃO DISPONÍVEL")
+                self.assertIn("não é filtragem", matrix[kind]["limitation"])
+
+    def test_the_gaps_reach_the_unsupported_list_and_the_summary(self):
+        with tempfile.TemporaryDirectory() as td:
+            payload = self._built(Path(td))
+        self.assertIn("variant_filtering", payload["unsupported_variant_classes"])
+        self.assertIn("per_variant_annotation", payload["unsupported_variant_classes"])
+        self.assertIn("filtragem validada", payload["summary"])
+
+
+class ReportStepWiringTest(unittest.TestCase):
+    """The reports step staged the policy evaluation, proved it non-empty, and dropped it.
+
+    Same shape as the evidence snapshot one process earlier: without `--policy` the release
+    was assembled from whatever the curation manifest declared about its own publication
+    gate, with no policy evaluation in the loop at all.
+    """
+
+    def test_the_workflow_passes_the_policy_evaluation_it_stages(self):
+        text = (ROOT / "workflows" / "wgs.nf").read_text(encoding="utf-8")
+        self.assertIn("--policy '${policy_evaluation}'", text)
+
+    def test_the_capability_inventory_step_is_named_for_what_it_does(self):
+        # It records which adapters exist, not which variants were annotated.
+        text = (ROOT / "workflows" / "wgs.nf").read_text(encoding="utf-8")
+        self.assertIn("ADAPTER_CAPABILITY_INVENTORY", text)
+        self.assertNotIn("ANNOTATE_EVIDENCE", text)
+
+
 if __name__ == "__main__":
     unittest.main()

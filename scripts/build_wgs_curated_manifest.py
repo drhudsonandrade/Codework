@@ -107,9 +107,56 @@ def main() -> int:
             f"operational_status={qc.get('operational_status')!r}"
         )
 
+    # "EXECUTADO" said that calling ran. It did not say that nothing filtered the result,
+    # that no per-variant annotation was performed, and that several standard preparation
+    # metrics were never computed — so a reader could take "SNV: EXECUTADO" for "SNV: ready
+    # to interpret". Each gap is now a named NÃO DISPONÍVEL beside the step that ran, and
+    # the calling entries carry the limitation instead of standing alone.
+    unfiltered_note = (
+        "normalização bcftools não é filtragem: nenhuma variante foi removida ou marcada por "
+        "VQSR, hard filters ou modelo equivalente, e nenhuma métrica Ti/Tv, het/hom, "
+        "profundidade ou balanço alélico foi calculada. Chamadas não PASS e artefatos "
+        "permanecem no arquivo."
+    )
     capability_matrix = {
-        "SNV": {"status": "EXECUTADO", "method": "GATK HaplotypeCaller + bcftools normalization"},
-        "small_indel": {"status": "EXECUTADO", "method": "GATK HaplotypeCaller + bcftools normalization"},
+        "SNV": {
+            "status": "EXECUTADO",
+            "method": "GATK HaplotypeCaller + bcftools normalization",
+            "filtering": "NÃO DISPONÍVEL",
+            "limitation": unfiltered_note,
+        },
+        "small_indel": {
+            "status": "EXECUTADO",
+            "method": "GATK HaplotypeCaller + bcftools normalization",
+            "filtering": "NÃO DISPONÍVEL",
+            "limitation": unfiltered_note,
+        },
+        "variant_filtering": {
+            "status": "NÃO DISPONÍVEL",
+            "reason": "nenhuma estratégia de filtragem validada foi executada nem aferida "
+            "contra conjunto-verdade (GIAB); o VCF entregue é bruto após normalização",
+        },
+        "per_variant_annotation": {
+            "status": "NÃO DISPONÍVEL",
+            "reason": "nenhuma variante foi consultada individualmente; não há consequência, "
+            "transcrito MANE, HGVS, frequência populacional nem recuperação ClinVar/ClinGen "
+            "por variante. O inventário de adaptadores registra capacidade, não consulta",
+        },
+        "duplicate_marking": {
+            "status": "NÃO DISPONÍVEL",
+            "reason": "MarkDuplicates ou equivalente não foi executado; leituras duplicadas "
+            "não estão marcadas e inflam a evidência de suporte a cada chamada",
+        },
+        "coverage_and_callability": {
+            "status": "NÃO DISPONÍVEL",
+            "reason": "cobertura por região e loci chamáveis não foram medidos; ausência de "
+            "chamada não pode ser distinguida de região não coberta",
+        },
+        "contamination_and_fingerprint": {
+            "status": "NÃO DISPONÍVEL",
+            "reason": "contaminação cruzada e identidade da amostra não foram aferidas; a "
+            "correspondência entre estes dados e este caso não foi verificada por ensaio",
+        },
         "CNV": {"status": "NÃO DISPONÍVEL", "reason": "specialized validated CNV workflow not yet executed"},
         "SV": {"status": "NÃO DISPONÍVEL", "reason": "specialized validated structural-variant workflow not yet executed"},
         "repeat_expansion": {"status": "NÃO DISPONÍVEL", "reason": "specialized repeat-expansion workflow not yet executed"},
@@ -125,7 +172,14 @@ def main() -> int:
         # Read from the sealed transport rather than restated here: a constant copy of the
         # normative identity is a copy that can fall behind the norm it names.
         "ruleset": normative.attested_ruleset_block(),
-        "summary": "Pipeline técnico executado para SNV/indel. Interpretação clínica e publicação final permanecem bloqueadas até curadoria, Evidence Gate e Final Audit.",
+        "summary": (
+            "Chamada técnica de SNV/indel executada sobre um VCF que não passou por "
+            "filtragem validada nem por anotação variante a variante, e cuja preparação não "
+            "inclui marcação de duplicatas, cobertura por região, contaminação ou "
+            "fingerprint de amostra. Interpretação clínica e publicação final permanecem "
+            "bloqueadas até curadoria, Evidence Gate e Final Audit. Veja capability_matrix: "
+            "cada lacuna está nomeada, não implícita."
+        ),
         "wgs_artifacts": {
             "normalized_vcf": str(vcf),
             "sha256": sha256_file(vcf),

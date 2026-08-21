@@ -25,7 +25,7 @@ class WgsWorkflowContractTest(unittest.TestCase):
             "RERUN_SAMPLE_RUNTIME_GATE",
             "CALL_SHORT_VARIANTS",
             "NORMALIZE_VARIANTS",
-            "ANNOTATE_EVIDENCE",
+            "ADAPTER_CAPABILITY_INVENTORY",
             "BUILD_CURATED_MANIFEST",
             "POLICY_EVALUATE",
             "GENERATE_REPORTS",

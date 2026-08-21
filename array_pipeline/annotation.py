@@ -86,9 +86,78 @@ def _orientation(row: dict[str, str], schema: str, qc: dict[str, Any]) -> tuple[
     return "NÃO DISPONÍVEL", "source-specific orientation evidence unavailable"
 
 
-def extract_target_observations(path: Path, target_rsids: set[str], qc: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+def check_coordinate(
+    observation: dict[str, Any], target: dict[str, Any], build: str | None
+) -> tuple[str, str]:
+    """Compare the observed coordinate with the registry's canonical one.
+
+    The observation used to be accepted on its rsID alone, because the registry held no
+    coordinates to compare against. An rsID is a label: a file that carries the right label
+    at the wrong position is a file annotated on another assembly, or a file whose
+    coordinate column has been rebuilt by a tool nobody recorded. Either way the locus is
+    not the locus the registry means, and interpreting it produces a finding about a
+    position that was never interrogated.
+
+    Returns an operational status and the basis for it, in the vocabulary the rest of the
+    pipeline uses. Anything short of an actual match is refused rather than downgraded, but
+    a registry with no coordinate for the locus is NÃO DISPONÍVEL, not a mismatch — there is
+    nothing to disagree with.
+    """
+    coordinates = target.get("coordinates") if isinstance(target.get("coordinates"), dict) else {}
+    if coordinates.get("status") != "VERIFICADO":
+        return (
+            "NÃO DISPONÍVEL",
+            f"registro não traz coordenada canônica para {target.get('rsid')}: "
+            f"{coordinates.get('reason') or 'coordenada ausente'}",
+        )
+    if build not in ("GRCh37", "GRCh38"):
+        return (
+            "NÃO DISPONÍVEL",
+            "build do caso não verificado; sem build não há coordenada canônica com que comparar",
+        )
+    expected = coordinates.get(build)
+    if not isinstance(expected, dict):
+        return ("NÃO DISPONÍVEL", f"registro não traz coordenada em {build} para este locus")
+    if expected.get("ambiguous_positions"):
+        return (
+            "NÃO DISPONÍVEL",
+            f"o ClinVar registra este rsid em {expected['ambiguous_positions']} posições "
+            f"distintas em {build}; não há coordenada única para conferir",
+        )
+
+    observed_chromosome = str(observation.get("chromosome") or "").strip().upper().removeprefix("CHR")
+    expected_chromosome = str(expected.get("chromosome") or "").strip().upper()
+    try:
+        observed_position = int(str(observation.get("position") or "").strip())
+    except ValueError:
+        return ("NÃO DISPONÍVEL", "posição observada não é um inteiro")
+
+    if observed_chromosome != expected_chromosome or observed_position != int(expected["position"]):
+        return (
+            "NÃO DISPONÍVEL",
+            f"coordenada divergente em {build}: o arquivo traz "
+            f"chr{observed_chromosome}:{observed_position:,} e o registro "
+            f"chr{expected_chromosome}:{int(expected['position']):,}. O rsid casa e a posição "
+            "não; o arquivo está em outra montagem ou a coluna de coordenadas foi reescrita.",
+        )
+    return (
+        "VERIFICADO",
+        f"coordenada confere com o registro em {build} "
+        f"(chr{expected_chromosome}:{int(expected['position']):,}, "
+        f"{expected.get('reference_allele')}>{expected.get('alternate_allele')})",
+    )
+
+
+def extract_target_observations(
+    path: Path,
+    target_rsids: set[str],
+    qc: dict[str, Any],
+    targets_by_rsid: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, list[dict[str, Any]]]:
     """Read only target loci into the annotation workspace; never duplicate the full chip."""
     wanted = {x.lower() for x in target_rsids}
+    by_rsid = {k.lower(): v for k, v in (targets_by_rsid or {}).items()}
+    case_build = str((qc.get("input") or {}).get("build") or "") or None
     found: dict[str, list[dict[str, Any]]] = {x: [] for x in sorted(wanted)}
     fh, _ = _text_stream(path)
     try:
@@ -106,18 +175,35 @@ def extract_target_observations(path: Path, target_rsids: set[str], qc: dict[str
                 continue
             gt = row.get("CONSENSUS_RESULT") if schema.startswith("harmonized") else row.get("RESULT")
             orientation_status, orientation_basis = _orientation(row, schema, qc)
-            found[rsid].append(
-                {
-                    "rsid": rsid,
-                    "chromosome": (row.get("CHROMOSOME") or "").strip(),
-                    "position": (row.get("POSITION") or "").strip(),
-                    "genotype": _canonical_gt(gt),
-                    "status": (row.get("STATUS") or "observed").strip(),
-                    "sources": (row.get("SOURCES") or "single_source").strip(),
-                    "orientation_operational_status": orientation_status,
-                    "orientation_basis": orientation_basis,
-                }
-            )
+            observation = {
+                "rsid": rsid,
+                "chromosome": (row.get("CHROMOSOME") or "").strip(),
+                "position": (row.get("POSITION") or "").strip(),
+                "genotype": _canonical_gt(gt),
+                # The file's own text, kept beside the canonical form. `_canonical_gt` sorts
+                # the alleles, which is what makes two vendors comparable and is also what
+                # destroys any ordering the file carried. Keeping both means the canonical
+                # form is a derivation rather than a replacement.
+                "genotype_as_reported": (gt or "").strip(),
+                # An array reports two alleles at a position and says nothing about which
+                # chromosome each sits on. Stated on every observation so no consumer has to
+                # infer it from the absence of a phase field.
+                "phase_status": "UNPHASED",
+                "phase_basis": (
+                    "genotipagem por microarranjo não resolve fase; diplótipo exige "
+                    "evidência de fase que este ensaio não produz"
+                ),
+                "status": (row.get("STATUS") or "observed").strip(),
+                "sources": (row.get("SOURCES") or "single_source").strip(),
+                "orientation_operational_status": orientation_status,
+                "orientation_basis": orientation_basis,
+            }
+            target = by_rsid.get(rsid)
+            if target is not None:
+                status, basis = check_coordinate(observation, target, case_build)
+                observation["coordinate_operational_status"] = status
+                observation["coordinate_basis"] = basis
+            found[rsid].append(observation)
     finally:
         fh.close()
     return {k: v for k, v in found.items() if v}
@@ -196,7 +282,10 @@ def annotate_partial_genome(
 
     manifest = load_target_manifest(target_manifest_path)
     target_ids = {str(x["rsid"]).lower() for x in manifest["targets"]}
-    observations = extract_target_observations(input_path, target_ids, qc)
+    # Passed so each observation can be checked against the registry's canonical coordinate
+    # instead of being accepted on its rsID alone.
+    targets_by_rsid = {str(x["rsid"]).lower(): x for x in manifest["targets"]}
+    observations = extract_target_observations(input_path, target_ids, qc, targets_by_rsid)
     plan = build_query_plan(observations.keys(), manifest, max_targets=max_targets, max_queries=max_queries)
     now = checked_at or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 

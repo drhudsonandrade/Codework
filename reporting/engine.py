@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import re
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -45,6 +46,23 @@ def load_catalog() -> dict[str, dict[str, Any]]:
     return catalog
 
 
+#: A raw template token as it appears in the sealed PDFs and in rendered markdown.
+PLACEHOLDER_TOKEN = re.compile(r"\[\[[^\]\n]{1,80}\]\]")
+
+
+def _surviving_placeholders(markdown: str) -> list[str]:
+    """Placeholder tokens still present in text that is about to be published.
+
+    Deduplicated and ordered, so the refusal names distinct fields rather than repeating one
+    token once per occurrence.
+    """
+    seen: list[str] = []
+    for token in PLACEHOLDER_TOKEN.findall(markdown):
+        if token not in seen:
+            seen.append(token)
+    return seen
+
+
 def _publication_blockers(data: dict[str, Any]) -> list[str]:
     blockers: list[str] = []
     ruleset = data.get("ruleset") if isinstance(data.get("ruleset"), dict) else {}
@@ -56,6 +74,17 @@ def _publication_blockers(data: dict[str, Any]) -> list[str]:
     for key in ("passed", "consent_verified", "qc_verified", "evidence_verified", "placeholders_resolved"):
         if publication.get(key) is not True:
             blockers.append(f"publication_gate:{key}")
+
+    # `placeholders_resolved` was a boolean the builders wrote as a literal and nothing
+    # measured. It is measured in `render_document` now, against the rendered text, which is
+    # where the claim can actually be tested.
+    #
+    # It is deliberately *not* reconciled with `template_fields_complete`, which an external
+    # audit proposed unifying it with. They are different claims: `template_fields_complete`
+    # means no field came back NÃO DISPONÍVEL, while `placeholders_resolved` means no raw
+    # token survived into the document. NÃO DISPONÍVEL *is* a resolution — printing it is
+    # this project's design — so requiring completeness for publication would make every
+    # honest report unpublishable, which is the opposite of the audit's intent.
 
     policy = data.get("policy_evaluation") if isinstance(data.get("policy_evaluation"), dict) else {}
     if policy.get("ready_for_requested_operation") is not True:
@@ -188,8 +217,16 @@ def _final_markdown(report_id: str, model: dict[str, Any], data: dict[str, Any])
         ]
     )
     markdown = "\n".join(lines)
+    # This is the measurement behind `publication_gate.placeholders_resolved`, which is
+    # otherwise a boolean the builders write about themselves. The bracket test catches an
+    # unbalanced `[[` as well as a whole token, so both stay; naming the tokens turns
+    # "something is unresolved" into a field an operator can go and fix.
     if "[[" in markdown or "]]" in markdown:
-        raise ReportReleaseError("FINAL report contains unresolved placeholder syntax")
+        surviving = _surviving_placeholders(markdown)
+        detail = (
+            f": {', '.join(surviving[:5])}" if surviving else " (unbalanced bracket, no whole token)"
+        )
+        raise ReportReleaseError(f"FINAL report contains unresolved placeholder syntax{detail}")
     return markdown
 
 

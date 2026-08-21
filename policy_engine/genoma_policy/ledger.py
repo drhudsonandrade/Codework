@@ -21,12 +21,31 @@ def _entry_hash(record_without_hash: dict[str, Any]) -> str:
     return _sha256_text(_canonical_json(record_without_hash))
 
 
+class LedgerError(RuntimeError):
+    """The chain on disk is not the chain this ledger wrote."""
+
+
 def append_event(path: str | Path, event_type: str, payload: Any) -> dict[str, Any]:
+    """Append one event, refusing to extend a chain that no longer verifies.
+
+    This used to read only the last line and continue from it. A tampered entry anywhere
+    earlier stayed invisible: the new record chained onto a hash that was still internally
+    consistent with a rewritten history, and every later append signed off on it. The chain
+    was verifiable after the fact and never verified before being extended, which is the one
+    moment the check is worth anything.
+    """
     ledger_path = Path(path)
     ledger_path.parent.mkdir(parents=True, exist_ok=True)
     previous_hash = GENESIS_HASH
     sequence = 1
     if ledger_path.exists() and ledger_path.stat().st_size:
+        ok, errors = verify_ledger(ledger_path)
+        if not ok:
+            raise LedgerError(
+                f"refusing to append to {ledger_path.name}: the existing chain does not "
+                f"verify ({'; '.join(errors[:5])}). An append onto a broken chain endorses "
+                "the break as history."
+            )
         lines = [line for line in ledger_path.read_text(encoding="utf-8").splitlines() if line.strip()]
         if lines:
             previous = json.loads(lines[-1])

@@ -1,30 +1,63 @@
 {
-  "schema": "genoma-partial-genome-targets-v1",
-  "id": "GENOMA-PARTIAL-CORE",
-  "version": "2026-08-16.1",
+  "assessed_allele_curation": {
+    "curated_at": "2026-08-19T13:35:30.461122Z",
+    "established": 28,
+    "evidence": "docs/evidence/ASSESSED_ALLELES_CLINVAR.json",
+    "sources": [
+      "NCBI dbSNP RefSNP API (api.ncbi.nlm.nih.gov/variation/v0/refsnp) — reference base",
+      "NCBI ClinVar via E-utilities (eutils.ncbi.nlm.nih.gov, db=clinvar) — asserted alternate",
+      "CPIC allele definitions (config/pgx_allele_definitions.json) — pharmacogenomic targets",
+      "EBI GWAS Catalog (www.ebi.ac.uk/gwas/rest/api) — risk allele for association SNPs",
+      "PubMed via NCBI elink — supporting citations per target"
+    ],
+    "total": 29
+  },
+  "coordinate_curation": {
+    "locator": "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.txt.gz",
+    "method": "most frequent (Chromosome, Start, ReferenceAlleleVCF, AlternateAlleleVCF) per rsid per assembly",
+    "note": "Coordenadas em ambos os builds, com REF/ALT, para que a observação do array possa ser conferida contra a coordenada canônica em vez de aceita só pelo rsid. distinct_positions>1 indica que o ClinVar registra o rsid em mais de uma posição naquele build; o locus não é validado por coordenada nesse caso.",
+    "retrieved_at": "2026-08-19T20:04:00Z",
+    "source": "NCBI ClinVar variant_summary.txt.gz",
+    "status": "VERIFICADO"
+  },
   "description": "Target-first registry for loci that may be interrogated by consumer SNP arrays. Presence here authorizes evidence retrieval only; it does not establish clinical significance, diagnosis, causality, phase or completeness.",
+  "id": "GENOMA-PARTIAL-CORE",
+  "schema": "genoma-partial-genome-targets-v1",
   "targets": [
     {
-      "rsid": "rs1799807",
+      "assessed_allele": "C",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "ClinVar (fallback)",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "C",
+          "chromosome": "3",
+          "position": 165548529,
+          "reference_allele": "T"
+        },
+        "GRCh38": {
+          "alternate_allele": "C",
+          "chromosome": "3",
+          "position": 165830741,
+          "reference_allele": "T"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "BCHE",
-      "scope": "CLINICO",
       "label": "BCHE targeted observation",
       "queries": {
-        "clinvar": {
-          "term": "rs1799807",
-          "retmax": 10
-        },
         "clinpgx": {
-          "path": "data/gene",
           "params": {
             "symbol": "BCHE",
             "view": "min"
-          }
+          },
+          "path": "data/gene"
+        },
+        "clinvar": {
+          "retmax": 10,
+          "term": "rs1799807"
         }
       },
-      "assessed_allele": "C",
-      "assessed_allele_source": "ClinVar (fallback)",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000013215"
@@ -42,29 +75,44 @@
           "25741868"
         ],
         "cpic_pubmed": []
-      }
+      },
+      "rsid": "rs1799807",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs1803274",
+      "assessed_allele": "T",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "ClinVar (fallback)",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "T",
+          "chromosome": "3",
+          "position": 165491280,
+          "reference_allele": "C"
+        },
+        "GRCh38": {
+          "alternate_allele": "T",
+          "chromosome": "3",
+          "position": 165773492,
+          "reference_allele": "C"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "BCHE",
-      "scope": "CLINICO",
       "label": "BCHE targeted observation",
       "queries": {
-        "clinvar": {
-          "term": "rs1803274",
-          "retmax": 10
-        },
         "clinpgx": {
-          "path": "data/gene",
           "params": {
             "symbol": "BCHE",
             "view": "min"
-          }
+          },
+          "path": "data/gene"
+        },
+        "clinvar": {
+          "retmax": 10,
+          "term": "rs1803274"
         }
       },
-      "assessed_allele": "T",
-      "assessed_allele_source": "ClinVar (fallback)",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000013220"
@@ -82,22 +130,37 @@
           "6716425"
         ],
         "cpic_pubmed": []
-      }
+      },
+      "rsid": "rs1803274",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs17580",
+      "assessed_allele": "A",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "ClinVar",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "A",
+          "chromosome": "14",
+          "position": 94847262,
+          "reference_allele": "T"
+        },
+        "GRCh38": {
+          "alternate_allele": "A",
+          "chromosome": "14",
+          "position": 94380925,
+          "reference_allele": "T"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "SERPINA1",
-      "scope": "CLINICO",
       "label": "SERPINA1 targeted observation",
       "queries": {
         "clinvar": {
-          "term": "rs17580",
-          "retmax": 10
+          "retmax": 10,
+          "term": "rs17580"
         }
       },
-      "assessed_allele": "A",
-      "assessed_allele_source": "ClinVar",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000017969",
@@ -118,22 +181,37 @@
           "30585791"
         ],
         "cpic_pubmed": []
-      }
+      },
+      "rsid": "rs17580",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs28929474",
+      "assessed_allele": "T",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "ClinVar + dbSNP frequency",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "T",
+          "chromosome": "14",
+          "position": 94844947,
+          "reference_allele": "C"
+        },
+        "GRCh38": {
+          "alternate_allele": "T",
+          "chromosome": "14",
+          "position": 94378610,
+          "reference_allele": "C"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "SERPINA1",
-      "scope": "CLINICO",
       "label": "SERPINA1 targeted observation",
       "queries": {
         "clinvar": {
-          "term": "rs28929474",
-          "retmax": 10
+          "retmax": 10,
+          "term": "rs28929474"
         }
       },
-      "assessed_allele": "T",
-      "assessed_allele_source": "ClinVar + dbSNP frequency",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000017967",
@@ -153,22 +231,37 @@
           "31564432"
         ],
         "cpic_pubmed": []
-      }
+      },
+      "rsid": "rs28929474",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs738409",
+      "assessed_allele": "G",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "ClinVar",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "G",
+          "chromosome": "22",
+          "position": 44324727,
+          "reference_allele": "C"
+        },
+        "GRCh38": {
+          "alternate_allele": "G",
+          "chromosome": "22",
+          "position": 43928847,
+          "reference_allele": "C"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "PNPLA3",
-      "scope": "PREDISPOSICAO",
       "label": "PNPLA3 association target",
       "queries": {
         "clinvar": {
-          "term": "rs738409",
-          "retmax": 10
+          "retmax": 10,
+          "term": "rs738409"
         }
       },
-      "assessed_allele": "G",
-      "assessed_allele_source": "ClinVar",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000341932"
@@ -184,29 +277,44 @@
           "21381068"
         ],
         "cpic_pubmed": []
-      }
+      },
+      "rsid": "rs738409",
+      "scope": "PREDISPOSICAO"
     },
     {
-      "rsid": "rs1799853",
+      "assessed_allele": "T",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "CPIC",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "T",
+          "chromosome": "10",
+          "position": 96702047,
+          "reference_allele": "C"
+        },
+        "GRCh38": {
+          "alternate_allele": "T",
+          "chromosome": "10",
+          "position": 94942290,
+          "reference_allele": "C"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "CYP2C9",
-      "scope": "CLINICO",
       "label": "CYP2C9 targeted observation",
       "queries": {
-        "clinvar": {
-          "term": "rs1799853",
-          "retmax": 10
-        },
         "clinpgx": {
-          "path": "data/gene",
           "params": {
             "symbol": "CYP2C9",
             "view": "min"
-          }
+          },
+          "path": "data/gene"
+        },
+        "clinvar": {
+          "retmax": 10,
+          "term": "rs1799853"
         }
       },
-      "assessed_allele": "T",
-      "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000008409",
@@ -236,29 +344,44 @@
           "24322786",
           "25775139"
         ]
-      }
+      },
+      "rsid": "rs1799853",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs1057910",
+      "assessed_allele": "C",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "CPIC",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "C",
+          "chromosome": "10",
+          "position": 96741053,
+          "reference_allele": "A"
+        },
+        "GRCh38": {
+          "alternate_allele": "C",
+          "chromosome": "10",
+          "position": 94981296,
+          "reference_allele": "A"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "CYP2C9",
-      "scope": "CLINICO",
       "label": "CYP2C9 targeted observation",
       "queries": {
-        "clinvar": {
-          "term": "rs1057910",
-          "retmax": 10
-        },
         "clinpgx": {
-          "path": "data/gene",
           "params": {
             "symbol": "CYP2C9",
             "view": "min"
-          }
+          },
+          "path": "data/gene"
+        },
+        "clinvar": {
+          "retmax": 10,
+          "term": "rs1057910"
         }
       },
-      "assessed_allele": "C",
-      "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000008408",
@@ -288,29 +411,44 @@
           "27179628",
           "29283396"
         ]
-      }
+      },
+      "rsid": "rs1057910",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs9923231",
+      "assessed_allele": "T",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "CPIC",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "T",
+          "chromosome": "16",
+          "position": 31107689,
+          "reference_allele": "C"
+        },
+        "GRCh38": {
+          "alternate_allele": "T",
+          "chromosome": "16",
+          "position": 31096368,
+          "reference_allele": "C"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "VKORC1",
-      "scope": "CLINICO",
       "label": "VKORC1 targeted observation",
       "queries": {
-        "clinvar": {
-          "term": "rs9923231",
-          "retmax": 10
-        },
         "clinpgx": {
-          "path": "data/gene",
           "params": {
             "symbol": "VKORC1",
             "view": "min"
-          }
+          },
+          "path": "data/gene"
+        },
+        "clinvar": {
+          "retmax": 10,
+          "term": "rs9923231"
         }
       },
-      "assessed_allele": "T",
-      "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000002211"
@@ -328,29 +466,44 @@
           "29432897"
         ],
         "cpic_pubmed": []
-      }
+      },
+      "rsid": "rs9923231",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs4149056",
+      "assessed_allele": "C",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "CPIC",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "C",
+          "chromosome": "12",
+          "position": 21331549,
+          "reference_allele": "T"
+        },
+        "GRCh38": {
+          "alternate_allele": "C",
+          "chromosome": "12",
+          "position": 21178615,
+          "reference_allele": "T"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "SLCO1B1",
-      "scope": "CLINICO",
       "label": "SLCO1B1 targeted observation",
       "queries": {
-        "clinvar": {
-          "term": "rs4149056",
-          "retmax": 10
-        },
         "clinpgx": {
-          "path": "data/gene",
           "params": {
             "symbol": "SLCO1B1",
             "view": "min"
-          }
+          },
+          "path": "data/gene"
+        },
+        "clinvar": {
+          "retmax": 10,
+          "term": "rs4149056"
         }
       },
-      "assessed_allele": "C",
-      "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000037346"
@@ -376,29 +529,44 @@
           "32961594",
           "33658230"
         ]
-      }
+      },
+      "rsid": "rs4149056",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs776746",
+      "assessed_allele": "C",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "CPIC",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "C",
+          "chromosome": "7",
+          "position": 99270539,
+          "reference_allele": "C"
+        },
+        "GRCh38": {
+          "alternate_allele": "C",
+          "chromosome": "7",
+          "position": 99672916,
+          "reference_allele": "T"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "CYP3A5",
-      "scope": "CLINICO",
       "label": "CYP3A5 targeted observation",
       "queries": {
-        "clinvar": {
-          "term": "rs776746",
-          "retmax": 10
-        },
         "clinpgx": {
-          "path": "data/gene",
           "params": {
             "symbol": "CYP3A5",
             "view": "min"
-          }
+          },
+          "path": "data/gene"
+        },
+        "clinvar": {
+          "retmax": 10,
+          "term": "rs776746"
         }
       },
-      "assessed_allele": "C",
-      "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000005066"
@@ -415,29 +583,44 @@
         "cpic_pubmed": [
           "15179407"
         ]
-      }
+      },
+      "rsid": "rs776746",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs1799930",
+      "assessed_allele": "A",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "CPIC",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "A",
+          "chromosome": "8",
+          "position": 18258103,
+          "reference_allele": "G"
+        },
+        "GRCh38": {
+          "alternate_allele": "A",
+          "chromosome": "8",
+          "position": 18400593,
+          "reference_allele": "G"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "NAT2",
-      "scope": "PESQUISA",
       "label": "NAT2 targeted observation",
       "queries": {
-        "clinvar": {
-          "term": "rs1799930",
-          "retmax": 10
-        },
         "clinpgx": {
-          "path": "data/gene",
           "params": {
             "symbol": "NAT2",
             "view": "min"
-          }
+          },
+          "path": "data/gene"
+        },
+        "clinvar": {
+          "retmax": 10,
+          "term": "rs1799930"
         }
       },
-      "assessed_allele": "A",
-      "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000000722"
@@ -458,22 +641,37 @@
           "15558239",
           "15564878"
         ]
-      }
+      },
+      "rsid": "rs1799930",
+      "scope": "PESQUISA"
     },
     {
-      "rsid": "rs429358",
+      "assessed_allele": "C",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "ClinVar",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "C",
+          "chromosome": "19",
+          "position": 45411941,
+          "reference_allele": "T"
+        },
+        "GRCh38": {
+          "alternate_allele": "C",
+          "chromosome": "19",
+          "position": 44908684,
+          "reference_allele": "T"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "APOE",
-      "scope": "PREDISPOSICAO",
       "label": "APOE component locus",
       "queries": {
         "clinvar": {
-          "term": "rs429358",
-          "retmax": 10
+          "retmax": 10,
+          "term": "rs429358"
         }
       },
-      "assessed_allele": "C",
-      "assessed_allele_source": "ClinVar",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000017864",
@@ -495,22 +693,37 @@
           "32376954"
         ],
         "cpic_pubmed": []
-      }
+      },
+      "rsid": "rs429358",
+      "scope": "PREDISPOSICAO"
     },
     {
-      "rsid": "rs7412",
+      "assessed_allele": "T",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "ClinVar",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "T",
+          "chromosome": "19",
+          "position": 45412079,
+          "reference_allele": "C"
+        },
+        "GRCh38": {
+          "alternate_allele": "T",
+          "chromosome": "19",
+          "position": 44908822,
+          "reference_allele": "C"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "APOE",
-      "scope": "PREDISPOSICAO",
       "label": "APOE component locus",
       "queries": {
         "clinvar": {
-          "term": "rs7412",
-          "retmax": 10
+          "retmax": 10,
+          "term": "rs7412"
         }
       },
-      "assessed_allele": "T",
-      "assessed_allele_source": "ClinVar",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000017848",
@@ -530,36 +743,55 @@
           "24829003"
         ],
         "cpic_pubmed": []
-      }
+      },
+      "rsid": "rs7412",
+      "scope": "PREDISPOSICAO"
     },
     {
-      "rsid": "rs4307059",
+      "assessed_allele_reason": "published studies disagree on the risk allele — the GWAS Catalogue reports C (2 record(s)), T (1 record(s)) for this variant. This is a documented contradiction in the literature, not a gap in the data, and choosing a side would manufacture agreement",
+      "assessed_allele_status": "NÃO DISPONÍVEL",
+      "coordinates": {
+        "reason": "rsid ausente do ClinVar variant_summary; nenhuma coordenada canônica para conferir",
+        "status": "NÃO DISPONÍVEL"
+      },
       "gene": null,
-      "scope": "PESQUISA",
       "label": "association-only research locus",
       "queries": {
         "clinvar": {
-          "term": "rs4307059",
-          "retmax": 10
+          "retmax": 10,
+          "term": "rs4307059"
         }
       },
-      "assessed_allele_status": "NÃO DISPONÍVEL",
-      "assessed_allele_reason": "published studies disagree on the risk allele — the GWAS Catalogue reports C (2 record(s)), T (1 record(s)) for this variant. This is a documented contradiction in the literature, not a gap in the data, and choosing a side would manufacture agreement"
+      "rsid": "rs4307059",
+      "scope": "PESQUISA"
     },
     {
-      "rsid": "rs6025",
+      "assessed_allele": "T",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "ClinVar",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "T",
+          "chromosome": "1",
+          "position": 169519049,
+          "reference_allele": "T"
+        },
+        "GRCh38": {
+          "alternate_allele": "T",
+          "chromosome": "1",
+          "position": 169549811,
+          "reference_allele": "C"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "F5",
-      "scope": "CLINICO",
       "label": "F5 targeted observation",
       "queries": {
         "clinvar": {
-          "term": "rs6025",
-          "retmax": 10
+          "retmax": 10,
+          "term": "rs6025"
         }
       },
-      "assessed_allele": "T",
-      "assessed_allele_source": "ClinVar",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000000642"
@@ -577,22 +809,37 @@
           "26251307"
         ],
         "cpic_pubmed": []
-      }
+      },
+      "rsid": "rs6025",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs1799963",
+      "assessed_allele": "A",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "ClinVar",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "A",
+          "chromosome": "11",
+          "position": 46761055,
+          "reference_allele": "G"
+        },
+        "GRCh38": {
+          "alternate_allele": "A",
+          "chromosome": "11",
+          "position": 46739505,
+          "reference_allele": "G"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "F2",
-      "scope": "CLINICO",
       "label": "F2 targeted observation",
       "queries": {
         "clinvar": {
-          "term": "rs1799963",
-          "retmax": 10
+          "retmax": 10,
+          "term": "rs1799963"
         }
       },
-      "assessed_allele": "A",
-      "assessed_allele_source": "ClinVar",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000013310"
@@ -610,22 +857,37 @@
           "28707429"
         ],
         "cpic_pubmed": []
-      }
+      },
+      "rsid": "rs1799963",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs1800562",
+      "assessed_allele": "A",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "ClinVar",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "A",
+          "chromosome": "6",
+          "position": 26093141,
+          "reference_allele": "G"
+        },
+        "GRCh38": {
+          "alternate_allele": "A",
+          "chromosome": "6",
+          "position": 26092913,
+          "reference_allele": "G"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "HFE",
-      "scope": "CLINICO",
       "label": "HFE targeted observation",
       "queries": {
         "clinvar": {
-          "term": "rs1800562",
-          "retmax": 10
+          "retmax": 10,
+          "term": "rs1800562"
         }
       },
-      "assessed_allele": "A",
-      "assessed_allele_source": "ClinVar",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000000009"
@@ -643,22 +905,37 @@
           "31022120"
         ],
         "cpic_pubmed": []
-      }
+      },
+      "rsid": "rs1800562",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs1799945",
+      "assessed_allele": "G",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "ClinVar",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "G",
+          "chromosome": "6",
+          "position": 26091179,
+          "reference_allele": "C"
+        },
+        "GRCh38": {
+          "alternate_allele": "G",
+          "chromosome": "6",
+          "position": 26090951,
+          "reference_allele": "C"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "HFE",
-      "scope": "CLINICO",
       "label": "HFE targeted observation",
       "queries": {
         "clinvar": {
-          "term": "rs1799945",
-          "retmax": 10
+          "retmax": 10,
+          "term": "rs1799945"
         }
       },
-      "assessed_allele": "G",
-      "assessed_allele_source": "ClinVar",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000000010"
@@ -676,29 +953,44 @@
           "30291871"
         ],
         "cpic_pubmed": []
-      }
+      },
+      "rsid": "rs1799945",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs3918290",
+      "assessed_allele": "T",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "CPIC",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "T",
+          "chromosome": "1",
+          "position": 97915614,
+          "reference_allele": "C"
+        },
+        "GRCh38": {
+          "alternate_allele": "T",
+          "chromosome": "1",
+          "position": 97450058,
+          "reference_allele": "C"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "DPYD",
-      "scope": "CLINICO",
       "label": "DPYD targeted observation",
       "queries": {
-        "clinvar": {
-          "term": "rs3918290",
-          "retmax": 10
-        },
         "clinpgx": {
-          "path": "data/gene",
           "params": {
             "symbol": "DPYD",
             "view": "min"
-          }
+          },
+          "path": "data/gene"
+        },
+        "clinvar": {
+          "retmax": 10,
+          "term": "rs3918290"
         }
       },
-      "assessed_allele": "T",
-      "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000000432",
@@ -719,29 +1011,44 @@
         "cpic_pubmed": [
           "23328581"
         ]
-      }
+      },
+      "rsid": "rs3918290",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs55886062",
+      "assessed_allele": "C",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "CPIC",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "C",
+          "chromosome": "1",
+          "position": 97981343,
+          "reference_allele": "A"
+        },
+        "GRCh38": {
+          "alternate_allele": "C",
+          "chromosome": "1",
+          "position": 97515787,
+          "reference_allele": "A"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "DPYD",
-      "scope": "CLINICO",
       "label": "DPYD targeted observation",
       "queries": {
-        "clinvar": {
-          "term": "rs55886062",
-          "retmax": 10
-        },
         "clinpgx": {
-          "path": "data/gene",
           "params": {
             "symbol": "DPYD",
             "view": "min"
-          }
+          },
+          "path": "data/gene"
+        },
+        "clinvar": {
+          "retmax": 10,
+          "term": "rs55886062"
         }
       },
-      "assessed_allele": "C",
-      "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000088975"
@@ -761,29 +1068,44 @@
         "cpic_pubmed": [
           "23328581"
         ]
-      }
+      },
+      "rsid": "rs55886062",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs67376798",
+      "assessed_allele": "A",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "CPIC",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "A",
+          "chromosome": "1",
+          "position": 97547947,
+          "reference_allele": "T"
+        },
+        "GRCh38": {
+          "alternate_allele": "A",
+          "chromosome": "1",
+          "position": 97082391,
+          "reference_allele": "T"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "DPYD",
-      "scope": "CLINICO",
       "label": "DPYD targeted observation",
       "queries": {
-        "clinvar": {
-          "term": "rs67376798",
-          "retmax": 10
-        },
         "clinpgx": {
-          "path": "data/gene",
           "params": {
             "symbol": "DPYD",
             "view": "min"
-          }
+          },
+          "path": "data/gene"
+        },
+        "clinvar": {
+          "retmax": 10,
+          "term": "rs67376798"
         }
       },
-      "assessed_allele": "A",
-      "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000088974"
@@ -803,29 +1125,44 @@
         "cpic_pubmed": [
           "24648345"
         ]
-      }
+      },
+      "rsid": "rs67376798",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs56038477",
+      "assessed_allele": "T",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "CPIC",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "T",
+          "chromosome": "1",
+          "position": 98039419,
+          "reference_allele": "C"
+        },
+        "GRCh38": {
+          "alternate_allele": "T",
+          "chromosome": "1",
+          "position": 97573863,
+          "reference_allele": "C"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "DPYD",
-      "scope": "CLINICO",
       "label": "DPYD targeted observation",
       "queries": {
-        "clinvar": {
-          "term": "rs56038477",
-          "retmax": 10
-        },
         "clinpgx": {
-          "path": "data/gene",
           "params": {
             "symbol": "DPYD",
             "view": "min"
-          }
+          },
+          "path": "data/gene"
+        },
+        "clinvar": {
+          "retmax": 10,
+          "term": "rs56038477"
         }
       },
-      "assessed_allele": "T",
-      "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000100100"
@@ -845,29 +1182,44 @@
         "cpic_pubmed": [
           "28295243"
         ]
-      }
+      },
+      "rsid": "rs56038477",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs1800462",
+      "assessed_allele": "G",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "CPIC",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "G",
+          "chromosome": "6",
+          "position": 18143955,
+          "reference_allele": "C"
+        },
+        "GRCh38": {
+          "alternate_allele": "G",
+          "chromosome": "6",
+          "position": 18143724,
+          "reference_allele": "C"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "TPMT",
-      "scope": "CLINICO",
       "label": "TPMT targeted observation",
       "queries": {
-        "clinvar": {
-          "term": "rs1800462",
-          "retmax": 10
-        },
         "clinpgx": {
-          "path": "data/gene",
           "params": {
             "symbol": "TPMT",
             "view": "min"
-          }
+          },
+          "path": "data/gene"
+        },
+        "clinvar": {
+          "retmax": 10,
+          "term": "rs1800462"
         }
       },
-      "assessed_allele": "G",
-      "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000012721"
@@ -893,29 +1245,44 @@
           "18021342",
           "18708949"
         ]
-      }
+      },
+      "rsid": "rs1800462",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs1800460",
+      "assessed_allele": "T",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "CPIC",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "T",
+          "chromosome": "6",
+          "position": 18139228,
+          "reference_allele": "C"
+        },
+        "GRCh38": {
+          "alternate_allele": "T",
+          "chromosome": "6",
+          "position": 18138997,
+          "reference_allele": "C"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "TPMT",
-      "scope": "CLINICO",
       "label": "TPMT targeted observation",
       "queries": {
-        "clinvar": {
-          "term": "rs1800460",
-          "retmax": 10
-        },
         "clinpgx": {
-          "path": "data/gene",
           "params": {
             "symbol": "TPMT",
             "view": "min"
-          }
+          },
+          "path": "data/gene"
+        },
+        "clinvar": {
+          "retmax": 10,
+          "term": "rs1800460"
         }
       },
-      "assessed_allele": "T",
-      "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000037126"
@@ -939,31 +1306,46 @@
           "19057372",
           "23252716"
         ]
-      }
+      },
+      "rsid": "rs1800460",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs1142345",
+      "assessed_allele": "C",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_reason": "CPIC defines different alleles by different bases here (C, G); the locus interrogates more than one question",
+      "assessed_allele_source": "CPIC + dbSNP frequency",
+      "assessed_allele_status": "NÃO DISPONÍVEL",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "C",
+          "chromosome": "6",
+          "position": 18130918,
+          "reference_allele": "T"
+        },
+        "GRCh38": {
+          "alternate_allele": "C",
+          "chromosome": "6",
+          "position": 18130687,
+          "reference_allele": "T"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "TPMT",
-      "scope": "CLINICO",
       "label": "TPMT targeted observation",
       "queries": {
-        "clinvar": {
-          "term": "rs1142345",
-          "retmax": 10
-        },
         "clinpgx": {
-          "path": "data/gene",
           "params": {
             "symbol": "TPMT",
             "view": "min"
-          }
+          },
+          "path": "data/gene"
+        },
+        "clinvar": {
+          "retmax": 10,
+          "term": "rs1142345"
         }
       },
-      "assessed_allele_status": "NÃO DISPONÍVEL",
-      "assessed_allele_reason": "CPIC defines different alleles by different bases here (C, G); the locus interrogates more than one question",
-      "assessed_allele": "C",
-      "assessed_allele_source": "CPIC + dbSNP frequency",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000012722",
@@ -993,29 +1375,44 @@
           "15226673",
           "15255798"
         ]
-      }
+      },
+      "rsid": "rs1142345",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs116855232",
+      "assessed_allele": "T",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "CPIC",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "T",
+          "chromosome": "13",
+          "position": 48619855,
+          "reference_allele": "C"
+        },
+        "GRCh38": {
+          "alternate_allele": "T",
+          "chromosome": "13",
+          "position": 48045719,
+          "reference_allele": "C"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "NUDT15",
-      "scope": "CLINICO",
       "label": "NUDT15 targeted observation",
       "queries": {
-        "clinvar": {
-          "term": "rs116855232",
-          "retmax": 10
-        },
         "clinpgx": {
-          "path": "data/gene",
           "params": {
             "symbol": "NUDT15",
             "view": "min"
-          }
+          },
+          "path": "data/gene"
+        },
+        "clinvar": {
+          "retmax": 10,
+          "term": "rs116855232"
         }
       },
-      "assessed_allele": "T",
-      "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000225201"
@@ -1044,29 +1441,44 @@
           "28659275",
           "28903549"
         ]
-      }
+      },
+      "rsid": "rs116855232",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs4244285",
+      "assessed_allele": "A",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "CPIC",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "A",
+          "chromosome": "10",
+          "position": 96541616,
+          "reference_allele": "G"
+        },
+        "GRCh38": {
+          "alternate_allele": "A",
+          "chromosome": "10",
+          "position": 94781859,
+          "reference_allele": "G"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "CYP2C19",
-      "scope": "CLINICO",
       "label": "CYP2C19 targeted observation",
       "queries": {
-        "clinvar": {
-          "term": "rs4244285",
-          "retmax": 10
-        },
         "clinpgx": {
-          "path": "data/gene",
           "params": {
             "symbol": "CYP2C19",
             "view": "min"
-          }
+          },
+          "path": "data/gene"
+        },
+        "clinvar": {
+          "retmax": 10,
+          "term": "rs4244285"
         }
       },
-      "assessed_allele": "A",
-      "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000016897",
@@ -1106,29 +1518,44 @@
           "22027650",
           "8195181"
         ]
-      }
+      },
+      "rsid": "rs4244285",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs12248560",
+      "assessed_allele": "T",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "CPIC",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "T",
+          "chromosome": "10",
+          "position": 96521657,
+          "reference_allele": "C"
+        },
+        "GRCh38": {
+          "alternate_allele": "T",
+          "chromosome": "10",
+          "position": 94761900,
+          "reference_allele": "C"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "CYP2C19",
-      "scope": "CLINICO",
       "label": "CYP2C19 targeted observation",
       "queries": {
-        "clinvar": {
-          "term": "rs12248560",
-          "retmax": 10
-        },
         "clinpgx": {
-          "path": "data/gene",
           "params": {
             "symbol": "CYP2C19",
             "view": "min"
-          }
+          },
+          "path": "data/gene"
+        },
+        "clinvar": {
+          "retmax": 10,
+          "term": "rs12248560"
         }
       },
-      "assessed_allele": "T",
-      "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000039357"
@@ -1153,29 +1580,44 @@
           "31649299",
           "32857933"
         ]
-      }
+      },
+      "rsid": "rs12248560",
+      "scope": "CLINICO"
     },
     {
-      "rsid": "rs4986893",
+      "assessed_allele": "A",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
+      "assessed_allele_source": "CPIC",
+      "coordinates": {
+        "GRCh37": {
+          "alternate_allele": "A",
+          "chromosome": "10",
+          "position": 96540410,
+          "reference_allele": "G"
+        },
+        "GRCh38": {
+          "alternate_allele": "A",
+          "chromosome": "10",
+          "position": 94780653,
+          "reference_allele": "G"
+        },
+        "status": "VERIFICADO"
+      },
       "gene": "CYP2C19",
-      "scope": "CLINICO",
       "label": "CYP2C19 targeted observation",
       "queries": {
-        "clinvar": {
-          "term": "rs4986893",
-          "retmax": 10
-        },
         "clinpgx": {
-          "path": "data/gene",
           "params": {
             "symbol": "CYP2C19",
             "view": "min"
-          }
+          },
+          "path": "data/gene"
+        },
+        "clinvar": {
+          "retmax": 10,
+          "term": "rs4986893"
         }
       },
-      "assessed_allele": "A",
-      "assessed_allele_source": "CPIC",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "references": {
         "clinvar_accessions": [
           "VCV000016899"
@@ -1197,20 +1639,10 @@
           "7969038",
           "9103550"
         ]
-      }
+      },
+      "rsid": "rs4986893",
+      "scope": "CLINICO"
     }
   ],
-  "assessed_allele_curation": {
-    "curated_at": "2026-08-19T13:35:30.461122Z",
-    "sources": [
-      "NCBI dbSNP RefSNP API (api.ncbi.nlm.nih.gov/variation/v0/refsnp) — reference base",
-      "NCBI ClinVar via E-utilities (eutils.ncbi.nlm.nih.gov, db=clinvar) — asserted alternate",
-      "CPIC allele definitions (config/pgx_allele_definitions.json) — pharmacogenomic targets",
-      "EBI GWAS Catalog (www.ebi.ac.uk/gwas/rest/api) — risk allele for association SNPs",
-      "PubMed via NCBI elink — supporting citations per target"
-    ],
-    "evidence": "docs/evidence/ASSESSED_ALLELES_CLINVAR.json",
-    "established": 28,
-    "total": 29
-  }
+  "version": "2026-08-16.1"
 }

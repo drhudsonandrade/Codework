@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -18,14 +19,29 @@ from scripts.prepare_report_release import assemble_release
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True)
-    parser.add_argument("--policy", help="actual policy evaluation JSON; if omitted, a staged evaluation.json is used when present")
+    # Required, and no longer falling back to `evaluation.json` in the working directory.
+    # The fallback meant two things nobody asked for: a run started in a directory holding
+    # another case's evaluation silently applied it, and a run with no evaluation at all
+    # skipped `assemble_release` entirely, leaving the publication gate to whatever the
+    # input file declared about itself. The policy evaluation is what authorises
+    # publication; it cannot be the optional argument.
+    parser.add_argument(
+        "--policy",
+        required=True,
+        help="actual policy evaluation JSON for this case; the release is assembled from it",
+    )
     parser.add_argument("--output-dir", required=True)
     args = parser.parse_args()
     data = json.loads(Path(args.input).read_text(encoding="utf-8"))
-    policy_path = Path(args.policy) if args.policy else Path("evaluation.json")
-    if policy_path.is_file():
-        policy = json.loads(policy_path.read_text(encoding="utf-8"))
-        data = assemble_release(data, policy)
+    policy_path = Path(args.policy)
+    if not policy_path.is_file():
+        raise SystemExit(f"NÃO DISPONÍVEL: policy evaluation not found at {policy_path}")
+    policy = json.loads(policy_path.read_text(encoding="utf-8"))
+    # Recorded so the release names which evaluation authorised it, by content and not by
+    # path: two files called evaluation.json are not the same evaluation.
+    policy_sha256 = hashlib.sha256(policy_path.read_bytes()).hexdigest()
+    data = assemble_release(data, policy)
+    data["policy_input"] = {"path": str(policy_path), "sha256": policy_sha256}
 
     out = Path(args.output_dir)
     out.mkdir(parents=True, exist_ok=True)

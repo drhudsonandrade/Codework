@@ -214,7 +214,7 @@ process NORMALIZE_VARIANTS {
     """
 }
 
-process ANNOTATE_EVIDENCE {
+process ADAPTER_CAPABILITY_INVENTORY {
     tag 'evidence-adapter-capabilities'
 
     input:
@@ -312,8 +312,13 @@ process GENERATE_REPORTS {
     script:
     """
     test -s '${policy_evaluation}'
+    # The evaluation was staged and proved non-empty and then never passed, the same shape
+    # as the evidence snapshot in BUILD_CURATED_MANIFEST. Without it the release was
+    # assembled from whatever the curation manifest said about its own publication gate,
+    # with no policy evaluation involved at all.
     python3 '${workflow.projectDir}/scripts/generate_all_reports.py' \
       --input '${curation_manifest}' \
+      --policy '${policy_evaluation}' \
       --output-dir reports
     """
 }
@@ -341,13 +346,13 @@ workflow WGS_PRODUCTION {
     RERUN_SAMPLE_RUNTIME_GATE(ALIGN_OR_STAGE.out.alignment, freshness_state_manifest, ref_root)
     CALL_SHORT_VARIANTS(ALIGN_OR_STAGE.out.alignment, RERUN_SAMPLE_RUNTIME_GATE.out.pre_call_gate, ref_root)
     NORMALIZE_VARIANTS(CALL_SHORT_VARIANTS.out.raw_vcf, CALL_SHORT_VARIANTS.out.raw_vcf_index, ref_root)
-    ANNOTATE_EVIDENCE(NORMALIZE_VARIANTS.out.normalized_vcf)
+    ADAPTER_CAPABILITY_INVENTORY(NORMALIZE_VARIANTS.out.normalized_vcf)
     BUILD_CURATED_MANIFEST(
         NORMALIZE_VARIANTS.out.normalized_vcf,
         NORMALIZE_VARIANTS.out.normalized_index,
         RERUN_SAMPLE_RUNTIME_GATE.out.pre_call_gate,
         INGEST_AND_QC.out.input_qc,
-        ANNOTATE_EVIDENCE.out.evidence_snapshot,
+        ADAPTER_CAPABILITY_INVENTORY.out.evidence_snapshot,
         case_id,
         sample_id
     )
