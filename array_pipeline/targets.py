@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import gzip
 import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
+
+from array_pipeline import assembly
 
 ALLOWED_SCOPES = {"CLINICO", "PREDISPOSICAO", "PESQUISA", "CURIOSIDADE"}
 ALLOWED_SOURCES = {"clinvar", "clingen", "cpic", "clinpgx", "gnomad", "pgs_catalog"}
@@ -22,7 +23,10 @@ def read_manifest_bytes(path: Path) -> str:
     """
     raw = Path(path).read_bytes()
     if raw[:2] == b"\x1f\x8b":
-        raw = gzip.decompress(raw)
+        # Bounded: `gzip.decompress` expands whatever it is given, and this path takes a
+        # filename from `--targets`. The ceilings live beside the ones the QC gate applies
+        # to an array export, so the two cannot drift apart on what is physically plausible.
+        raw = assembly.bounded_gunzip(raw, name=str(path))
     return raw.decode("utf-8")
 
 

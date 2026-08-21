@@ -285,3 +285,73 @@ class ExternalAuditRepairsTest(unittest.TestCase):
         self.assertGreater(MAX_MUTABLE_SOURCE_AGE_DAYS, 0)
         source = (ROOT / "policy_engine/genoma_policy/gates_evidence.py").read_text(encoding="utf-8")
         self.assertIn("beyond the", source)
+
+
+class BoundedRegistryDecompressionTest(unittest.TestCase):
+    """A curated registry is decompressed under the same ceilings an array export is.
+
+    `array_pipeline.qc` bounds a ZIP member by uncompressed size and compression ratio; the
+    registry loaders called `gzip.decompress`, which expands whatever it is given. Both take
+    a filename from the command line (`--targets`, `--panel`), so the asymmetry was a real
+    one: the path that reads the person's genotypes was bounded and the path that reads the
+    registry it is interpreted against was not.
+    """
+
+    def _bomb(self, megabytes: int = 200) -> bytes:
+        import gzip
+
+        return gzip.compress(b"\0" * (megabytes * 1024 * 1024))
+
+    def test_a_high_ratio_payload_is_refused(self):
+        from array_pipeline.assembly import MAX_REGISTRY_COMPRESSION_RATIO, bounded_gunzip
+
+        with self.assertRaises(ValueError) as caught:
+            bounded_gunzip(self._bomb(), name="bomba.gz")
+        message = str(caught.exception)
+        self.assertIn("bomba.gz", message)
+        self.assertIn(f"{MAX_REGISTRY_COMPRESSION_RATIO:.0f}x", message)
+
+    def test_an_ordinary_payload_still_decompresses(self):
+        import gzip
+
+        from array_pipeline.assembly import bounded_gunzip
+
+        payload = json.dumps({"schema": "x", "targets": list(range(1000))}).encode("utf-8")
+        self.assertEqual(bounded_gunzip(gzip.compress(payload), name="ok.gz"), payload)
+
+    def test_the_shipped_registries_are_within_the_ceilings(self):
+        """Measured, so the bound cannot be set where it would refuse the real files."""
+        from array_pipeline.assembly import (
+            MAX_REGISTRY_COMPRESSION_RATIO,
+            MAX_REGISTRY_UNCOMPRESSED_BYTES,
+            bounded_gunzip,
+        )
+
+        for relative in (
+            "config/targets_merged_panel_1star.json.gz",
+            "config/ancestry_reference_panel.json.gz",
+            "docs/evidence/GENE_DISEASE_VALIDITY_1STAR.json.gz",
+        ):
+            with self.subTest(registry=relative):
+                raw = (ROOT / relative).read_bytes()
+                out = bounded_gunzip(raw, name=relative)
+                self.assertLess(len(out), MAX_REGISTRY_UNCOMPRESSED_BYTES)
+                self.assertLess(len(out) / len(raw), MAX_REGISTRY_COMPRESSION_RATIO)
+
+    def test_the_registry_loaders_refuse_a_bomb(self):
+        """Behaviour, not source text: the first draft of this test matched its own comment."""
+        import tempfile
+
+        from array_pipeline.ancestry import load_panel
+        from array_pipeline.targets import read_manifest_bytes
+
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "registry.json.gz"
+            path.write_bytes(self._bomb())
+            for name, call in (
+                ("targets", lambda: read_manifest_bytes(path)),
+                ("panel", lambda: load_panel(path)),
+            ):
+                with self.subTest(loader=name), self.assertRaises(ValueError) as caught:
+                    call()
+                self.assertIn("x, above the", str(caught.exception))

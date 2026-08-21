@@ -26,12 +26,13 @@ as such.
 """
 from __future__ import annotations
 
-import gzip
 import json
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+from array_pipeline import assembly
 
 SCHEMA = "genoma-ancestry-reference-panel-v1"
 UNAVAILABLE = "NÃO DISPONÍVEL"
@@ -122,7 +123,7 @@ def read_case_genotypes(input_path: Path, rsids: set[str]) -> tuple[dict[str, st
 def load_panel(path: Path) -> dict[str, Any]:
     raw = Path(path).read_bytes()
     if raw[:2] == b"\x1f\x8b":
-        raw = gzip.decompress(raw)
+        raw = assembly.bounded_gunzip(raw, name=str(path))
     panel = json.loads(raw.decode("utf-8"))
     if panel.get("schema") != SCHEMA:
         raise AncestryPanelError(f"unsupported ancestry panel schema: {panel.get('schema')!r}")

@@ -76,3 +76,49 @@ AUTOSOME_KB_BY_CHROMOSOME: dict[str, int] = {
 }
 
 AUTOSOME_TOTAL_KB: float = float(sum(AUTOSOME_KB_BY_CHROMOSOME.values()))
+
+
+#: Ceilings for decompressing a curated registry or panel. The QC gate applies the same two
+#: to an array export inside a ZIP; the registry loaders applied neither, so a path handed to
+#: `--targets` or `--panel` was expanded with no bound at all. The shipped files decompress at
+#: 5x to 17x and reach 168 MB, so these admit them with room while refusing a bomb, which
+#: reaches a thousandfold and beyond.
+MAX_REGISTRY_UNCOMPRESSED_BYTES = 1024 * 1024 * 1024
+MAX_REGISTRY_COMPRESSION_RATIO = 200.0
+
+
+def bounded_gunzip(raw: bytes, *, name: str) -> bytes:
+    """Decompress a gzip payload, refusing one that expands beyond the declared ceilings.
+
+    Decompression is incremental so the refusal happens while expanding rather than after: a
+    ratio check on the finished output has already spent the memory it was meant to protect.
+    """
+    import zlib
+
+    decompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
+    chunks: list[bytes] = []
+    produced = 0
+    view = memoryview(raw)
+    step = 1 << 20
+    for start in range(0, len(view), step):
+        chunk = decompressor.decompress(bytes(view[start : start + step]), step * 64)
+        while True:
+            produced += len(chunk)
+            if produced > MAX_REGISTRY_UNCOMPRESSED_BYTES:
+                raise ValueError(
+                    f"{name}: gzip payload expands past "
+                    f"{MAX_REGISTRY_UNCOMPRESSED_BYTES:,} bytes and was refused before "
+                    "the rest was read"
+                )
+            chunks.append(chunk)
+            if not decompressor.unconsumed_tail:
+                break
+            chunk = decompressor.decompress(decompressor.unconsumed_tail, step * 64)
+    chunks.append(decompressor.flush())
+    produced += len(chunks[-1])
+    if raw and produced / len(raw) > MAX_REGISTRY_COMPRESSION_RATIO:
+        raise ValueError(
+            f"{name}: gzip payload expands {produced / len(raw):.0f}x, above the "
+            f"{MAX_REGISTRY_COMPRESSION_RATIO:.0f}x ceiling for a curated registry"
+        )
+    return b"".join(chunks)
