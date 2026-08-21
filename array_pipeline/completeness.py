@@ -63,6 +63,33 @@ CLASSES = (OBSERVADO, NAO_DETECTADO, NO_CALL, NAO_TESTADO, NAO_REPORTAVEL)
 INTERPRETABLE = frozenset({OBSERVADO, NAO_DETECTADO})
 
 
+def assessed_bases(target: dict[str, Any]) -> set[str]:
+    """Every base whose presence at this locus this registry can test for.
+
+    `assessed_allele` holds the single alternate base when ClinVar asserts exactly one at the
+    coordinate. When it asserts several, the expander declines to name one and records them
+    all in `clinvar_alternate_alleles` — and, before this function existed, the classifier
+    read only the singular field, found it empty, and fell through to OBSERVADO with
+    "ausência não pode ser afirmada".
+
+    That was the wrong reading twice over. At one coordinate a single alternate base *is* a
+    single variant, so the called genotype answers presence for each of them independently:
+    a genotype sharing no base with any asserted alternate is a real NÃO DETECTADO. And
+    `clinical_findings` read the resulting OBSERVADO as presence, so a person homozygous for
+    the reference base was graded "homozigoto para variante patogênica". On the first real
+    array this produced 3.412 false positives out of 3.153 reported risk genotypes,
+    including familial adenomatous polyposis from a plain reference call in APC.
+    """
+    single = str(target.get("assessed_allele") or "").strip().upper()
+    if single:
+        return {single}
+    return {
+        str(base).strip().upper()
+        for base in (target.get("clinvar_alternate_alleles") or [])
+        if str(base).strip()
+    }
+
+
 def _row_reader(path: Path):
     fh, _ = _text_stream(path)
     try:
@@ -123,17 +150,20 @@ def _classify(
         )
 
     genotype = _canonical_gt(raw_gt) or ""
-    assessed = str(target.get("assessed_allele") or "").strip().upper()
+    assessed = assessed_bases(target)
     if not assessed:
         return (
             OBSERVADO,
             "genótipo chamado; ausência não pode ser afirmada porque o registro não declara o alelo avaliado",
         )
-    if assessed in set(genotype):
-        return OBSERVADO, f"genótipo chamado contém o alelo avaliado {assessed}"
+    present = sorted(assessed & set(genotype))
+    named = ", ".join(sorted(assessed))
+    if present:
+        return OBSERVADO, f"genótipo chamado {genotype} contém o alelo avaliado {', '.join(present)}"
     return (
         NAO_DETECTADO,
-        f"genótipo chamado {genotype} não contém o alelo avaliado {assessed}; ausência vale apenas para este locus",
+        f"genótipo chamado {genotype} não contém nenhuma das {len(assessed)} base(s) "
+        f"avaliada(s) ({named}); ausência vale apenas para este locus",
     )
 
 
@@ -260,6 +290,11 @@ def build_completeness_matrix(
                 ),
                 "genotype_withheld": row is not None and classification not in INTERPRETABLE,
                 "assessed_allele": target.get("assessed_allele"),
+                # Every base the classification was actually able to test for. Empty means
+                # the registry could name none, so OBSERVADO at this locus says "chamado",
+                # never "presente" — and `clinical_findings` must refuse to grade it rather
+                # than read the class alone.
+                "assessed_alleles": sorted(assessed_bases(target)),
             }
         )
 

@@ -160,7 +160,13 @@ class MixedXLinkedModeIsNamedTest(unittest.TestCase):
     def _interpret(self, modes, sex):
         from array_pipeline import clinical_findings as cf
 
-        entry = {"classification": "OBSERVADO", "genotype": "AG", "scope": "CLINICO"}
+        # A real OBSERVADO entry names the base its class was decided against. Without it
+        # OBSERVADO means only "chamado", and `_interpretation` refuses to grade the locus
+        # at all — so a fixture that omits it is not exercising the X-linked reading.
+        entry = {
+            "classification": "OBSERVADO", "genotype": "AG", "scope": "CLINICO",
+            "assessed_allele": "A", "assessed_alleles": ["A"],
+        }
         clinvar = {
             "asserts_pathogenic": True, "asserts_benign": False, "classifications": ["Pathogenic"],
             "meets_review_threshold": True, "review_stars": 2, "conditions": [], "records": [],

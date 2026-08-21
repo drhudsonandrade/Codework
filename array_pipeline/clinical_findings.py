@@ -496,6 +496,29 @@ def _interpretation(
             ),
         }
 
+    # OBSERVADO carries two different facts and only one of them is presence. When the
+    # registry named at least one base to test for, OBSERVADO means the genotype contains it.
+    # When it named none, OBSERVADO means only "this locus was called" — the matrix says so
+    # in its own basis — and everything below reads it as presence: it grades the genotype as
+    # a pathogenic variant, calls a homozygous reference call "homozigoto para variante
+    # patogênica", and marks the finding as requiring confirmation.
+    #
+    # On the first real array that fail-open produced 3.152 of 3.153 reported risk genotypes,
+    # among them familial adenomatous polyposis in APC from a plain TT reference call. The
+    # completeness classifier now tests the full alternate set, which resolves most of these
+    # to a real NÃO DETECTADO; this refusal is the backstop for whatever the registry still
+    # cannot name, and it fails closed by construction rather than by coverage.
+    if not (entry.get("assessed_alleles") or entry.get("assessed_allele")):
+        return {
+            "kind": SEM_INTERPRETACAO,
+            "basis": (
+                "o registro não declara nenhuma base avaliada nesta coordenada, então o "
+                "genótipo chamado não pode ser comparado: nem presença nem ausência da "
+                f"variante é estabelecida ({entry.get('basis')}). O genótipo é reportado como "
+                "observação, não como achado"
+            ),
+        }
+
     zygosity = _zygosity(entry.get("genotype"))
     if not clinvar["asserts_pathogenic"]:
         if clinvar.get("asserts_benign"):
