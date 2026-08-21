@@ -40,6 +40,32 @@ pair unflagged — unflagged, it would cast a meaningless vote.
 A reverse-strand file is reported as `reverse`, never as `forward`. That is the
 consequential failure: treating a flipped file as forward inverts every allele downstream.
 
+### The verdict is knowledge, not permission
+
+`reverse` is a determinate answer, and for a while that was enough to make it dangerous.
+`attestation_from_probe` used to render *any* VERIFICADO verdict as a full
+`VERIFICADO/SATISFIED` attestation — including one whose justification read
+"Veredito: reverse". Handed to `run_snp_array.py --strand forward` (the only strand the CLI
+offers) it validated on every count: right status, right decision, correctly bound to the
+input's SHA-256. `BUILD_STRAND_GATE` passed and the run published
+`operational_status: VERIFICADO` over a file whose every allele is the complement of what
+the registries mean — rs6025 `CT`, a Factor V Leiden carrier, reads `GA` and classifies as
+NÃO DETECTADO. The probe's own honest finding was the credential that certified its opposite.
+
+Three independent checks now close that, and each fails on its own:
+
+1. `attestation_from_probe` emits a strand attestation only for `forward`. A `reverse`
+   verdict returns `None`, exactly as an inconclusive one does — the file's orientation is
+   known, and what is known is that it cannot pass.
+2. Every attestation carries `asserted_value`, and `qc._verified_provenance` refuses one
+   that names a different value than the one being declared. An attestation that names *no*
+   value verifies nothing: the absent field is "no way to disagree", not "no disagreement".
+3. `inspect_array` counts the same plus/minus vote over the markers the file itself carries
+   and blocks the gate when the file contradicts the declared strand. Only a contradiction
+   blocks — agreement is not treated as proof, and a file with too few informative markers
+   is neither confirmed nor refused. This is what stops a *hand-written* attestation, which
+   nothing else checks, from certifying a flipped file.
+
 ## Result on the real file
 
 ```
@@ -65,6 +91,10 @@ should be done before any clinical use.
 
 - It does not guess. Weak or contradictory evidence yields `NÃO DISPONÍVEL`, and
   `attestation_from_probe` returns `None` rather than letting silence become an attestation.
+- It does not flip the file. A determinate `reverse` verdict makes complementing every call
+  a well-defined operation, and the probe still refuses to do it: the output would be a
+  genotype set nobody can re-derive from the delivered file, and "repaired" and "intact"
+  would read the same downstream. The file is refused and re-exported instead.
 - It does not lower the gate. The attestation goes through the same
   `_verified_provenance` check as any other, is bound to the input SHA-256, and fails
   against a different file.

@@ -81,8 +81,11 @@ jobs:
                   'tool_versions':{'python':'3.12'}
               }
           }
-          for name in ('build-attestation.json','strand-attestation.json'):
-              (root/name).write_text(json.dumps(base),encoding='utf-8')
+          # One attestation per assertion, each naming the value it establishes. A single
+          # object standing in for both said neither, and BUILD_STRAND_GATE could then only
+          # check that evidence existed, never that it agreed with the declared value.
+          for name, asserted in (('build-attestation.json','GRCh37'),('strand-attestation.json','forward')):
+              (root/name).write_text(json.dumps({**base,'asserted_value':asserted}),encoding='utf-8')
           PY
           python3 scripts/run_snp_array.py \
             --input "$RUNNER_TEMP/genoma-array/synthetic.csv.gz" \
@@ -163,8 +166,11 @@ jobs:
                   'tool_versions':{'python':'3.12'}
               }
           }
-          for name in ('build-attestation.json','strand-attestation.json'):
-              (root/name).write_text(json.dumps(base),encoding='utf-8')
+          # One attestation per assertion, each naming the value it establishes. A single
+          # object standing in for both said neither, and BUILD_STRAND_GATE could then only
+          # check that evidence existed, never that it agreed with the declared value.
+          for name, asserted in (('build-attestation.json','GRCh37'),('strand-attestation.json','forward')):
+              (root/name).write_text(json.dumps({**base,'asserted_value':asserted}),encoding='utf-8')
           PY
           docker run --rm \
             -v "$RUNNER_TEMP/genoma-array/workspace:/workspace" \

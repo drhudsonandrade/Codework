@@ -8,9 +8,11 @@ from pathlib import Path
 from typing import Any
 
 from array_pipeline.qc import (
+    FORWARD_STRANDS,
     HARMONIZED_COLUMNS,
     INTERPRETABLE_OVERLAP_STATUSES,
     RAW_COLUMNS,
+    REVERSE_STRANDS,
     UNRESOLVED_OVERLAP_STATUSES,
     _canonical_gt,
     _read_header_and_metadata,
@@ -50,7 +52,18 @@ def _orientation(row: dict[str, str], schema: str, qc: dict[str, Any]) -> tuple[
     verified = inputs.get("strand_evidence_verified")
     if verified is None:
         verified = strand_evidence not in {None, "", "NÃO DISPONÍVEL"}
-    forward = strand in {"forward", "plus", "+"} and bool(verified)
+    forward = strand in FORWARD_STRANDS and bool(verified)
+
+    if str(strand or "").strip().lower() in REVERSE_STRANDS:
+        # A determinate reverse verdict disqualifies every locus, whatever its sources say.
+        # Cross-platform consensus would otherwise return INFERIDO here — a status
+        # `completeness._classify` accepts — and the allele comparison it admits runs against
+        # the complement of what the registry means.
+        return (
+            "NÃO DISPONÍVEL",
+            f"file reported on the reverse strand ({strand}); the reported allele is the "
+            "complement of the one the registry names",
+        )
 
     if schema.startswith("harmonized"):
         sources = (row.get("SOURCES") or "").strip()

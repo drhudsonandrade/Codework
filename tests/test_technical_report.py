@@ -69,8 +69,8 @@ def _artifacts(root: Path, rows: str = CLEAN_ROWS, *, evidence: bool = True):
         fh.write(HEADER)
         fh.write(rows)
     sha = hashlib.sha256(array.read_bytes()).hexdigest()
-    attestation = json.dumps({
-        "status": "VERIFICADO", "decision": "SATISFIED",
+    attestation = lambda asserted: json.dumps({
+        "status": "VERIFICADO", "decision": "SATISFIED", "asserted_value": asserted,
         "justification": "Fixture determinístico declara build e fita.",
         "evidence_refs": ["synthetic-tec-fixture"],
         "trace": {
@@ -81,7 +81,8 @@ def _artifacts(root: Path, rows: str = CLEAN_ROWS, *, evidence: bool = True):
         },
     })
     kwargs = (
-        {"build": "GRCh37", "strand": "forward", "build_evidence": attestation, "strand_evidence": attestation}
+        {"build": "GRCh37", "strand": "forward",
+         "build_evidence": attestation("GRCh37"), "strand_evidence": attestation("forward")}
         if evidence
         else {}
     )

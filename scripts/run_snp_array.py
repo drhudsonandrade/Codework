@@ -18,6 +18,13 @@ from array_pipeline.qc import inspect_array, write_outputs
 ALLOWED_ACTOR_TYPES = {"HUMAN", "SOFTWARE", "SERVICE"}
 
 
+def _normalise(assertion: str, value: str) -> str:
+    """Canonical spelling, so `plus` and `forward` are not read as two different claims."""
+    from array_pipeline.qc import _normalised_assertion
+
+    return _normalised_assertion("strand" if assertion == "strand" else "reference_build", value) or ""
+
+
 def _sha256_file(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as fh:
@@ -27,11 +34,25 @@ def _sha256_file(path: Path) -> str:
 
 
 def _load_json_value(value: str) -> dict[str, Any]:
-    candidate = Path(value)
-    if candidate.is_file():
-        raw = candidate.read_text(encoding="utf-8")
+    """Accept either a path to an attestation or the attestation itself.
+
+    Which one it is, is decided by the shape of the string rather than by asking the
+    filesystem. `Path(value).is_file()` raises `OSError: File name too long` on any inline
+    attestation whose JSON has no `/` in it — every path component over 255 bytes does — so
+    the documented inline form crashed for most real payloads, and `main` reported it as
+    `NÃO DISPONÍVEL: [Errno 36] File name too long`, which names neither the problem nor the
+    fix. It survived unnoticed because CI passes attestations as files and the one inline
+    fixture happened to contain a slash.
+    """
+    text = value.strip()
+    if text.startswith("{"):
+        raw = text
     else:
-        raw = value
+        try:
+            candidate = Path(value)
+            raw = candidate.read_text(encoding="utf-8") if candidate.is_file() else value
+        except OSError as exc:
+            raise ValueError(f"provenance evidence path is unreadable: {exc}") from exc
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError as exc:
@@ -41,16 +62,37 @@ def _load_json_value(value: str) -> dict[str, Any]:
     return payload
 
 
-def load_verified_attestation(value: str, *, assertion: str, input_path: Path) -> dict[str, Any]:
+def load_verified_attestation(
+    value: str, *, assertion: str, input_path: Path, declared_value: str | None = None
+) -> dict[str, Any]:
     """Validate build/strand provenance before it can unlock an array gate.
 
     Plain prose is intentionally insufficient.  The attestation must explicitly be
     VERIFICADO/SATISFIED, justify the assertion, name evidence references, retain a
-    trace object, and bind to the exact array input SHA-256.  INFERIDO remains useful
-    evidence, but cannot be silently promoted to verification by this gate.
+    trace object, bind to the exact array input SHA-256, and name the value it
+    establishes.  INFERIDO remains useful evidence, but cannot be silently promoted to
+    verification by this gate.
+
+    `asserted_value` is required and must equal `declared_value`.  Without it the checks
+    above verify only that *an* attestation exists: `array_pipeline.provenance_probe` will
+    correctly determine that a file is on the reverse strand and emit a properly formed,
+    correctly bound attestation saying so, and paired with `--strand forward` that
+    attestation used to pass every test here and unlock BUILD_STRAND_GATE.
     """
     payload = _load_json_value(value)
     prefix = f"{assertion} provenance"
+
+    asserted = payload.get("asserted_value")
+    if not isinstance(asserted, str) or not asserted.strip():
+        raise ValueError(
+            f"{prefix} must carry asserted_value naming the {assertion} it establishes; "
+            "an attestation that does not say what it asserts cannot verify a declared value"
+        )
+    if declared_value is not None and _normalise(assertion, asserted) != _normalise(assertion, declared_value):
+        raise ValueError(
+            f"{prefix} attests {assertion}={asserted!r} but {declared_value!r} was declared; "
+            "the evidence contradicts the claim it was supplied to support"
+        )
 
     if payload.get("status") != "VERIFICADO":
         raise ValueError(f"{prefix} status must be VERIFICADO")
@@ -106,11 +148,17 @@ def main() -> int:
     input_path = Path(args.input)
     try:
         build_attestation = (
-            load_verified_attestation(args.build_evidence, assertion="build", input_path=input_path)
+            load_verified_attestation(
+                args.build_evidence, assertion="build", input_path=input_path,
+                declared_value=args.build,
+            )
             if args.build_evidence else None
         )
         strand_attestation = (
-            load_verified_attestation(args.strand_evidence, assertion="strand", input_path=input_path)
+            load_verified_attestation(
+                args.strand_evidence, assertion="strand", input_path=input_path,
+                declared_value=args.strand,
+            )
             if args.strand_evidence else None
         )
     except (ValueError, OSError) as exc:

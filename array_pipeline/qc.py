@@ -25,6 +25,17 @@ HARMONIZED_COLUMNS = [
 RAW_COLUMNS = ["RSID", "CHROMOSOME", "POSITION", "RESULT"]
 ALLOWED_CHROMS = {str(i) for i in range(1, 23)} | {"X", "Y", "MT", "M"}
 MISSING_GENOTYPES = {"", "--", "NA", "N/A", "NULL", "."}
+
+#: The strand every registry in this project is expressed on. A file reported on the other
+#: strand is not merely unverified: every allele comparison made against it is inverted.
+FORWARD_STRANDS = frozenset({"forward", "plus", "+"})
+COMPLEMENT = {"A": "T", "T": "A", "C": "G", "G": "C"}
+#: Markers that must agree before the file's own content is allowed to contradict a declared
+#: strand. One marker is a coincidence; this is the same threshold the probe uses.
+MIN_STRAND_CONTRADICTION_MARKERS = 3
+#: Spellings of the determinate opposite. These are the *knowledge* that a file is flipped,
+#: which is never permission to interpret it as though it were not.
+REVERSE_STRANDS = frozenset({"reverse", "minus", "-"})
 DIPLOID_SNP = re.compile(r"^[ACGT]{2}$")
 HAPLOID_SNP = re.compile(r"^[ACGT]$")
 INDEL = re.compile(r"^(?:II|DD|ID|DI)$")
@@ -64,6 +75,34 @@ BASELINE_RSIDS = [
     "rs1799853", "rs1057910", "rs9923231", "rs4149056", "rs776746",
     "rs1799930", "rs4307059", "rs429358", "rs7412",
 ]
+
+
+#: The pinned, verified two-assembly marker table. Loaded lazily so this module keeps no
+#: import-time dependency on `provenance_probe`, which imports from here.
+STRAND_MARKERS_PATH = Path(__file__).resolve().parents[1] / "config/array_provenance_markers.json"
+
+
+def _strand_marker_alleles() -> dict[str, set[str]]:
+    """rsid → plus-strand allele set, for the non-palindromic markers only.
+
+    Returns an empty mapping when the table is unreadable: the check this feeds can only
+    ever *contradict* a declared strand, so having no table means having no contradiction,
+    never a licence. Palindromic markers are excluded because they read identically on both
+    strands and would vote for whatever they were asked.
+    """
+    try:
+        payload = json.loads(STRAND_MARKERS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    out: dict[str, set[str]] = {}
+    for marker in payload.get("markers") or []:
+        if not isinstance(marker, dict) or marker.get("palindromic"):
+            continue
+        alleles = marker.get("plus_alleles")
+        rsid = str(marker.get("rsid") or "").strip().lower()
+        if rsid and isinstance(alleles, list) and len(alleles) == 2:
+            out[rsid] = {str(a).strip().upper() for a in alleles}
+    return out
 
 
 @dataclass(frozen=True)
@@ -196,10 +235,14 @@ def _gate(state: str, reasons: list[str], **extra: Any) -> dict[str, Any]:
     return {"state": state, "reasons": reasons, **extra}
 
 
-def _metadata_attestation(kind: str, text: str, input_sha: str) -> str:
+def _metadata_attestation(kind: str, text: str, input_sha: str, asserted_value: str) -> str:
     payload = {
         "status": "VERIFICADO",
         "decision": "SATISFIED",
+        # Which value this attestation establishes, in machine-readable form. Without it the
+        # gate can only check that *an* attestation exists, never that it agrees with the
+        # value being declared — see `_verified_provenance`.
+        "asserted_value": asserted_value,
         "justification": f"The source file explicitly declares {kind}: {text}",
         "evidence_refs": [f"input-metadata:{kind}"],
         "trace": {
@@ -217,7 +260,44 @@ def _metadata_attestation(kind: str, text: str, input_sha: str) -> str:
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
 
-def _verified_provenance(value: str | None, input_sha: str) -> bool:
+def _normalised_assertion(kind: str, value: Any) -> str | None:
+    """Canonical spelling of a build or strand value, for comparing two of them."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if kind == "strand":
+        lower = text.lower()
+        if lower in FORWARD_STRANDS:
+            return "forward"
+        if lower in REVERSE_STRANDS:
+            return "reverse"
+        return lower
+    return text.upper()
+
+
+def _verified_provenance(
+    value: str | None,
+    input_sha: str,
+    *,
+    kind: str | None = None,
+    expected_value: Any = None,
+) -> bool:
+    """True when the attestation is structurally sound, bound to this file, and says so.
+
+    `kind`/`expected_value` close the hole that made the whole gate ornamental. The
+    attestation was checked for shape, status and SHA-256 binding but never for *content*,
+    so it could not contradict the value it was supposed to support. The probe in
+    `array_pipeline.provenance_probe` will honestly determine that a file is on the reverse
+    strand and, before this check existed, that determination — a real VERIFICADO/SATISFIED
+    attestation, correctly bound to the input — was accepted as the evidence certifying the
+    same file as forward. BUILD_STRAND_GATE passed, `operational_status` came out VERIFICADO,
+    and every allele comparison downstream ran inverted: a Factor V Leiden carrier reads
+    NÃO DETECTADO, and a palindromic locus can read OBSERVADO in someone who carries nothing.
+
+    An attestation that does not name what it asserts cannot be checked against the declared
+    value, so it no longer verifies one. That is fail-closed by design: the missing field is
+    not "no disagreement", it is "no way to disagree".
+    """
     if not value:
         return False
     try:
@@ -251,6 +331,11 @@ def _verified_provenance(value: str | None, input_sha: str) -> bool:
     tools = trace.get("tool_versions")
     if not isinstance(tools, dict) or any(not isinstance(k, str) or not isinstance(v, str) for k, v in tools.items()):
         return False
+    if kind is not None:
+        declared = _normalised_assertion(kind, expected_value)
+        asserted = _normalised_assertion(kind, payload.get("asserted_value"))
+        if declared is None or asserted is None or declared != asserted:
+            return False
     return True
 
 
@@ -296,15 +381,25 @@ def inspect_array(
                 build = "GRCh38"
         if strand is None and metadata.get("strand"):
             strand = metadata.get("strand")
-        if build_evidence is None and metadata.get("reference"):
-            build_evidence = _metadata_attestation("reference_build", metadata.get("reference", ""), input_sha)
+        if build_evidence is None and metadata.get("reference") and build:
+            build_evidence = _metadata_attestation(
+                "reference_build", metadata.get("reference", ""), input_sha, build
+            )
         if strand_evidence is None and metadata.get("strand_evidence"):
-            strand_evidence = _metadata_attestation("strand", metadata.get("strand_evidence", ""), input_sha)
+            strand_evidence = _metadata_attestation(
+                "strand", metadata.get("strand_evidence", ""), input_sha, metadata.get("strand", "")
+            )
         if platform is None:
             platform = metadata.get("chip")
 
-        build_evidence_verified = _verified_provenance(build_evidence, input_sha)
-        strand_evidence_verified = _verified_provenance(strand_evidence, input_sha)
+        # The declared value is passed in, so an attestation that establishes a different
+        # one stops counting as verification of this one.
+        build_evidence_verified = _verified_provenance(
+            build_evidence, input_sha, kind="reference_build", expected_value=build
+        )
+        strand_evidence_verified = _verified_provenance(
+            strand_evidence, input_sha, kind="strand", expected_value=strand
+        )
 
         reader = csv.DictReader(fh, fieldnames=header)
         total = 0
@@ -331,6 +426,12 @@ def inspect_array(
         marker_hits: dict[str, dict[str, Any]] = {}
         coordinate_seen: set[tuple[str, str]] = set()
         duplicate_coordinate_rows = 0
+
+        # The file's own vote on its orientation. An attestation is a claim; these markers
+        # are the data, and the data is allowed to contradict the claim.
+        strand_markers = _strand_marker_alleles()
+        strand_votes_plus = 0
+        strand_votes_minus = 0
 
         for row in reader:
             total += 1
@@ -392,8 +493,28 @@ def inspect_array(
                 if v[0] != v[1]:
                     autosomal_het += 1
 
+            plus_alleles = strand_markers.get(rsid.lower())
+            if plus_alleles and v and set(v) <= set("ACGT"):
+                letters = set(v)
+                minus_alleles = {COMPLEMENT[a] for a in plus_alleles}
+                if letters <= plus_alleles and not letters <= minus_alleles:
+                    strand_votes_plus += 1
+                elif letters <= minus_alleles and not letters <= plus_alleles:
+                    strand_votes_minus += 1
+
             if rsid in BASELINE_RSIDS:
-                if schema.startswith("harmonized"):
+                reverse_strand = str(strand or "").strip().lower() in REVERSE_STRANDS
+                if reverse_strand:
+                    # Checked before the source-specific branches, because none of their
+                    # arguments survive a known flip. Cross-platform consensus in particular
+                    # establishes that the two vendors agree with each other — and when the
+                    # file is reverse, what they agree on is the complement.
+                    orientation_status = "NÃO DISPONÍVEL"
+                    orientation_basis = (
+                        f"fita determinada como reversa ({strand}); o alelo relatado é o "
+                        "complementar do que os registros esperam"
+                    )
+                elif schema.startswith("harmonized"):
                     marker_sources = (row.get("SOURCES") or "").strip()
                     if marker_sources == "GM":
                         # Cross-platform agreement proves the two vendors used the SAME
@@ -505,10 +626,43 @@ def inspect_array(
         build_reasons.append("reference build not explicitly verified")
     elif not build_evidence_verified:
         build_reasons.append("reference build provenance is not a structured VERIFICADO/SATISFIED attestation bound to input SHA-256")
-    if strand not in {"forward", "plus", "+"}:
+    if str(strand or "").strip().lower() in REVERSE_STRANDS:
+        # Distinguished from "not verified" on purpose: this is not a missing answer, it is
+        # the wrong one, determined. Every registry this project compares against is written
+        # on the plus strand, so the file's alleles are the complements of the ones the
+        # comparison expects. Complementing it here would be a silent repair of data whose
+        # provenance nobody can re-derive afterwards, so the file is refused instead.
+        build_reasons.append(
+            f"o arquivo está na fita reversa ({strand}); toda comparação de alelo contra "
+            "os registros (escritos na fita plus) sairia invertida, e a inversão não é "
+            "corrigida em silêncio"
+        )
+    elif strand not in FORWARD_STRANDS:
         build_reasons.append("strand convention not explicitly verified")
     elif not strand_evidence_verified:
         build_reasons.append("strand provenance is not a structured VERIFICADO/SATISFIED attestation bound to input SHA-256")
+    elif strand_votes_minus >= MIN_STRAND_CONTRADICTION_MARKERS and strand_votes_plus == 0:
+        # An attestation is a claim about the file; the file is the evidence. A well-formed,
+        # correctly bound, human-signed attestation asserting `forward` used to be the end of
+        # the matter even when the file's own markers said otherwise — which is the one
+        # remaining way to certify a flipped file, and the one with no automated check
+        # against it. Only a *contradiction* blocks: agreement is not treated as proof, and
+        # a file with too few informative markers is neither confirmed nor refused here.
+        build_reasons.append(
+            f"a atestação declara fita forward, mas o conteúdo do próprio arquivo a "
+            f"contradiz: {strand_votes_minus} marcadores não palindrômicos compatíveis "
+            f"apenas com a fita minus e {strand_votes_plus} apenas com a plus"
+        )
+        strand_evidence_verified = False
+        # The per-locus orientation was decided inside the row loop, before this vote could
+        # be counted. Leaving those entries VERIFICADO would publish the contradiction in
+        # one field of the same file that resolves it in another.
+        for hit in marker_hits.values():
+            hit["orientation_operational_status"] = "NÃO DISPONÍVEL"
+            hit["orientation_basis"] = (
+                f"conteúdo do arquivo contradiz a fita declarada ({strand_votes_minus} "
+                f"marcadores apenas minus, {strand_votes_plus} apenas plus)"
+            )
     build_state = "PASS" if not build_reasons else "BLOCKED"
 
     call_reasons: list[str] = []
@@ -583,6 +737,13 @@ def inspect_array(
             "autosomal_diploid_snp_calls": autosomal_diploid,
             "autosomal_heterozygous_calls": autosomal_het,
             "autosomal_heterozygosity_rate": het_rate,
+            # The file's own orientation vote, recorded whether or not it contradicted
+            # anything, so a reader can recompute the verdict instead of trusting it. Zero on
+            # both sides means the file carried too few informative markers to say — which is
+            # neither confirmation nor refusal.
+            "strand_markers_plus_only": strand_votes_plus,
+            "strand_markers_minus_only": strand_votes_minus,
+            "strand_contradiction_threshold": MIN_STRAND_CONTRADICTION_MARKERS,
             "chromosome_counts": dict(sorted(chromosome_counts.items())),
             "status_counts": dict(status_counts),
             "source_counts": dict(source_counts),

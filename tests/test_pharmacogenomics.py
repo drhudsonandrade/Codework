@@ -77,8 +77,8 @@ def _artifacts(root: Path, rows: str, *, registry: dict | None = None):
         fh.write(HEADER)
         fh.write(rows)
     sha = hashlib.sha256(array.read_bytes()).hexdigest()
-    evidence = json.dumps({
-        "status": "VERIFICADO", "decision": "SATISFIED",
+    evidence = lambda asserted: json.dumps({
+        "status": "VERIFICADO", "decision": "SATISFIED", "asserted_value": asserted,
         "justification": "Fixture determinístico declara build e fita.",
         "evidence_refs": ["synthetic-pgx-fixture"],
         "trace": {
@@ -89,7 +89,7 @@ def _artifacts(root: Path, rows: str, *, registry: dict | None = None):
         },
     })
     qc = inspect_array(array, case_id="SYN-PGX", build="GRCh37", strand="forward",
-                       build_evidence=evidence, strand_evidence=evidence)
+                       build_evidence=evidence("GRCh37"), strand_evidence=evidence("forward"))
     (root / "qc.json").write_text(json.dumps(qc), encoding="utf-8")
     targets_path = root / "targets.json"
     targets_path.write_text(json.dumps(TARGETS), encoding="utf-8")
@@ -316,15 +316,15 @@ class DiplotypeRefusalTest(unittest.TestCase):
                 fh.write(HEADER)
                 fh.write(rows)
             sha = hashlib.sha256(array.read_bytes()).hexdigest()
-            evidence = json.dumps({
-                "status": "VERIFICADO", "decision": "SATISFIED", "justification": "fixture",
-                "evidence_refs": ["x"],
+            evidence = lambda asserted: json.dumps({
+                "status": "VERIFICADO", "decision": "SATISFIED", "asserted_value": asserted,
+                "justification": "fixture", "evidence_refs": ["x"],
                 "trace": {"attestation_id": "a", "created_at": "2026-08-18T00:00:00Z",
                           "actor_type": "SOFTWARE", "actor_id": "t", "method": "m", "run_id": "r",
                           "input_sha256": [sha], "output_sha256": [], "tool_versions": {"t": "1"}},
             })
             qc = inspect_array(array, case_id="SYN-PGX", build="GRCh37", strand="forward",
-                               build_evidence=evidence, strand_evidence=evidence)
+                               build_evidence=evidence("GRCh37"), strand_evidence=evidence("forward"))
             (root / "qc.json").write_text(json.dumps(qc), encoding="utf-8")
             targets_path = root / "targets.json"
             targets_path.write_text(json.dumps(targets), encoding="utf-8")

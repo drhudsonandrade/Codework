@@ -42,11 +42,12 @@ QC_NO_STRAND_EVIDENCE = {
 }
 
 
-def _attestation(input_sha: str) -> str:
+def _attestation(input_sha: str, asserted_value: str) -> str:
     return json.dumps(
         {
             "status": "VERIFICADO",
             "decision": "SATISFIED",
+            "asserted_value": asserted_value,
             "justification": "synthetic fixture for infrastructure testing only",
             "evidence_refs": ["synthetic-fixture"],
             "trace": {
@@ -148,14 +149,13 @@ class CrossPlatformGateTest(unittest.TestCase):
     def _inspect(self, rows, **kwargs):
         directory, path, sha = _fixture(rows)
         try:
-            attestation = _attestation(sha)
             return inspect_array(
                 path,
                 case_id="TEST-NO-PERSONAL-DATA",
                 build="GRCh37",
                 strand="forward",
-                build_evidence=attestation,
-                strand_evidence=attestation,
+                build_evidence=_attestation(sha, "GRCh37"),
+                strand_evidence=_attestation(sha, "forward"),
                 min_call_rate=0.5,
                 max_overlap_conflict_rate=0.99,
                 **kwargs,

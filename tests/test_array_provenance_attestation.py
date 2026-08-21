@@ -29,10 +29,11 @@ class ArrayProvenanceAttestationTest(unittest.TestCase):
         path.write_text("RSID,CHROMOSOME,POSITION,RESULT\nrs1,1,100,AA\n", encoding="utf-8")
         return path, hashlib.sha256(path.read_bytes()).hexdigest()
 
-    def _verified(self, input_sha: str) -> dict:
+    def _verified(self, input_sha: str, asserted_value: str = "GRCh37") -> dict:
         return {
             "status": "VERIFICADO",
             "decision": "SATISFIED",
+            "asserted_value": asserted_value,
             "justification": "Vendor/reference provenance independently establishes this assertion.",
             "evidence_refs": ["vendor-metadata"],
             "trace": {

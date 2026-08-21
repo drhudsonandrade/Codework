@@ -220,16 +220,36 @@ def probe(array_path: Path, markers_path: Path) -> dict[str, Any]:
     }
 
 
+#: Strand verdicts that BUILD_STRAND_GATE exists to establish. `reverse` is a determinate
+#: verdict too, and a true one — but it is knowledge that the file is flipped, never
+#: permission to interpret it as though it were not.
+ATTESTABLE_STRANDS = frozenset({"forward"})
+
+
 def attestation_from_probe(result: dict[str, Any], kind: str) -> str | None:
     """Render a probe verdict as the structured attestation `qc.inspect_array` accepts.
 
-    Returns None when the probe was inconclusive, so an unusable verdict cannot become an
-    attestation by omission.
+    Returns None when the verdict cannot support the gate, so an unusable verdict cannot
+    become an attestation by omission. Two cases return None, and the second was a real hole:
+
+    * the probe was inconclusive — there is nothing to attest;
+    * the probe determined the file is on the **reverse** strand. This module used to emit a
+      full VERIFICADO/SATISFIED attestation for that verdict, whose justification read
+      "Veredito: reverse". Handed to `run_snp_array.py --strand forward` — the only strand
+      the CLI offers — it validated, because nothing compared the attestation's verdict with
+      the declared value. BUILD_STRAND_GATE passed and the run reported operational_status
+      VERIFICADO on a file whose every allele is the complement of what the registries mean.
+      The probe's own honest finding was the credential that certified the opposite of it.
+
+    `qc._verified_provenance` now also refuses an attestation whose `asserted_value`
+    disagrees with the declared one, so the two halves fail closed independently.
     """
     if kind not in {"reference_build", "strand"}:
         raise ProvenanceProbeError(f"unknown attestation kind: {kind!r}")
     block = result["build"] if kind == "reference_build" else result["strand"]
     if block["status"] != "VERIFICADO" or not block["value"]:
+        return None
+    if kind == "strand" and str(block["value"]).lower() not in ATTESTABLE_STRANDS:
         return None
 
     if kind == "reference_build":
@@ -249,6 +269,9 @@ def attestation_from_probe(result: dict[str, Any], kind: str) -> str | None:
     payload = {
         "status": "VERIFICADO",
         "decision": "SATISFIED",
+        # The verdict in machine-readable form, so the gate can check that the value being
+        # declared is the value this attestation actually establishes.
+        "asserted_value": block["value"],
         "justification": justification,
         "evidence_refs": [
             f"array-provenance-probe:{kind}",

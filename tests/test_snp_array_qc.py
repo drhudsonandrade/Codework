@@ -19,11 +19,12 @@ class ArrayQCTest(unittest.TestCase):
             f.write(text)
         return p
 
-    def _verified_evidence(self, p: Path) -> str:
+    def _verified_evidence(self, p: Path, asserted_value: str = "forward") -> str:
         sha = hashlib.sha256(p.read_bytes()).hexdigest()
         return json.dumps({
             "status": "VERIFICADO",
             "decision": "SATISFIED",
+            "asserted_value": asserted_value,
             "justification": "Synthetic fixture provenance is explicitly controlled by this test.",
             "evidence_refs": ["synthetic-test-fixture"],
             "trace": {
@@ -49,7 +50,7 @@ class ArrayQCTest(unittest.TestCase):
         evidence = self._verified_evidence(p)
         r = inspect_array(
             p, case_id="T", build="GRCh37", strand="forward",
-            build_evidence=evidence, strand_evidence=evidence,
+            build_evidence=self._verified_evidence(p, "GRCh37"), strand_evidence=evidence,
             min_call_rate=.9, max_overlap_conflict_rate=.5,
         )
         self.assertEqual(r["gates"]["LIMITED_INTERPRETATION_GATE"]["state"], "PASS")
@@ -75,7 +76,7 @@ class ArrayQCTest(unittest.TestCase):
         evidence = self._verified_evidence(p)
         r = inspect_array(
             p, case_id="T", build="GRCh37", strand="forward",
-            build_evidence=evidence, strand_evidence=evidence,
+            build_evidence=self._verified_evidence(p, "GRCh37"), strand_evidence=evidence,
         )
         self.assertEqual(r["gates"]["STRUCTURE_GATE"]["state"], "PASS")
         self.assertEqual(r["metrics"]["duplicate_rsid_rows"], 1)
@@ -90,7 +91,7 @@ class ArrayQCTest(unittest.TestCase):
         evidence = self._verified_evidence(p)
         r = inspect_array(
             p, case_id="T", build="GRCh37", strand="forward",
-            build_evidence=evidence, strand_evidence=evidence,
+            build_evidence=self._verified_evidence(p, "GRCh37"), strand_evidence=evidence,
         )
         self.assertEqual(r["gates"]["STRUCTURE_GATE"]["state"], "FAIL")
 

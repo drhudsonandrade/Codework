@@ -9,7 +9,6 @@ to fold them into "nothing found".
 from __future__ import annotations
 
 import gzip
-import hashlib
 import json
 import sys
 import tempfile
@@ -20,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from tests.attestations import provenance_for
 from array_pipeline.completeness import (
     CLASSES,
     NAO_DETECTADO,
@@ -59,27 +59,10 @@ class CompletenessMatrixTest(unittest.TestCase):
         with gzip.open(array, "wt", encoding="utf-8", newline="") as fh:
             fh.write(HEADER)
             fh.write(rows)
-        sha = hashlib.sha256(array.read_bytes()).hexdigest()
-        evidence = json.dumps({
-            "status": "VERIFICADO",
-            "decision": "SATISFIED",
-            "justification": "Fixture determinístico declara build e fita.",
-            "evidence_refs": ["synthetic-completeness-fixture"],
-            "trace": {
-                "attestation_id": "completeness-fixture",
-                "created_at": "2026-08-18T00:00:00Z",
-                "actor_type": "SOFTWARE",
-                "actor_id": "tests.test_genome_completeness",
-                "method": "deterministic fixture",
-                "run_id": "unit-test",
-                "input_sha256": [sha],
-                "output_sha256": [],
-                "tool_versions": {"test": "1"},
-            },
-        })
         qc = inspect_array(
-            array, case_id="SYN-GCM", build="GRCh37", strand="forward",
-            build_evidence=evidence, strand_evidence=evidence,
+            array, case_id="SYN-GCM",
+            **provenance_for(array, evidence_ref="synthetic-completeness-fixture",
+                             actor_id="tests.test_genome_completeness"),
         )
         qc_path = root / "qc.json"
         qc_path.write_text(json.dumps(qc), encoding="utf-8")
@@ -561,27 +544,10 @@ class QCEnforcementTest(unittest.TestCase):
             with gzip.open(array, "wt", encoding="utf-8", newline="") as fh:
                 fh.write(HEADER)
                 fh.write("rs1799807,3,165548529,CT,consensus,CT,CT,GM\n")
-            sha = hashlib.sha256(array.read_bytes()).hexdigest()
-            evidence = json.dumps({
-                "status": "VERIFICADO",
-                "decision": "SATISFIED",
-                "justification": "Fixture determinístico declara build e fita.",
-                "evidence_refs": ["synthetic-completeness-fixture"],
-                "trace": {
-                    "attestation_id": "completeness-fixture",
-                    "created_at": "2026-08-18T00:00:00Z",
-                    "actor_type": "SOFTWARE",
-                    "actor_id": "tests.test_genome_completeness",
-                    "method": "deterministic fixture",
-                    "run_id": "unit-test",
-                    "input_sha256": [sha],
-                    "output_sha256": [],
-                    "tool_versions": {"test": "1"},
-                },
-            })
             qc = inspect_array(
-                array, case_id="SYN-GCM", build="GRCh37", strand="forward",
-                build_evidence=evidence, strand_evidence=evidence,
+                array, case_id="SYN-GCM",
+                **provenance_for(array, evidence_ref="synthetic-completeness-fixture",
+                                 actor_id="tests.test_genome_completeness"),
             )
             matrix = self._matrix_from(qc, root, array)
         self.assertEqual(matrix["qc_reservations"], [])
