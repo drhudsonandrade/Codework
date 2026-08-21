@@ -655,5 +655,78 @@ class PanelMatrixTest(unittest.TestCase):
         self.assertIn("CYP2C19*17", cyp["discrimination"]["discriminable_alleles"])
 
 
+class NoCallIsNotHomozygousTest(unittest.TestCase):
+    """A position that was not read cannot stand as evidence of the reference haplotype.
+
+    Zygosity was read as `len(set(genotype)) > 1` over any locus with a truthy genotype. The
+    no-call string "--" has a set of size one, so an uninterrogated position counted as
+    homozygous. That went wrong twice: it removed the position from the heterozygous count,
+    so a gene with two het positions and one no-call could drop to one and stop raising phase
+    ambiguity, and it let an unknown genotype pass as the reference base — the closed-world
+    claim a diplotype must never make silently. A gene whose panel positions were all
+    no-calls returned `INFERIDO *1/*1` alongside the words "todas as posições definidoras
+    interpretáveis".
+    """
+
+    SPEC = {
+        "complete_panel": True,
+        "reference_allele": "*1",
+        "alleles": {
+            "*2": {"cpic_clinical_function": "No function", "defining": [{"rsid": "rs1", "allele": "T"}]}
+        },
+    }
+
+    def _diplotype(self, loci):
+        from array_pipeline.pharmacogenomics import _diplotype_for
+
+        return _diplotype_for("TEST", self.SPEC, loci, [], gaps=[])
+
+    def _locus(self, rsid, genotype, interpretable):
+        return {"rsid": rsid, "genotype": genotype, "interpretable": interpretable}
+
+    def test_a_gene_of_nothing_but_no_calls_yields_no_diplotype(self):
+        result = self._diplotype([
+            self._locus("rs2", "--", False), self._locus("rs3", None, False),
+        ])
+        self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+        self.assertIsNone(result["value"])
+
+    def test_the_refusal_names_the_uncalled_positions(self):
+        result = self._diplotype([self._locus("rs9", "--", False)])
+        self.assertIn("rs9", " ".join(result["reasons"]))
+        self.assertIn("mundo fechado", " ".join(result["reasons"]))
+
+    def test_one_no_call_beside_called_positions_still_withholds(self):
+        result = self._diplotype([
+            self._locus("rs1", "AG", True), self._locus("rs2", "--", False),
+        ])
+        self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+
+    def test_fully_called_positions_still_produce_a_diplotype(self):
+        # Negative control: the refusal must not have made every diplotype impossible.
+        result = self._diplotype([self._locus("rs1", "AA", True)])
+        self.assertEqual(result["status"], "INFERIDO")
+        self.assertEqual(result["value"], "*1/*1")
+
+    def test_a_no_call_no_longer_masks_phase_ambiguity(self):
+        # Two heterozygous positions must raise phase ambiguity whether or not an uncalled
+        # position sits between them.
+        result = self._diplotype([
+            self._locus("rs1", "AG", True), self._locus("rs4", "CT", True),
+        ])
+        self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+        self.assertIn("fase não resolvida", " ".join(result["reasons"]))
+
+    def test_the_call_predicate_separates_reads_from_placeholders(self):
+        from array_pipeline.pharmacogenomics import _is_called_genotype
+
+        for value in ("AG", "AA", "ID", "cc"):
+            with self.subTest(called=value):
+                self.assertTrue(_is_called_genotype(value))
+        for value in ("--", "-", "", None, "NA", "N/A", "NULL", ".", "00", "A-", "??"):
+            with self.subTest(uncalled=value):
+                self.assertFalse(_is_called_genotype(value))
+
+
 if __name__ == "__main__":
     unittest.main()

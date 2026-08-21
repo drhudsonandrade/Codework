@@ -256,6 +256,7 @@ def residual_risk(partition: dict[str, Any]) -> dict[str, Any]:
             "worst_population": None,
             "worst_altered": None,
             "worst_uncertain": None,
+            "worst_uncertain_population": None,
             "unpriced_altered": [],
             "unpriced_uncertain": [],
             "unpriced_normal": [],
@@ -275,6 +276,7 @@ def residual_risk(partition: dict[str, Any]) -> dict[str, Any]:
             "worst_population": None,
             "worst_altered": 0.0,
             "worst_uncertain": 0.0,
+            "worst_uncertain_population": None,
             "unpriced_altered": [],
             "unpriced_uncertain": [],
             "unpriced_normal": [],
@@ -294,6 +296,7 @@ def residual_risk(partition: dict[str, Any]) -> dict[str, Any]:
             "worst_population": None,
             "worst_altered": None,
             "worst_uncertain": None,
+            "worst_uncertain_population": None,
             "unpriced_altered": unpriced_altered,
             "unpriced_uncertain": unpriced_uncertain,
             "unpriced_normal": unpriced_normal,
@@ -308,7 +311,15 @@ def residual_risk(partition: dict[str, Any]) -> dict[str, Any]:
     # Ancestry is not established for this sample, so the reported residual is the worst
     # group rather than an average: an average would understate the risk for whichever
     # population the person actually belongs to.
+    #
+    # Each axis gets its own worst group, because they are not the same group. Reporting the
+    # uncertain fraction of whichever population happened to top the *altered* ranking did
+    # exactly what the paragraph above forbids: on the shipped CPIC definitions it understated
+    # the uncertain residual in six of ten genes, worst of all VKORC1 — 0.101 reported where
+    # East Asian is 0.866, on the gene that dictates warfarin dosing — and TPMT, reported as
+    # 0.0 where African American/Afro-Caribbean is 0.033.
     worst_group = max(populations, key=lambda g: populations[g]["altered"])
+    worst_uncertain_group = max(populations, key=lambda g: populations[g]["uncertain"])
     bounded = all(entry["bounded"] for entry in populations.values()) and not (
         unpriced_altered or unpriced_uncertain
     )
@@ -318,7 +329,10 @@ def residual_risk(partition: dict[str, Any]) -> dict[str, Any]:
         "populations": populations,
         "worst_population": worst_group,
         "worst_altered": populations[worst_group]["altered"],
-        "worst_uncertain": populations[worst_group]["uncertain"],
+        "worst_uncertain": populations[worst_uncertain_group]["uncertain"],
+        # Named, because the two maxima usually come from different populations and a reader
+        # given one group label would attach both numbers to it.
+        "worst_uncertain_population": worst_uncertain_group,
         "unpriced_altered": unpriced_altered,
         "unpriced_uncertain": unpriced_uncertain,
         "unpriced_normal": unpriced_normal,

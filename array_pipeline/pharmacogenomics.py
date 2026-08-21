@@ -225,6 +225,20 @@ def _heterozygous_defining_positions(
     return heterozygous
 
 
+#: Genotype strings that mean "this position was not read". A no-call is not a homozygous
+#: reference call, and the difference decides whether a diplotype may be stated at all.
+NO_CALL_GENOTYPES = frozenset({"", "--", "-", "NA", "N/A", "NULL", ".", "00", "0"})
+
+
+def _is_called_genotype(value: Any) -> bool:
+    """True when the value is a real genotype rather than a placeholder for a missing one."""
+    text = str(value or "").strip().upper()
+    if not text or text in NO_CALL_GENOTYPES:
+        return False
+    # A call is bases. Anything containing a gap character is a partial read, not a genotype.
+    return all(character in "ACGTID" for character in text)
+
+
 def _diplotype_for(
     gene: str,
     spec: dict[str, Any] | None,
@@ -286,10 +300,25 @@ def _diplotype_for(
             "a cada cromossomo exige fase"
         )
 
-    heterozygous = [
-        locus["rsid"]
+    # Zygosity is read only from loci that were actually called. The test used to be
+    # `len(set(genotype)) > 1` over any locus carrying a truthy genotype, and a no-call
+    # string like "--" has a set of size one: an uninterrogated position was counted as
+    # homozygous. That is the wrong direction twice over — it removed a position from the
+    # heterozygous count, so a gene with two het positions and one no-call could drop to one
+    # and stop raising phase ambiguity, and it let an unknown genotype stand as evidence of
+    # the reference haplotype.
+    called = [
+        locus
         for locus in loci
-        if locus.get("genotype") and len(set(str(locus["genotype"]))) > 1
+        if locus.get("interpretable") and _is_called_genotype(locus.get("genotype"))
+    ]
+    uncalled = sorted(
+        str(locus["rsid"])
+        for locus in loci
+        if not locus.get("interpretable") or not _is_called_genotype(locus.get("genotype"))
+    )
+    heterozygous = [
+        str(locus["rsid"]) for locus in called if len(set(str(locus["genotype"]))) > 1
     ]
     if len(heterozygous) > 1:
         # Two or more het positions in one gene are consistent with more than one diplotype
@@ -297,6 +326,18 @@ def _diplotype_for(
         reasons.append(
             f"fase não resolvida: {len(heterozygous)} posições heterozigotas "
             f"({', '.join(sorted(heterozygous))}) admitem mais de um diplótipo"
+        )
+    if uncalled:
+        # Stated as its own refusal rather than folded into the panel-gap count, because
+        # these are positions the panel *does* carry and this sample did not read. Assuming
+        # the reference base at them is exactly the closed-world claim a diplotype must not
+        # make silently.
+        sample = ", ".join(uncalled[:5])
+        more = f" (+{len(uncalled) - 5})" if len(uncalled) > 5 else ""
+        reasons.append(
+            f"{len(uncalled)} posição(ões) do painel deste gene sem genótipo interpretável "
+            f"({sample}{more}); presumir a base de referência nelas é justamente a hipótese "
+            "de mundo fechado que um diplótipo não pode assumir em silêncio"
         )
 
     if reasons:

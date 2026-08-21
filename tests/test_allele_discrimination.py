@@ -432,6 +432,95 @@ class AnalysisShapeTest(unittest.TestCase):
         self.assertAlmostEqual(result["coverage_fraction"], 1 / 3)
 
 
+class WorstGroupPerAxisTest(unittest.TestCase):
+    """The two residual axes peak in different populations, and one label served both.
+
+    `worst_population` maximises the *altered* fraction, and `worst_uncertain` used to read
+    the uncertain fraction out of that same group. The module's own comment says the worst
+    group is reported rather than an average because "an average would understate the risk
+    for whichever population the person actually belongs to" — and this understated it, on
+    the uncertain axis, for the same reason.
+    """
+
+    def _spec(self, freq_a, freq_b):
+        return {
+            "alleles": {
+                "*2": {
+                    "cpic_clinical_function": "No function",
+                    "defining": [{"rsid": "rsX", "allele": "T"}],
+                    "cpic_frequency": freq_a,
+                },
+                "*9": {
+                    "cpic_clinical_function": "Uncertain function",
+                    "defining": [{"rsid": "rsY", "allele": "G"}],
+                    "cpic_frequency": freq_b,
+                },
+            }
+        }
+
+    def test_the_uncertain_maximum_is_not_taken_from_the_altered_group(self):
+        # Group A tops the altered axis; group B tops the uncertain axis by a wide margin.
+        spec = self._spec({"A": 0.20, "B": 0.01}, {"A": 0.00, "B": 0.90})
+        residual = residual_risk(partition_alleles(spec, {}))
+        self.assertEqual(residual["worst_population"], "A")
+        self.assertEqual(residual["worst_altered"], 0.2)
+        self.assertEqual(residual["worst_uncertain"], 0.9)
+        self.assertEqual(residual["worst_uncertain_population"], "B")
+
+    def test_the_group_behind_each_number_is_named(self):
+        # A reader given one group label would attach both numbers to it.
+        spec = self._spec({"A": 0.20, "B": 0.01}, {"A": 0.00, "B": 0.90})
+        residual = residual_risk(partition_alleles(spec, {}))
+        self.assertNotEqual(residual["worst_population"], residual["worst_uncertain_population"])
+
+    def test_one_group_peaking_on_both_axes_still_reports_that_group(self):
+        spec = self._spec({"A": 0.20, "B": 0.01}, {"A": 0.50, "B": 0.10})
+        residual = residual_risk(partition_alleles(spec, {}))
+        self.assertEqual(residual["worst_population"], "A")
+        self.assertEqual(residual["worst_uncertain_population"], "A")
+
+    def test_every_return_path_declares_the_field(self):
+        # A consumer reading it must not hit a KeyError on the refusal paths.
+        for spec in ({}, {"alleles": {}}):
+            with self.subTest(spec=spec):
+                self.assertIn(
+                    "worst_uncertain_population", residual_risk(partition_alleles(spec, {}))
+                )
+
+    def test_the_shipped_registry_no_longer_understates_vkorc1(self):
+        # VKORC1 dictates warfarin dosing. Its whole residual is uncertainty, and it was
+        # reported as 0.101 where East Asian is 0.866.
+        import json
+
+        registry = json.loads(
+            (ROOT / "config/pgx_allele_definitions.json").read_text(encoding="utf-8")
+        )
+        residual = residual_risk(partition_alleles(registry["genes"]["VKORC1"], {}))
+        populations = residual["populations"]
+        self.assertEqual(
+            residual["worst_uncertain"],
+            max(entry["uncertain"] for entry in populations.values()),
+        )
+        self.assertGreater(residual["worst_uncertain"], 0.8)
+
+    def test_no_shipped_gene_understates_its_uncertain_residual(self):
+        import json
+
+        registry = json.loads(
+            (ROOT / "config/pgx_allele_definitions.json").read_text(encoding="utf-8")
+        )
+        for gene, spec in sorted(registry["genes"].items()):
+            residual = residual_risk(partition_alleles(spec, {}))
+            populations = residual.get("populations") or {}
+            if not populations:
+                continue
+            with self.subTest(gene=gene):
+                self.assertEqual(
+                    residual["worst_uncertain"],
+                    max(entry["uncertain"] for entry in populations.values()),
+                )
+
+
 if __name__ == "__main__":
     unittest.main()
 
