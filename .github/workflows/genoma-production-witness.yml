@@ -7,6 +7,7 @@ on:
       - 'manifests/RULESET_V3.4.sha256'
       - 'policy_engine/**'
       - 'scripts/materialize_ruleset.py'
+      - 'scripts/bootstrap_attestation.py'
       - 'scripts/run_live_post_deployment_smoke.py'
       - 'deploy/attestations/bootstrap-project-v3.4.json'
       - '.github/workflows/genoma-production-witness.yml'
@@ -45,9 +46,11 @@ jobs:
           canonical="$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
           test "$(stat -c '%a' "$canonical")" = 444
           printf '%s  %s\n' 'ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580' "$canonical" | sha256sum -c -
-          echo "GENOMA_RULESET_PATH=$canonical" >> "$GITHUB_ENV"
-          echo "GENOMA_RULESET_SHA_MANIFEST=$GITHUB_WORKSPACE/manifests/RULESET_V3.4.sha256" >> "$GITHUB_ENV"
-          echo 'GENOMA_EXPECT_CANONICAL_SHA=1' >> "$GITHUB_ENV"
+          {
+            echo "GENOMA_RULESET_PATH=$canonical"
+            echo "GENOMA_RULESET_SHA_MANIFEST=$GITHUB_WORKSPACE/manifests/RULESET_V3.4.sha256"
+            echo 'GENOMA_EXPECT_CANONICAL_SHA=1'
+          } >> "$GITHUB_ENV"
       - name: Build exact policy image
         run: |
           docker build -f policy_engine/Dockerfile -t genoma-policy-witness:${GITHUB_SHA} .
