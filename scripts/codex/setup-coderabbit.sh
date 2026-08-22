@@ -2,38 +2,60 @@
 set -euo pipefail
 
 readonly CODERABBIT_VERSION="0.7.5"
+readonly CODERABBIT_PLUGIN_SOURCE_SHA="11c74d6ba24d3a6d48f54a194cd00ef3beea18f9"
 readonly CODERABBIT_BINARY_SHA256="${CODERABBIT_BINARY_SHA256:-}"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
+MARKETPLACE_MANIFEST="$REPO_ROOT/.agents/plugins/marketplace.json"
 cd "$REPO_ROOT"
 
-if ! command -v jq >/dev/null 2>&1; then
-  echo "ERROR: jq é obrigatório para validar o estado do marketplace/plugin." >&2
+fail() {
+  echo "ERROR: $*" >&2
   exit 2
-fi
-if ! command -v codex >/dev/null 2>&1; then
-  echo "ERROR: Codex CLI não encontrado neste ambiente." >&2
-  exit 2
-fi
+}
+
+command -v jq >/dev/null 2>&1 || fail "jq é obrigatório para validar o estado do marketplace/plugin."
+command -v codex >/dev/null 2>&1 || fail "Codex CLI não encontrado neste ambiente."
+[[ -f "$MARKETPLACE_MANIFEST" ]] || fail "manifesto local do marketplace não encontrado."
+
+# Bind plugin installation to the reviewed marketplace source, not to a mutable ref alone.
+manifest_source_sha="$(jq -er '
+  .plugins[]?
+  | select(.name == "coderabbit")
+  | select(.source.source == "git-subdir")
+  | select(.source.url == "openai/plugins")
+  | select(.source.path == "plugins/coderabbit")
+  | .source.sha
+' "$MARKETPLACE_MANIFEST")" || fail "fonte canônica do plugin coderabbit não encontrada no marketplace."
+[[ "$manifest_source_sha" == "$CODERABBIT_PLUGIN_SOURCE_SHA" ]] || fail "SHA do source do plugin coderabbit diverge do pin revisado."
+[[ "$manifest_source_sha" =~ ^[0-9a-f]{40}$ ]] || fail "SHA do source do plugin coderabbit é inválido."
+
+marketplace_present() {
+  jq -e '[.marketplaces[]? | select(.name == "codework-codex")] | length == 1' >/dev/null
+}
+
+plugin_present() {
+  jq -e '[
+    .installed[]?, .available[]?
+    | select(
+        (.pluginId == "coderabbit@codework-codex")
+        or (.name == "coderabbit" and .marketplaceName == "codework-codex")
+      )
+  ] | length >= 1' >/dev/null
+}
 
 marketplaces_json="$(codex plugin marketplace list --json)"
-if ! jq -e '[.. | strings] | index("codework-codex") != null' >/dev/null <<<"$marketplaces_json"; then
+if ! marketplace_present <<<"$marketplaces_json"; then
   codex plugin marketplace add "$REPO_ROOT" --json >/dev/null
 fi
 marketplaces_json="$(codex plugin marketplace list --json)"
-jq -e '[.. | strings] | index("codework-codex") != null' >/dev/null <<<"$marketplaces_json" || {
-  echo "ERROR: marketplace codework-codex não foi confirmado após registro." >&2
-  exit 3
-}
+marketplace_present <<<"$marketplaces_json" || fail "marketplace codework-codex não foi confirmado por campo de identidade após registro."
 
-plugins_json="$(codex plugin list --marketplace codework-codex --json)"
-if ! jq -e '[.. | strings] | index("coderabbit") != null' >/dev/null <<<"$plugins_json"; then
+plugins_json="$(codex plugin list --marketplace codework-codex --json --available)"
+if ! plugin_present <<<"$plugins_json"; then
   codex plugin add coderabbit@codework-codex --json >/dev/null
 fi
-plugins_json="$(codex plugin list --marketplace codework-codex --json)"
-jq -e '[.. | strings] | index("coderabbit") != null' >/dev/null <<<"$plugins_json" || {
-  echo "ERROR: plugin coderabbit não foi confirmado no marketplace codework-codex." >&2
-  exit 3
-}
+plugins_json="$(codex plugin list --marketplace codework-codex --json --available)"
+plugin_present <<<"$plugins_json" || fail "plugin coderabbit não foi confirmado por identidade no marketplace codework-codex."
 
 if ! command -v coderabbit >/dev/null 2>&1; then
   cat >&2 <<EOF
@@ -44,6 +66,9 @@ EOF
   exit 4
 fi
 
+[[ -n "$CODERABBIT_BINARY_SHA256" ]] || fail "CODERABBIT_BINARY_SHA256 aprovado é obrigatório; binário sem digest não será aceito."
+[[ "$CODERABBIT_BINARY_SHA256" =~ ^[0-9a-fA-F]{64}$ ]] || fail "CODERABBIT_BINARY_SHA256 deve conter exatamente 64 dígitos hexadecimais."
+
 observed_version="$(coderabbit --version 2>&1)"
 case "$observed_version" in
   *"${CODERABBIT_VERSION}"*) ;;
@@ -53,14 +78,12 @@ case "$observed_version" in
     ;;
 esac
 
-if [[ -n "$CODERABBIT_BINARY_SHA256" ]]; then
-  coderabbit_path="$(command -v coderabbit)"
-  observed_sha256="$(sha256sum "$coderabbit_path" | awk '{print $1}')"
-  [[ "$observed_sha256" == "$CODERABBIT_BINARY_SHA256" ]] || {
-    echo "ERROR: SHA256 do binário CodeRabbit não corresponde ao valor aprovado." >&2
-    exit 6
-  }
-fi
+coderabbit_path="$(command -v coderabbit)"
+observed_sha256="$(sha256sum "$coderabbit_path" | awk '{print $1}')"
+[[ "${observed_sha256,,}" == "${CODERABBIT_BINARY_SHA256,,}" ]] || {
+  echo "ERROR: SHA256 do binário CodeRabbit não corresponde ao valor aprovado." >&2
+  exit 6
+}
 
 if ! coderabbit auth status --agent >/dev/null 2>&1; then
   if [[ -t 0 && -t 1 ]]; then
@@ -73,9 +96,10 @@ if ! coderabbit auth status --agent >/dev/null 2>&1; then
 fi
 coderabbit auth status --agent >/dev/null
 
+# Final confirmation uses the same structured predicates as the installation path.
 marketplaces_json="$(codex plugin marketplace list --json)"
-plugins_json="$(codex plugin list --marketplace codework-codex --json)"
-jq -e '[.. | strings] | index("codework-codex") != null' >/dev/null <<<"$marketplaces_json"
-jq -e '[.. | strings] | index("coderabbit") != null' >/dev/null <<<"$plugins_json"
+plugins_json="$(codex plugin list --marketplace codework-codex --json --available)"
+marketplace_present <<<"$marketplaces_json" || fail "marketplace perdeu a identidade esperada antes da confirmação final."
+plugin_present <<<"$plugins_json" || fail "plugin perdeu a identidade esperada antes da confirmação final."
 
 echo "CodeRabbit Codex plugin + CLI configurados para este workspace. Reinicie/abra nova sessão do Codex antes de usar o plugin."
