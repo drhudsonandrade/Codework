@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Single implementation of the GENOMA v3.3 sealed normative transport contract.
+"""Single implementation of the GENOMA v3.4 sealed normative transport contract.
 
 The repository keeps the normative TXT inactive at rest as content-addressed Base64
 chunks. This module is the ONLY implementation allowed to decode, verify, and
@@ -20,11 +20,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-EXPECTED_SHA = "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a"
-EXPECTED_NAME = "REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt"
+EXPECTED_SHA = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
+EXPECTED_NAME = "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
 EXPECTED_STATUS = "VIGENTE"
-EXPECTED_VERSION = "v3.3"
-EXPECTED_DATE = "14/08/2026"
+EXPECTED_VERSION = "v3.4"
+EXPECTED_DATE = "17/08/2026"
 EXPECTED_SECTIONS = 263
 MANIFEST_NAME = "MANIFEST.json"
 
