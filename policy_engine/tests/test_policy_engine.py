@@ -6,10 +6,10 @@ from genoma_policy.paths import resolve_manifest_path, resolve_ruleset_path
 from genoma_policy.ruleset import RulesetError, enforce_unique_active_ruleset, load_ruleset, verify_external_manifest
 from genoma_policy.scaffold import scaffold_manifest
 from genoma_policy.smoke import run_smoke
-ROOT=Path(__file__).resolve().parents[1]; RULESET=resolve_ruleset_path(ROOT); HASH_MANIFEST=resolve_manifest_path(RULESET,ROOT); EXPECTED_SHA256="187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a"
+ROOT=Path(__file__).resolve().parents[1]; RULESET=resolve_ruleset_path(ROOT); HASH_MANIFEST=resolve_manifest_path(RULESET,ROOT); EXPECTED_SHA256="ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
 class RulesetTests(unittest.TestCase):
  def test_normative_identity_hash_and_263_sections(self):
-  r=load_ruleset(RULESET); self.assertEqual(r.status,"VIGENTE"); self.assertEqual(r.version,"v3.3"); self.assertEqual(r.effective_date,"14/08/2026");
+  r=load_ruleset(RULESET); self.assertEqual(r.status,"VIGENTE"); self.assertEqual(r.version,"v3.4"); self.assertEqual(r.effective_date,"17/08/2026");
   if os.environ.get("GENOMA_EXPECT_CANONICAL_SHA")=="1": self.assertEqual(r.sha256,EXPECTED_SHA256)
   self.assertEqual([s.number for s in r.sections],list(range(263))); verify_external_manifest(r,HASH_MANIFEST)
  def test_duplicate_vigente_fails_closed(self):
@@ -21,12 +21,12 @@ class PolicyEngineTests(unittest.TestCase):
  def setUpClass(cls): cls.ruleset=load_ruleset(RULESET); cls.engine=PolicyEngine(cls.ruleset,external_manifest=HASH_MANIFEST)
  def valid_analysis_manifest(self):
   m=scaffold_manifest(self.ruleset,case_id="TEST"); m["session_id"]="test-session"; m["inputs"]=[{"id":"input-1","kind":"vcf","source":"test-fixture","sha256":"abc123"}]; m["consent"]={"verified":True,"version":"test-v1","authorized_domains":["research"]}; m["qc"]={"status":"EXECUTADO","passed":True,"evidence_refs":["fixture:qc"]}; m["sources"]=[{"id":"fixture:attestation","mutable":False,"status":"VERIFICADO","accessible":True,"locator":"fixture://attestation","retrieval_evidence":{"method":"fixture","result_digest":"sha256:fixture"}}]
-  for a in m["section_attestations"]: a.update({"applicability":"NOT_APPLICABLE","status":"VERIFICADO","decision":"NOT_APPLICABLE","justification":"not triggered by this fixture","evidence_refs":[]}); a["trace"].update({"run_id":"test-session","created_at":"2026-08-15T23:00:00-03:00"})
+  for a in m["section_attestations"]: a.update({"applicability":"NOT_APPLICABLE","status":"VERIFICADO","decision":"NOT_APPLICABLE","justification":"not triggered by this fixture","evidence_refs":[]}); a["trace"].update({"run_id":"test-session","created_at":"2026-08-22T18:46:00-03:00"})
   return m
  def test_post_deployment_is_nonblocking_pending_by_default(self):
   r=self.engine.evaluate(self.valid_analysis_manifest()); g=next(g for g in r.gates if g.gate=="POST_DEPLOYMENT_GATE"); self.assertEqual(g.state.value,"PENDING"); self.assertFalse(g.blocking); self.assertTrue(r.ready)
  def test_vus_cannot_change_conduct_without_confirmation(self):
-  m=self.valid_analysis_manifest(); m["claims"]=[{"id":"v1","nature":"INFERÊNCIA","domain":"CLÍNICO","status":"INFERIDO","priority":"P2","evidence_refs":["clinvar"],"variant_classification":"VUS","changes_conduct":True,"confirmation":{"status":"PROPOSTO"}}]; m["sources"]=[{"id":"clinvar","mutable":True,"status":"VERIFICADO","accessible":True,"version":"fixture","checked_at":"2026-08-15","locator":"https://www.ncbi.nlm.nih.gov/clinvar/","primary_or_official":True,"retrieval_evidence":{"method":"fixture","result_digest":"sha256:fixture"}}]; r=self.engine.evaluate(m); self.assertEqual(next(g for g in r.gates if g.gate=="CLINICAL_CONFIRMATION_GATE").state.value,"FAIL"); self.assertFalse(r.ready)
+  m=self.valid_analysis_manifest(); m["claims"]=[{"id":"v1","nature":"INFERÊNCIA","domain":"CLÍNICO","status":"INFERIDO","priority":"P2","evidence_refs":["clinvar"],"variant_classification":"VUS","changes_conduct":True,"confirmation":{"status":"PROPOSTO"}}]; m["sources"]=[{"id":"clinvar","mutable":True,"status":"VERIFICADO","accessible":True,"version":"fixture","checked_at":"2026-08-22","locator":"https://www.ncbi.nlm.nih.gov/clinvar/","primary_or_official":True,"retrieval_evidence":{"method":"fixture","result_digest":"sha256:fixture"}}]; r=self.engine.evaluate(m); self.assertEqual(next(g for g in r.gates if g.gate=="CLINICAL_CONFIRMATION_GATE").state.value,"FAIL"); self.assertFalse(r.ready)
  def test_runtime_gate_is_session_specific(self):
   m=self.valid_analysis_manifest(); m["operation"]["requires_real_calling"]=True; m["runtime_resource_gate"]={"session_id":"old-session","checks":{}}; r=self.engine.evaluate(m); self.assertEqual(next(g for g in r.gates if g.gate=="RUNTIME_RESOURCE_GATE").state.value,"FAIL")
  def test_final_audit_requires_all_15_criteria(self):
