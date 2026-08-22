@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate static repository safety and the shared sealed normative contract."""
+"""Validate static repository safety and the shared GENOMA v3.4 sealed contract."""
 from __future__ import annotations
 
 import csv
@@ -24,7 +24,7 @@ REQUIRED_PATHS = (
     ".github/workflows/genoma-snp-array.yml", ".gitignore", "Dockerfile", "environment.yml", "main.nf",
     "nextflow.config", "workflows/wgs.nf", "workflows/array.nf", "array_pipeline/qc.py",
     "array_pipeline/annotation.py", "array_pipeline/targets.py", "config/partial_genome_annotation_targets.json",
-    "manifests/GRCh38.sources.tsv", "manifests/GRCh38.lock.sha256.example", "manifests/RULESET_V3.3.sha256",
+    "manifests/GRCh38.sources.tsv", "manifests/GRCh38.lock.sha256.example", "manifests/RULESET_V3.4.sha256",
     "normative/sealed/MANIFEST.json", "normative/sealed/README.md",
     "scripts/__init__.py", "scripts/sealed_ruleset.py", "scripts/check_versions.sh", "scripts/fetch_grch38.sh",
     "scripts/build_bwa_mem2_index.sh", "scripts/validate_grch38.sh", "scripts/validate_bwa_mem2_functional.sh",
@@ -43,12 +43,11 @@ REQUIRED_PATHS = (
     "policy_engine/genoma_policy/engine.py", "policy_engine/genoma_policy/attestation.py",
     "policy_engine/genoma_policy/ledger.py", "policy_engine/policy/schema/execution-manifest.schema.json",
     "policy_engine/Dockerfile", "mcp/package.json", "mcp/package-lock.json", "mcp/tsconfig.json", "mcp/src/server.ts",
-    "deploy/docker-compose.yml", "deploy/attestations/bootstrap-project-v3.3.json", "adapters/README.md",
-    "adapters/config.example.json", "docs/FALLOW_SECURITY_REVIEW.md", "docs/GITHUB_MOBILE_IMPORT.md",
-    "docs/MAGALU_PRIVATE_MCP_SETUP.md", "docs/PRE_DEPLOYMENT_VALIDATION_2026-08-15.md",
-    "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md", "docs/PR_BODY.md", "docs/DETERMINISTIC_ENGINE.md",
-    "docs/PRODUCTION_CEREMONY.md", "docs/PORTABILITY_MATRIX.md", "docs/GRCH38_COMPUTE_STRATEGY.md",
-    "docs/audits/GENOMA_V0.8_PREIMPLEMENTATION_AUDIT_2026-08-16.md",
+    "deploy/docker-compose.yml", "adapters/README.md", "adapters/config.example.json",
+    "docs/FALLOW_SECURITY_REVIEW.md", "docs/GITHUB_MOBILE_IMPORT.md", "docs/MAGALU_PRIVATE_MCP_SETUP.md",
+    "docs/PRE_DEPLOYMENT_VALIDATION_2026-08-15.md", "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md", "docs/PR_BODY.md",
+    "docs/DETERMINISTIC_ENGINE.md", "docs/PRODUCTION_CEREMONY.md", "docs/PORTABILITY_MATRIX.md",
+    "docs/GRCH38_COMPUTE_STRATEGY.md", "docs/audits/GENOMA_V0.8_PREIMPLEMENTATION_AUDIT_2026-08-16.md",
 )
 EXPECTED_ARTIFACTS = {
     "Homo_sapiens_assembly38.fasta", "Homo_sapiens_assembly38.fasta.fai", "Homo_sapiens_assembly38.dict",
@@ -59,12 +58,27 @@ EXPECTED_ARTIFACTS = {
 EXPECTED_EVIDENCE_ADAPTERS = {"clinvar", "clingen", "cpic", "clinpgx", "gnomad", "pgs_catalog"}
 FORBIDDEN_SUFFIXES = (".fastq", ".fq", ".bam", ".bai", ".cram", ".crai", ".vcf", ".tbi")
 SKIP_PARTS = {".git", "node_modules", "dist", "__pycache__", ".pytest_cache"}
+OLD_ACTIVE_TOKENS = (
+    "REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt",
+    "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a",
+)
+ACTIVE_IDENTITY_SURFACES = (
+    "scripts/run_live_post_deployment_smoke.py",
+    "array_pipeline/qc.py",
+    "array_pipeline/annotation.py",
+    "scripts/build_array_case_manifest.py",
+    "policy_engine/policy/rego/genoma.rego",
+    "policy_engine/policy/schema/execution-manifest.schema.json",
+    "locks/runtime-lock.json",
+    ".github/workflows/genoma-policy-engine.yml",
+    ".github/workflows/genoma-production-ceremony.yml",
+    ".github/workflows/genoma-production-witness.yml",
+)
 
 
 def validate_sealed_ruleset(root: Path, errors: list[str]) -> None:
-    sealed_dir = root / "normative" / "sealed"
     try:
-        verify_transport(sealed_dir)
+        verify_transport(root / "normative" / "sealed")
     except (OSError, UnicodeError, ValueError, SealedRulesetError) as exc:
         errors.append(f"sealed normative transport invalid: {type(exc).__name__}: {exc}")
 
@@ -90,23 +104,32 @@ def validate(root: Path) -> list[str]:
 
     validate_sealed_ruleset(root, errors)
 
+    ruleset_manifest = root / "manifests/RULESET_V3.4.sha256"
+    if ruleset_manifest.is_file() and ruleset_manifest.read_text(encoding="ascii").strip().split() != [CANONICAL_RULESET_SHA256, CANONICAL_RULESET]:
+        errors.append("ruleset external manifest does not match the verified v3.4 artifact")
+
+    for relative in ACTIVE_IDENTITY_SURFACES:
+        path = root / relative
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for token in OLD_ACTIVE_TOKENS:
+            if token in text:
+                errors.append(f"active ruleset surface still references v3.3: {relative}: {token}")
+
     manifest = root / "manifests/GRCh38.sources.tsv"
     if manifest.is_file():
-        with manifest.open(encoding="utf-8", newline="") as h:
-            rows = list(csv.DictReader(h, delimiter="\t"))
-        targets = {r.get("target", "") for r in rows}
+        with manifest.open(encoding="utf-8", newline="") as handle:
+            rows = list(csv.DictReader(handle, delimiter="\t"))
+        targets = {row.get("target", "") for row in rows}
         if len(rows) != 9 or targets != EXPECTED_ARTIFACTS:
             errors.append(f"GRCh38 manifest must contain exactly the required 9 artifacts; found {len(rows)}")
-        if any(not r.get("url", "").startswith(("https://", "generated-from:")) for r in rows):
+        if any(not row.get("url", "").startswith(("https://", "generated-from:")) for row in rows):
             errors.append("GRCh38 manifest contains a non-HTTPS/non-generated source")
 
     package = root / "mcp/package.json"
     if package.is_file() and json.loads(package.read_text()).get("devDependencies", {}).get("fallow") != "3.16.0":
         errors.append("mcp/package.json must pin fallow 3.16.0 exactly")
-
-    ruleset_manifest = root / "manifests/RULESET_V3.3.sha256"
-    if ruleset_manifest.is_file() and ruleset_manifest.read_text(encoding="ascii").strip().split() != [CANONICAL_RULESET_SHA256, CANONICAL_RULESET]:
-        errors.append("ruleset external manifest does not match the verified v3.3 artifact")
 
     fw = root / ".github/workflows/fallow.yml"
     if fw.is_file():
@@ -218,7 +241,7 @@ def main() -> None:
             print(f"FAIL\t{error}")
         raise SystemExit(1)
     print("PASS\trepository_contract")
-    print("PASS\truleset_manifest_contract\tv3.3 raw SHA-256 pinned")
+    print("PASS\truleset_manifest_contract\tv3.4 raw SHA-256 pinned")
     print("PASS\trepository_active_rulesets\t0")
     print("PASS\tsealed_normative_transport\tshared decoder")
     print("PASS\tgrch38_manifest\t9/9")
