@@ -127,7 +127,11 @@ class CuratedManifestTest(unittest.TestCase):
                 fh.write(b"##fileformat=VCFv4.2\n#CHROM\tPOS\n1\t100\t\xff\xfe\x00rubbish\n")
             result = self._run(root, bad, "--evidence", str(root / "ev.json"))
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("not valid UTF-8", result.stdout + result.stderr)
+        # The refusal now comes from `scripts.ngs_formats.probe_vcf` and is worded in the
+        # project's language; what is asserted is the reason, not the sentence.
+        output = result.stdout + result.stderr
+        self.assertIn("não é UTF-8 válido", output)
+        self.assertIn("não é um VCF legível", output)
 
 
 class WorkflowWiringTest(unittest.TestCase):

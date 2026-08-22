@@ -40,6 +40,7 @@ REQUIRED_PATHS = (
     "scripts/runtime_stack.py", "scripts/prepare_latest_candidate.py", "scripts/promote_latest_candidate.py",
     "scripts/freshness_gate.py", "scripts/latest_runtime_resource_gate.py", "scripts/verify_runtime_gate_manifest.py",
     "scripts/wgs_consent_gate.py", "scripts/wgs_input_gate.py", "scripts/wgs_align_or_stage.sh",
+    "scripts/ngs_formats.py",
     "scripts/build_wgs_curated_manifest.py", "scripts/query_evidence.py", "scripts/build_adapter_capabilities.py",
     "scripts/run_snp_array.py", "scripts/annotate_partial_genome.py", "scripts/build_array_case_manifest.py",
     "scripts/capture_consent.py", "reporting/consent.py", "reporting/provenance.py",

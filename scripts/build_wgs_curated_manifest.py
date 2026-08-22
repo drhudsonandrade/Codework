@@ -21,6 +21,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import normative
+from scripts.ngs_formats import FormatError, probe_vcf
 
 
 def sha256_file(path: Path) -> str:
@@ -31,27 +32,27 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def count_vcf_records(path: Path) -> int:
-    """Count variant records, refusing a file that is not valid UTF-8.
+def read_vcf(path: Path) -> dict:
+    """Validate the VCF and count its records, refusing anything that is not one.
 
-    `errors="replace"` turned undecodable bytes into U+FFFD and counted the line anyway, so a
-    truncated or corrupt VCF produced a plausible record count instead of an error. A caller
-    cannot tell a real count from a repaired one, so the repair is not offered.
+    This counted every line not starting with `#`, so three lines of prose in a file named
+    `.vcf` came back as "3 variant records" — a count of nothing, printed as evidence of
+    variant calling. It also chose its decompressor with `path.suffix == ".gz"`, so a
+    bgzipped VCF named `.vcf` was read as its own compressed bytes.
+
+    `probe_vcf` requires `##fileformat=VCF`, the eight mandatory `#CHROM` columns and an
+    integer POS on every record, and picks the decompressor by magic bytes. A record is
+    counted only when it is one.
     """
-    import gzip
-    opener = gzip.open if path.suffix == ".gz" else open
-    count = 0
     try:
-        with opener(path, "rt", encoding="utf-8", errors="strict") as handle:
-            for line in handle:
-                if line and not line.startswith("#"):
-                    count += 1
-    except UnicodeDecodeError as exc:
-        raise SystemExit(
-            f"NÃO DISPONÍVEL: {path.name} is not valid UTF-8 ({exc}); a record count read "
-            "over replaced bytes would describe a file that does not exist"
-        ) from exc
-    return count
+        return probe_vcf(path)
+    except FormatError as exc:
+        raise SystemExit(f"NÃO DISPONÍVEL: {path.name} não é um VCF legível: {exc}") from exc
+
+
+def count_vcf_records(path: Path) -> int:
+    """Backwards-compatible record count, now over a validated VCF."""
+    return read_vcf(path)["record_count"]
 
 
 def main() -> int:

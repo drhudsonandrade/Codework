@@ -2,10 +2,16 @@
 from __future__ import annotations
 
 import argparse
-import gzip
 import hashlib
 import json
+import sys
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.ngs_formats import FormatError, detect_container, probe_alignment, probe_fastq
 
 
 def sha256_file(path: Path) -> str:
@@ -24,24 +30,43 @@ def resolve(root: Path, value: str | None) -> Path | None:
 
 
 def fastq_probe(path: Path) -> tuple[bool, dict]:
+    """Structurally read the first records, then hash. Delegates to `scripts.ngs_formats`.
+
+    The probe itself is unchanged in what it verifies; the decompressor is now chosen by
+    magic bytes rather than by `path.suffix == ".gz"`, so a bgzipped FASTQ named `.fastq`
+    is read as the reads it holds instead of failing every record silently.
+    """
+    try:
+        detail = probe_fastq(path)
+    except FormatError as exc:
+        return False, {"path": str(path), "reason": str(exc)}
+    return True, {"path": str(path), **detail, "sha256": sha256_file(path)}
+
+
+def alignment_probe(path: Path) -> tuple[bool, dict]:
+    """Read the BAM/CRAM header, refusing a file that only carries the extension.
+
+    This checked `is_file()` and `size > 0` and then recorded a SHA-256. A 32-byte text file
+    named `fake.bam` passed with `status: VERIFICADO` and no errors — the gate certified as a
+    verified alignment input a file containing one line of prose. Verified by doing it before
+    closing it.
+    """
     if not path.is_file() or path.stat().st_size == 0:
         return False, {"path": str(path), "reason": "missing_or_empty"}
-    opener = gzip.open if path.suffix == ".gz" else open
     try:
-        with opener(path, "rt", encoding="utf-8", errors="strict") as handle:
-            records = []
-            for _ in range(128):
-                row = [handle.readline() for __ in range(4)]
-                if row[0] == "":
-                    break
-                if any(part == "" for part in row) or not row[0].startswith("@") or not row[2].startswith("+") or len(row[1].strip()) != len(row[3].strip()):
-                    return False, {"path": str(path), "reason": "malformed_fastq_probe"}
-                records.append(row[0].strip().split()[0])
-        if not records:
-            return False, {"path": str(path), "reason": "no_records"}
-        return True, {"path": str(path), "probe_records": len(records), "sha256": sha256_file(path)}
-    except (OSError, UnicodeError) as exc:
-        return False, {"path": str(path), "reason": type(exc).__name__}
+        detail = probe_alignment(path)
+    except FormatError as exc:
+        return False, {
+            "path": str(path),
+            "detected": detect_container(path),
+            "reason": str(exc),
+        }
+    return True, {
+        "path": str(path),
+        "size_bytes": path.stat().st_size,
+        **detail,
+        "sha256": sha256_file(path),
+    }
 
 
 def validate_manifest(manifest_path: Path) -> dict:
@@ -74,10 +99,35 @@ def validate_manifest(manifest_path: Path) -> dict:
             if not ok2: errors.append("R2 integrity probe failed")
     elif input_type in {"BAM", "CRAM"}:
         alignment = resolve(root, manifest.get("alignment"))
-        if alignment is None or not alignment.is_file() or alignment.stat().st_size == 0:
-            errors.append(f"{input_type} alignment missing_or_empty")
+        if alignment is None:
+            errors.append(f"{input_type} requires an alignment path")
         else:
-            inputs["alignment"] = {"path": str(alignment), "size_bytes": alignment.stat().st_size, "sha256": sha256_file(alignment)}
+            ok, detail = alignment_probe(alignment)
+            inputs["alignment"] = detail
+            if not ok:
+                errors.append(f"{input_type} integrity probe failed: {detail.get('reason')}")
+            elif detail.get("format") != input_type:
+                # The manifest says BAM and the bytes say CRAM, or the reverse. Neither is
+                # trustworthy on its own; the disagreement is the finding.
+                errors.append(
+                    f"manifest declares {input_type} and the file is {detail.get('format')}"
+                )
+            else:
+                # A BAM header that names read groups is checkable evidence about the same
+                # sample the manifest claims. Where the two disagree the manifest is
+                # describing a different file, which is exactly what this gate is for.
+                declared = {str(rg.get("id")), str(rg.get("sample"))}
+                observed = {
+                    str(value)
+                    for group in detail.get("read_groups") or []
+                    for value in (group.get("id"), group.get("sample"))
+                    if value
+                }
+                if observed and not (observed & declared):
+                    errors.append(
+                        f"read groups in the {input_type} header {sorted(observed)} do not "
+                        f"include the manifest's id/sample {sorted(declared)}"
+                    )
 
     return {
         "schema": "genoma-wgs-input-gate-v1",
@@ -87,7 +137,7 @@ def validate_manifest(manifest_path: Path) -> dict:
         "read_group": rg,
         "inputs": inputs,
         "errors": errors,
-        "note": "FASTQ is probed here; complete BAM/CRAM/read-group integrity is re-executed after alignment before variant calling.",
+        "note": "FASTQ, BAM and CRAM are read structurally here — magic bytes, BGZF framing, header text and read groups. Full-file integrity (samtools quickcheck, index consistency) is re-executed after alignment, before variant calling.",
     }
 
 

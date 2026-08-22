@@ -14,7 +14,15 @@ VariantKey = tuple[str, int, str, str]
 
 
 def open_text(path: Path) -> TextIO:
-    if path.suffix == ".gz":
+    """Open by content, not by extension.
+
+    `path.suffix == ".gz"` meant a bgzipped VCF named `.vcf` was read as its own compressed
+    bytes: no line parsed, no error raised, zero variants scored. Zero variants against a
+    truth set reads as "the caller found nothing", which is a very different statement.
+    """
+    with path.open("rb") as probe:
+        compressed = probe.read(2) == b"\x1f\x8b"
+    if compressed:
         return gzip.open(path, "rt", encoding="ascii")
     return path.open("r", encoding="ascii")
 
@@ -27,11 +35,31 @@ def normalize_genotype(value: str) -> str:
 
 
 def read_variants(path: Path) -> dict[VariantKey, str]:
+    """Read a VCF's calls, refusing a file that is not a VCF.
+
+    Every non-`#` line was parsed as a record and anything that did not fit was skipped, so a
+    file that is not a VCF at all produced an empty call set in silence. Against a truth set
+    that scores as recall 0 — indistinguishable from a caller that genuinely found nothing,
+    and the two demand opposite responses.
+    """
     variants: dict[VariantKey, str] = {}
+    header_seen = False
     with open_text(path) as handle:
-        for line in handle:
+        for index, line in enumerate(handle):
+            if index == 0 and not line.startswith("##fileformat=VCF"):
+                raise SystemExit(
+                    f"NÃO DISPONÍVEL: {path.name} não começa com `##fileformat=VCF`; "
+                    "pontuar um arquivo que não é VCF produziria zero variantes em silêncio"
+                )
+            if line.startswith("#CHROM"):
+                header_seen = True
+                continue
             if not line or line.startswith("#"):
                 continue
+            if not header_seen:
+                raise SystemExit(
+                    f"NÃO DISPONÍVEL: {path.name} traz registros antes da linha #CHROM"
+                )
             fields = line.rstrip("\n").split("\t")
             if len(fields) < 10 or fields[6] not in {"PASS", "."}:
                 continue
