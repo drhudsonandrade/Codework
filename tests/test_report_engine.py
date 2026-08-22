@@ -34,6 +34,10 @@ class ReportEngineTest(unittest.TestCase):
         result = render_document("01", {}, mode="MODEL")
         self.assertIn("MODELO — NÃO É RESULTADO GENÉTICO", result["markdown"])
         self.assertEqual(result["metadata"]["mode"], "MODEL")
+        self.assertEqual(
+            result["metadata"]["ruleset_required"],
+            {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026"},
+        )
 
     def test_final_mode_fails_closed_without_publication_gate(self):
         from reporting.engine import ReportReleaseError, render_document
@@ -46,7 +50,7 @@ class ReportEngineTest(unittest.TestCase):
 
         data = {
             "case_id": "CASE-001",
-            "ruleset": {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026"},
+            "ruleset": {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026"},
             "publication_gate": {"passed": True, "consent_verified": True, "qc_verified": True, "evidence_verified": True, "placeholders_resolved": True},
             "policy_evaluation": {"ready_for_requested_operation": False, "planes": {}, "gates": []},
         }
@@ -60,7 +64,7 @@ class ReportEngineTest(unittest.TestCase):
         policy["gates"] = [{"gate": "FINAL_AUDIT_GATE", "state": "FAIL", "blocking": True}]
         data = {
             "case_id": "CASE-001",
-            "ruleset": {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026"},
+            "ruleset": {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026"},
             "publication_gate": {"passed": True, "consent_verified": True, "qc_verified": True, "evidence_verified": True, "placeholders_resolved": True},
             "policy_evaluation": policy,
         }
@@ -73,7 +77,7 @@ class ReportEngineTest(unittest.TestCase):
         data = {
             "case_id": "CASE-001",
             "summary": "Nenhum achado fictício é inserido pelo motor.",
-            "ruleset": {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026"},
+            "ruleset": {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026"},
             "publication_gate": {
                 "passed": True,
                 "consent_verified": True,
@@ -90,7 +94,9 @@ class ReportEngineTest(unittest.TestCase):
             self.assertEqual(set(paths), {"json", "markdown", "html"})
             self.assertTrue(all(path.is_file() for path in paths.values()))
             self.assertNotIn("[[", paths["markdown"].read_text(encoding="utf-8"))
-            self.assertIn("POST-DEPLOYMENT: PENDENTE", paths["markdown"].read_text(encoding="utf-8"))
+            markdown = paths["markdown"].read_text(encoding="utf-8")
+            self.assertIn("POST-DEPLOYMENT: PENDENTE", markdown)
+            self.assertIn("Ruleset: v3.4 / VIGENTE / 17/08/2026", markdown)
 
 
 if __name__ == "__main__":
