@@ -60,6 +60,10 @@ EXPECTED_ARTIFACTS = {
 EXPECTED_EVIDENCE_ADAPTERS = {"clinvar", "clingen", "cpic", "clinpgx", "gnomad", "pgs_catalog"}
 FORBIDDEN_SUFFIXES = (".fastq", ".fq", ".bam", ".bai", ".cram", ".crai", ".vcf", ".tbi")
 SKIP_PARTS = {".git", "node_modules", "dist", "__pycache__", ".pytest_cache"}
+FORBIDDEN_ACTIVE_PATHS = (
+    "manifests/RULESET_V3.3.sha256",
+    "deploy/attestations/bootstrap-project-v3.3.json",
+)
 OLD_ACTIVE_TOKENS = (
     "REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt",
     "RULESET_V3.3.sha256",
@@ -76,7 +80,8 @@ ACTIVE_IDENTITY_SURFACES = (
     "array_pipeline/qc.py", "array_pipeline/annotation.py", "workflows/wgs.nf", "workflows/array.nf",
     "main.nf", "nextflow.config", "Dockerfile", "deploy/docker-compose.yml", "mcp/src/server.ts",
     "reporting/engine.py", "policy_engine/Dockerfile", "policy_engine/docker-compose.yml",
-    "policy_engine/pyproject.toml", "policy_engine/genoma_policy/__init__.py", "policy_engine/genoma_policy/cli.py",
+    "policy_engine/pyproject.toml", "policy_engine/README_GENOMA_POLICY.md", "policy_engine/tests/test_server.py",
+    "policy_engine/genoma_policy/__init__.py", "policy_engine/genoma_policy/cli.py",
     "policy_engine/genoma_policy/engine.py", "policy_engine/genoma_policy/gates_core.py",
     "policy_engine/genoma_policy/gates_audit.py", "policy_engine/genoma_policy/models.py",
     "policy_engine/genoma_policy/paths.py", "policy_engine/genoma_policy/ruleset.py",
@@ -85,6 +90,8 @@ ACTIVE_IDENTITY_SURFACES = (
     "locks/runtime-lock.json", ".github/workflows/genoma-policy-engine.yml",
     ".github/workflows/genoma-production-ceremony.yml", ".github/workflows/genoma-production-witness.yml",
     ".github/workflows/genoma-ngs-runtime-gate.yml", ".github/workflows/genoma-snp-array.yml",
+    "docs/DETERMINISTIC_ENGINE.md", "docs/PRODUCTION_CEREMONY.md", "docs/MAGALU_PRIVATE_MCP_SETUP.md",
+    "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md", "docs/SNP_ARRAY_PARTIAL_GENOME.md", "docs/PR_BODY.md",
 )
 
 
@@ -108,6 +115,11 @@ def validate(root: Path) -> list[str]:
         f"missing required path: {relative}"
         for relative in REQUIRED_PATHS
         if not (root / relative).is_file()
+    )
+    errors.extend(
+        f"superseded active ruleset path must be archived outside executable surfaces: {relative}"
+        for relative in FORBIDDEN_ACTIVE_PATHS
+        if (root / relative).exists()
     )
 
     active = []
