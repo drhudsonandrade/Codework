@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
+from policy_engine.genoma_policy import __version__
 from policy_engine.genoma_policy import paths as policy_paths
 from policy_engine.genoma_policy import ruleset as policy_ruleset
+from policy_engine.genoma_policy.engine import PolicyEngine
 from scripts import sealed_ruleset
+from scripts.bootstrap_attestation import verify_bootstrap_attestation
+from scripts.validate_repo import OLD_ACTIVE_TOKENS, validate_active_identity_text
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_NAME = "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
@@ -36,6 +41,9 @@ class V34ActivationContractTests(unittest.TestCase):
         self.assertEqual(manifest["raw_sha256"], EXPECTED_SHA)
         self.assertEqual(len(manifest["transport_parts"]), 13)
         self.assertFalse(manifest["active_at_rest"])
+        evidence = sealed_ruleset.verify_transport(ROOT / "normative" / "sealed")
+        self.assertEqual(evidence["raw_sha256"], EXPECTED_SHA)
+        self.assertEqual(evidence["section_range"], [0, 262])
 
     def test_external_v34_manifest_is_the_active_contract(self) -> None:
         current = ROOT / "manifests" / "RULESET_V3.4.sha256"
@@ -48,6 +56,47 @@ class V34ActivationContractTests(unittest.TestCase):
         self.assertIn("v3.4/VIGENTE/17/08/2026", text)
         self.assertIn(EXPECTED_NAME, text)
         self.assertNotIn("v3.3/VIGENTE/14/08/2026", text)
+        self.assertIn("verify_bootstrap_attestation", text)
+
+    def test_each_superseded_identity_token_fails_independently(self) -> None:
+        self.assertGreaterEqual(len(OLD_ACTIVE_TOKENS), 7)
+        for token in OLD_ACTIVE_TOKENS:
+            with self.subTest(token=token):
+                errors: list[str] = []
+                validate_active_identity_text(token, "fixture-active-surface", errors)
+                self.assertEqual(len(errors), 1)
+                self.assertIn(token, errors[0])
+
+    def test_bootstrap_attestation_is_digest_bound_and_complete(self) -> None:
+        path = ROOT / "deploy" / "attestations" / "bootstrap-project-v3.4.json"
+        evidence = verify_bootstrap_attestation(path)
+        self.assertEqual(evidence["status"], "VERIFICADO")
+        self.assertEqual(evidence["ruleset_identity"], "v3.4/VIGENTE/17/08/2026")
+        self.assertEqual(evidence["canonical_sha256"], EXPECTED_SHA)
+        self.assertEqual(len(evidence["checks_verified"]), 8)
+
+        with tempfile.TemporaryDirectory() as td:
+            tampered = Path(td) / path.name
+            data = json.loads(path.read_text(encoding="utf-8"))
+            data["checks"]["require_version_v3_4"] = False
+            tampered.write_text(json.dumps(data), encoding="utf-8")
+            with self.assertRaises(Exception):
+                verify_bootstrap_attestation(tampered)
+
+    def test_engine_metadata_uses_package_version(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            target, _ = sealed_ruleset.materialize(ROOT / "normative" / "sealed", Path(td))
+            ruleset = policy_ruleset.load_ruleset(target)
+            engine = PolicyEngine(ruleset)
+            manifest = {
+                "case_id": "VERSION",
+                "session_id": "VERSION",
+                "ruleset": {"version": EXPECTED_VERSION, "effective_date": EXPECTED_DATE, "sha256": EXPECTED_SHA},
+                "operation": {"name": "version-check", "analysis_relevant": False, "requires_real_calling": False, "output": "ANALYSIS"},
+                "claims": [], "sources": [], "section_attestations": [], "post_deployment": {},
+            }
+            report = engine.evaluate(manifest)
+            self.assertEqual(report.metadata["engine_version"], __version__)
 
 
 if __name__ == "__main__":
