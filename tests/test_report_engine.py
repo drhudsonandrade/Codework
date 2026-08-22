@@ -2,6 +2,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
+RULESET = {
+    "status": "VIGENTE",
+    "version": "v3.4",
+    "effective_date": "17/08/2026",
+    "sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
+}
+
 
 def passing_policy_evaluation():
     return {
@@ -34,10 +41,7 @@ class ReportEngineTest(unittest.TestCase):
         result = render_document("01", {}, mode="MODEL")
         self.assertIn("MODELO — NÃO É RESULTADO GENÉTICO", result["markdown"])
         self.assertEqual(result["metadata"]["mode"], "MODEL")
-        self.assertEqual(
-            result["metadata"]["ruleset_required"],
-            {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026"},
-        )
+        self.assertEqual(result["metadata"]["ruleset_required"], RULESET)
 
     def test_final_mode_fails_closed_without_publication_gate(self):
         from reporting.engine import ReportReleaseError, render_document
@@ -45,12 +49,26 @@ class ReportEngineTest(unittest.TestCase):
         with self.assertRaises(ReportReleaseError):
             render_document("01", {"case_id": "CASE-001"}, mode="FINAL")
 
+    def test_final_mode_rejects_wrong_ruleset_digest(self):
+        from reporting.engine import ReportReleaseError, render_document
+
+        bad_ruleset = dict(RULESET)
+        bad_ruleset["sha256"] = "0" * 64
+        data = {
+            "case_id": "CASE-001",
+            "ruleset": bad_ruleset,
+            "publication_gate": {"passed": True, "consent_verified": True, "qc_verified": True, "evidence_verified": True, "placeholders_resolved": True},
+            "policy_evaluation": passing_policy_evaluation(),
+        }
+        with self.assertRaises(ReportReleaseError):
+            render_document("01", data, mode="FINAL")
+
     def test_final_mode_rejects_unready_policy_evaluation(self):
         from reporting.engine import ReportReleaseError, render_document
 
         data = {
             "case_id": "CASE-001",
-            "ruleset": {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026"},
+            "ruleset": dict(RULESET),
             "publication_gate": {"passed": True, "consent_verified": True, "qc_verified": True, "evidence_verified": True, "placeholders_resolved": True},
             "policy_evaluation": {"ready_for_requested_operation": False, "planes": {}, "gates": []},
         }
@@ -64,7 +82,7 @@ class ReportEngineTest(unittest.TestCase):
         policy["gates"] = [{"gate": "FINAL_AUDIT_GATE", "state": "FAIL", "blocking": True}]
         data = {
             "case_id": "CASE-001",
-            "ruleset": {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026"},
+            "ruleset": dict(RULESET),
             "publication_gate": {"passed": True, "consent_verified": True, "qc_verified": True, "evidence_verified": True, "placeholders_resolved": True},
             "policy_evaluation": policy,
         }
@@ -77,7 +95,7 @@ class ReportEngineTest(unittest.TestCase):
         data = {
             "case_id": "CASE-001",
             "summary": "Nenhum achado fictício é inserido pelo motor.",
-            "ruleset": {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026"},
+            "ruleset": dict(RULESET),
             "publication_gate": {
                 "passed": True,
                 "consent_verified": True,
@@ -97,6 +115,7 @@ class ReportEngineTest(unittest.TestCase):
             markdown = paths["markdown"].read_text(encoding="utf-8")
             self.assertIn("POST-DEPLOYMENT: PENDENTE", markdown)
             self.assertIn("Ruleset: v3.4 / VIGENTE / 17/08/2026", markdown)
+            self.assertIn(RULESET["sha256"], markdown)
 
 
 if __name__ == "__main__":
