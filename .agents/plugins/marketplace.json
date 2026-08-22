@@ -1,0 +1,26 @@
+{
+  "name": "codework-codex",
+  "interface": {
+    "displayName": "Codework Codex Plugins"
+  },
+  "plugins": [
+    {
+      "name": "coderabbit",
+      "source": {
+        "source": "git-subdir",
+        "url": "openai/plugins",
+        "path": "plugins/coderabbit",
+        "ref": "main",
+        "sha": "11c74d6ba24d3a6d48f54a194cd00ef3beea18f9"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL",
+        "products": [
+          "CODEX"
+        ]
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}
