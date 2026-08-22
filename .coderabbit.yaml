@@ -38,13 +38,6 @@ reviews:
     auto_pause_after_reviewed_commits: 0
     base_branches:
       - "main"
-    ignore_title_keywords:
-      - "WIP"
-      - "DO NOT MERGE"
-      - "[skip review]"
-    ignore_usernames:
-      - "dependabot[bot]"
-      - "github-actions[bot]"
 
   finishing_touches:
     docstrings:
@@ -193,6 +186,12 @@ reviews:
         Adapters devem permanecer interfaces opcionais. Não introduza dependência runtime
         obrigatória do core nem bypass dos contratos de policy/evidence/audit.
 
+    - path: "evidence_adapters/**"
+      instructions: |
+        Evidence adapters devem permanecer interfaces opcionais e auditáveis. Verifique
+        proveniência, status de recuperação, digest, locator e fail-closed. Não permita
+        promover fonte inacessível para VERIFICADO nem criar dependência obrigatória do core.
+
     - path: "reporting/**"
       instructions: |
         Relatórios devem ser derivados de evidência disponível. Sinalize inferências não
@@ -236,7 +235,7 @@ reviews:
 
   pre_merge_checks:
     title:
-      mode: "warning"
+      mode: "error"
       requirements: >-
         O título deve descrever uma única mudança técnica e não deve afirmar
         "fix", "validated", "PASS" ou equivalente sem evidência no PR.
