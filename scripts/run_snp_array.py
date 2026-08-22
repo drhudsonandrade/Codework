@@ -90,7 +90,7 @@ def load_verified_attestation(value: str, *, assertion: str, input_path: Path) -
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="GENOMA v3.3 fail-closed SNP-array QC and baseline observation extractor")
+    p = argparse.ArgumentParser(description="GENOMA v3.4 fail-closed SNP-array QC and baseline observation extractor")
     p.add_argument("--input", required=True)
     p.add_argument("--case-id", required=True)
     p.add_argument("--build", choices=["GRCh37", "GRCh38"])
