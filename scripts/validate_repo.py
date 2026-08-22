@@ -29,23 +29,23 @@ REQUIRED_PATHS = (
     "scripts/__init__.py", "scripts/sealed_ruleset.py", "scripts/check_versions.sh", "scripts/fetch_grch38.sh",
     "scripts/build_bwa_mem2_index.sh", "scripts/validate_grch38.sh", "scripts/validate_bwa_mem2_functional.sh",
     "scripts/generate_canary.py", "scripts/score_variants.py", "scripts/run_canary.sh", "scripts/verify_ruleset.sh",
-    "scripts/materialize_ruleset.py", "scripts/run_live_post_deployment_smoke.py", "scripts/runtime_resource_gate.py",
-    "scripts/runtime_stack.py", "scripts/prepare_latest_candidate.py", "scripts/promote_latest_candidate.py",
-    "scripts/freshness_gate.py", "scripts/latest_runtime_resource_gate.py", "scripts/verify_runtime_gate_manifest.py",
-    "scripts/wgs_consent_gate.py", "scripts/wgs_input_gate.py", "scripts/wgs_align_or_stage.sh",
-    "scripts/build_wgs_curated_manifest.py", "scripts/query_evidence.py", "scripts/build_adapter_capabilities.py",
-    "scripts/run_snp_array.py", "scripts/annotate_partial_genome.py", "scripts/build_array_case_manifest.py",
-    "scripts/verify_prebuilt_bwa_mem2_bundle.py", "scripts/verify_supply_chain_lock.py",
-    "scripts/generate_report.py", "scripts/generate_all_reports.py", "reporting/__init__.py", "reporting/catalog.json",
-    "reporting/engine.py", "reporting/editorial_v3.py", "reporting/editorial_v3_hifi.py", "reporting/requirements.txt",
-    "reporting/reference_v3_manifest.json", "template_store/v3.0/MANIFEST.json", "locks/actions-lock.json",
-    "locks/runtime-lock.json", "evidence_adapters/__init__.py", "policy_engine/pyproject.toml",
-    "policy_engine/genoma_policy/engine.py", "policy_engine/genoma_policy/attestation.py",
-    "policy_engine/genoma_policy/ledger.py", "policy_engine/genoma_policy/version.py",
-    "policy_engine/policy/schema/execution-manifest.schema.json", "policy_engine/Dockerfile",
-    "policy_engine/docker-compose.yml", "mcp/package.json", "mcp/package-lock.json", "mcp/tsconfig.json", "mcp/src/server.ts",
-    "deploy/docker-compose.yml", "deploy/attestations/bootstrap-project-v3.4.json",
-    "adapters/README.md", "adapters/config.example.json",
+    "scripts/materialize_ruleset.py", "scripts/bootstrap_attestation.py", "scripts/run_live_post_deployment_smoke.py",
+    "scripts/runtime_resource_gate.py", "scripts/runtime_stack.py", "scripts/prepare_latest_candidate.py",
+    "scripts/promote_latest_candidate.py", "scripts/freshness_gate.py", "scripts/latest_runtime_resource_gate.py",
+    "scripts/verify_runtime_gate_manifest.py", "scripts/wgs_consent_gate.py", "scripts/wgs_input_gate.py",
+    "scripts/wgs_align_or_stage.sh", "scripts/build_wgs_curated_manifest.py", "scripts/query_evidence.py",
+    "scripts/build_adapter_capabilities.py", "scripts/run_snp_array.py", "scripts/annotate_partial_genome.py",
+    "scripts/build_array_case_manifest.py", "scripts/verify_prebuilt_bwa_mem2_bundle.py",
+    "scripts/verify_supply_chain_lock.py", "scripts/generate_report.py", "scripts/generate_all_reports.py",
+    "reporting/__init__.py", "reporting/catalog.json", "reporting/engine.py", "reporting/editorial_v3.py",
+    "reporting/editorial_v3_hifi.py", "reporting/requirements.txt", "reporting/reference_v3_manifest.json",
+    "template_store/v3.0/MANIFEST.json", "locks/actions-lock.json", "locks/runtime-lock.json",
+    "evidence_adapters/__init__.py", "policy_engine/pyproject.toml", "policy_engine/genoma_policy/engine.py",
+    "policy_engine/genoma_policy/attestation.py", "policy_engine/genoma_policy/ledger.py",
+    "policy_engine/genoma_policy/version.py", "policy_engine/policy/schema/execution-manifest.schema.json",
+    "policy_engine/Dockerfile", "policy_engine/docker-compose.yml", "mcp/package.json", "mcp/package-lock.json",
+    "mcp/tsconfig.json", "mcp/src/server.ts", "deploy/docker-compose.yml",
+    "deploy/attestations/bootstrap-project-v3.4.json", "adapters/README.md", "adapters/config.example.json",
     "docs/FALLOW_SECURITY_REVIEW.md", "docs/GITHUB_MOBILE_IMPORT.md", "docs/MAGALU_PRIVATE_MCP_SETUP.md",
     "docs/PRE_DEPLOYMENT_VALIDATION_2026-08-15.md", "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md", "docs/PR_BODY.md",
     "docs/DETERMINISTIC_ENGINE.md", "docs/PRODUCTION_CEREMONY.md", "docs/PORTABILITY_MATRIX.md",
@@ -70,35 +70,18 @@ OLD_ACTIVE_TOKENS = (
     "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a",
 )
 ACTIVE_IDENTITY_SURFACES = (
-    "scripts/run_live_post_deployment_smoke.py",
-    "scripts/verify_ruleset.sh",
-    "scripts/genoma_audit.py",
-    "scripts/run_snp_array.py",
-    "scripts/build_wgs_curated_manifest.py",
-    "scripts/build_array_case_manifest.py",
-    "array_pipeline/qc.py",
-    "array_pipeline/annotation.py",
-    "workflows/wgs.nf",
-    "workflows/array.nf",
-    "policy_engine/Dockerfile",
-    "policy_engine/docker-compose.yml",
-    "policy_engine/pyproject.toml",
-    "policy_engine/genoma_policy/__init__.py",
-    "policy_engine/genoma_policy/cli.py",
-    "policy_engine/genoma_policy/engine.py",
-    "policy_engine/genoma_policy/gates_core.py",
-    "policy_engine/genoma_policy/gates_audit.py",
-    "policy_engine/genoma_policy/models.py",
-    "policy_engine/genoma_policy/paths.py",
-    "policy_engine/genoma_policy/ruleset.py",
-    "policy_engine/genoma_policy/smoke.py",
-    "policy_engine/policy/rego/genoma.rego",
-    "policy_engine/policy/rego/genoma_test.rego",
-    "policy_engine/policy/schema/execution-manifest.schema.json",
-    "locks/runtime-lock.json",
-    ".github/workflows/genoma-policy-engine.yml",
-    ".github/workflows/genoma-production-ceremony.yml",
-    ".github/workflows/genoma-production-witness.yml",
+    "scripts/run_live_post_deployment_smoke.py", "scripts/verify_ruleset.sh", "scripts/genoma_audit.py",
+    "scripts/run_snp_array.py", "scripts/build_wgs_curated_manifest.py", "scripts/build_array_case_manifest.py",
+    "array_pipeline/qc.py", "array_pipeline/annotation.py", "workflows/wgs.nf", "workflows/array.nf",
+    "policy_engine/Dockerfile", "policy_engine/docker-compose.yml", "policy_engine/pyproject.toml",
+    "policy_engine/genoma_policy/__init__.py", "policy_engine/genoma_policy/cli.py",
+    "policy_engine/genoma_policy/engine.py", "policy_engine/genoma_policy/gates_core.py",
+    "policy_engine/genoma_policy/gates_audit.py", "policy_engine/genoma_policy/models.py",
+    "policy_engine/genoma_policy/paths.py", "policy_engine/genoma_policy/ruleset.py",
+    "policy_engine/genoma_policy/smoke.py", "policy_engine/policy/rego/genoma.rego",
+    "policy_engine/policy/rego/genoma_test.rego", "policy_engine/policy/schema/execution-manifest.schema.json",
+    "locks/runtime-lock.json", ".github/workflows/genoma-policy-engine.yml",
+    ".github/workflows/genoma-production-ceremony.yml", ".github/workflows/genoma-production-witness.yml",
 )
 
 
@@ -107,6 +90,13 @@ def validate_sealed_ruleset(root: Path, errors: list[str]) -> None:
         verify_transport(root / "normative" / "sealed")
     except (OSError, UnicodeError, ValueError, SealedRulesetError) as exc:
         errors.append(f"sealed normative transport invalid: {type(exc).__name__}: {exc}")
+
+
+def validate_active_identity_text(text: str, relative: str, errors: list[str]) -> None:
+    """Reject each superseded active-identity token independently."""
+    for token in OLD_ACTIVE_TOKENS:
+        if token in text:
+            errors.append(f"active ruleset surface still references superseded identity: {relative}: {token}")
 
 
 def validate(root: Path) -> list[str]:
@@ -138,12 +128,8 @@ def validate(root: Path) -> list[str]:
 
     for relative in ACTIVE_IDENTITY_SURFACES:
         path = root / relative
-        if not path.is_file():
-            continue
-        text = path.read_text(encoding="utf-8", errors="replace")
-        for token in OLD_ACTIVE_TOKENS:
-            if token in text:
-                errors.append(f"active ruleset surface still references superseded identity: {relative}: {token}")
+        if path.is_file():
+            validate_active_identity_text(path.read_text(encoding="utf-8", errors="replace"), relative, errors)
 
     manifest = root / "manifests/GRCh38.sources.tsv"
     if manifest.is_file():
