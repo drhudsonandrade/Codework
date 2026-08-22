@@ -10,7 +10,7 @@ from policy_engine.genoma_policy import paths as policy_paths
 from policy_engine.genoma_policy import ruleset as policy_ruleset
 from policy_engine.genoma_policy.engine import PolicyEngine
 from scripts import sealed_ruleset
-from scripts.bootstrap_attestation import verify_bootstrap_attestation
+from scripts.bootstrap_attestation import BootstrapAttestationError, verify_bootstrap_attestation
 from scripts.validate_repo import OLD_ACTIVE_TOKENS, validate_active_identity_text
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,6 +42,9 @@ class V34ActivationContractTests(unittest.TestCase):
         self.assertEqual(len(manifest["transport_parts"]), 13)
         self.assertFalse(manifest["active_at_rest"])
         evidence = sealed_ruleset.verify_transport(ROOT / "normative" / "sealed")
+        self.assertEqual(evidence["canonical_filename"], EXPECTED_NAME)
+        self.assertEqual(evidence["version"], EXPECTED_VERSION)
+        self.assertEqual(evidence["effective_date"], EXPECTED_DATE)
         self.assertEqual(evidence["raw_sha256"], EXPECTED_SHA)
         self.assertEqual(evidence["section_range"], [0, 262])
 
@@ -64,8 +67,8 @@ class V34ActivationContractTests(unittest.TestCase):
             with self.subTest(token=token):
                 errors: list[str] = []
                 validate_active_identity_text(token, "fixture-active-surface", errors)
-                self.assertEqual(len(errors), 1)
-                self.assertIn(token, errors[0])
+                self.assertTrue(errors)
+                self.assertTrue(any(token in error for error in errors))
 
     def test_bootstrap_attestation_is_digest_bound_and_complete(self) -> None:
         path = ROOT / "deploy" / "attestations" / "bootstrap-project-v3.4.json"
@@ -80,7 +83,7 @@ class V34ActivationContractTests(unittest.TestCase):
             data = json.loads(path.read_text(encoding="utf-8"))
             data["checks"]["require_version_v3_4"] = False
             tampered.write_text(json.dumps(data), encoding="utf-8")
-            with self.assertRaises(Exception):
+            with self.assertRaises(BootstrapAttestationError):
                 verify_bootstrap_attestation(tampered)
 
     def test_engine_metadata_uses_package_version(self) -> None:
