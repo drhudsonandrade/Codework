@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-RULESET_SHA = "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a"
+RULESET_SHA = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
 
 
 def run(cmd: list[str]) -> tuple[int, str]:
@@ -81,7 +81,7 @@ def audit(*, allow_template_sealed_only: bool = False) -> dict:
     return {
         "schema": "genoma-v0.8-four-plane-audit-v1",
         "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "ruleset": {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026", "sha256": RULESET_SHA},
+        "ruleset": {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026", "sha256": RULESET_SHA},
         "operational_status": "VERIFICADO" if not blocking_failures else "NÃO DISPONÍVEL",
         "four_planes": planes,
         "checks": checks,
