@@ -41,9 +41,11 @@ REQUIRED_PATHS = (
     "reporting/reference_v3_manifest.json", "template_store/v3.0/MANIFEST.json", "locks/actions-lock.json",
     "locks/runtime-lock.json", "evidence_adapters/__init__.py", "policy_engine/pyproject.toml",
     "policy_engine/genoma_policy/engine.py", "policy_engine/genoma_policy/attestation.py",
-    "policy_engine/genoma_policy/ledger.py", "policy_engine/policy/schema/execution-manifest.schema.json",
-    "policy_engine/Dockerfile", "mcp/package.json", "mcp/package-lock.json", "mcp/tsconfig.json", "mcp/src/server.ts",
-    "deploy/docker-compose.yml", "adapters/README.md", "adapters/config.example.json",
+    "policy_engine/genoma_policy/ledger.py", "policy_engine/genoma_policy/version.py",
+    "policy_engine/policy/schema/execution-manifest.schema.json", "policy_engine/Dockerfile",
+    "policy_engine/docker-compose.yml", "mcp/package.json", "mcp/package-lock.json", "mcp/tsconfig.json", "mcp/src/server.ts",
+    "deploy/docker-compose.yml", "deploy/attestations/bootstrap-project-v3.4.json",
+    "adapters/README.md", "adapters/config.example.json",
     "docs/FALLOW_SECURITY_REVIEW.md", "docs/GITHUB_MOBILE_IMPORT.md", "docs/MAGALU_PRIVATE_MCP_SETUP.md",
     "docs/PRE_DEPLOYMENT_VALIDATION_2026-08-15.md", "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md", "docs/PR_BODY.md",
     "docs/DETERMINISTIC_ENGINE.md", "docs/PRODUCTION_CEREMONY.md", "docs/PORTABILITY_MATRIX.md",
@@ -60,14 +62,38 @@ FORBIDDEN_SUFFIXES = (".fastq", ".fq", ".bam", ".bai", ".cram", ".crai", ".vcf",
 SKIP_PARTS = {".git", "node_modules", "dist", "__pycache__", ".pytest_cache"}
 OLD_ACTIVE_TOKENS = (
     "REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt",
+    "RULESET_V3.3.sha256",
+    '"v3.3"',
+    "GENOMA-V3.3",
+    "14/08/2026",
+    "2026-08-14",
     "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a",
 )
 ACTIVE_IDENTITY_SURFACES = (
     "scripts/run_live_post_deployment_smoke.py",
+    "scripts/verify_ruleset.sh",
+    "scripts/genoma_audit.py",
+    "scripts/run_snp_array.py",
+    "scripts/build_wgs_curated_manifest.py",
+    "scripts/build_array_case_manifest.py",
     "array_pipeline/qc.py",
     "array_pipeline/annotation.py",
-    "scripts/build_array_case_manifest.py",
+    "workflows/wgs.nf",
+    "workflows/array.nf",
+    "policy_engine/Dockerfile",
+    "policy_engine/docker-compose.yml",
+    "policy_engine/pyproject.toml",
+    "policy_engine/genoma_policy/__init__.py",
+    "policy_engine/genoma_policy/cli.py",
+    "policy_engine/genoma_policy/engine.py",
+    "policy_engine/genoma_policy/gates_core.py",
+    "policy_engine/genoma_policy/gates_audit.py",
+    "policy_engine/genoma_policy/models.py",
+    "policy_engine/genoma_policy/paths.py",
+    "policy_engine/genoma_policy/ruleset.py",
+    "policy_engine/genoma_policy/smoke.py",
     "policy_engine/policy/rego/genoma.rego",
+    "policy_engine/policy/rego/genoma_test.rego",
     "policy_engine/policy/schema/execution-manifest.schema.json",
     "locks/runtime-lock.json",
     ".github/workflows/genoma-policy-engine.yml",
@@ -85,9 +111,11 @@ def validate_sealed_ruleset(root: Path, errors: list[str]) -> None:
 
 def validate(root: Path) -> list[str]:
     errors: list[str] = []
-    for relative in REQUIRED_PATHS:
-        if not (root / relative).is_file():
-            errors.append(f"missing required path: {relative}")
+    errors.extend(
+        f"missing required path: {relative}"
+        for relative in REQUIRED_PATHS
+        if not (root / relative).is_file()
+    )
 
     active = []
     for candidate in root.rglob("REGRAS_PROJETO_GENOMA*.txt"):
@@ -115,7 +143,7 @@ def validate(root: Path) -> list[str]:
         text = path.read_text(encoding="utf-8", errors="replace")
         for token in OLD_ACTIVE_TOKENS:
             if token in text:
-                errors.append(f"active ruleset surface still references v3.3: {relative}: {token}")
+                errors.append(f"active ruleset surface still references superseded identity: {relative}: {token}")
 
     manifest = root / "manifests/GRCh38.sources.tsv"
     if manifest.is_file():
@@ -251,7 +279,7 @@ def main() -> None:
     print("PASS\tevidence_adapter_contract\tClinVar/ClinGen/CPIC/ClinPGx/gnomAD/PGS Catalog")
     print("PASS\tsupply_chain_contract\tworkflow/action/container lock paths present")
     print("PASS\treporting_contract\t11-model deterministic renderer and reference identities")
-    print("PASS\toptional_adapters\tcore has no Cloudflare/Temporal/Supabase/OpenAI runtime dependency")
+    print("PASS\toptional_adapters\tcore has no external runtime dependency")
 
 
 if __name__ == "__main__":
