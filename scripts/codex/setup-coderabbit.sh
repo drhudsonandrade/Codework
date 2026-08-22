@@ -9,6 +9,10 @@ if ! command -v codex >/dev/null 2>&1; then
   exit 2
 fi
 
+# Este marketplace fica dentro do repositório, portanto precisa ser registrado
+# explicitamente no Codex antes da instalação do plugin.
+codex plugin marketplace add "$REPO_ROOT" --json
+
 codex plugin add coderabbit@codework-codex --json
 
 if ! command -v coderabbit >/dev/null 2>&1; then
@@ -24,6 +28,7 @@ if ! coderabbit auth status --agent >/dev/null 2>&1; then
 fi
 
 coderabbit auth status --agent
+codex plugin marketplace list --json
 codex plugin list --marketplace codework-codex --json
 
-echo "CodeRabbit Codex plugin + CLI configurados para este workspace."
+echo "CodeRabbit Codex plugin + CLI configurados para este workspace. Reinicie/abra nova sessão do Codex antes de usar o plugin."
