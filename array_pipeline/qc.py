@@ -15,9 +15,9 @@ from typing import Any, TextIO
 
 RULESET = {
     "status": "VIGENTE",
-    "version": "v3.3",
-    "effective_date": "14/08/2026",
-    "sha256": "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a",
+    "version": "v3.4",
+    "effective_date": "17/08/2026",
+    "sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
 }
 
 HARMONIZED_COLUMNS = [
