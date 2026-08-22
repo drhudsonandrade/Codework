@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import normative
+from reporting.consent import ConsentError, validate_record as validate_consent
 from reporting.provenance import witness_verdict
 
 
@@ -31,6 +32,7 @@ def build_manifest(
     annotation_path: Path,
     *,
     consent: dict[str, Any] | None = None,
+    consent_sha256: str | None = None,
     witness: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble the manifest the policy engine evaluates for one array case.
@@ -57,7 +59,35 @@ def build_manifest(
     observed = annotation.get("observations", []) if isinstance(annotation.get("observations"), list) else []
     sources = [x for x in annotation.get("evidence_retrievals", []) if isinstance(x, dict) and x.get("status") == "VERIFICADO"]
     input_sha = str(qc.get("input", {}).get("sha256") or "")
-    consent = consent or {}
+    consent_block: dict[str, Any] = {
+        "verified": False,
+        "version": None,
+        "authorized_domains": [],
+        "basis": "nenhum registro de consentimento foi fornecido a esta execução",
+    }
+    if consent:
+        try:
+            validate_consent(consent, case_id=qc.get("case_id"), input_sha256=input_sha)
+        except ConsentError as exc:
+            # Refused, not silently downgraded: the operator supplied something they believed
+            # was consent, and the manifest must say why it does not authorise this run.
+            consent_block["basis"] = f"registro de consentimento recusado: {exc}"
+        else:
+            consent_block = {
+                "verified": True,
+                "version": consent.get("version"),
+                "authorized_domains": list(consent.get("authorized_domains") or []),
+                "subject_id": consent.get("subject_id"),
+                "granted_at": consent.get("granted_at"),
+                "expires_at": consent.get("expires_at"),
+                "instrument": consent.get("instrument"),
+                "instrument_version": consent.get("instrument_version"),
+                "captured_by": consent.get("captured_by"),
+                # The exact record evaluated, so the manifest and the report can be shown to
+                # have acted on the same bytes.
+                "record_sha256": consent_sha256,
+                "basis": consent.get("basis"),
+            }
     # `post_deployment_status` was the literal "PENDING" beside a POST_DEPLOYMENT_GATE that
     # reads `manifest["post_deployment"]` — a key this builder never wrote. The gate therefore
     # reported unmet criteria on every run regardless of any evidence, and the string next to
@@ -92,16 +122,12 @@ def build_manifest(
             "requires_real_calling": False,
             "output": "ANALYSIS",
         },
-        # The consent contract, read from the operator's record. Absent, it stays
-        # unverified and CONSENT_GATE fails — which is the correct answer for a run that
-        # carries no consent instrument, not a reason to omit the block.
-        "consent": {
-            "verified": bool(consent.get("verified")),
-            "version": consent.get("version"),
-            "authorized_domains": consent.get("authorized_domains") or [],
-            "basis": consent.get("basis")
-            or "nenhum registro de consentimento foi fornecido a esta execução",
-        },
+        # The consent contract, read from the operator's record and *validated* against this
+        # case and these bytes. It used to be copied field by field out of whatever dict the
+        # caller supplied, so `{"verified": true, "version": "x", "authorized_domains":
+        # ["CLÍNICO"]}` cleared CONSENT_GATE — three fields anyone can type, standing between
+        # a genomic file and a published report about a person.
+        "consent": consent_block,
         "qc": {
             "status": qc.get("operational_status"),
             "passed": qc.get("gates", {}).get("LIMITED_INTERPRETATION_GATE", {}).get("state") == "PASS",
@@ -199,9 +225,10 @@ def main() -> int:
     p.add_argument("--output", required=True)
     p.add_argument(
         "--consent",
-        help="JSON (or path) with the operator's consent record: verified, version, "
-        "authorized_domains. Without it CONSENT_GATE fails, which is the honest answer "
-        "for a run that carries no consent instrument.",
+        help="path to the record written by scripts/capture_consent.py. It used to accept "
+        "inline JSON, which meant the three fields CONSENT_GATE checks could be typed on the "
+        "command line. Without a record the gate fails, which is the honest answer for a run "
+        "that carries no consent instrument.",
     )
     p.add_argument(
         "--post-deployment-witness",
@@ -214,12 +241,13 @@ def main() -> int:
         qc = json.loads(qc_path.read_text(encoding="utf-8"))
         annotation = json.loads(annotation_path.read_text(encoding="utf-8"))
         consent = None
+        consent_sha256 = None
         if args.consent:
-            candidate = Path(args.consent)
-            raw = candidate.read_text(encoding="utf-8") if candidate.is_file() else args.consent
-            consent = json.loads(raw)
+            raw = Path(args.consent).read_bytes()
+            consent = json.loads(raw.decode("utf-8"))
             if not isinstance(consent, dict):
                 raise ValueError("consent record must decode to a JSON object")
+            consent_sha256 = hashlib.sha256(raw).hexdigest()
         witness = None
         if args.post_deployment_witness:
             witness = json.loads(
@@ -228,7 +256,8 @@ def main() -> int:
             if not isinstance(witness, dict):
                 raise ValueError("post-deployment witness must decode to a JSON object")
         payload = build_manifest(
-            qc, annotation, qc_path, annotation_path, consent=consent, witness=witness
+            qc, annotation, qc_path, annotation_path,
+            consent=consent, consent_sha256=consent_sha256, witness=witness,
         )
     except (ValueError, OSError, json.JSONDecodeError) as exc:
         raise SystemExit(f"NÃO DISPONÍVEL: {exc}")

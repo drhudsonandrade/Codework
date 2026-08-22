@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tests.attestations import policy_evaluation_file
+from tests.attestations import consent_for, policy_evaluation_file
 from array_pipeline.completeness import build_completeness_matrix, write_matrix
 from array_pipeline.pharmacogenomics import (
     PgxRegistryError,
@@ -617,7 +617,10 @@ class ReportIntegrationTest(unittest.TestCase):
 
         matrix_path, passport, _ = _artifacts(root, rows, registry=registry)
         passport_path = write_passport(passport, root / "passport.json")
-        return build_payload(passport_path, matrix_path, policy_evaluation_file(root)), passport
+        return build_payload(
+            passport_path, matrix_path, policy_evaluation_file(root),
+            consent=consent_for(root, matrix_path),
+        ), passport
 
     def test_the_compiled_payload_passes_the_provenance_gate(self):
         from reporting.provenance import provenance_blockers

@@ -56,10 +56,17 @@ def _verdict_file(verdict: dict) -> Path:
     return path
 
 
-def _payload(verdict: dict | None) -> dict:
+def _consent_file() -> Path:
+    from tests.attestations import consent_file
+
+    return consent_file(Path(tempfile.mkdtemp()), case_id="CASO-AUT")
+
+
+def _payload(verdict: dict | None, *, consent: Path | None = None) -> dict:
     compiler = PayloadCompiler(
         case_id="CASO-AUT", report_id="09",
         policy_evaluation=_verdict_file(verdict) if verdict is not None else None,
+        consent=consent,
     )
     compiler.register(Artifact.from_payload("array-qc", ARTIFACT))
     compiler.derive(
@@ -223,8 +230,18 @@ class RenderRefusesAnUnauthorisedPayloadTest(unittest.TestCase):
     def test_final_publication_proceeds_on_a_real_verdict(self):
         from reporting.engine import render_document
 
-        rendered = render_document("09", _payload(PASS_VERDICT), mode="FINAL")
+        rendered = render_document(
+            "09", _payload(PASS_VERDICT, consent=_consent_file()), mode="FINAL"
+        )
         self.assertIn("markdown", rendered)
+
+    def test_a_verdict_alone_no_longer_publishes_without_a_consent_record(self):
+        """CONSENT_GATE PASS says a consent exists, not that it covers this report."""
+        from reporting.engine import ReportReleaseError, render_document
+
+        with self.assertRaises(ReportReleaseError) as caught:
+            render_document("09", _payload(PASS_VERDICT), mode="FINAL")
+        self.assertIn("publication_gate:consent_scope_verified", str(caught.exception))
 
 
 class ArrayManifestAnswersItsGatesTest(unittest.TestCase):
@@ -269,12 +286,48 @@ class ArrayManifestAnswersItsGatesTest(unittest.TestCase):
         self.assertIn("nenhum registro de consentimento", consent["basis"])
 
     def test_a_supplied_consent_record_is_carried_not_invented(self):
-        consent = self._manifest(
-            {"verified": True, "version": "v2", "authorized_domains": ["CLÍNICO"]}
-        )["consent"]
+        from tests.attestations import consent_record
+
+        record = consent_record(
+            case_id="CASO-AUT", input_sha256="a" * 64,
+            version="v2", authorized_domains=["CLÍNICO"],
+        )
+        consent = self._manifest(record)["consent"]
         self.assertIs(consent["verified"], True)
         self.assertEqual(consent["version"], "v2")
         self.assertEqual(consent["authorized_domains"], ["CLÍNICO"])
+        self.assertEqual(consent["subject_id"], record["subject_id"])
+
+    def test_three_typed_fields_no_longer_clear_the_gate(self):
+        """The exact payload that used to pass: the whole of what consent had to be.
+
+        `--consent '{"verified": true, "version": "x", "authorized_domains": ["CLÍNICO"]}'`
+        satisfied every check CONSENT_GATE makes, and CONSENT_GATE is what stands between a
+        genomic file and a published report about a person.
+        """
+        consent = self._manifest(
+            {"verified": True, "version": "v2", "authorized_domains": ["CLÍNICO"]}
+        )["consent"]
+        self.assertIs(consent["verified"], False)
+        self.assertIn("recusado", consent["basis"])
+
+    def test_a_record_for_another_case_does_not_authorise_this_one(self):
+        from tests.attestations import consent_record
+
+        consent = self._manifest(
+            consent_record(case_id="OUTRO-CASO", input_sha256="a" * 64)
+        )["consent"]
+        self.assertIs(consent["verified"], False)
+        self.assertIn("não viaja entre casos", consent["basis"])
+
+    def test_a_record_for_other_bytes_does_not_authorise_this_file(self):
+        from tests.attestations import consent_record
+
+        consent = self._manifest(
+            consent_record(case_id="CASO-AUT", input_sha256="b" * 64)
+        )["consent"]
+        self.assertIs(consent["verified"], False)
+        self.assertIn("não viaja entre arquivos", consent["basis"])
 
     def test_the_inputs_carry_provenance_for_the_provenance_gate(self):
         for artifact in self._manifest()["inputs"]:

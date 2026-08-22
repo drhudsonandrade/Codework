@@ -94,6 +94,7 @@ def build_payload(
     passport_path: Path | None,
     policy_evaluation: Path | None = None,
     post_deployment_witness: Path | None = None,
+    consent: Path | None = None,
 ) -> dict:
     matrix = Artifact.from_path("completeness-matrix", matrix_path)
     passport = Artifact.from_path("pgx-passport", passport_path) if passport_path else None
@@ -104,6 +105,7 @@ def build_payload(
         report_id=REPORT_ID,
         policy_evaluation=policy_evaluation,
         post_deployment_witness=post_deployment_witness,
+        consent=consent,
     )
     compiler.register(matrix)
     if passport:

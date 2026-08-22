@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tests.attestations import policy_evaluation_file
+from tests.attestations import consent_for, policy_evaluation_file
 
 from tests.test_genome_completeness import CompletenessMatrixTest
 
@@ -43,8 +43,11 @@ class OnePageSummaryTest(unittest.TestCase):
         from scripts.build_one_page_summary import build_payload
 
         matrix_path, passport_path = self._artifacts(root)
-        return build_payload(matrix_path, passport_path if with_passport else None,
-                             policy_evaluation_file(matrix_path.parent))
+        return build_payload(
+            matrix_path, passport_path if with_passport else None,
+            policy_evaluation_file(matrix_path.parent),
+            consent=consent_for(matrix_path.parent, matrix_path),
+        )
 
     def test_the_sections_match_the_catalogue_for_report_10(self):
         from reporting.engine import load_catalog

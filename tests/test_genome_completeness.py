@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tests.attestations import policy_evaluation_file, provenance_for
+from tests.attestations import consent_for, policy_evaluation_file, provenance_for
 from array_pipeline.completeness import (
     CLASSES,
     NAO_DETECTADO,
@@ -306,7 +306,10 @@ class CompletenessReportTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as td:
             matrix, matrix_path, qc_path = self._artifacts(Path(td))
-            payload = build_payload(matrix_path, qc_path, policy_evaluation_file(Path(td)))
+            payload = build_payload(
+                matrix_path, qc_path, policy_evaluation_file(Path(td)),
+                consent=consent_for(Path(td), matrix_path),
+            )
             rendered = render_document("09", payload, mode="FINAL")
 
         markdown = rendered["markdown"]

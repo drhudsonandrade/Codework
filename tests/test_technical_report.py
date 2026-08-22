@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tests.attestations import policy_evaluation_file
+from tests.attestations import consent_file, policy_evaluation_file
 from array_pipeline.completeness import build_completeness_matrix, write_matrix
 from array_pipeline.qc import inspect_array
 
@@ -124,7 +124,10 @@ class TechnicalReportTest(unittest.TestCase):
                 ],
             }
         return build_payload(
-            qc_path, matrix_path, probe_path, policy_evaluation_file(qc_path.parent, verdict)
+            qc_path, matrix_path, probe_path,
+            policy_evaluation_file(qc_path.parent, verdict),
+            consent=consent_file(qc_path.parent, case_id=str(json.loads(
+                matrix_path.read_text(encoding="utf-8")).get("case_id"))),
         )
 
     def _probe(self):

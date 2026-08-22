@@ -86,3 +86,59 @@ def policy_evaluation_file(root: Path, verdict: dict[str, Any] | None = None) ->
         encoding="utf-8",
     )
     return path
+
+
+def consent_record(
+    *,
+    case_id: str,
+    input_sha256: str = "a" * 64,
+    subject_id: str = "SUJEITO-TESTE",
+    authorized_domains: Any = None,
+    **overrides: Any,
+) -> dict[str, Any]:
+    """A complete consent record, as `reporting.consent` validates it.
+
+    Defaults to the full domain vocabulary because most tests are about something else and a
+    scope refusal would obscure what they are actually measuring; tests about scope pass the
+    narrow list they mean.
+    """
+    from reporting.consent import ALLOWED_DOMAINS, REQUIRED_AFFIRMATIONS, SCHEMA
+
+    record = {
+        "schema": SCHEMA,
+        "subject_id": subject_id,
+        "case_id": case_id,
+        "input_sha256": input_sha256,
+        "version": "consentimento-teste-v1",
+        "authorized_domains": list(
+            authorized_domains if authorized_domains is not None else ALLOWED_DOMAINS
+        ),
+        "granted_at": "2026-08-01",
+        "expires_at": None,
+        "instrument": "termo de consentimento de teste",
+        "instrument_version": "1.0",
+        "captured_by": "tests",
+        "affirmations": {key: True for key in REQUIRED_AFFIRMATIONS},
+        "verified": True,
+        "basis": "fixture determinístico de teste; nenhum sujeito real",
+    }
+    record.update(overrides)
+    return record
+
+
+def consent_file(root: Path, **kwargs: Any) -> Path:
+    """Write a consent record into `root` and return its path."""
+    path = Path(root) / "consent-record.json"
+    path.write_text(json.dumps(consent_record(**kwargs), ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def consent_for(root: Path, artifact_path: Path, **kwargs: Any) -> Path:
+    """A consent record bound to the case an already-written artifact names.
+
+    The record must match the case it authorises, so tests that build an artifact and then a
+    payload from it read the identifier back rather than repeating it — repeating it is how a
+    fixture ends up authorising a different case than the one it renders.
+    """
+    payload = json.loads(Path(artifact_path).read_text(encoding="utf-8"))
+    return consent_file(root, case_id=str(payload.get("case_id")), **kwargs)

@@ -77,7 +77,11 @@ def _publication_blockers(data: dict[str, Any]) -> list[str]:
     # assert something they could not have measured. The real measurement is the bracket
     # scan in `_final_markdown`, which refuses the report and names the surviving tokens;
     # `render_document` writes the measured result back into the payload afterwards.
-    for key in ("passed", "consent_verified", "qc_verified", "evidence_verified"):
+    # `consent_scope_verified` is here because CONSENT_GATE is evaluated once per run and
+    # knows nothing about which report is being rendered. A record authorising ANCESTRALIDADE
+    # cleared it for a clinical report: a real consent, for the wrong thing, reading as
+    # authorisation. The per-report check is `reporting.consent.scope_verdict`.
+    for key in ("passed", "consent_verified", "consent_scope_verified", "qc_verified", "evidence_verified"):
         if publication.get(key) is not True:
             blockers.append(f"publication_gate:{key}")
 

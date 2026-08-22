@@ -42,6 +42,7 @@ REQUIRED_PATHS = (
     "scripts/wgs_consent_gate.py", "scripts/wgs_input_gate.py", "scripts/wgs_align_or_stage.sh",
     "scripts/build_wgs_curated_manifest.py", "scripts/query_evidence.py", "scripts/build_adapter_capabilities.py",
     "scripts/run_snp_array.py", "scripts/annotate_partial_genome.py", "scripts/build_array_case_manifest.py",
+    "scripts/capture_consent.py", "reporting/consent.py", "reporting/provenance.py",
     "scripts/verify_prebuilt_bwa_mem2_bundle.py", "scripts/verify_supply_chain_lock.py",
     "scripts/generate_report.py", "scripts/generate_all_reports.py", "reporting/__init__.py", "reporting/catalog.json",
     "reporting/engine.py", "reporting/editorial_v3.py", "reporting/editorial_v3_hifi.py", "reporting/requirements.txt",

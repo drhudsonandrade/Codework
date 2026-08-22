@@ -321,6 +321,7 @@ def build_payload(
     matrix_path: Path,
     policy_evaluation: Path | None = None,
     post_deployment_witness: Path | None = None,
+    consent: Path | None = None,
 ) -> dict:
     if report_id not in REPORT_SCOPES:
         raise ValueError(f"unsupported association report: {report_id!r}")
@@ -346,6 +347,7 @@ def build_payload(
         report_id=report_id,
         policy_evaluation=policy_evaluation,
         post_deployment_witness=post_deployment_witness,
+        consent=consent,
     )
     compiler.register(findings)
     compiler.register(matrix)

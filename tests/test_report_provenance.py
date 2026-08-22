@@ -60,8 +60,18 @@ def _verdict_file() -> Path:
     return path
 
 
+def _consent_file() -> Path:
+    """Consent arrives as a file too, for the same reason the verdict does."""
+    from tests.attestations import consent_file
+
+    return consent_file(Path(tempfile.mkdtemp()), case_id="CASE-PROV")
+
+
 def _compiler() -> PayloadCompiler:
-    compiler = PayloadCompiler(case_id="CASE-PROV", report_id="09", policy_evaluation=_verdict_file())
+    compiler = PayloadCompiler(
+        case_id="CASE-PROV", report_id="09",
+        policy_evaluation=_verdict_file(), consent=_consent_file(),
+    )
     compiler.register(Artifact.from_payload("array-qc", ARTIFACT))
     return compiler
 

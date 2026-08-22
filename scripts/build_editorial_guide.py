@@ -231,6 +231,7 @@ def build_payload(
     guide: str,
     policy_evaluation: Path | None = None,
     post_deployment_witness: Path | None = None,
+    consent: Path | None = None,
 ) -> dict:
     """Report 11's payload, anchored to the guide this same run produced.
 
@@ -260,6 +261,7 @@ def build_payload(
         report_id=REPORT_ID,
         policy_evaluation=policy_evaluation,
         post_deployment_witness=post_deployment_witness,
+        consent=consent,
     )
     compiler.register(artifact)
 

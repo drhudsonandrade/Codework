@@ -222,6 +222,7 @@ def build_payload(
     qc_path: Path,
     policy_evaluation: Path | None = None,
     post_deployment_witness: Path | None = None,
+    consent: Path | None = None,
 ) -> dict:
     findings = Artifact.from_path("clinical-findings", findings_path)
     matrix = Artifact.from_path("completeness-matrix", matrix_path)
@@ -238,6 +239,7 @@ def build_payload(
         report_id=REPORT_ID,
         policy_evaluation=policy_evaluation,
         post_deployment_witness=post_deployment_witness,
+        consent=consent,
     )
     compiler.register(findings)
     compiler.register(matrix)

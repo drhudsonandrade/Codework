@@ -314,28 +314,28 @@ def run(
     # `probe_path` is positional in build_payload, so omitting it raised a TypeError that
     # blocked report 05 in every orchestrated run — a failure of the call, read as a failure
     # of the report.
-    payload("05", lambda: p05(qc_path, matrix_path, probe_path, policy_path, witness_path))
+    payload("05", lambda: p05(qc_path, matrix_path, probe_path, policy_path, witness_path, consent))
     if passport_path:
-        payload("06", lambda: p06(passport_path, matrix_path, policy_path, witness_path))
-    payload("09", lambda: p09(matrix_path, qc_path, policy_path, witness_path))
+        payload("06", lambda: p06(passport_path, matrix_path, policy_path, witness_path, consent))
+    payload("09", lambda: p09(matrix_path, qc_path, policy_path, witness_path, consent))
     if passport_path:
-        payload("10", lambda: p10(matrix_path, passport_path, policy_path, witness_path))
+        payload("10", lambda: p10(matrix_path, passport_path, policy_path, witness_path, consent))
 
     if findings_path:
         from scripts.build_association_report import build_payload as passoc
         from scripts.build_clinical_report import build_payload as p01
         from scripts.build_reproductive_report import build_payload as p03
 
-        payload("01", lambda: p01(findings_path, matrix_path, qc_path, policy_path, witness_path))
+        payload("01", lambda: p01(findings_path, matrix_path, qc_path, policy_path, witness_path, consent))
         payload(
             "03",
-            lambda: p03(findings_path, matrix_path, homozygosity_path, policy_path, witness_path),
+            lambda: p03(findings_path, matrix_path, homozygosity_path, policy_path, witness_path, consent),
         )
         for report_id in ("04", "07", "08"):
             payload(
                 report_id,
                 (lambda rid: lambda: passoc(
-                    rid, findings_path, matrix_path, policy_path, witness_path
+                    rid, findings_path, matrix_path, policy_path, witness_path, consent
                 ))(report_id),
             )
 
@@ -353,6 +353,7 @@ def run(
             input_path=input_path if ancestry_panel and ancestry_panel.is_file() else None,
             policy_evaluation=policy_path,
             post_deployment_witness=witness_path,
+            consent=consent,
         ),
     )
 
@@ -363,7 +364,7 @@ def run(
         def guide() -> dict:
             manifest, _hashes = _verified_coordinate_manifest(template_dir)
             rows = analyse(manifest)
-            return p11(rows, manifest, render(rows, manifest), policy_path, witness_path)
+            return p11(rows, manifest, render(rows, manifest), policy_path, witness_path, consent)
 
         payload("11", guide)
 

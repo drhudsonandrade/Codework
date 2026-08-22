@@ -36,6 +36,16 @@ from pathlib import Path
 from typing import Any
 
 import normative
+from reporting.consent import (
+    ALLOWED_DOMAINS as ALLOWED_CONSENT_DOMAINS,
+    CONSENT_ARTIFACT,
+    REPORT_DOMAINS,
+    REQUIRED_AFFIRMATIONS,
+    SCHEMA as CONSENT_SCHEMA,
+    ConsentError,
+    scope_verdict as consent_scope_verdict,
+    validate_record as validate_consent,
+)
 
 SCHEMA = "genoma-report-provenance-v1"
 
@@ -96,6 +106,7 @@ DERIVED_BLOCKS = (
     "publication_gate",
     "policy_evaluation",
     "post_deployment",
+    "consent",
     "operational_status",
     "artifacts",
     "provenance",
@@ -401,6 +412,7 @@ class PayloadCompiler:
         report_id: str,
         policy_evaluation: "Path | str | None" = None,
         post_deployment_witness: "Path | str | None" = None,
+        consent: "Path | str | None" = None,
     ) -> None:
         if not str(case_id).strip():
             raise ProvenanceError("case_id is required")
@@ -417,6 +429,7 @@ class PayloadCompiler:
         # judged.
         self._fixture_verdict = False
         self._fixture_witness = False
+        self._fixture_consent = False
         if policy_evaluation is not None:
             self._install_verdict(
                 Artifact.from_path(POLICY_EVALUATION_ARTIFACT, Path(policy_evaluation))
@@ -428,6 +441,12 @@ class PayloadCompiler:
             self._install_witness(
                 Artifact.from_path(POST_DEPLOYMENT_WITNESS_ARTIFACT, Path(post_deployment_witness))
             )
+        # And again for the consent record. CONSENT_GATE is evaluated once per run, for the
+        # whole manifest; whether *this* report falls inside what was authorised is a
+        # per-report question only the compiler can answer, and it answers it from the record
+        # on disk rather than from anything the builder says.
+        if consent is not None:
+            self._artifacts[CONSENT_ARTIFACT] = Artifact.from_path(CONSENT_ARTIFACT, Path(consent))
 
     # -- artifacts ---------------------------------------------------------------
 
@@ -458,6 +477,12 @@ class PayloadCompiler:
                 "PayloadCompiler(post_deployment_witness=<path>). An in-memory witness is a "
                 "payload asserting that a service it never contacted behaved correctly."
             )
+        if artifact.name == CONSENT_ARTIFACT:
+            raise ProvenanceError(
+                f"{CONSENT_ARTIFACT!r} is not a registrable artifact: consent is read from the "
+                "operator's record, via PayloadCompiler(consent=<path>). A consent record "
+                "composed by the component that wants to publish is not consent."
+            )
         existing = self._artifacts.get(artifact.name)
         if existing is not None and existing.sha256 != artifact.sha256:
             raise ProvenanceError(f"artifact {artifact.name!r} registered twice with different content")
@@ -473,6 +498,11 @@ class PayloadCompiler:
         """Install the POST-DEPLOYMENT witness. Private, and the only route that exists."""
         self._artifacts[POST_DEPLOYMENT_WITNESS_ARTIFACT] = artifact
         self._fixture_witness = fixture
+
+    def _install_consent(self, artifact: Artifact, *, fixture: bool = False) -> None:
+        """Install the consent record. Private, and the only route that exists."""
+        self._artifacts[CONSENT_ARTIFACT] = artifact
+        self._fixture_consent = fixture
 
     def artifact(self, name: str) -> Artifact:
         try:
@@ -637,6 +667,49 @@ class PayloadCompiler:
             fixture=self._fixture_witness,
         )
 
+    def consent_scope(self) -> dict[str, Any]:
+        """Whether the registered consent record authorises *this* report's domain.
+
+        `publication_gate.consent_verified` came from the engine's CONSENT_GATE, which is
+        evaluated once for the whole run and checks only that some consent exists with some
+        version and some non-empty domain list. It cannot know which of the eleven reports is
+        being compiled, so a record authorising ANCESTRALIDADE cleared the gate for a clinical
+        report — a real consent, for the wrong thing, reading as authorisation.
+
+        The report's domain comes from `reporting.consent.REPORT_DOMAINS` keyed by
+        `report_id`, never from the builder: a builder that declared its own domain could
+        declare the one it happened to have consent for.
+
+        A record that fails validation refuses here rather than raising, so the payload still
+        compiles — the measurements are facts either way — and carries the reason it may not
+        be published.
+        """
+        artifact = self._artifacts.get(CONSENT_ARTIFACT)
+        record = artifact.payload if artifact is not None else None
+        if artifact is not None:
+            try:
+                validate_consent(record, case_id=self.case_id)
+            except ConsentError as exc:
+                return {
+                    "covers": False,
+                    "report_domain": REPORT_DOMAINS.get(str(self.report_id)),
+                    "record_sha256": artifact.sha256,
+                    "basis": f"o registro de consentimento não é válido para esta execução: {exc}",
+                }
+        try:
+            verdict = consent_scope_verdict(
+                record,
+                self.report_id,
+                sha256=artifact.sha256 if artifact is not None else None,
+            )
+        except ConsentError as exc:
+            return {"covers": False, "report_domain": None, "basis": str(exc)}
+        if artifact is not None:
+            # Named for the same reason the policy verdict and the witness name theirs: a
+            # reader must be able to tell the operator's record from the layout-QA fixture.
+            verdict["origin"] = "fixture" if self._fixture_consent else "operator-record"
+        return verdict
+
     def policy_verdict(self) -> dict[str, Any]:
         """The single normative verdict, read from a registered policy-engine evaluation.
 
@@ -698,7 +771,7 @@ class PayloadCompiler:
             },
         }
 
-    def publication_gate(self, verdict: dict[str, Any]) -> dict[str, Any]:
+    def publication_gate(self, verdict: dict[str, Any], consent: dict[str, Any]) -> dict[str, Any]:
         """Derive the publication gate from the verdict, never from the builder.
 
         `consent_verified` was `bool(case_id)` — having an identifier for a case is not a
@@ -708,12 +781,17 @@ class PayloadCompiler:
 
         `placeholders_resolved` stays False here: it is a property of the rendered document,
         not of the payload, and `render_document` measures it against the real text.
+
+        `consent_scope_verified` is the one key here the engine cannot supply, and it is
+        strictly subtractive: it can withhold publication from a report outside the authorised
+        domains, never grant it to one the engine refused.
         """
         by_gate = {str(g.get("gate")): str(g.get("state")) for g in verdict.get("gates") or []}
         planes = verdict.get("planes") or {}
         return {
             "passed": verdict.get("ready_for_requested_operation") is True,
             "consent_verified": by_gate.get("CONSENT_GATE") == "PASS",
+            "consent_scope_verified": consent.get("covers") is True,
             "qc_verified": by_gate.get("QC_GATE") == "PASS",
             "evidence_verified": (planes.get("evidence") or {}).get("state") == "PASS",
             "placeholders_resolved": False,
@@ -734,7 +812,7 @@ class PayloadCompiler:
         POST-DEPLOYMENT verdict are derived for the same reason — see `policy_verdict` and
         `post_deployment`.
         """
-        if self._fixture_verdict or self._fixture_witness:
+        if self._fixture_verdict or self._fixture_witness or self._fixture_consent:
             # The fixture verdict exists so layout QA can render a FINAL document and measure
             # it. It is safe only while every value on the payload is a fixture, which floors
             # the operational status at NÃO DISPONÍVEL and prints that on the document's face.
@@ -749,7 +827,8 @@ class PayloadCompiler:
                     "compile with a real policy evaluation or anchor these as fixtures"
                 )
         policy_evaluation = self.policy_verdict()
-        publication_gate = self.publication_gate(policy_evaluation)
+        consent = self.consent_scope()
+        publication_gate = self.publication_gate(policy_evaluation, consent)
         post_deployment = self.post_deployment()
         for required in ("summary", "sources", "limitations"):
             if required not in self._anchors:
@@ -805,6 +884,7 @@ class PayloadCompiler:
             "policy_evaluation": dict(policy_evaluation),
             "post_deployment_status": self.value("post_deployment_status"),
             "post_deployment": dict(post_deployment),
+            "consent": dict(consent),
             "sections": dict(self._sections),
             "findings": [dict(x) for x in self._findings],
             "execution_manifest": dict(execution_manifest or {}),
@@ -986,6 +1066,33 @@ def fixture_payload(
                     {"gate": "QC_GATE", "state": "PASS", "blocking": True},
                 ],
                 "nature": "fixture de QA de layout; nenhuma avaliação real de política",
+            },
+        ),
+        fixture=True,
+    )
+    # Layout QA renders FINAL, so it needs a consent record covering the report's domain. It
+    # gets a fixture one, declared as such on the payload, bound to the fixture case, and — in
+    # common with every other value here — anchored so the document's status floor stays
+    # NÃO DISPONÍVEL. The bytes it authorises are the literal string "fixture", which no real
+    # input can hash to.
+    compiler._install_consent(
+        Artifact.from_payload(
+            CONSENT_ARTIFACT,
+            {
+                "schema": CONSENT_SCHEMA,
+                "subject_id": "fixture",
+                "case_id": str(case_id),
+                "input_sha256": "fixture",
+                "version": "fixture",
+                "authorized_domains": list(ALLOWED_CONSENT_DOMAINS),
+                "granted_at": "2026-01-01",
+                "expires_at": None,
+                "instrument": "fixture de QA de layout",
+                "instrument_version": "1.0",
+                "captured_by": "reporting.provenance.fixture_payload",
+                "affirmations": {key: True for key in REQUIRED_AFFIRMATIONS},
+                "verified": True,
+                "basis": basis,
             },
         ),
         fixture=True,

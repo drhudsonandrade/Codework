@@ -200,6 +200,7 @@ def build_payload(
     input_path: Path | None = None,
     policy_evaluation: Path | None = None,
     post_deployment_witness: Path | None = None,
+    consent: Path | None = None,
 ) -> dict:
     matrix = Artifact.from_path("completeness-matrix", matrix_path)
     qc = Artifact.from_path("array-qc", qc_path)
@@ -213,6 +214,7 @@ def build_payload(
         report_id=REPORT_ID,
         policy_evaluation=policy_evaluation,
         post_deployment_witness=post_deployment_witness,
+        consent=consent,
     )
     compiler.register(matrix)
     compiler.register(qc)
