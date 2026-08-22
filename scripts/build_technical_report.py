@@ -163,13 +163,24 @@ def _reproducibility_text(qc: dict, matrix: dict, probe: dict | None) -> str:
     return " ".join(parts)
 
 
-def build_payload(qc_path: Path, matrix_path: Path, probe_path: Path | None, policy_evaluation: Path | None = None) -> dict:
+def build_payload(
+    qc_path: Path,
+    matrix_path: Path,
+    probe_path: Path | None,
+    policy_evaluation: Path | None = None,
+    post_deployment_witness: Path | None = None,
+) -> dict:
     qc = Artifact.from_path("array-qc", qc_path)
     matrix = Artifact.from_path("completeness-matrix", matrix_path)
     probe = Artifact.from_path("provenance-probe", probe_path) if probe_path else None
 
     case_id = qc.payload.get("case_id") or UNAVAILABLE
-    compiler = PayloadCompiler(case_id=str(case_id), report_id=REPORT_ID, policy_evaluation=policy_evaluation)
+    compiler = PayloadCompiler(
+        case_id=str(case_id),
+        report_id=REPORT_ID,
+        policy_evaluation=policy_evaluation,
+        post_deployment_witness=post_deployment_witness,
+    )
     compiler.register(qc)
     compiler.register(matrix)
     if probe:

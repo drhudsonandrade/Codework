@@ -213,9 +213,24 @@ def main() -> int:
         results.append({"case": number, "prompt": PROMPTS[number], "expected_behavior": expected_behavior, "expected_blocking_gate": expected_gate, "pass": ok, "http_status": status, "observed_gate": gate, "response_sha256": sha256_bytes(raw)})
 
     live_ok = passed == 15 and critical_failures == 0
+    # `single_active_ruleset` was the literal `True` here — a self-declared field feeding the
+    # gate that reads it. It is derived instead from what the live service returned: its
+    # /v1/ruleset identity (already refused above if it disagreed) together with the bootstrap
+    # probe that proves the deployment fails closed when a second, conflicting ruleset is
+    # present. Both are measurements of the running instance.
+    single_active_ruleset = bool(
+        metadata.get("sha256") == EXPECTED_SHA
+        and metadata.get("canonical_filename") == EXPECTED_NAME
+        and metadata.get("status") == normative.STATUS
+        and (bootstrap.get("checks") or {}).get("fail_closed_on_missing_or_conflicting_ruleset") is True
+    )
+    # `identity_recovered` likewise: read back from the deployment rather than restated from
+    # this script's own constant. `verify_ruleset` has already refused any mismatch, so the
+    # two agree — but the field now says what the service reported.
+    identity_recovered = f"{metadata.get('version')}/{metadata.get('status')}/{metadata.get('effective_date')}"
     post_manifest = baseline()
     post_manifest["session_id"] = args.deployment_id
-    post_manifest["post_deployment"] = {"single_active_ruleset": True, "bootstrap_installed": bootstrap_ok, "live_smoke_passed": live_ok, "live_smoke_count": passed, "critical_failures": critical_failures, "identity_recovered": EXPECTED_IDENTITY}
+    post_manifest["post_deployment"] = {"single_active_ruleset": single_active_ruleset, "bootstrap_installed": bootstrap_ok, "live_smoke_passed": live_ok, "live_smoke_count": passed, "critical_failures": critical_failures, "identity_recovered": identity_recovered}
     _, post_report, post_raw = http_json(args.base_url, "POST", "/v1/evaluate", post_manifest)
     pd_gate = next((g for g in post_report.get("gates", []) if g.get("gate") == "POST_DEPLOYMENT_GATE"), None)
     post_gate_pass = bool(pd_gate and pd_gate.get("state") == "PASS")
@@ -236,6 +251,9 @@ def main() -> int:
         "all_pass": live_ok,
         "post_deployment_gate": pd_gate,
         "post_deployment_response_sha256": sha256_bytes(post_raw),
+        # The exact block the live gate ruled on, carried so a later case manifest can submit
+        # what was actually verified instead of reconstructing it from the summary numbers.
+        "post_deployment_claim": post_manifest["post_deployment"],
         "post_deployment_status": "PASS" if overall else "FAIL",
         "started_at": datetime.fromtimestamp(started, timezone.utc).isoformat().replace("+00:00", "Z"),
         "completed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),

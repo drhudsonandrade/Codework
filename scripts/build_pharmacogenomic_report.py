@@ -173,12 +173,22 @@ def _anesthesia_gaps(card: dict) -> str:
     )
 
 
-def build_payload(passport_path: Path, matrix_path: Path, policy_evaluation: Path | None = None) -> dict:
+def build_payload(
+    passport_path: Path,
+    matrix_path: Path,
+    policy_evaluation: Path | None = None,
+    post_deployment_witness: Path | None = None,
+) -> dict:
     passport = Artifact.from_path("pgx-passport", passport_path)
     matrix = Artifact.from_path("completeness-matrix", matrix_path)
 
     case_id = passport.payload.get("case_id") or UNAVAILABLE
-    compiler = PayloadCompiler(case_id=str(case_id), report_id=REPORT_ID, policy_evaluation=policy_evaluation)
+    compiler = PayloadCompiler(
+        case_id=str(case_id),
+        report_id=REPORT_ID,
+        policy_evaluation=policy_evaluation,
+        post_deployment_witness=post_deployment_witness,
+    )
     compiler.register(passport)
     compiler.register(matrix)
 

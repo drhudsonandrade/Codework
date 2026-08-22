@@ -103,13 +103,23 @@ def _by_gene(entries: list) -> str:
     return body
 
 
-def build_payload(matrix_path: Path, qc_path: Path, policy_evaluation: Path | None = None) -> dict:
+def build_payload(
+    matrix_path: Path,
+    qc_path: Path,
+    policy_evaluation: Path | None = None,
+    post_deployment_witness: Path | None = None,
+) -> dict:
     """Anchor every printed value of report 09 to the artifact it came from."""
     matrix = Artifact.from_path("completeness-matrix", matrix_path)
     qc = Artifact.from_path("array-qc", qc_path)
 
     case_id = matrix.payload.get("case_id") or "NÃO DISPONÍVEL"
-    compiler = PayloadCompiler(case_id=str(case_id), report_id=REPORT_ID, policy_evaluation=policy_evaluation)
+    compiler = PayloadCompiler(
+        case_id=str(case_id),
+        report_id=REPORT_ID,
+        policy_evaluation=policy_evaluation,
+        post_deployment_witness=post_deployment_witness,
+    )
     compiler.register(matrix)
     compiler.register(qc)
 

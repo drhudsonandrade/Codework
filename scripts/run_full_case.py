@@ -52,7 +52,12 @@ DEFAULT_ANCESTRY_PANEL = ROOT / "config/ancestry_reference_panel.json.gz"
 
 
 def evaluate_policy(
-    input_path: Path, qc_path: Path, outdir: Path, *, consent: Path | None
+    input_path: Path,
+    qc_path: Path,
+    outdir: Path,
+    *,
+    consent: Path | None,
+    witness: Path | None = None,
 ) -> tuple[Path | None, str]:
     """Run the policy engine on this case and return its evaluation.
 
@@ -80,6 +85,8 @@ def evaluate_policy(
                    "--output", str(manifest)]
         if consent is not None:
             command += ["--consent", str(consent)]
+        if witness is not None:
+            command += ["--post-deployment-witness", str(witness)]
         subprocess.run(command, check=True, capture_output=True, text=True)
         subprocess.run(
             [sys.executable, str(ROOT / "scripts/materialize_ruleset.py"),
@@ -159,16 +166,43 @@ def run(
     dossier: Path | None,
     probe_path: Path | None = None,
     consent: Path | None = None,
+    post_deployment_witness: Path | None = None,
 ) -> dict[str, Any]:
     outdir.mkdir(parents=True, exist_ok=True)
     results: dict[str, Any] = {}
     payloads: dict[str, Path] = {}
 
+    # The POST-DEPLOYMENT witness is resolved first because both authorities need it: the
+    # policy engine, whose POST_DEPLOYMENT_GATE reads the claim the witness backs, and every
+    # report builder, whose payload prints the verdict. One file, named once, handed to both —
+    # otherwise the engine and the report can disagree about the same deployment.
+    #
+    # Deliberately *not* recorded in `results`: a run without a witness is not a blocked run.
+    # It produces every payload correctly, each stating POST-DEPLOYMENT PENDENTE, which is the
+    # true state of a system with no deployed service. Recording it as a failed step would
+    # make the honest outcome look like a broken pipeline.
+    witness_path = post_deployment_witness
+    if witness_path is not None and not witness_path.is_file():
+        raise FileNotFoundError(f"testemunha de pós-implantação não encontrada: {witness_path}")
+    witness_state: dict[str, Any] = (
+        {"status": "OK", "path": str(witness_path)}
+        if witness_path is not None
+        else {
+            "status": "PENDENTE",
+            "path": None,
+            "reason": "nenhuma testemunha fornecida; os relatórios declaram POST-DEPLOYMENT "
+            "PENDENTE. Produzir uma exige scripts/run_live_post_deployment_smoke.py contra "
+            "um serviço implantado",
+        }
+    )
+
     # Asked before anything is compiled, so every builder receives the same verdict and none
     # of them composes one. A missing or refusing evaluation does not stop the measurements —
     # the matrix, the passport and the clinical join are facts about the file either way — it
     # stops publication, which is the decision the engine owns.
-    policy_path, policy_state = evaluate_policy(input_path, qc_path, outdir, consent=consent)
+    policy_path, policy_state = evaluate_policy(
+        input_path, qc_path, outdir, consent=consent, witness=witness_path
+    )
     results["policy-evaluation"] = {
         "status": "OK" if policy_path is not None else "BLOQUEADO",
         "verdict": policy_state,
@@ -280,22 +314,30 @@ def run(
     # `probe_path` is positional in build_payload, so omitting it raised a TypeError that
     # blocked report 05 in every orchestrated run — a failure of the call, read as a failure
     # of the report.
-    payload("05", lambda: p05(qc_path, matrix_path, probe_path, policy_path))
+    payload("05", lambda: p05(qc_path, matrix_path, probe_path, policy_path, witness_path))
     if passport_path:
-        payload("06", lambda: p06(passport_path, matrix_path, policy_path))
-    payload("09", lambda: p09(matrix_path, qc_path, policy_path))
+        payload("06", lambda: p06(passport_path, matrix_path, policy_path, witness_path))
+    payload("09", lambda: p09(matrix_path, qc_path, policy_path, witness_path))
     if passport_path:
-        payload("10", lambda: p10(matrix_path, passport_path, policy_path))
+        payload("10", lambda: p10(matrix_path, passport_path, policy_path, witness_path))
 
     if findings_path:
         from scripts.build_association_report import build_payload as passoc
         from scripts.build_clinical_report import build_payload as p01
         from scripts.build_reproductive_report import build_payload as p03
 
-        payload("01", lambda: p01(findings_path, matrix_path, qc_path, policy_path))
-        payload("03", lambda: p03(findings_path, matrix_path, homozygosity_path, policy_path))
+        payload("01", lambda: p01(findings_path, matrix_path, qc_path, policy_path, witness_path))
+        payload(
+            "03",
+            lambda: p03(findings_path, matrix_path, homozygosity_path, policy_path, witness_path),
+        )
         for report_id in ("04", "07", "08"):
-            payload(report_id, (lambda rid: lambda: passoc(rid, findings_path, matrix_path, policy_path))(report_id))
+            payload(
+                report_id,
+                (lambda rid: lambda: passoc(
+                    rid, findings_path, matrix_path, policy_path, witness_path
+                ))(report_id),
+            )
 
     from scripts.build_ancestry_report import build_payload as p02
 
@@ -310,6 +352,7 @@ def run(
             panel_path=ancestry_panel if ancestry_panel and ancestry_panel.is_file() else None,
             input_path=input_path if ancestry_panel and ancestry_panel.is_file() else None,
             policy_evaluation=policy_path,
+            post_deployment_witness=witness_path,
         ),
     )
 
@@ -320,7 +363,7 @@ def run(
         def guide() -> dict:
             manifest, _hashes = _verified_coordinate_manifest(template_dir)
             rows = analyse(manifest)
-            return p11(rows, manifest, render(rows, manifest), policy_path)
+            return p11(rows, manifest, render(rows, manifest), policy_path, witness_path)
 
         payload("11", guide)
 
@@ -341,6 +384,7 @@ def run(
     return {
         "steps": results,
         "payloads": {k: str(v) for k, v in sorted(payloads.items())},
+        "post_deployment_witness": witness_state,
         "blocked": blocked,
         "blocked_count": len(blocked),
     }
@@ -372,6 +416,12 @@ def main() -> int:
         help="operator's consent record (JSON or path): verified, version, "
         "authorized_domains. Without it CONSENT_GATE fails and no report may publish.",
     )
+    parser.add_argument(
+        "--post-deployment-witness",
+        help="witness written by scripts/run_live_post_deployment_smoke.py against a deployed "
+        "service. Without it every report states POST-DEPLOYMENT PENDENTE, which is correct "
+        "for a system with no live deployment.",
+    )
     args = parser.parse_args()
 
     result = run(
@@ -388,6 +438,9 @@ def main() -> int:
         dossier=Path(args.dossier) if args.dossier else None,
         probe_path=Path(args.probe) if args.probe else None,
         consent=Path(args.consent) if args.consent else None,
+        post_deployment_witness=(
+            Path(args.post_deployment_witness) if args.post_deployment_witness else None
+        ),
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if not result["blocked"] else 2

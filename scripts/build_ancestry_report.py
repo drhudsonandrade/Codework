@@ -197,7 +197,10 @@ def build_payload(
     qc_path: Path,
     *,
     panel_path: Path | None = None,
-    input_path: Path | None = None, policy_evaluation: Path | None = None) -> dict:
+    input_path: Path | None = None,
+    policy_evaluation: Path | None = None,
+    post_deployment_witness: Path | None = None,
+) -> dict:
     matrix = Artifact.from_path("completeness-matrix", matrix_path)
     qc = Artifact.from_path("array-qc", qc_path)
     if qc.payload.get("input", {}).get("sha256") != matrix.payload.get("input_sha256"):
@@ -205,7 +208,12 @@ def build_payload(
 
     titles = section_titles(REPORT_ID)
     case_id = matrix.payload.get("case_id") or UNAVAILABLE
-    compiler = PayloadCompiler(case_id=str(case_id), report_id=REPORT_ID, policy_evaluation=policy_evaluation)
+    compiler = PayloadCompiler(
+        case_id=str(case_id),
+        report_id=REPORT_ID,
+        policy_evaluation=policy_evaluation,
+        post_deployment_witness=post_deployment_witness,
+    )
     compiler.register(matrix)
     compiler.register(qc)
 

@@ -315,7 +315,13 @@ def _summary(report_id: str, loci: list[dict[str, Any]], findings: dict[str, Any
     )
 
 
-def build_payload(report_id: str, findings_path: Path, matrix_path: Path, policy_evaluation: Path | None = None) -> dict:
+def build_payload(
+    report_id: str,
+    findings_path: Path,
+    matrix_path: Path,
+    policy_evaluation: Path | None = None,
+    post_deployment_witness: Path | None = None,
+) -> dict:
     if report_id not in REPORT_SCOPES:
         raise ValueError(f"unsupported association report: {report_id!r}")
 
@@ -331,7 +337,16 @@ def build_payload(report_id: str, findings_path: Path, matrix_path: Path, policy
     limitations_title = titles[-1]
 
     case_id = findings.payload.get("case_id") or UNAVAILABLE
-    compiler = PayloadCompiler(case_id=str(case_id), report_id=report_id)
+    # `policy_evaluation` was in this builder's signature and never reached the compiler, so
+    # reports 04, 07 and 08 compiled with no verdict registered whatever the caller passed —
+    # always the refusal path, never the engine's actual answer. Fail-closed, and still a lie
+    # about where the payload's verdict came from.
+    compiler = PayloadCompiler(
+        case_id=str(case_id),
+        report_id=report_id,
+        policy_evaluation=policy_evaluation,
+        post_deployment_witness=post_deployment_witness,
+    )
     compiler.register(findings)
     compiler.register(matrix)
 

@@ -89,12 +89,22 @@ def _pgx_line(passport: dict[str, Any] | None) -> str:
     )
 
 
-def build_payload(matrix_path: Path, passport_path: Path | None, policy_evaluation: Path | None = None) -> dict:
+def build_payload(
+    matrix_path: Path,
+    passport_path: Path | None,
+    policy_evaluation: Path | None = None,
+    post_deployment_witness: Path | None = None,
+) -> dict:
     matrix = Artifact.from_path("completeness-matrix", matrix_path)
     passport = Artifact.from_path("pgx-passport", passport_path) if passport_path else None
 
     case_id = matrix.payload.get("case_id") or UNAVAILABLE
-    compiler = PayloadCompiler(case_id=str(case_id), report_id=REPORT_ID, policy_evaluation=policy_evaluation)
+    compiler = PayloadCompiler(
+        case_id=str(case_id),
+        report_id=REPORT_ID,
+        policy_evaluation=policy_evaluation,
+        post_deployment_witness=post_deployment_witness,
+    )
     compiler.register(matrix)
     if passport:
         compiler.register(passport)

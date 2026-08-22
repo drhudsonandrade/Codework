@@ -216,7 +216,13 @@ def _confirmation_text(payload: dict[str, Any], matrix: dict[str, Any]) -> str:
     )
 
 
-def build_payload(findings_path: Path, matrix_path: Path, qc_path: Path, policy_evaluation: Path | None = None) -> dict:
+def build_payload(
+    findings_path: Path,
+    matrix_path: Path,
+    qc_path: Path,
+    policy_evaluation: Path | None = None,
+    post_deployment_witness: Path | None = None,
+) -> dict:
     findings = Artifact.from_path("clinical-findings", findings_path)
     matrix = Artifact.from_path("completeness-matrix", matrix_path)
     qc = Artifact.from_path("array-qc", qc_path)
@@ -227,7 +233,12 @@ def build_payload(findings_path: Path, matrix_path: Path, qc_path: Path, policy_
         raise ValueError("QC artifact and completeness matrix describe different inputs")
 
     case_id = findings.payload.get("case_id") or UNAVAILABLE
-    compiler = PayloadCompiler(case_id=str(case_id), report_id=REPORT_ID, policy_evaluation=policy_evaluation)
+    compiler = PayloadCompiler(
+        case_id=str(case_id),
+        report_id=REPORT_ID,
+        policy_evaluation=policy_evaluation,
+        post_deployment_witness=post_deployment_witness,
+    )
     compiler.register(findings)
     compiler.register(matrix)
     compiler.register(qc)

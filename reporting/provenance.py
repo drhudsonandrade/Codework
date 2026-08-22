@@ -31,7 +31,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass, field as dataclass_field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -70,13 +70,148 @@ POLICY_EVALUATION_ARTIFACT = "policy-evaluation"
 #: checks them at render time; kept here so the verdict is shaped the same way it is read.
 REQUIRED_PLANES = ("policy_control", "scientific_data", "evidence", "audit")
 
+#: The witness a live deployment produces under ruleset section 260. Like the policy verdict,
+#: it is read from an artifact and never composed: `post_deployment_status` was a keyword
+#: argument defaulting to the string "PENDENTE", so the one verdict reserved for an external
+#: witness was, in the payload, whatever the caller typed.
+POST_DEPLOYMENT_WITNESS_ARTIFACT = "post-deployment-witness"
+
+#: What the witness must show before the payload may carry anything but PENDENTE. Named
+#: individually because `all(...)` over a truncated dict is True, and this is the gate the
+#: project reserves for evidence it did not produce itself.
+WITNESS_REQUIRED = {
+    "post_deployment_status": "PASS",
+    "all_pass": True,
+    "bootstrap_verified": True,
+    "critical_failures": 0,
+}
+
+#: Payload blocks `compile` derives from registered artifacts rather than from its caller.
+#: `extra` merges into the payload after every anchor is fixed and refused only keys that
+#: had been *anchored* — which left the two blocks the render gate actually reads
+#: (`publication_gate` and `policy_evaluation`) writable from outside. Passing
+#: ``extra={"publication_gate": {"passed": True, ...}}`` reinstated, in one line, the
+#: self-granted PASS that moving the verdict out of `compile`'s parameters removed.
+DERIVED_BLOCKS = (
+    "publication_gate",
+    "policy_evaluation",
+    "post_deployment",
+    "operational_status",
+    "artifacts",
+    "provenance",
+)
+
 #: A locator is a dotted/bracketed path into the artifact, e.g.
 #: ``observations[rs1799807].records[0].genotype`` or ``metrics.call_rate``.
 _LOCATOR_STEP = re.compile(r"([^.\[\]]+)|\[([^\]]*)\]")
 
 
+#: How long a live-deployment witness may certify a payload. Section 259 forbids inheriting
+#: another session's PASS, and a witness with no expiry is exactly that: run the ceremony once
+#: and every report thereafter cites it. Thirty days is short enough that a certification names
+#: a service that plausibly still exists, and long enough not to force a re-run per report.
+MAX_WITNESS_AGE_DAYS = 30
+
+
 class ProvenanceError(Exception):
     """A value could not be bound to the artifact it claims to come from."""
+
+
+def _now() -> datetime:
+    """Seam for tests; production always reads the clock."""
+    return datetime.now(timezone.utc)
+
+
+def _witness_binding_refusal(payload: dict[str, Any]) -> str | None:
+    """Why this witness may not certify *this* payload, or None if it may.
+
+    The four `WITNESS_REQUIRED` keys say the smoke run succeeded. They say nothing about
+    *what* it ran against or *when*, so a witness satisfying them would certify every report
+    the project ever produces, including reports built on a ruleset it never saw.
+    """
+    ruleset = payload.get("ruleset") if isinstance(payload.get("ruleset"), dict) else {}
+    observed = ruleset.get("sha256")
+    if observed != normative.RAW_SHA256:
+        return (
+            f"a testemunha foi tomada contra o ruleset {observed!r}, e este relatório declara "
+            f"{normative.RAW_SHA256!r}: são implantações distintas e uma não atesta a outra"
+        )
+    raw = payload.get("completed_at")
+    try:
+        completed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return (
+            f"a testemunha não registra um instante de conclusão legível ({raw!r}); sem ele "
+            "não há como saber se ela descreve um serviço que ainda existe"
+        )
+    if completed.tzinfo is None:
+        completed = completed.replace(tzinfo=timezone.utc)
+    now = _now()
+    if completed > now + timedelta(minutes=5):
+        return f"a testemunha declara ter concluído no futuro ({raw!r})"
+    age = now - completed
+    if age > timedelta(days=MAX_WITNESS_AGE_DAYS):
+        return (
+            f"a testemunha tem {age.days} dias, acima do limite de {MAX_WITNESS_AGE_DAYS}; "
+            "a seção 259 proíbe herdar o PASS de outra sessão e uma testemunha sem validade "
+            "seria exatamente isso"
+        )
+    return None
+
+
+def witness_verdict(
+    payload: dict[str, Any],
+    *,
+    sha256: str | None = None,
+    path: str | None = None,
+    fixture: bool = False,
+) -> dict[str, Any]:
+    """Judge one POST-DEPLOYMENT witness, PASS or PENDENTE with the reason.
+
+    Module-level because two components must reach the same conclusion about the same file:
+    `PayloadCompiler`, which decides what a report may print, and the case-manifest builder,
+    which decides what the policy engine is told. Two implementations of "is this witness
+    good enough" would eventually disagree, and then the report and the engine would too.
+    """
+    unmet = sorted(key for key, expected in WITNESS_REQUIRED.items() if payload.get(key) != expected)
+    if unmet:
+        return {
+            "status": "PENDENTE",
+            "basis": (
+                "a testemunha registrada não sustenta um veredicto: "
+                + ", ".join(f"{key}={payload.get(key)!r}" for key in unmet)
+            ),
+            "witness_sha256": sha256,
+        }
+    if not fixture:
+        refusal = _witness_binding_refusal(payload)
+        if refusal is not None:
+            return {"status": "PENDENTE", "basis": refusal, "witness_sha256": sha256}
+    return {
+        "status": "PASS",
+        # The fixture gets its own sentence rather than the live one with fixture numbers
+        # substituted in: "bootstrap verificado ao vivo, 0 falhas críticas" is a false
+        # statement about a witness that contacted nothing, and it would have been written
+        # into the anchor's basis — the field a reader consults to learn what happened.
+        "basis": (
+            "fixture de QA de layout: nenhuma implantação foi contatada e nenhum "
+            "bootstrap foi verificado; a face PASS existe aqui apenas para medir o layout"
+            if fixture
+            else (
+                f"{payload.get('passed')}/{payload.get('total')} casos do conjunto "
+                f"{payload.get('suite')!r} contra a implantação "
+                f"{payload.get('deployment_id')!r}, bootstrap verificado ao vivo, "
+                f"{payload.get('critical_failures')} falhas críticas"
+            )
+        ),
+        "witness_sha256": sha256,
+        "witness_path": path,
+        "deployment_id": payload.get("deployment_id"),
+        "classification": payload.get("classification"),
+        # Named for the same reason the policy verdict names its origin: a reader must be
+        # able to tell a live witness from the layout-QA fixture without reading anchors.
+        "origin": "fixture" if fixture else "live-deployment-witness",
+    }
 
 
 def _stable_json(value: Any) -> str:
@@ -265,6 +400,7 @@ class PayloadCompiler:
         case_id: str,
         report_id: str,
         policy_evaluation: "Path | str | None" = None,
+        post_deployment_witness: "Path | str | None" = None,
     ) -> None:
         if not str(case_id).strip():
             raise ProvenanceError("case_id is required")
@@ -280,9 +416,17 @@ class PayloadCompiler:
         # writes a refusal — which is the correct payload for a run the policy engine never
         # judged.
         self._fixture_verdict = False
+        self._fixture_witness = False
         if policy_evaluation is not None:
             self._install_verdict(
                 Artifact.from_path(POLICY_EVALUATION_ARTIFACT, Path(policy_evaluation))
+            )
+        # Same reasoning, same route: the POST-DEPLOYMENT verdict is a claim about a running
+        # service, so it enters as a file that a live run wrote and never as a string the
+        # builder chose.
+        if post_deployment_witness is not None:
+            self._install_witness(
+                Artifact.from_path(POST_DEPLOYMENT_WITNESS_ARTIFACT, Path(post_deployment_witness))
             )
 
     # -- artifacts ---------------------------------------------------------------
@@ -307,6 +451,13 @@ class PayloadCompiler:
                 "PayloadCompiler(policy_evaluation=<path>). Composing one here would be the "
                 "self-granted PASS this indirection exists to prevent."
             )
+        if artifact.name == POST_DEPLOYMENT_WITNESS_ARTIFACT:
+            raise ProvenanceError(
+                f"{POST_DEPLOYMENT_WITNESS_ARTIFACT!r} is not a registrable artifact: the "
+                "POST-DEPLOYMENT verdict is read from the witness a live smoke run wrote, via "
+                "PayloadCompiler(post_deployment_witness=<path>). An in-memory witness is a "
+                "payload asserting that a service it never contacted behaved correctly."
+            )
         existing = self._artifacts.get(artifact.name)
         if existing is not None and existing.sha256 != artifact.sha256:
             raise ProvenanceError(f"artifact {artifact.name!r} registered twice with different content")
@@ -317,6 +468,11 @@ class PayloadCompiler:
         """Install the policy verdict. Private, and the only route that exists."""
         self._artifacts[POLICY_EVALUATION_ARTIFACT] = artifact
         self._fixture_verdict = fixture
+
+    def _install_witness(self, artifact: Artifact, *, fixture: bool = False) -> None:
+        """Install the POST-DEPLOYMENT witness. Private, and the only route that exists."""
+        self._artifacts[POST_DEPLOYMENT_WITNESS_ARTIFACT] = artifact
+        self._fixture_witness = fixture
 
     def artifact(self, name: str) -> Artifact:
         try:
@@ -447,6 +603,40 @@ class PayloadCompiler:
     def status_floor(self) -> str:
         return weakest_status(self._anchors.values())
 
+    def post_deployment(self) -> dict[str, Any]:
+        """The POST-DEPLOYMENT verdict, read from a live-deployment witness.
+
+        Section 260 reserves this for evidence that a *deployed* service behaved correctly,
+        which is precisely the claim a payload cannot make about itself. It arrived as a
+        keyword argument defaulting to "PENDENTE" — honest by default, and forgeable by
+        anyone who passed a different string.
+
+        A witness is accepted only when it says the suite passed in full, the bootstrap was
+        verified live and no critical failure occurred. Anything short of that, or no witness
+        at all, is PENDENTE with the reason attached.
+
+        Two further bindings keep a witness from becoming a reusable token. It must have been
+        taken against *this* ruleset — a smoke run against another version certifies another
+        deployment — and it must be recent, because section 259 forbids inheriting a PASS from
+        a session that is not this one, and a service verified a year ago may no longer exist.
+        """
+        artifact = self._artifacts.get(POST_DEPLOYMENT_WITNESS_ARTIFACT)
+        if artifact is None:
+            return {
+                "status": "PENDENTE",
+                "basis": (
+                    "nenhuma testemunha de pós-implantação foi registrada; a seção 260 "
+                    "reserva este veredicto a evidência de um serviço implantado, que um "
+                    "payload não pode produzir sobre si mesmo"
+                ),
+            }
+        return witness_verdict(
+            artifact.payload if isinstance(artifact.payload, dict) else {},
+            sha256=artifact.sha256,
+            path=artifact.path,
+            fixture=self._fixture_witness,
+        )
+
     def policy_verdict(self) -> dict[str, Any]:
         """The single normative verdict, read from a registered policy-engine evaluation.
 
@@ -534,17 +724,17 @@ class PayloadCompiler:
         self,
         *,
         execution_manifest: dict[str, Any] | None = None,
-        post_deployment_status: str = "PENDENTE",
         extra: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Produce the payload `reporting.engine.render_document` consumes.
 
         Sections and findings come from what was actually anchored during compilation, not
         from a parameter: accepting them here would let a caller pass content that was
-        never bound to an artifact. The publication gate and the policy evaluation are
-        derived for the same reason — see `policy_verdict`.
+        never bound to an artifact. The publication gate, the policy evaluation and the
+        POST-DEPLOYMENT verdict are derived for the same reason — see `policy_verdict` and
+        `post_deployment`.
         """
-        if self._fixture_verdict:
+        if self._fixture_verdict or self._fixture_witness:
             # The fixture verdict exists so layout QA can render a FINAL document and measure
             # it. It is safe only while every value on the payload is a fixture, which floors
             # the operational status at NÃO DISPONÍVEL and prints that on the document's face.
@@ -560,6 +750,7 @@ class PayloadCompiler:
                 )
         policy_evaluation = self.policy_verdict()
         publication_gate = self.publication_gate(policy_evaluation)
+        post_deployment = self.post_deployment()
         for required in ("summary", "sources", "limitations"):
             if required not in self._anchors:
                 raise ProvenanceError(f"{required!r} must be anchored before compiling")
@@ -574,13 +765,37 @@ class PayloadCompiler:
             basis="identificador do caso com que este payload foi compilado",
             status="VERIFICADO",
         )
-        self.state(
-            "post_deployment_status",
-            post_deployment_status,
-            kind="case_control",
-            basis="estado POST-DEPLOYMENT no momento da compilação; nunca concedido aqui",
-            status="VERIFICADO",
-        )
+        if self._fixture_witness:
+            # Layout QA has to be able to render the PASS variant of the header. It may print
+            # the string; what it may not do is anchor it as anything but a fixture, which is
+            # what `provenance_blockers` reads back.
+            self.state(
+                "post_deployment_status",
+                post_deployment["status"],
+                kind="fixture",
+                basis=post_deployment["basis"],
+                status=UNAVAILABLE,
+            )
+        elif post_deployment["status"] == "PASS":
+            # Read out of the witness by locator, so the anchor carries that file's SHA-256.
+            # A payload that prints PASS now names the document that says so, and a payload
+            # compiled without one cannot reach this branch at all.
+            self.derive(
+                "post_deployment_status",
+                artifact=POST_DEPLOYMENT_WITNESS_ARTIFACT,
+                locator="post_deployment_status",
+                status="VERIFICADO",
+                basis=post_deployment["basis"],
+                kind="evidence_retrieval",
+            )
+        else:
+            self.state(
+                "post_deployment_status",
+                post_deployment["status"],
+                kind="case_control",
+                basis=post_deployment["basis"],
+                status="VERIFICADO",
+            )
         data: dict[str, Any] = {
             "case_id": self.case_id,
             "report_id": self.report_id,
@@ -588,7 +803,8 @@ class PayloadCompiler:
             "ruleset": normative.ruleset_block(include_sha256=False),
             "publication_gate": dict(publication_gate),
             "policy_evaluation": dict(policy_evaluation),
-            "post_deployment_status": post_deployment_status,
+            "post_deployment_status": self.value("post_deployment_status"),
+            "post_deployment": dict(post_deployment),
             "sections": dict(self._sections),
             "findings": [dict(x) for x in self._findings],
             "execution_manifest": dict(execution_manifest or {}),
@@ -614,6 +830,17 @@ class PayloadCompiler:
                     f"extra may not overwrite anchored fields {overwritten}; pass the value "
                     "through the anchor that records it, so the payload and its provenance "
                     "cannot disagree"
+                )
+            # Anchored fields were refused; the derived authority blocks were not, and those
+            # are the ones `reporting.engine.render_blockers` reads to decide whether a FINAL
+            # document may be produced. `extra={"publication_gate": {"passed": True, ...}}`
+            # published a report the policy engine had blocked. Verified by doing it.
+            reserved = sorted(key for key in extra if key in DERIVED_BLOCKS)
+            if reserved:
+                raise ProvenanceError(
+                    f"extra may not supply derived blocks {reserved}; they are read from the "
+                    "artifacts registered on this compiler, and a caller that writes them is "
+                    "granting itself the verdict those artifacts exist to withhold"
                 )
             data.update(extra)
         data["provenance"] = provenance_block(self._anchors)
@@ -763,11 +990,34 @@ def fixture_payload(
         ),
         fixture=True,
     )
+    # The POST-DEPLOYMENT header has a PENDENTE face and a PASS face, and layout QA has to be
+    # able to render both. It gets the PASS face the same way a real run does — from a witness
+    # — except that this one declares itself a fixture, is anchored as one, and so cannot be
+    # mistaken for evidence that a service was contacted.
+    if post_deployment_status not in {"PENDENTE", "PASS"}:
+        raise ProvenanceError(
+            f"post_deployment_status={post_deployment_status!r}: a fixture may render the "
+            "PENDENTE or the PASS face of the header, and nothing else"
+        )
+    if post_deployment_status == "PASS":
+        compiler._install_witness(
+            Artifact.from_payload(
+                POST_DEPLOYMENT_WITNESS_ARTIFACT,
+                {
+                    **WITNESS_REQUIRED,
+                    "suite": "fixture",
+                    "passed": 0,
+                    "total": 0,
+                    "deployment_id": "fixture",
+                    "classification": (
+                        "fixture de QA de layout; nenhuma implantação foi contatada"
+                    ),
+                },
+            ),
+            fixture=True,
+        )
     return compiler.compile(
         execution_manifest={"status": UNAVAILABLE, "nature": basis},
-        # Passed to `compile` so it is anchored, rather than smuggled through `extra` where
-        # the payload would say one thing and its provenance another.
-        post_deployment_status=post_deployment_status,
         extra=extra,
     )
 
@@ -851,6 +1101,14 @@ def provenance_blockers(data: dict[str, Any]) -> list[str]:
             counts[status] += 1
         if block.get("status_distribution") != counts:
             blockers.append("provenance:distribution_mismatch")
+
+    # The header prints `post_deployment_status`, which is anchored, while the detail block
+    # beside it is not. Left unchecked they could disagree — a face reading PENDENTE over a
+    # block naming a witness SHA-256, or the reverse. Whichever was edited, the payload is
+    # no longer describing one run.
+    detail = data.get("post_deployment")
+    if isinstance(detail, dict) and detail.get("status") != data.get("post_deployment_status"):
+        blockers.append("provenance:post_deployment_disagreement")
 
     declared = data.get("operational_status")
     floor = block.get("operational_status_floor")

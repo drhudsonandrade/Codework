@@ -270,7 +270,12 @@ def _homozygosity_text(payload: dict[str, Any]) -> str:
 
 
 def build_payload(
-    findings_path: Path, matrix_path: Path, homozygosity_path: Path | None = None, policy_evaluation: Path | None = None) -> dict:
+    findings_path: Path,
+    matrix_path: Path,
+    homozygosity_path: Path | None = None,
+    policy_evaluation: Path | None = None,
+    post_deployment_witness: Path | None = None,
+) -> dict:
     findings = Artifact.from_path("clinical-findings", findings_path)
     matrix = Artifact.from_path("completeness-matrix", matrix_path)
     if findings.payload.get("input_sha256") != matrix.payload.get("input_sha256"):
@@ -287,7 +292,12 @@ def build_payload(
         raise ValueError("homozygosity artefact describes a different input")
 
     case_id = findings.payload.get("case_id") or UNAVAILABLE
-    compiler = PayloadCompiler(case_id=str(case_id), report_id=REPORT_ID, policy_evaluation=policy_evaluation)
+    compiler = PayloadCompiler(
+        case_id=str(case_id),
+        report_id=REPORT_ID,
+        policy_evaluation=policy_evaluation,
+        post_deployment_witness=post_deployment_witness,
+    )
     compiler.register(findings)
     compiler.register(matrix)
 

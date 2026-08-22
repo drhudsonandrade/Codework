@@ -17,6 +17,9 @@ that artifact's SHA-256 beside it, and a payload that registers none refuses.
 """
 from __future__ import annotations
 
+import ast
+import importlib
+import inspect
 import json
 import sys
 import tempfile
@@ -130,6 +133,37 @@ class NoVerdictMeansNoAuthorityTest(unittest.TestCase):
             compiler.compile(policy_evaluation=PASS_VERDICT)  # type: ignore[call-arg]
         with self.assertRaises(TypeError):
             compiler.compile(publication_gate={"passed": True})  # type: ignore[call-arg]
+
+    def test_extra_cannot_reinstate_the_verdict_that_the_parameters_no_longer_accept(self):
+        """The third door: `extra` merges into the payload after the anchors are fixed.
+
+        It refused keys that had been *anchored*, and `publication_gate` and
+        `policy_evaluation` are not anchors — they are derived blocks. So the one-line
+        replacement for the removed parameter was `extra={"publication_gate": {"passed":
+        True, ...}}`, and `reporting.engine.render_blockers` reads exactly that block to
+        decide whether a FINAL document may be produced. Verified by doing it before closing
+        it: the payload rendered FINAL on a verdict the engine had refused.
+        """
+        from reporting.provenance import ProvenanceError
+
+        for block in ("publication_gate", "policy_evaluation", "post_deployment",
+                      "operational_status", "artifacts", "provenance"):
+            with self.subTest(block=block):
+                compiler = PayloadCompiler(case_id="CASO-AUT", report_id="09")
+                compiler.register(Artifact.from_payload("array-qc", ARTIFACT))
+                compiler.derive(
+                    "summary", artifact="array-qc", locator="metrics.call_rate",
+                    status="VERIFICADO", basis="call rate",
+                )
+                compiler.state(
+                    "sources", ["array-qc"], kind="case_control", basis="s", status="VERIFICADO"
+                )
+                compiler.state(
+                    "limitations", "x", kind="case_control", basis="l", status="VERIFICADO"
+                )
+                with self.assertRaises(ProvenanceError) as caught:
+                    compiler.compile(extra={block: {"passed": True}})
+                self.assertIn(block, str(caught.exception))
 
 
 class VerdictIsCopiedNotComposedTest(unittest.TestCase):
@@ -257,15 +291,68 @@ if __name__ == "__main__":
 class OrchestratorAsksTheEngineTest(unittest.TestCase):
     """`run_full_case` had no policy plane at all — the engine could never disagree."""
 
+    #: The aliases `run_full_case.run` imports its eleven builders under.
+    BUILDERS = frozenset({"p01", "p02", "p03", "p05", "p06", "p09", "p10", "p11", "passoc"})
+
+    def _builder_calls(self):
+        """Every call to a report builder inside `run`, as AST nodes.
+
+        Read from the syntax tree rather than matched as text: the first version of this test
+        asserted on literal call strings like `p05(qc_path, matrix_path, probe_path,
+        policy_path)`, so reformatting the call broke the test while adding a *new* builder
+        that received nothing would not have. What matters is that each call carries the
+        run's single verdict and its single witness, not how the line is wrapped.
+        """
+        tree = ast.parse((ROOT / "scripts/run_full_case.py").read_text(encoding="utf-8"))
+        run = next(
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "run"
+        )
+        return [
+            node for node in ast.walk(run)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in self.BUILDERS
+        ]
+
     def test_the_entrypoint_runs_the_engine_and_threads_its_verdict(self):
         source = (ROOT / "scripts/run_full_case.py").read_text(encoding="utf-8")
         self.assertIn("def evaluate_policy(", source)
         self.assertIn('"genoma_policy", "evaluate"', source)
-        # Every builder receives the same evaluation; none composes one.
-        for call in ("p05(qc_path, matrix_path, probe_path, policy_path)",
-                     "p09(matrix_path, qc_path, policy_path)",
-                     "p01(findings_path, matrix_path, qc_path, policy_path)"):
-            self.assertIn(call, source)
+
+        calls = self._builder_calls()
+        self.assertEqual(len(self.BUILDERS), len({c.func.id for c in calls}))
+        for call in calls:
+            passed = {
+                node.id for node in ast.walk(call)
+                if isinstance(node, ast.Name) and node.id in {"policy_path", "witness_path"}
+            }
+            # Every builder receives the same evaluation and the same witness; none composes
+            # either. `build_association_report` accepted `policy_evaluation` and dropped it
+            # on the floor, so reports 04/07/08 took the refusal path whatever the engine had
+            # said — which is why the signature check below exists as well.
+            self.assertEqual(
+                {"policy_path", "witness_path"}, passed,
+                f"{call.func.id} at line {call.lineno} does not receive both",
+            )
+
+    def test_every_builder_accepts_the_verdict_and_the_witness(self):
+        """A parameter the builder accepts and never forwards is not plumbing."""
+        modules = (
+            "build_clinical_report", "build_ancestry_report", "build_reproductive_report",
+            "build_association_report", "build_technical_report",
+            "build_pharmacogenomic_report", "build_completeness_report",
+            "build_one_page_summary", "build_editorial_guide",
+        )
+        for name in modules:
+            module = importlib.import_module(f"scripts.{name}")
+            parameters = inspect.signature(module.build_payload).parameters
+            with self.subTest(module=name):
+                self.assertIn("policy_evaluation", parameters)
+                self.assertIn("post_deployment_witness", parameters)
+                source = inspect.getsource(module.build_payload)
+                self.assertIn("policy_evaluation=policy_evaluation", source)
+                self.assertIn("post_deployment_witness=post_deployment_witness", source)
 
     def test_the_plaintext_ruleset_is_removed_after_the_evaluation(self):
         source = (ROOT / "scripts/run_full_case.py").read_text(encoding="utf-8")

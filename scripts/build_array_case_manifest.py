@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import normative
+from reporting.provenance import witness_verdict
 
 
 def sha256_file(path: Path) -> str:
@@ -30,6 +31,7 @@ def build_manifest(
     annotation_path: Path,
     *,
     consent: dict[str, Any] | None = None,
+    witness: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble the manifest the policy engine evaluates for one array case.
 
@@ -56,6 +58,22 @@ def build_manifest(
     sources = [x for x in annotation.get("evidence_retrievals", []) if isinstance(x, dict) and x.get("status") == "VERIFICADO"]
     input_sha = str(qc.get("input", {}).get("sha256") or "")
     consent = consent or {}
+    # `post_deployment_status` was the literal "PENDING" beside a POST_DEPLOYMENT_GATE that
+    # reads `manifest["post_deployment"]` — a key this builder never wrote. The gate therefore
+    # reported unmet criteria on every run regardless of any evidence, and the string next to
+    # it was decoration nothing consulted.
+    #
+    # A witness changes that, and only a witness does. It is judged by the same function the
+    # report compiler uses, so the engine and the report cannot reach different conclusions
+    # about the same file, and only the block the live gate actually ruled on is submitted.
+    post_deployment_claim: dict[str, Any] | None = None
+    post_deployment_status = "PENDING"
+    if witness:
+        verdict = witness_verdict(witness)
+        claim = witness.get("post_deployment_claim")
+        if verdict["status"] == "PASS" and isinstance(claim, dict):
+            post_deployment_claim = dict(claim)
+            post_deployment_status = "PASS"
     payload: dict[str, Any] = {
         "schema": "genoma-array-curation-manifest-v1",
         "case_id": qc.get("case_id"),
@@ -167,8 +185,10 @@ def build_manifest(
             },
             "gates": [{"gate": "FINAL_AUDIT_GATE", "state": "PENDING", "blocking": True}]
         },
-        "post_deployment_status": "PENDING"
+        "post_deployment_status": post_deployment_status,
     }
+    if post_deployment_claim is not None:
+        payload["post_deployment"] = post_deployment_claim
     return payload
 
 
@@ -183,6 +203,11 @@ def main() -> int:
         "authorized_domains. Without it CONSENT_GATE fails, which is the honest answer "
         "for a run that carries no consent instrument.",
     )
+    p.add_argument(
+        "--post-deployment-witness",
+        help="witness written by scripts/run_live_post_deployment_smoke.py. Without it the "
+        "manifest declares no post_deployment block and POST_DEPLOYMENT_GATE stays PENDENTE.",
+    )
     args = p.parse_args()
     qc_path, annotation_path = Path(args.qc), Path(args.annotation)
     try:
@@ -195,7 +220,16 @@ def main() -> int:
             consent = json.loads(raw)
             if not isinstance(consent, dict):
                 raise ValueError("consent record must decode to a JSON object")
-        payload = build_manifest(qc, annotation, qc_path, annotation_path, consent=consent)
+        witness = None
+        if args.post_deployment_witness:
+            witness = json.loads(
+                Path(args.post_deployment_witness).read_text(encoding="utf-8")
+            )
+            if not isinstance(witness, dict):
+                raise ValueError("post-deployment witness must decode to a JSON object")
+        payload = build_manifest(
+            qc, annotation, qc_path, annotation_path, consent=consent, witness=witness
+        )
     except (ValueError, OSError, json.JSONDecodeError) as exc:
         raise SystemExit(f"NÃO DISPONÍVEL: {exc}")
     out = Path(args.output)

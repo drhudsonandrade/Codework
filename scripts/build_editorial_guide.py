@@ -225,7 +225,13 @@ def render(rows: list[dict[str, Any]], manifest: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def build_payload(rows: list[dict[str, Any]], manifest: dict[str, Any], guide: str, policy_evaluation: Path | None = None) -> dict:
+def build_payload(
+    rows: list[dict[str, Any]],
+    manifest: dict[str, Any],
+    guide: str,
+    policy_evaluation: Path | None = None,
+    post_deployment_witness: Path | None = None,
+) -> dict:
     """Report 11's payload, anchored to the guide this same run produced.
 
     The guide is registered as an artifact and every section reads a locator out of it, so
@@ -249,7 +255,12 @@ def build_payload(rows: list[dict[str, Any]], manifest: dict[str, Any], guide: s
         "coordinate_manifest_reports": sorted((manifest.get("reports") or {})),
     }
     artifact = Artifact.from_payload("editorial-analysis", analysis)
-    compiler = PayloadCompiler(case_id="SUITE-EDITORIAL", report_id=REPORT_ID, policy_evaluation=policy_evaluation)
+    compiler = PayloadCompiler(
+        case_id="SUITE-EDITORIAL",
+        report_id=REPORT_ID,
+        policy_evaluation=policy_evaluation,
+        post_deployment_witness=post_deployment_witness,
+    )
     compiler.register(artifact)
 
     titles = section_titles(REPORT_ID)
