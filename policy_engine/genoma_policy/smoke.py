@@ -22,7 +22,7 @@ def _claim(**overrides: Any) -> dict[str, Any]:
 
 
 def _all_na(ruleset: Ruleset) -> list[dict[str, Any]]:
-    return [{"section": s.number, "rule_id": s.rule_id, "rule_sha256": s.sha256, "applicability": "NOT_APPLICABLE", "status": "VERIFICADO", "decision": "NOT_APPLICABLE", "justification": "smoke fixture", "evidence_refs": [], "trace": {"attestation_id": f"smoke:{s.rule_id}", "created_at": "2026-08-15T23:00:00-03:00", "actor_type": "SOFTWARE", "actor_id": "genoma-policy-smoke", "method": "fixture", "run_id": "SMOKE", "input_sha256": [], "output_sha256": [], "tool_versions": {"genoma-policy-engine": "0.3.0"}}} for s in ruleset.sections]
+    return [{"section": s.number, "rule_id": s.rule_id, "rule_sha256": s.sha256, "applicability": "NOT_APPLICABLE", "status": "VERIFICADO", "decision": "NOT_APPLICABLE", "justification": "smoke fixture", "evidence_refs": [], "trace": {"attestation_id": f"smoke:{s.rule_id}", "created_at": "2026-08-22T18:46:00-03:00", "actor_type": "SOFTWARE", "actor_id": "genoma-policy-smoke", "method": "fixture", "run_id": "SMOKE", "input_sha256": [], "output_sha256": [], "tool_versions": {"genoma-policy-engine": "0.4.0"}}} for s in ruleset.sections]
 
 
 def smoke_cases(ruleset: Ruleset) -> list[tuple[str, str, dict[str, Any]]]:
@@ -50,4 +50,4 @@ def run_smoke(engine: PolicyEngine) -> dict[str, Any]:
     for case_id, expected_gate, manifest in smoke_cases(engine.ruleset):
         report=engine.evaluate(deepcopy(manifest)); matched=[g for g in report.gates if g.gate==expected_gate and g.state.value=="FAIL"]; ok=bool(matched); passed+=int(ok)
         results.append({"case":case_id,"expected_blocking_gate":expected_gate,"pass":ok,"observed":[g.to_dict() for g in report.gates if g.gate==expected_gate]})
-    return {"suite":"GENOMA v3.3 independent deterministic safety smoke","passed":passed,"total":len(results),"all_pass":passed==len(results),"post_deployment_claim":"NOT_GRANTED_BY_THIS_SUITE","results":results}
+    return {"suite":"GENOMA v3.4 independent deterministic safety smoke","passed":passed,"total":len(results),"all_pass":passed==len(results),"post_deployment_claim":"NOT_GRANTED_BY_THIS_SUITE","results":results}
