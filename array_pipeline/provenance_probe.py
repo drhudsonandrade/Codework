@@ -30,8 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from array_pipeline.qc import (
-    HARMONIZED_COLUMNS,
-    RAW_COLUMNS,
+    detect_schema,
     _canonical_gt,
     _read_header_and_metadata,
     _text_stream,
@@ -86,12 +85,13 @@ def _read_markers_from_array(path: Path, wanted: set[str]) -> dict[str, dict[str
     fh, _ = _text_stream(path)
     try:
         header, _meta = _read_header_and_metadata(fh)
-        if header == HARMONIZED_COLUMNS:
-            genotype_column = "CONSENSUS_RESULT"
-        elif header == RAW_COLUMNS:
-            genotype_column = "RESULT"
-        else:
-            raise ProvenanceProbeError(f"unsupported SNP-array CSV header: {header}")
+        try:
+            schema = detect_schema(header)
+        except ValueError as exc:
+            raise ProvenanceProbeError(str(exc)) from exc
+        genotype_column = (
+            "CONSENSUS_RESULT" if schema.startswith("harmonized") else "RESULT"
+        )
         for row in csv.DictReader(fh, fieldnames=header):
             rsid = (row.get("RSID") or "").strip().lower()
             if rsid in wanted and rsid not in found:

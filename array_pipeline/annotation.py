@@ -9,9 +9,8 @@ from typing import Any
 
 from array_pipeline.qc import (
     FORWARD_STRANDS,
-    HARMONIZED_COLUMNS,
+    detect_schema,
     INTERPRETABLE_OVERLAP_STATUSES,
-    RAW_COLUMNS,
     REVERSE_STRANDS,
     UNRESOLVED_OVERLAP_STATUSES,
     _canonical_gt,
@@ -175,12 +174,7 @@ def extract_target_observations(
     fh, _ = _text_stream(path)
     try:
         header, _metadata = _read_header_and_metadata(fh)
-        if header == HARMONIZED_COLUMNS:
-            schema = "harmonized_genera_myheritage_v1"
-        elif header == RAW_COLUMNS:
-            schema = "raw_snp_array_v1"
-        else:
-            raise ValueError(f"unsupported SNP-array CSV header: {header}")
+        schema = detect_schema(header)
         reader = csv.DictReader(fh, fieldnames=header)
         for row in reader:
             rsid = (row.get("RSID") or "").strip().lower()

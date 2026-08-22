@@ -24,6 +24,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from array_pipeline.completeness import CLASSES, build_completeness_matrix, write_matrix
+from reporting.assay import Assay, assay_for
 from reporting.provenance import Artifact, PayloadCompiler
 
 REPORT_ID = "05"
@@ -47,10 +48,11 @@ def _pct(value: Any) -> str:
     return f"{float(value) * 100:.2f}%" if isinstance(value, (int, float)) else UNAVAILABLE
 
 
-def _platform_text(qc: dict) -> str:
+def _platform_text(qc: dict, assay: Assay) -> str:
     metrics, inputs = qc["metrics"], qc["input"]
     return (
-        f"Esquema {inputs['schema']}; plataforma {inputs.get('platform') or UNAVAILABLE}. "
+        f"Método: {assay.name}. Esquema {inputs['schema']}; "
+        f"plataforma {inputs.get('platform') or UNAVAILABLE}. "
         f"{metrics['rows']} linhas, {metrics['unique_rsids']} rsids únicos, "
         f"{metrics['unique_coordinates']} coordenadas únicas "
         f"({metrics['duplicate_coordinate_rows']} linhas compartilham coordenada com outra). "
@@ -129,7 +131,7 @@ def _qc_text(qc: dict) -> str:
     return " ".join(lines)
 
 
-def _limitations_text(qc: dict, matrix: dict) -> str:
+def _limitations_text(qc: dict, matrix: dict, assay: Assay) -> str:
     unresolved = qc["gates"]["CROSS_PLATFORM_GATE"].get("unresolved_records") or {}
     total_unresolved = sum(unresolved.values())
     withheld = sum(1 for e in matrix["entries"] if e.get("genotype_withheld"))
@@ -140,8 +142,11 @@ def _limitations_text(qc: dict, matrix: dict) -> str:
         f"({json.dumps(unresolved, ensure_ascii=False)}). Conflitos nunca são arbitrados.",
         f"Alvos com genótipo retido por não serem interpretáveis: {withheld}.",
         f"Classes de variação que a plataforma não resolve em nenhum locus: {blind}.",
-        "Genotipagem em array não produz DP, GQ nem balanço alélico; não há profundidade de "
-        "leitura, e ausência de observação não é evidência de ausência genome-wide.",
+        # Both halves used to be constants describing an array. The first is simply false of
+        # a WGS projection, which carries DP and GQ on every call: a report that understates
+        # the evidence it holds is as wrong as one that overstates it.
+        assay.depth_note,
+        assay.genome_wide_note,
     ]
     if notes:
         text.append("Observações estruturais do QC: " + "; ".join(str(n) for n in notes) + ".")
@@ -172,6 +177,7 @@ def build_payload(
     consent: Path | None = None,
 ) -> dict:
     qc = Artifact.from_path("array-qc", qc_path)
+    assay = assay_for(qc.payload)
     matrix = Artifact.from_path("completeness-matrix", matrix_path)
     probe = Artifact.from_path("provenance-probe", probe_path) if probe_path else None
 
@@ -197,7 +203,7 @@ def build_payload(
         artifact="array-qc",
         locator="metrics",
         status=status,
-        basis="métricas centrais medidas pelo QC do array",
+        basis=f"métricas centrais medidas pelo QC ({assay.name})",
         kind="qc_metric",
         transform=lambda m: (
             f"{m['rows']} variantes analisadas, call rate {_pct(m['call_rate'])}, "
@@ -218,7 +224,7 @@ def build_payload(
         "Plataforma e desempenho analítico",
         artifact="array-qc", locator="metrics", status=status,
         basis="contagens estruturais medidas no arquivo", kind="qc_metric",
-        transform=lambda _m: _platform_text(qc.payload),
+        transform=lambda _m: _platform_text(qc.payload, assay),
     )
     compiler.section_derived(
         "Contrato de entrada e cadeia de custódia",
@@ -237,7 +243,7 @@ def build_payload(
         artifact="completeness-matrix", locator="structural_blind_spots", status=status,
         basis="registros não resolvidos, genótipos retidos e limites da plataforma",
         kind="computed",
-        transform=lambda _b: _limitations_text(qc.payload, matrix.payload),
+        transform=lambda _b: _limitations_text(qc.payload, matrix.payload, assay),
     )
     compiler.section_derived(
         "Pipeline reproduzível",
@@ -261,7 +267,8 @@ def build_payload(
         "Runtime/Resource Gate",
         "NÃO APLICÁVEL a esta execução: o Runtime/Resource Gate governa chamada de variantes "
         "em NGS (FASTA/FAI/dicionário, índices de alinhador, compatibilidade caller–referência). "
-        "Uma análise de array não abre nenhum desses recursos. Nenhum PASS de outra sessão é "
+        "Nem uma análise de array nem uma projeção de VCF já chamado abre esses recursos: "
+        "nenhuma das duas alinha leituras nem chama variantes. Nenhum PASS de outra sessão é "
         "herdado, conforme a seção 259.",
         kind="case_control",
         basis="escopo do gate frente ao tipo de execução",
@@ -272,8 +279,8 @@ def build_payload(
     # than a single aggregate that could hide a blocked prerequisite.
     for name in sorted(qc.payload["gates"]):
         gate = qc.payload["gates"][name]
-        builder = compiler.finding(f"QC-{name}", basis="gate do QC do array")
-        builder.stated("domain", "QC do array", kind="case_control", basis="plano de dados científicos", status="VERIFICADO")
+        builder = compiler.finding(f"QC-{name}", basis=f"gate do QC ({assay.short})")
+        builder.stated("domain", f"QC — {assay.short}", kind="case_control", basis="plano de dados científicos", status="VERIFICADO")
         builder.derived(
             "nature", artifact="array-qc", locator=f"gates.{name}.state",
             status=status, basis="estado do gate", kind="computed",

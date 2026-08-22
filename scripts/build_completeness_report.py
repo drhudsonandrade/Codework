@@ -25,6 +25,7 @@ from array_pipeline.completeness import (
     build_completeness_matrix,
     write_matrix,
 )
+from reporting.assay import assay_for
 from reporting.provenance import Artifact, PayloadCompiler
 
 REPORT_ID = "09"
@@ -69,7 +70,7 @@ def _blind_spot_order(item: tuple[int, dict]) -> tuple:
     )
 
 
-def _by_gene(entries: list) -> str:
+def _by_gene(entries: list, assay_short: str) -> str:
     """Group the coverage classes by gene, so a partly-covered gene is visible as such.
 
     Only genes this sample actually reached. A gene whose every locus is NÃO TESTADO says
@@ -91,7 +92,7 @@ def _by_gene(entries: list) -> str:
     )
     if not grouped:
         return (
-            f"Nenhum gene do painel foi alcançado por este array; {len(untouched)} genes "
+            f"Nenhum gene do painel foi alcançado por {assay_short}; {len(untouched)} genes "
             "permanecem inteiramente não testados."
         )
     if untouched:
@@ -113,6 +114,9 @@ def build_payload(
     """Anchor every printed value of report 09 to the artifact it came from."""
     matrix = Artifact.from_path("completeness-matrix", matrix_path)
     qc = Artifact.from_path("array-qc", qc_path)
+    # What produced these genotypes, read from the schema the QC measured off the input
+    # header. Every methods sentence below derives from it instead of naming an array.
+    assay = assay_for(qc.payload)
 
     case_id = matrix.payload.get("case_id") or "NÃO DISPONÍVEL"
     compiler = PayloadCompiler(
@@ -160,12 +164,13 @@ def build_payload(
         artifact="array-qc",
         locator="metrics.call_rate",
         status=status,
-        basis="call rate medido pelo QC do array",
+        basis=f"call rate medido pelo QC ({assay.name})",
         kind="qc_metric",
+        # The methods sentence is read from the assay the QC recorded, never written as a
+        # constant: the same builder now serves an array export and a WGS projection, and
+        # "não produz DP/GQ" is false of the second — it carries both on every call.
         transform=lambda rate: (
-            f"Call rate do array: {_percent(float(rate))}. "
-            "Genotipagem em array não produz DP/GQ/balanço alélico; "
-            "não há profundidade de leitura a reportar."
+            f"Call rate ({assay.short}): {_percent(float(rate))}. {assay.depth_note}"
         ),
     )
 
@@ -189,7 +194,7 @@ def build_payload(
         status=status,
         basis="agrupamento por gene das classificações de cobertura",
         kind="computed",
-        transform=_by_gene,
+        transform=lambda entries: _by_gene(entries, assay.short),
     )
 
     compiler.section_derived(
@@ -245,7 +250,7 @@ def build_payload(
         )
         builder.derived(
             "observed_data", artifact="completeness-matrix", locator=f"entries[{index}].genotype",
-            status=status, basis="genótipo lido do array, se houver", kind="computed",
+            status=status, basis=f"genótipo lido da tabela de {assay.short}, se houver", kind="computed",
             transform=lambda gt: str(gt) if gt else "NÃO DISPONÍVEL",
         )
         builder.derived(

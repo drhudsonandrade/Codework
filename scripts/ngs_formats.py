@@ -51,6 +51,17 @@ class FormatError(Exception):
     """The file is not the format it is being read as, and the message says how it differs."""
 
 
+def sha256_of(path: Path) -> str:
+    """SHA-256 of a file, streamed. Here so the format module and its callers agree."""
+    import hashlib
+
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _read_prefix(path: Path, count: int = 64) -> bytes:
     with Path(path).open("rb") as handle:
         return handle.read(count)

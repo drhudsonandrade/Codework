@@ -23,6 +23,15 @@ HARMONIZED_COLUMNS = [
     "GENERA_RESULT", "MYHERITAGE_RESULT", "SOURCES",
 ]
 RAW_COLUMNS = ["RSID", "CHROMOSOME", "POSITION", "RESULT"]
+#: The table `scripts/vcf_projection.py` writes from a WGS VCF. It is deliberately not
+#: `RAW_COLUMNS`: those four columns would make this QC name the schema
+#: `raw_snp_array_v1`, and every report prints the method — calling a WGS-derived
+#: genotype a SNP-array reading is a false statement about how it was obtained. The three
+#: extra columns are what an array never had: the per-call depth and genotype quality
+#: section 119 asks for, and the basis of each call or refusal.
+VCF_PROJECTION_COLUMNS = [
+    "RSID", "CHROMOSOME", "POSITION", "RESULT", "DEPTH", "GENOTYPE_QUALITY", "CALL_BASIS",
+]
 ALLOWED_CHROMS = {str(i) for i in range(1, 23)} | {"X", "Y", "MT", "M"}
 MISSING_GENOTYPES = {"", "--", "NA", "N/A", "NULL", "."}
 
@@ -207,6 +216,23 @@ def _read_header_and_metadata(fh: TextIO) -> tuple[list[str], dict[str, str]]:
         return header, metadata
 
 
+def detect_schema(header: list[str]) -> str:
+    """Name the genotype table's schema from its header, or refuse it.
+
+    Four modules carried their own copy of this three-branch check — qc, annotation,
+    completeness and the provenance probe. A schema added to one and forgotten in another is
+    the kind of drift that ends with a file accepted by the gate and unreadable by the
+    matrix, so the branches live here once and the four call it.
+    """
+    if header == HARMONIZED_COLUMNS:
+        return "harmonized_genera_myheritage_v1"
+    if header == RAW_COLUMNS:
+        return "raw_snp_array_v1"
+    if header == VCF_PROJECTION_COLUMNS:
+        return "wgs_vcf_projection_v1"
+    raise ValueError(f"unsupported genotype table header: {header}")
+
+
 def _is_called(value: str | None) -> bool:
     if value is None:
         return False
@@ -366,12 +392,7 @@ def inspect_array(
     fh, src = _text_stream(path)
     try:
         header, metadata = _read_header_and_metadata(fh)
-        if header == HARMONIZED_COLUMNS:
-            schema = "harmonized_genera_myheritage_v1"
-        elif header == RAW_COLUMNS:
-            schema = "raw_snp_array_v1"
-        else:
-            raise ValueError(f"unsupported SNP-array CSV header: {header}")
+        schema = detect_schema(header)
 
         if build is None:
             ref = metadata.get("reference", "")

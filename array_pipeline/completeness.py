@@ -37,8 +37,7 @@ from typing import Any
 import normative
 from array_pipeline.annotation import UNSUPPORTED_ARRAY_CLAIMS, _orientation
 from array_pipeline.qc import (
-    HARMONIZED_COLUMNS,
-    RAW_COLUMNS,
+    detect_schema,
     UNRESOLVED_OVERLAP_STATUSES,
     _canonical_gt,
     _is_valid_consensus,
@@ -47,6 +46,7 @@ from array_pipeline.qc import (
     sha256_file,
 )
 from array_pipeline.targets import load_target_manifest, sha256_json
+from reporting.assay import assay_for_schema
 
 SCHEMA = "genoma-genome-completeness-matrix-v1"
 RULESET = normative.ruleset_block()
@@ -90,16 +90,20 @@ def assessed_bases(target: dict[str, Any]) -> set[str]:
     }
 
 
+def _header_of(path: Path) -> list[str]:
+    fh, _ = _text_stream(path)
+    try:
+        header, _metadata = _read_header_and_metadata(fh)
+        return header
+    finally:
+        fh.close()
+
+
 def _row_reader(path: Path):
     fh, _ = _text_stream(path)
     try:
         header, _metadata = _read_header_and_metadata(fh)
-        if header == HARMONIZED_COLUMNS:
-            schema = "harmonized_genera_myheritage_v1"
-        elif header == RAW_COLUMNS:
-            schema = "raw_snp_array_v1"
-        else:
-            raise ValueError(f"unsupported SNP-array CSV header: {header}")
+        schema = detect_schema(header)
         import csv
 
         for row in csv.DictReader(fh, fieldnames=header):
@@ -112,10 +116,15 @@ def _classify(
     row: dict[str, str] | None,
     schema: str | None,
     target: dict[str, Any],
+    file_schema: str,
 ) -> tuple[str, str]:
     """Return (class, basis) for one target locus."""
     if row is None:
-        return NAO_TESTADO, "locus não presente no arquivo do array; nada foi interrogado"
+        # Why the locus was not interrogated depends on what produced the table. For an array
+        # it is absent from the chip; for a VCF projection it is a position the file said
+        # nothing about — and absence in a VCF is not reference, which is the whole reason
+        # this class exists rather than a negative one.
+        return NAO_TESTADO, assay_for_schema(file_schema).absence_note
 
     if schema and schema.startswith("harmonized"):
         raw_gt = row.get("CONSENSUS_RESULT")
@@ -234,6 +243,10 @@ def build_completeness_matrix(
     # picked a winner whenever two rows disagreed — resolving a conflict by arbitration,
     # which sections 4 and 7 forbid.
     collected: dict[str, list[tuple[str, dict[str, str]]]] = {}
+    # The file's own schema, read once from its header, so a target the table never
+    # mentions can still be explained in the vocabulary of what produced the table.
+    file_schema = detect_schema(_header_of(Path(input_path)))
+    assay = assay_for_schema(file_schema)
     for schema, row in _row_reader(Path(input_path)):
         rsid = (row.get("RSID") or "").strip().lower()
         if rsid not in targets:
@@ -268,7 +281,7 @@ def build_completeness_matrix(
     for rsid in sorted(targets):
         target = targets[rsid]
         schema, row = seen.get(rsid, (None, None))
-        classification, basis = _classify(row, schema, target)
+        classification, basis = _classify(row, schema, target, file_schema)
         entries.append(
             {
                 "rsid": rsid,
@@ -339,8 +352,12 @@ def build_completeness_matrix(
             "NÃO TESTADO, NO-CALL e NÃO REPORTÁVEL nunca são evidência de ausência."
         ),
         "limitations": [
-            "A matriz descreve cobertura do array; não estabelece significado clínico de nenhum locus.",
-            "Ausência genome-wide não é demonstrável a partir de genotipagem em array.",
+            # Both sentences named the array as a constant. The matrix now also describes a
+            # WGS projection, where the first is the wrong subject and the second the wrong
+            # reason — a projection is bounded by the target registry, not by a chip.
+            f"A matriz descreve {assay.coverage_subject}; não estabelece significado clínico "
+            "de nenhum locus.",
+            assay.genome_wide_note,
             "NÃO DETECTADO depende de o registro declarar o alelo avaliado; sem isso o locus permanece OBSERVADO.",
             "Pontos cegos estruturais são limites da plataforma, não achados desta amostra.",
         ],
