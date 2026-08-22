@@ -694,6 +694,9 @@ class PayloadCompiler:
                     "covers": False,
                     "report_domain": REPORT_DOMAINS.get(str(self.report_id)),
                     "record_sha256": artifact.sha256,
+                    # Carried on the refusal too, so a reader inspecting the block finds the
+                    # same keys whichever way it went.
+                    "origin": "fixture" if self._fixture_consent else "operator-record",
                     "basis": f"o registro de consentimento não é válido para esta execução: {exc}",
                 }
         try:
