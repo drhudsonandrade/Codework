@@ -14,6 +14,13 @@ if str(ROOT) not in sys.path:
 
 import normative
 from reporting.consent import ConsentError, validate_record as validate_consent
+from reporting.section_attestations import (
+    CurationError,
+    build_attestations,
+    load_curation,
+    pending as section_pending,
+    validate_curation,
+)
 from reporting.provenance import witness_verdict
 
 
@@ -59,6 +66,67 @@ def build_manifest(
     observed = annotation.get("observations", []) if isinstance(annotation.get("observations"), list) else []
     sources = [x for x in annotation.get("evidence_retrievals", []) if isinstance(x, dict) and x.get("status") == "VERIFICADO"]
     input_sha = str(qc.get("input", {}).get("sha256") or "")
+    qc_sha, annotation_sha = sha256_file(qc_path), sha256_file(annotation_path)
+
+    # The run's own artifacts, registered as evidence sources. RULE_COVERAGE_GATE resolves
+    # every attestation's `evidence_refs` against `sources`, and `sources` held only external
+    # retrievals — so no section attestation could cite the QC report or the ruleset that
+    # actually satisfies it, and none could be SATISFIED. Each is immutable and content-
+    # addressed, so `locator` and `retrieval_evidence` are the digest itself rather than a
+    # claim about a remote database.
+    run_artifacts = {
+        "array-input": (input_sha, "export de genotipagem analisado nesta execução"),
+        "array-qc": (qc_sha, "artefato de QC produzido por array_pipeline.qc nesta execução"),
+        "partial-annotation": (
+            annotation_sha,
+            "extração de observações nos alvos produzida nesta execução",
+        ),
+        f"ruleset-{normative.VERSION}": (
+            normative.RAW_SHA256,
+            "artefato normativo vigente conferido contra o manifesto de hashes",
+        ),
+    }
+    sources = sources + [
+        {
+            "id": source_id,
+            "status": "VERIFICADO",
+            "mutable": False,
+            "accessible": True,
+            "primary_or_official": False,
+            "version": digest[:16],
+            "locator": f"sha256:{digest}",
+            "retrieval_evidence": {
+                "method": "SHA-256 do artefato produzido ou conferido nesta execução",
+                "result_digest": digest,
+            },
+            "note": note,
+        }
+        for source_id, (digest, note) in run_artifacts.items()
+    ]
+    attestations: list[dict[str, Any]] = []
+    attestation_state: dict[str, Any] = {"status": "PENDENTE"}
+    try:
+        curation = load_curation()
+        gaps = section_pending(curation)
+        problems = validate_curation(curation)
+        if gaps or problems:
+            attestation_state = {
+                "status": "PENDENTE",
+                "pending_sections": len(gaps),
+                "problems": problems[:5],
+            }
+        else:
+            attestations = build_attestations(
+                curation,
+                artifact_sha256={key: value[0] for key, value in run_artifacts.items()},
+                input_sha256=input_sha,
+                run_id=f"array-{qc.get('case_id')}-{input_sha[:16]}",
+            )
+            attestation_state = {"status": "COMPLETA", "count": len(attestations)}
+    except CurationError as exc:
+        # Refused, not defaulted: a run whose curation cannot be read attests nothing, and
+        # RULE_COVERAGE_GATE then reports 263 rules not considered — which is true.
+        attestation_state = {"status": "PENDENTE", "reason": str(exc)}
     consent_block: dict[str, Any] = {
         "verified": False,
         "version": None,
@@ -131,7 +199,7 @@ def build_manifest(
         "qc": {
             "status": qc.get("operational_status"),
             "passed": qc.get("gates", {}).get("LIMITED_INTERPRETATION_GATE", {}).get("state") == "PASS",
-            "evidence_refs": [f"array-qc:{sha256_file(qc_path)}"],
+            "evidence_refs": [f"array-qc:{qc_sha}"],
         },
         "inputs": [
             {
@@ -157,13 +225,14 @@ def build_manifest(
                 "parent_sha256": input_sha,
             },
         ],
-        "section_attestations": [],
+        "section_attestations": attestations,
+        "section_attestation_curation": attestation_state,
         "ruleset": normative.attested_ruleset_block(),
         "summary": "SNP-array Scientific Data Plane executed for interrogated target loci only. Clinical interpretation remains bounded by assay coverage, current evidence and confirmation requirements.",
         "array_artifacts": {
             "input_sha256": qc.get("input", {}).get("sha256"),
-            "qc_sha256": sha256_file(qc_path),
-            "annotation_sha256": sha256_file(annotation_path),
+            "qc_sha256": qc_sha,
+            "annotation_sha256": annotation_sha,
             "build": qc.get("input", {}).get("build"),
             "strand": qc.get("input", {}).get("strand"),
             "unique_rsids": qc.get("metrics", {}).get("unique_rsids"),
@@ -177,6 +246,11 @@ def build_manifest(
             "repeat_expansion": {"status": "NÃO DISPONÍVEL", "reason": "not established by this SNP-array lane"},
             "HLA": {"status": "NÃO DISPONÍVEL", "reason": "specialized HLA typing not executed"},
             "CYP2D6": {"status": "NÃO DISPONÍVEL", "reason": "array SNPs are insufficient for structural/hybrid/copy-number diplotyping"},
+            # Declared because section 68 is attested NOT_APPLICABLE on the grounds that no
+            # score is produced, and a reader must be able to check that against the manifest
+            # rather than take the attestation's word for it. The PGS Catalog is used to
+            # curate which loci are worth interrogating; it is not used to score the case.
+            "PRS": {"status": "NÃO DISPONÍVEL", "reason": "no polygenic score is computed by this lane; the PGS Catalog is used only to curate target loci"},
             "genome_wide_negative": {"status": "NÃO DISPONÍVEL", "reason": "non-assayed loci cannot be treated as negative evidence"}
         },
         "sources": sources,
