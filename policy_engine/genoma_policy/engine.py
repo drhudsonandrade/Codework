@@ -9,6 +9,7 @@ from .gates_evidence import EvidenceGates
 from .gates_common import CRITICAL_FINAL_AUDIT_KEYS
 from .models import EvaluationReport
 from .ruleset import Ruleset, load_ruleset
+from .version import __version__
 
 
 class PolicyEngine(CoreGates, EvidenceGates, AuditGates):
@@ -33,7 +34,7 @@ class PolicyEngine(CoreGates, EvidenceGates, AuditGates):
         ])
         report.section_coverage = self._section_coverage_summary(manifest)
         report.metadata = {
-            "engine": "genoma-policy-engine", "engine_version": "0.3.0", "rule_count": len(self.ruleset.sections),
+            "engine": "genoma-policy-engine", "engine_version": __version__, "rule_count": len(self.ruleset.sections),
             "note": "POST-DEPLOYMENT is a distinct project gate and is never inferred from unit tests or synthetic CI fixtures.",
         }
         report.planes = self._plane_summary(report.gates)
