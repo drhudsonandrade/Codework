@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+EXPECTED_SHA = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
 
 
 class SealedRulesetContractTest(unittest.TestCase):
@@ -13,9 +14,9 @@ class SealedRulesetContractTest(unittest.TestCase):
 
         manifest = load_manifest(ROOT / "normative" / "sealed")
         self.assertEqual(len(manifest["transport_parts"]), 13)
-        self.assertFalse((ROOT / "normative" / "sealed" / "GENOMA_RULESET_v3.3.txt.gz.b64").exists())
+        self.assertFalse((ROOT / "normative" / "sealed" / "GENOMA_RULESET_v3.4.txt.gz.b64").exists())
         evidence = verify_transport(ROOT / "normative" / "sealed")
-        self.assertEqual(evidence["raw_sha256"], "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a")
+        self.assertEqual(evidence["raw_sha256"], EXPECTED_SHA)
         self.assertEqual(evidence["section_count"], 263)
         self.assertEqual(evidence["section_range"], [0, 262])
 
@@ -24,7 +25,7 @@ class SealedRulesetContractTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as td:
             target, evidence = materialize(ROOT / "normative" / "sealed", Path(td))
-            self.assertEqual(evidence["raw_sha256"], "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a")
+            self.assertEqual(evidence["raw_sha256"], EXPECTED_SHA)
             self.assertEqual(stat.S_IMODE(os.stat(target).st_mode), 0o444)
             self.assertFalse(os.access(target, os.W_OK) and (stat.S_IMODE(os.stat(target).st_mode) & 0o222))
 
