@@ -78,8 +78,26 @@ class EvaluationReport:
     gates: list[GateResult] = field(default_factory=list)
     section_coverage: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
+    planes: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def blocking_failures(self) -> list[GateResult]:
+        return [g for g in self.gates if g.blocking and g.state == GateState.FAIL]
+
+    @property
+    def pending_blockers(self) -> list[GateResult]:
+        return [g for g in self.gates if g.blocking and g.state == GateState.PENDING]
+
+    @property
+    def ready(self) -> bool:
+        return not self.blocking_failures and not self.pending_blockers
 
     def to_dict(self) -> dict[str, Any]:
-        data = asdict(self)
-        data["gates"] = [g.to_dict() for g in self.gates]
-        return data
+        return {
+            "ready_for_requested_operation": self.ready,
+            "ruleset": self.ruleset,
+            "gates": [g.to_dict() for g in self.gates],
+            "section_coverage": self.section_coverage,
+            "metadata": self.metadata,
+            "planes": self.planes,
+        }
