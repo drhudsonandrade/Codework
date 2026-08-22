@@ -17,7 +17,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent
 CATALOG_PATH = ROOT / "catalog.json"
-EXPECTED_RULESET = {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026"}
+EXPECTED_RULESET = {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026"}
 REQUIRED_PLANES = ("policy_control", "scientific_data", "evidence", "audit")
 
 
@@ -80,7 +80,7 @@ def _model_markdown(report_id: str, model: dict[str, Any]) -> str:
         "",
         "**MODELO — NÃO É RESULTADO GENÉTICO**",
         "",
-        f"Modelo GENOMA v3.0 / {model['code']}. Ruleset exigido: v3.3 / VIGENTE / 14/08/2026.",
+        f"Modelo GENOMA v3.0 / {model['code']}. Ruleset exigido: v3.4 / VIGENTE / 17/08/2026.",
         "",
         f"Finalidade: {model['purpose']}",
         f"Público: {model['audience']}",
@@ -109,7 +109,7 @@ def _final_markdown(report_id: str, model: dict[str, Any], data: dict[str, Any])
         "",
         f"Caso: {_safe(data.get('case_id'))}",
         f"Versão do modelo: v3.0/{model['code']}",
-        "Ruleset: v3.3 / VIGENTE / 14/08/2026",
+        "Ruleset: v3.4 / VIGENTE / 17/08/2026",
         f"POST-DEPLOYMENT: {_safe(data.get('post_deployment_status'), 'PENDENTE')}",
         "",
         "## Finalidade",
