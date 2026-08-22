@@ -63,7 +63,7 @@ SKIP_PARTS = {".git", "node_modules", "dist", "__pycache__", ".pytest_cache"}
 OLD_ACTIVE_TOKENS = (
     "REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt",
     "RULESET_V3.3.sha256",
-    '"v3.3"',
+    "v3.3",
     "GENOMA-V3.3",
     "14/08/2026",
     "2026-08-14",
@@ -71,10 +71,12 @@ OLD_ACTIVE_TOKENS = (
 )
 ACTIVE_IDENTITY_SURFACES = (
     "scripts/run_live_post_deployment_smoke.py", "scripts/verify_ruleset.sh", "scripts/genoma_audit.py",
-    "scripts/run_snp_array.py", "scripts/build_wgs_curated_manifest.py", "scripts/build_array_case_manifest.py",
+    "scripts/run_snp_array.py", "scripts/annotate_partial_genome.py", "scripts/build_wgs_curated_manifest.py",
+    "scripts/build_array_case_manifest.py", "scripts/generate_report.py", "scripts/generate_all_reports.py",
     "array_pipeline/qc.py", "array_pipeline/annotation.py", "workflows/wgs.nf", "workflows/array.nf",
-    "policy_engine/Dockerfile", "policy_engine/docker-compose.yml", "policy_engine/pyproject.toml",
-    "policy_engine/genoma_policy/__init__.py", "policy_engine/genoma_policy/cli.py",
+    "main.nf", "nextflow.config", "Dockerfile", "deploy/docker-compose.yml", "mcp/src/server.ts",
+    "reporting/engine.py", "policy_engine/Dockerfile", "policy_engine/docker-compose.yml",
+    "policy_engine/pyproject.toml", "policy_engine/genoma_policy/__init__.py", "policy_engine/genoma_policy/cli.py",
     "policy_engine/genoma_policy/engine.py", "policy_engine/genoma_policy/gates_core.py",
     "policy_engine/genoma_policy/gates_audit.py", "policy_engine/genoma_policy/models.py",
     "policy_engine/genoma_policy/paths.py", "policy_engine/genoma_policy/ruleset.py",
@@ -82,6 +84,7 @@ ACTIVE_IDENTITY_SURFACES = (
     "policy_engine/policy/rego/genoma_test.rego", "policy_engine/policy/schema/execution-manifest.schema.json",
     "locks/runtime-lock.json", ".github/workflows/genoma-policy-engine.yml",
     ".github/workflows/genoma-production-ceremony.yml", ".github/workflows/genoma-production-witness.yml",
+    ".github/workflows/genoma-ngs-runtime-gate.yml", ".github/workflows/genoma-snp-array.yml",
 )
 
 
