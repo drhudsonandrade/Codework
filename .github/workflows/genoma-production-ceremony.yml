@@ -24,9 +24,9 @@ jobs:
           python3 scripts/materialize_ruleset.py \
             --output-dir "$RUNNER_TEMP/genoma-normative" \
             --evidence production-evidence/ruleset-materialization.json
-          canonical="$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt"
+          canonical="$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
           test "$(stat -c '%a' "$canonical")" = 444
-          echo '187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a  '"$canonical" | sha256sum -c -
+          echo 'ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580  '"$canonical" | sha256sum -c -
       - name: Build exact policy image for this commit
         run: |
           docker build --file policy_engine/Dockerfile --tag genoma-policy-live:${{ github.sha }} .
@@ -36,13 +36,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          canonical="$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt"
+          canonical="$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
           cid=$(docker run -d --name genoma-policy-live \
             --read-only \
             --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m \
             --cap-drop ALL --security-opt no-new-privileges:true \
-            -v "$canonical:/run/genoma/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt:ro" \
-            -v "$PWD/manifests/RULESET_V3.3.sha256:/run/genoma/manifests/RULESET_V3.3.sha256:ro" \
+            -v "$canonical:/run/genoma/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt:ro" \
+            -v "$PWD/manifests/RULESET_V3.4.sha256:/run/genoma/manifests/RULESET_V3.4.sha256:ro" \
             -p 127.0.0.1:8787:8787 \
             genoma-policy-live:${{ github.sha }})
           echo "$cid" > production-evidence/container-id.txt
@@ -56,11 +56,11 @@ jobs:
           import json
           from pathlib import Path
           p=json.loads(Path('production-evidence/live-ruleset.json').read_text())
-          assert p['status']=='VIGENTE'; assert p['version']=='v3.3'; assert p['effective_date']=='14/08/2026'
-          assert p['sha256']=='187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a'
+          assert p['status']=='VIGENTE'; assert p['version']=='v3.4'; assert p['effective_date']=='17/08/2026'
+          assert p['sha256']=='ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580'
           assert p['section_count']==263
           inspect=json.loads(Path('production-evidence/container-inspect.json').read_text())[0]
-          mount=next(m for m in inspect['Mounts'] if m['Destination'].endswith('REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt'))
+          mount=next(m for m in inspect['Mounts'] if m['Destination'].endswith('REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt'))
           assert mount['RW'] is False
           assert inspect['HostConfig']['ReadonlyRootfs'] is True
           assert inspect['HostConfig']['CapDrop']==['ALL']
@@ -69,7 +69,7 @@ jobs:
         run: |
           python3 scripts/run_live_post_deployment_smoke.py \
             --base-url http://127.0.0.1:8787 \
-            --bootstrap-attestation deploy/attestations/bootstrap-project-v3.3.json \
+            --bootstrap-attestation deploy/attestations/bootstrap-project-v3.4.json \
             --deployment-id "github-${GITHUB_RUN_ID}-${GITHUB_SHA}" \
             --output production-evidence/live-section-260.json
       - name: Hash complete evidence bundle and verify result
