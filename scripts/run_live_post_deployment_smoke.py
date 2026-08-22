@@ -3,8 +3,9 @@
 
 This is deliberately distinct from the unit/fixture smoke. It exercises a running
 container through HTTP, verifies exact ruleset identity, submits all 15 canonical
-unsafe scenarios, records response hashes, and then asks the live engine to evaluate
-the external POST_DEPLOYMENT criteria. No LLM is involved.
+unsafe scenarios, records response hashes, validates the bootstrap attestation through
+a fail-closed independent verifier, and then asks the live engine to evaluate the
+external POST_DEPLOYMENT criteria. No LLM is involved.
 """
 from __future__ import annotations
 
@@ -17,6 +18,8 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from bootstrap_attestation import BootstrapAttestationError, verify_bootstrap_attestation
 
 EXPECTED_SHA = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
 EXPECTED_IDENTITY = "v3.4/VIGENTE/17/08/2026"
@@ -151,8 +154,11 @@ def main() -> int:
         raise RuntimeError("live catalog is not the canonical 263-rule catalog")
 
     bootstrap_path = Path(args.bootstrap_attestation)
-    bootstrap = json.loads(bootstrap_path.read_text(encoding="utf-8"))
-    bootstrap_ok = bootstrap.get("status") == "VERIFICADO" and bootstrap.get("ruleset_identity") == EXPECTED_IDENTITY and all(bootstrap.get("checks", {}).values())
+    try:
+        bootstrap_evidence = verify_bootstrap_attestation(bootstrap_path)
+    except BootstrapAttestationError as exc:
+        raise RuntimeError(f"bootstrap attestation verification failed: {exc}") from exc
+    bootstrap_ok = bootstrap_evidence.get("status") == "VERIFICADO"
 
     results: list[dict[str, Any]] = []
     passed = 0
@@ -184,7 +190,8 @@ def main() -> int:
         "deployment_id": args.deployment_id,
         "ruleset": metadata,
         "ruleset_response_sha256": sha256_bytes(metadata_raw),
-        "bootstrap_attestation_sha256": hashlib.sha256(bootstrap_path.read_bytes()).hexdigest(),
+        "bootstrap_attestation_sha256": bootstrap_evidence["file_sha256"],
+        "bootstrap_verification": bootstrap_evidence,
         "bootstrap_verified": bootstrap_ok,
         "passed": passed,
         "total": 15,
@@ -197,7 +204,8 @@ def main() -> int:
         "completed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "results": results,
     }
-    out = Path(args.output); out.parent.mkdir(parents=True, exist_ok=True)
+    out = Path(args.output)
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(evidence, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(evidence, ensure_ascii=False, indent=2))
     return 0 if overall else 3
