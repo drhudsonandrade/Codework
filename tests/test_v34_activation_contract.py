@@ -11,7 +11,12 @@ from policy_engine.genoma_policy import ruleset as policy_ruleset
 from policy_engine.genoma_policy.engine import PolicyEngine
 from scripts import sealed_ruleset
 from scripts.bootstrap_attestation import BootstrapAttestationError, verify_bootstrap_attestation
-from scripts.validate_repo import OLD_ACTIVE_TOKENS, validate_active_identity_text
+from scripts.validate_repo import (
+    FORBIDDEN_ACTIVE_PATHS,
+    OLD_ACTIVE_TOKENS,
+    validate,
+    validate_active_identity_text,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_NAME = "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
@@ -27,6 +32,12 @@ EXPECTED_SUPERSEDED_TOKENS = frozenset(
         "14/08/2026",
         "2026-08-14",
         "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a",
+    }
+)
+EXPECTED_FORBIDDEN_ACTIVE_PATHS = frozenset(
+    {
+        "manifests/RULESET_V3.3.sha256",
+        "deploy/attestations/bootstrap-project-v3.3.json",
     }
 )
 
@@ -80,6 +91,21 @@ class V34ActivationContractTests(unittest.TestCase):
                 validate_active_identity_text(token, "fixture-active-surface", errors)
                 self.assertTrue(errors)
                 self.assertTrue(any(token in error for error in errors))
+
+    def test_superseded_active_paths_are_forbidden_but_history_is_not(self) -> None:
+        self.assertEqual(frozenset(FORBIDDEN_ACTIVE_PATHS), EXPECTED_FORBIDDEN_ACTIVE_PATHS)
+        for relative in EXPECTED_FORBIDDEN_ACTIVE_PATHS:
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory() as td:
+                root = Path(td)
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("historical-looking active surface", encoding="utf-8")
+                errors = validate(root)
+                self.assertTrue(any(relative in error and "superseded active ruleset path" in error for error in errors))
+
+        self.assertTrue((ROOT / "docs" / "history" / "v3.3" / "README.md").is_file())
+        self.assertFalse((ROOT / "manifests" / "RULESET_V3.3.sha256").exists())
+        self.assertFalse((ROOT / "deploy" / "attestations" / "bootstrap-project-v3.3.json").exists())
 
     def test_bootstrap_attestation_is_digest_bound_and_complete(self) -> None:
         path = ROOT / "deploy" / "attestations" / "bootstrap-project-v3.4.json"
