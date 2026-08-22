@@ -170,6 +170,21 @@ def _witness_binding_refusal(payload: dict[str, Any]) -> str | None:
     return None
 
 
+def _exactly(observed: Any, expected: Any) -> bool:
+    """Equal *and* the same type, because `1 == True` and `False == 0` in Python.
+
+    `payload.get(key) != expected` accepted every type-confused spelling of the four
+    conditions that gate POST-DEPLOYMENT: `all_pass: 1`, `bootstrap_verified: 1`, and — worst
+    — `critical_failures: false`, which is not a count of anything and was read as zero
+    critical failures. A JSON producer emits any of these without meaning to, and the witness
+    is the one artifact this project refuses to compose for itself, so it must be read
+    exactly as written.
+    """
+    if isinstance(expected, bool) or isinstance(observed, bool):
+        return observed is expected
+    return type(observed) is type(expected) and observed == expected
+
+
 def witness_verdict(
     payload: dict[str, Any],
     *,
@@ -184,7 +199,7 @@ def witness_verdict(
     which decides what the policy engine is told. Two implementations of "is this witness
     good enough" would eventually disagree, and then the report and the engine would too.
     """
-    unmet = sorted(key for key, expected in WITNESS_REQUIRED.items() if payload.get(key) != expected)
+    unmet = sorted(key for key, expected in WITNESS_REQUIRED.items() if not _exactly(payload.get(key), expected))
     if unmet:
         return {
             "status": "PENDENTE",

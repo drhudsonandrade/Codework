@@ -471,7 +471,12 @@ def inspect_array(
                     off_assembly_positions += 1
                     if off_assembly_example is None or position > off_assembly_example[1]:
                         off_assembly_example = (chrom, position)
-            except Exception:
+            except (TypeError, ValueError):
+                # Only what `int()` raises on a malformed position. `except Exception` also
+                # swallowed anything `is_beyond_end` could throw, so a defect in the assembly
+                # bounds check would have been counted as one more invalid coordinate in the
+                # patient's file — a real bug reported as bad input, at QC, where the count
+                # decides whether the run proceeds.
                 invalid_positions += 1
             if chrom not in ALLOWED_CHROMS:
                 invalid_chromosomes += 1

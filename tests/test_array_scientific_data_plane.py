@@ -35,7 +35,8 @@ class ArrayScientificDataPlaneTest(unittest.TestCase):
             qc = {
                 "operational_status": "VERIFICADO",
                 "case_id": "SYN",
-                "input": {"sha256": "a" * 64, "build": "GRCh37", "strand": "forward"},
+                "input": {"sha256": "a" * 64, "build": "GRCh37", "strand": "forward",
+                          "schema": "harmonized_genera_myheritage_v1"},
                 "metrics": {"unique_rsids": 2, "call_rate": 1.0},
                 "gates": {"LIMITED_INTERPRETATION_GATE": {"state": "PASS"}},
                 "limitations": [],

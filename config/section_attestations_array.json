@@ -1,4 +1,8 @@
 {
+ "applies_to_schemas": [
+  "harmonized_genera_myheritage_v1",
+  "raw_snp_array_v1"
+ ],
  "curated_at": "2026-08-22",
  "curated_by": "curadoria do projeto GENOMA — leitura seção a seção do ruleset vigente",
  "note": "Cada entrada é um juízo sobre uma seção específica, escrito contra o texto dela e fixado ao SHA-256 daquela seção. Uma seção cujo texto mude deixa de ser coberta por esta curadoria e o RULE_COVERAGE_GATE recusa, que é o comportamento correto: um juízo sobre outras palavras não é um juízo sobre estas.",
@@ -8,6 +12,7 @@
   "version": "v3.4"
  },
  "schema": "genoma-section-attestations-v1",
+ "scope_note": "Estes juízos foram escritos sobre uma execução de genotipagem em array. Uma projeção de VCF de WGS é outra operação — a hierarquia de fontes, a auditoria de WGS, a normalização de variantes e o truth set mudam de resposta — e exige a própria curadoria.",
  "sections": {
   "0": {
    "applicability": "APPLICABLE",

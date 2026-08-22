@@ -14,14 +14,20 @@ if str(ROOT) not in sys.path:
 
 import normative
 from reporting.consent import ConsentError, validate_record as validate_consent
+from reporting.assay import UnknownAssayError, assay_for
 from reporting.section_attestations import (
     CurationError,
     build_attestations,
+    curation_for_schema,
     load_curation,
     pending as section_pending,
     validate_curation,
 )
 from reporting.provenance import witness_verdict
+
+
+class _CurationNotWritten(Exception):
+    """No section curation exists for this assay. Not a fault in one — its absence."""
 
 
 def sha256_file(path: Path) -> str:
@@ -103,10 +109,29 @@ def build_manifest(
         }
         for source_id, (digest, note) in run_artifacts.items()
     ]
+    # Which assay produced these genotypes, read from the schema the QC measured off the
+    # input header. It decides both what this operation is called and which curation, if any,
+    # was ever written about it.
+    try:
+        assay = assay_for(qc)
+    except UnknownAssayError as exc:
+        # Consistent with the QC guards above: an artifact this builder cannot describe is
+        # refused with the reason, not with a KeyError from three modules away. Every QC
+        # `array_pipeline.qc` writes records `input.schema`; one that does not is not a QC
+        # artifact this manifest can name an operation from.
+        raise ValueError(f"QC artifact does not name its assay: {exc}") from exc
     attestations: list[dict[str, Any]] = []
     attestation_state: dict[str, Any] = {"status": "PENDENTE"}
+    curation_path = curation_for_schema(assay.schema)
     try:
-        curation = load_curation()
+        if curation_path is None:
+            # The array lane's 263 judgements were being attached to a WGS projection: section 3
+            # declared the input the harmonised bank with "nenhum WGS foi enviado", 7 and 55
+            # dismissed WGS rules as inapplicable because none existed, 8 dismissed variant
+            # normalisation as an array concern. Six were false about the very run they were
+            # certifying, and RULE_COVERAGE_GATE would have passed on them.
+            raise _CurationNotWritten
+        curation = load_curation(curation_path)
         gaps = section_pending(curation)
         problems = validate_curation(curation)
         if gaps or problems:
@@ -122,7 +147,24 @@ def build_manifest(
                 input_sha256=input_sha,
                 run_id=f"array-{qc.get('case_id')}-{input_sha[:16]}",
             )
-            attestation_state = {"status": "COMPLETA", "count": len(attestations)}
+            attestation_state = {
+                "status": "COMPLETA",
+                "count": len(attestations),
+                "assay": assay.schema,
+                "curation": curation_path.name,
+            }
+    except _CurationNotWritten:
+        # No curation is the honest state for an operation nobody has judged the ruleset
+        # against, and it makes the gate report 263 rules not considered — which is true.
+        attestation_state = {
+            "status": "PENDENTE",
+            "assay": assay.schema,
+            "reason": (
+                f"nenhuma curadoria de secoes foi escrita para {assay.name} "
+                f"(schema {assay.schema}); os juizos de outra via descreveriam uma operacao "
+                "diferente desta, e o RULE_COVERAGE_GATE deve recusar"
+            ),
+        }
     except CurationError as exc:
         # Refused, not defaulted: a run whose curation cannot be read attests nothing, and
         # RULE_COVERAGE_GATE then reports 263 rules not considered — which is true.
@@ -179,7 +221,10 @@ def build_manifest(
         # reproducible from the artifacts and cannot be reused across inputs.
         "session_id": f"array-{qc.get('case_id')}-{input_sha[:16]}",
         "operation": {
-            "name": "SNP-array curated interpretation",
+            # Named from the assay, not from a constant. A WGS projection declaring itself
+            # "SNP-array curated interpretation" is a false statement in the very manifest the
+            # policy engine evaluates.
+            "name": f"{assay.name} - interpretacao curada",
             # True, and it is the whole point: this switches the provenance, consent and QC
             # gates back on. Declaring false to make them pass would be the silencing this
             # manifest previously achieved by omission.

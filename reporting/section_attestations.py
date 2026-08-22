@@ -41,6 +41,19 @@ ROOT = Path(__file__).resolve().parents[1]
 #: prevent.
 ARRAY_CURATION_PATH = ROOT / "config/section_attestations_array.json"
 
+#: Which genotype-table schemas each curation file was written against. A curation declares
+#: this itself, in `applies_to_schemas`, and `curation_for_schema` refuses outside it.
+#:
+#: This is not hypothetical tidiness. When the VCF projection landed, the array lane's manifest
+#: builder attached these 263 judgements to a WGS run without noticing: §3 said "o arquivo
+#: analisado é o banco harmonizado, Nível 2 da hierarquia. Nenhum WGS foi enviado", §7 and §55
+#: were attested NOT_APPLICABLE because "nenhum WGS existe nesta execução", and §8 —
+#: normalisation of sequencing calls — was dismissed as inapplicable to an array export. Six
+#: judgements were outright false about the run they were certifying, and RULE_COVERAGE_GATE
+#: would have passed on them. Judgements made about one operation certifying another is the
+#: inheritance this gate exists to prevent.
+CURATIONS = (ARRAY_CURATION_PATH,)
+
 ALLOWED_APPLICABILITY = ("APPLICABLE", "NOT_APPLICABLE", "UNRESOLVED")
 ALLOWED_DECISIONS = ("SATISFIED", "BLOCKED", "NOT_APPLICABLE", "UNRESOLVED")
 ALLOWED_STATUSES = ("EXECUTADO", "VERIFICADO", "INFERIDO", "PROPOSTO", "NÃO DISPONÍVEL")
@@ -57,6 +70,23 @@ class CurationError(Exception):
 def rule_id_for(number: int) -> str:
     """The canonical rule id, derived the way `RulesetSection.rule_id` derives it."""
     return f"GENOMA-{normative.VERSION.upper()}-S{number:03d}"
+
+
+def curation_for_schema(schema: str | None) -> Path | None:
+    """The curation written for this assay, or None when nobody has written one.
+
+    None is the honest answer for an operation nobody has judged the ruleset against, and it
+    makes RULE_COVERAGE_GATE report 263 rules not considered — which is true. Borrowing
+    another lane's file would make the gate pass on judgements about a different run.
+    """
+    for candidate in CURATIONS:
+        try:
+            payload = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if str(schema) in (payload.get("applies_to_schemas") or []):
+            return candidate
+    return None
 
 
 def load_curation(path: Path | str | None = None) -> dict[str, Any]:
@@ -77,6 +107,11 @@ def load_curation(path: Path | str | None = None) -> dict[str, Any]:
         )
     if not isinstance(curation.get("sections"), dict):
         raise CurationError("a curadoria não traz um objeto 'sections'")
+    if not curation.get("applies_to_schemas"):
+        raise CurationError(
+            f"a curadoria em {source} não declara `applies_to_schemas`; sem isso nada impede "
+            "que os juízos de uma via sejam anexados a outra"
+        )
     return curation
 
 

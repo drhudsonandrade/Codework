@@ -103,8 +103,12 @@ def normalise_contig(value: str) -> str:
     return upper
 
 
-def load_targets(path: Path) -> dict[tuple[str, int], dict[str, Any]]:
-    """Index the registry by GRCh38 coordinate, refusing two targets at one position.
+def load_targets(path: Path) -> tuple[dict[tuple[str, int], dict[str, Any]], int]:
+    """Index the registry by GRCh38 coordinate; return it with the count that has none.
+
+    The count used to ride back inside the index under a string key, in a dict every caller
+    iterates as `for contig, position in index`. Any second caller would have unpacked a
+    fourteen-character string into two names and got a confusing failure far from the cause.
 
     Two registry rows at the same coordinate would make the projection's choice between them
     arbitrary, which is the arbitration sections 4 and 7 forbid.
@@ -131,8 +135,7 @@ def load_targets(path: Path) -> dict[tuple[str, int], dict[str, Any]]:
             f"{len(collisions)} coordenadas do registro apontam para alvos distintos, os "
             f"primeiros: {collisions[:3]}; escolher um deles seria arbitrar"
         )
-    index["__without_coordinate__"] = without_coordinate  # type: ignore[index]
-    return index
+    return index, without_coordinate
 
 
 def _sample_column(header_columns: list[str], wanted: str | None) -> int:
@@ -203,12 +206,28 @@ def _load_callable_bed(path: Path) -> dict[str, list[tuple[int, int]]]:
             contig = normalise_contig(fields[0])
             # BED is half-open and zero-based; the registry's positions are one-based.
             intervals.setdefault(contig, []).append((int(fields[1]) + 1, int(fields[2])))
-    for contig in intervals:
-        intervals[contig].sort()
+    # Merged, not merely sorted. `_covered_by_bed` bisects to the last interval starting at
+    # or before the position; with `chr1 0-5000` followed by `chr1 900-950`, position 1000 is
+    # inside the first and the bisect only ever sees the second, so a callable locus came back
+    # uncovered and the matrix called it NÃO TESTADO. Fail-closed, and still wrong.
+    for contig, spans in intervals.items():
+        merged: list[tuple[int, int]] = []
+        for start, end in sorted(spans):
+            if end < start:
+                raise ProjectionError(
+                    f"intervalo BED inválido em {contig}: {start}-{end} termina antes de começar"
+                )
+            if merged and start <= merged[-1][1] + 1:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+            else:
+                merged.append((start, end))
+        intervals[contig] = merged
     return intervals
 
 
 def _covered_by_bed(intervals: dict[str, list[tuple[int, int]]], contig: str, position: int) -> bool:
+    # Sound because `_load_callable_bed` merged the intervals: no two overlap, so the last
+    # one starting at or before `position` is the only one that can contain it.
     spans = intervals.get(contig)
     if not spans:
         return False
@@ -243,8 +262,7 @@ def project(
     except FormatError as exc:
         raise ProjectionError(f"{Path(vcf_path).name} não é um VCF legível: {exc}") from exc
 
-    index = load_targets(targets_path)
-    without_coordinate = index.pop("__without_coordinate__")  # type: ignore[arg-type]
+    index, without_coordinate = load_targets(targets_path)
     positions_by_contig: dict[str, list[int]] = {}
     for contig, position in index:
         positions_by_contig.setdefault(contig, []).append(position)
@@ -328,6 +346,13 @@ def project(
             # -- gVCF non-variant block: positive evidence of reference across a span -----
             if end is not None and "<NON_REF>" in alternate and set(alternate.split(",")) <= {"<NON_REF>"}:
                 gvcf_blocks += 1
+                if filter_field not in {"PASS", ".", ""}:
+                    # The variant branch refuses a filtered record and this one did not, so a
+                    # block the caller itself marked low-quality was read as "reference
+                    # confirmed across this span" — a false negative at every target inside
+                    # it, which is the failure this whole adapter exists to avoid.
+                    reasons["filtered_gvcf_block"] += 1
+                    continue
                 candidates = positions_by_contig.get(contig) or []
                 start = bisect.bisect_left(candidates, position)
                 stop = bisect.bisect_right(candidates, end)

@@ -253,7 +253,8 @@ class TheEngineIsToldWhatTheReportPrintsTest(unittest.TestCase):
             qc = {
                 "case_id": "CASO-PD", "operational_status": "VERIFICADO",
                 "gates": {"LIMITED_INTERPRETATION_GATE": {"state": "PASS"}},
-                "input": {"sha256": "a" * 64, "build": "GRCh37", "strand": "forward"},
+                "input": {"sha256": "a" * 64, "build": "GRCh37", "strand": "forward",
+                          "schema": "harmonized_genera_myheritage_v1"},
                 "metrics": {"unique_rsids": 10, "call_rate": 0.99}, "limitations": [],
             }
             annotation = {
