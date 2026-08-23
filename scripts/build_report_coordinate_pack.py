@@ -16,6 +16,7 @@ import fitz
 COMPILER_ID = "fitz-1.26.7-genoma-v2"
 TOKEN_RE = re.compile(r"\[\[.*?\]\]", re.S)
 RULESET_CONTROL_RE = re.compile(r"GENOMA-HUDSON-RULESET-v\d+(?:\.\d+)+")
+RULESET_CONTROL_PREFIX = "GENOMA-HUDSON-RULESET-v"
 CANONICAL_RULESET_CONTROL = "GENOMA-HUDSON-RULESET-v3.4"
 CONTROLLED = [
     "MODELO REUTILIZÁVEL v3.0",
@@ -139,13 +140,23 @@ def _tokens(page: fitz.Page) -> list[tuple[str, fitz.Rect, dict[str, Any]]]:
 
 
 def _ruleset_control_sources(text: str) -> list[str]:
-    matches = list(dict.fromkeys(match.group(0) for match in RULESET_CONTROL_RE.finditer(text)))
-    invalid = [marker for marker in matches if marker != CANONICAL_RULESET_CONTROL]
-    if invalid:
-        raise RuntimeError(
-            "reference PDF contains noncanonical ruleset marker(s): " + ", ".join(invalid)
-        )
-    return matches
+    matches = list(RULESET_CONTROL_RE.finditer(text))
+    sources: list[str] = []
+    for match in matches:
+        marker = match.group(0)
+        before = text[match.start() - 1] if match.start() else ""
+        after = text[match.end()] if match.end() < len(text) else ""
+        if before and (before.isalnum() or before in "_-"):
+            raise RuntimeError(f"malformed GENOMA ruleset control marker: {marker!r}")
+        if after and (after.isalnum() or after in "._-"):
+            raise RuntimeError(f"malformed GENOMA ruleset control marker: {marker + after!r}")
+        if marker != CANONICAL_RULESET_CONTROL:
+            raise RuntimeError(f"noncanonical GENOMA ruleset control marker: {marker}")
+        if marker not in sources:
+            sources.append(marker)
+    if RULESET_CONTROL_PREFIX in text and not matches:
+        raise RuntimeError("malformed GENOMA ruleset control marker")
+    return sources
 
 
 def _controls(page: fitz.Page) -> list[tuple[str, fitz.Rect, dict[str, Any]]]:
@@ -214,7 +225,14 @@ def compile_pack(template_dir: Path, reference_index: Path) -> dict[str, Any]:
         reports[report_id] = {
             **{
                 k: expected[k]
-                for k in ("filename", "sha256", "size_bytes", "page_count", "page_size_pt", "placeholder_count")
+                for k in (
+                    "filename",
+                    "sha256",
+                    "size_bytes",
+                    "page_count",
+                    "page_size_pt",
+                    "placeholder_count",
+                )
             },
             "fields": fields,
             "controlled_spans": controls,
@@ -231,7 +249,9 @@ def write_pack(payload: dict[str, Any], output_dir: Path) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     manifest = output_dir / "GENOMA_V3_TEMPLATE_MANIFEST.v2.json"
     detail = output_dir / "reference_v3_manifest.v2.json.gz.b64"
-    raw = (json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+    raw = (
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode("utf-8")
     manifest.write_bytes(raw)
     compressed = gzip.compress(raw, mtime=0)
     detail.write_text(base64.b64encode(compressed).decode("ascii") + "\n", encoding="ascii")
@@ -239,8 +259,16 @@ def write_pack(payload: dict[str, Any], output_dir: Path) -> dict[str, Any]:
         "schema": "genoma-editorial-coordinate-build-v2",
         "status": "VERIFICADO",
         "compiler": COMPILER_ID,
-        "manifest": {"path": str(manifest), "sha256": _sha256(manifest), "size_bytes": manifest.stat().st_size},
-        "detail": {"path": str(detail), "sha256": _sha256(detail), "size_bytes": detail.stat().st_size},
+        "manifest": {
+            "path": str(manifest),
+            "sha256": _sha256(manifest),
+            "size_bytes": manifest.stat().st_size,
+        },
+        "detail": {
+            "path": str(detail),
+            "sha256": _sha256(detail),
+            "size_bytes": detail.stat().st_size,
+        },
         "reports": len(payload["reports"]),
         "pages": sum(int(x["page_count"]) for x in payload["reports"].values()),
         "placeholders": sum(len(x["fields"]) for x in payload["reports"].values()),
