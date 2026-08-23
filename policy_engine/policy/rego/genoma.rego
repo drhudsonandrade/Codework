@@ -9,6 +9,7 @@ allowed_nature := {"FATO CONFIRMADO", "INFERÊNCIA", "ASSOCIAÇÃO", "HIPÓTESE"
 allowed_domain := {"CLÍNICO", "PREDISPOSIÇÃO", "PESQUISA", "CURIOSIDADE"}
 allowed_priority := {"P1", "P2", "P3", "P4", "P5"}
 
+deny contains "RULESET: status must be VIGENTE" if object.get(input.ruleset, "status", "") != "VIGENTE"
 deny contains "RULESET: version must be v3.4" if input.ruleset.version != "v3.4"
 deny contains "RULESET: effective date must be 17/08/2026" if input.ruleset.effective_date != "17/08/2026"
 deny contains "RULESET: canonical SHA-256 mismatch" if input.ruleset.sha256 != "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
