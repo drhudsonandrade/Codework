@@ -56,6 +56,19 @@ class EvidenceAdapterTest(unittest.TestCase):
         self.assertFalse(snapshot["accessible"])
         self.assertNotIn("result_digest", snapshot.get("retrieval_evidence", {}))
 
+    def test_oversized_payload_is_unavailable_and_not_hashed(self):
+        from evidence_adapters import MAX_RESPONSE_BYTES, get_adapter
+
+        def oversized(_request):
+            return b"x" * (MAX_RESPONSE_BYTES + 1), {"content-type": "application/json"}
+
+        adapter = get_adapter("clinvar", transport=oversized)
+        snapshot = adapter.query({"term": "BRCA1[gene]"}, checked_at="2026-08-16T14:00:00Z")
+        self.assertEqual(snapshot["status"], "NÃO DISPONÍVEL")
+        self.assertFalse(snapshot["accessible"])
+        self.assertEqual(snapshot["error_class"], "EvidenceResponseTooLargeError")
+        self.assertNotIn("result_digest", snapshot.get("retrieval_evidence", {}))
+
     def test_failed_transport_does_not_expose_exception_message(self):
         from evidence_adapters import get_adapter
 
