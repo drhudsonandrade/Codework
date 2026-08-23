@@ -3,7 +3,7 @@ version: 2.1
 jobs:
   repository-contract:
     docker:
-      - image: cimg/python:3.12
+      - image: cimg/python:3.12@sha256:20d33113404d29dd6b8413f7b9fd88b9b4aa7b4827eb828548d66bcecd3d4a8f
     steps:
       - checkout
       - run:
@@ -21,7 +21,7 @@ jobs:
 
   policy-contract:
     docker:
-      - image: cimg/python:3.12
+      - image: cimg/python:3.12@sha256:20d33113404d29dd6b8413f7b9fd88b9b4aa7b4827eb828548d66bcecd3d4a8f
     steps:
       - checkout
       - run:
@@ -44,7 +44,7 @@ jobs:
 
   mcp-contract:
     docker:
-      - image: cimg/node:22.14
+      - image: cimg/node:22.14@sha256:d032e271ca3d48c82a5fa392ae05d53e2df08f8540dbc1f2f8c158dea3dabd40
     steps:
       - checkout
       - run:
@@ -56,7 +56,7 @@ jobs:
 
   shell-quality:
     docker:
-      - image: cimg/base:stable
+      - image: cimg/base:stable@sha256:35e5e29930ab565475a4f2aa9b4124998ed67dbc7b0e2dd5f420a4189d08d0d2
     steps:
       - checkout
       - run:
