@@ -52,6 +52,7 @@ export const TOOL_TIMEOUTS_MS = {
 } as const;
 
 const SCRIPT_OUTPUT_MAX_BYTES = 5 * 1024 * 1024;
+const STDERR_TAIL_MAX_BYTES = 4 * 1024;
 /** Time a terminated process group gets to exit before it is killed outright. */
 const GROUP_TERMINATION_GRACE_MS = 5_000;
 /** POSIX only: a negative pid signals the whole process group instead of one process. */
@@ -103,8 +104,12 @@ export async function runFixedScript(
     }
     stdout += chunk;
   });
-  // Drained so a chatty script cannot block on a full stderr pipe.
-  child.stderr.resume();
+
+  let stderrTail = Buffer.alloc(0);
+  child.stderr.on("data", (chunk: Buffer) => {
+    const combined = Buffer.concat([stderrTail, chunk]);
+    stderrTail = combined.subarray(Math.max(0, combined.length - STDERR_TAIL_MAX_BYTES));
+  });
 
   let timedOut = false;
   let killTimer: NodeJS.Timeout | undefined;
@@ -127,7 +132,12 @@ export async function runFixedScript(
       throw new Error(`fixed script exceeded the ${SCRIPT_OUTPUT_MAX_BYTES} byte output budget`);
     }
     if (code !== 0) {
-      throw new Error(`fixed script exited with code ${code}`);
+      const detail = stderrTail.toString("utf8").trim();
+      throw new Error(
+        detail
+          ? `fixed script exited with code ${code}: ${sanitizeError(detail)}`
+          : `fixed script exited with code ${code}`,
+      );
     }
     return stdout.trim();
   } finally {
