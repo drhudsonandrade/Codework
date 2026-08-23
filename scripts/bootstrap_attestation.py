@@ -87,13 +87,29 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _require_source_revision(revision: Any) -> str:
-    """Require the full lowercase 40-hex Git commit identity used by this project."""
+def _require_source_revision(revision: Any, *, root: Path = ROOT) -> str:
+    """Require a full SHA that resolves to that exact commit in the associated repository."""
     if revision == "UNKNOWN":
         raise BootstrapAttestationError("bootstrap attestation source_commit_sha is UNKNOWN")
     if not isinstance(revision, str) or FULL_GIT_SHA_RE.fullmatch(revision) is None:
         raise BootstrapAttestationError(
             "bootstrap attestation source_commit_sha must be a full 40-character lowercase hex Git commit SHA"
+        )
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--verify", f"{revision}^{{commit}}"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError as exc:
+        raise BootstrapAttestationError(
+            "bootstrap attestation source_commit_sha could not be verified in the associated Git repository"
+        ) from exc
+    resolved = result.stdout.strip()
+    if result.returncode != 0 or resolved != revision:
+        raise BootstrapAttestationError(
+            "bootstrap attestation source_commit_sha does not resolve to a commit in the associated Git repository"
         )
     return revision
 
@@ -164,7 +180,12 @@ def _identity_mismatches(payload: dict[str, Any], status: str) -> dict[str, Any]
     }
 
 
-def _require_reproducible_method(payload: dict[str, Any], evidence: dict[str, Any]) -> None:
+def _require_reproducible_method(
+    payload: dict[str, Any],
+    evidence: dict[str, Any],
+    *,
+    root: Path = ROOT,
+) -> None:
     """The recorded method must be verifier metadata that this run reproduces."""
     method = payload.get("method")
     if not isinstance(method, dict):
@@ -173,7 +194,7 @@ def _require_reproducible_method(payload: dict[str, Any], evidence: dict[str, An
         )
     if method.get("kind") != "DETERMINISTIC_VERIFIER":
         raise BootstrapAttestationError("bootstrap attestation method kind is not DETERMINISTIC_VERIFIER")
-    _require_source_revision(method.get("source_commit_sha"))
+    _require_source_revision(method.get("source_commit_sha"), root=root)
     for field in ("verifier", "input", "result_locator"):
         if method.get(field) != evidence[field]:
             raise BootstrapAttestationError(
@@ -191,6 +212,7 @@ def verify_bootstrap_attestation(
     path: str | Path = ATTESTATION_PATH,
     *,
     sealed_dir: str | Path = SEALED_DIR,
+    root: Path = ROOT,
 ) -> dict[str, Any]:
     source = Path(path)
     if not source.is_file():
@@ -226,7 +248,7 @@ def verify_bootstrap_attestation(
         )
     if not isinstance(payload.get("verified_at"), str) or not payload["verified_at"].strip():
         raise BootstrapAttestationError("bootstrap attestation verified_at is missing")
-    _require_reproducible_method(payload, evidence)
+    _require_reproducible_method(payload, evidence, root=root)
 
     checks = payload.get("checks")
     if not isinstance(checks, dict) or not checks:
@@ -256,7 +278,7 @@ def build_attestation(
 ) -> dict[str, Any]:
     """Produce the attestation payload from a verifier run, never from prose."""
     evidence = verify_project_bootstrap(sealed_dir)
-    source_revision = _require_source_revision(_source_revision(root))
+    source_revision = _require_source_revision(_source_revision(root), root=root)
     unsatisfied = sorted(name for name, result in evidence["checks"].items() if not result["satisfied"])
     return {
         "attestation_type": "GENOMA_PROJECT_BOOTSTRAP",
