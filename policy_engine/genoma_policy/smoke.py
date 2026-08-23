@@ -6,6 +6,7 @@ from typing import Any
 from .engine import PolicyEngine
 from .ruleset import Ruleset, RulesetError, validate_normative_identity
 from .scaffold import scaffold_manifest
+from .version import __version__
 
 EXPECTED_SMOKE_RULESET_SHA256 = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
 
@@ -61,7 +62,7 @@ def _all_na(ruleset: Ruleset) -> list[dict[str, Any]]:
                 "run_id": "SMOKE",
                 "input_sha256": [],
                 "output_sha256": [],
-                "tool_versions": {"genoma-policy-engine": "0.4.0"},
+                "tool_versions": {"genoma-policy-engine": __version__},
             },
         }
         for section in ruleset.sections
