@@ -4,7 +4,27 @@ from typing import Any
 
 from .attestation import validate_section_attestation
 from .gates_common import CRITICAL_FINAL_AUDIT_KEYS, _as_bool, _gate, _get_list
+from .gates_evidence import _parse_iso_date
 from .models import GateResult, GateState
+
+#: The classes section 117 requires a negative conclusion to account for. `variant_class_
+#: coverage_explicit` claims each of them has a declared status; this is that list.
+VARIANT_CLASSES = (
+    "SNV", "indel", "CNV", "SV", "repeat_expansion", "mtDNA", "HLA", "KIR",
+    "noncoding", "mosaicism",
+)
+
+#: Loci sections 174 and 238 name as unresolvable by a generic callset. `complex_regions_
+#: flagged` claims they are flagged; flagged means present in the capability matrix.
+COMPLEX_LOCI = ("CYP2D6", "SMN1_SMN2", "PMS2", "GBA1", "HLA")
+
+#: Fields whose presence on a claim means it is asserting a magnitude of risk.
+RISK_MAGNITUDE_FIELDS = ("odds_ratio", "hazard_ratio", "relative_risk", "absolute_risk",
+                         "lifetime_risk", "penetrance", "prs_percentile", "effect_size")
+
+#: Section 233's vocabulary. A magnitude must say which of these it is.
+RISK_TYPES = ("OR", "HR", "RR", "ABSOLUTE", "LIFETIME", "PENETRANCE", "PERCENTILE",
+              "EFFECT_SIZE")
 
 
 class AuditGates:
@@ -168,8 +188,136 @@ class AuditGates:
                 )
         if audit.get("remaining_gaps_listed") is True and not manifest.get("remaining_gaps"):
             reasons.append("remaining_gaps_listed asserted while the manifest lists no gap")
-        if audit.get("master_database_query_manifest") is True and not manifest.get("database_query_manifest"):
+        queries = _get_list(manifest, "database_query_manifest")
+        if audit.get("master_database_query_manifest") is True and not queries:
             reasons.append("master_database_query_manifest asserted while no query manifest is present")
+
+        capability = manifest.get("capability_matrix")
+        capability = capability if isinstance(capability, dict) else {}
+
+        if audit.get("critical_databases_current") is True:
+            # Section 202's freshness status, checked against the same field and window
+            # EVIDENCE_RECENCY_GATE uses, so the two cannot disagree about one source.
+            stale = [
+                s.get("id") for s in sources
+                if isinstance(s, dict) and _as_bool(s.get("mutable"))
+                and not _parse_iso_date(str(s.get("checked_at", "")))
+            ]
+            if stale:
+                reasons.append(
+                    "critical_databases_current asserted while mutable sources carry no "
+                    f"readable checked_at: {stale[:5]}"
+                )
+
+        if audit.get("variant_class_coverage_explicit") is True:
+            # Section 117 names the classes a negative conclusion must account for. A report
+            # may not assert that its coverage is explicit while a class it never mentions
+            # sits outside the matrix entirely.
+            undeclared = [
+                key for key in VARIANT_CLASSES
+                if not isinstance(capability.get(key), dict) or not capability[key].get("status")
+            ]
+            if undeclared:
+                reasons.append(
+                    "variant_class_coverage_explicit asserted while these variant classes "
+                    f"carry no declared status: {undeclared}"
+                )
+
+        if audit.get("lod_described") is True:
+            # Section 232: "não detectado" must mean "not detected above this method's
+            # estimated capability". A class declared unavailable with no reason states the
+            # opposite — that nothing is known about why.
+            silent = [
+                key for key, entry in capability.items()
+                if isinstance(entry, dict)
+                and not str(entry.get("reason") or entry.get("method") or "").strip()
+            ]
+            if not capability:
+                # `all(...)` over nothing is true, and so is "no entry lacks a reason" over an
+                # empty matrix. A limit of detection described for no class is not described.
+                reasons.append(
+                    "lod_described asserted while the manifest carries no capability matrix; "
+                    "a limit of detection for no variant class is not a limit of detection"
+                )
+            elif silent:
+                reasons.append(
+                    "lod_described asserted while these capability entries give neither a "
+                    f"method nor a reason: {sorted(silent)[:5]}"
+                )
+
+        if audit.get("complex_regions_flagged") is True:
+            # Sections 174 and 238 name loci that a generic callset does not resolve. Flagged
+            # means named, with a status, not merely believed.
+            unflagged = [key for key in COMPLEX_LOCI if key not in capability]
+            if unflagged:
+                reasons.append(
+                    f"complex_regions_flagged asserted while these loci are absent from the "
+                    f"capability matrix: {unflagged}"
+                )
+
+        if audit.get("ancestry_reference_considered") is True:
+            # Section 115: a population association carries the cohort it was estimated in.
+            # Without it the effect is being transferred to this genome silently.
+            contextless = [
+                c.get("id") for c in claims
+                if isinstance(c, dict)
+                and (c.get("nature") == "ASSOCIAÇÃO" or _as_bool(c.get("prs")))
+                and not str(c.get("ancestry_context") or "").strip()
+            ]
+            if contextless:
+                reasons.append(
+                    "ancestry_reference_considered asserted while association claims carry no "
+                    f"ancestry_context: {contextless[:5]}"
+                )
+
+        if audit.get("absolute_vs_relative_risk_separated") is True:
+            # Section 233 lists the measures that must not be conflated. A claim carrying a
+            # magnitude has to say which one it is.
+            unlabelled = [
+                c.get("id") for c in claims
+                if isinstance(c, dict)
+                and any(c.get(field) is not None for field in RISK_MAGNITUDE_FIELDS)
+                and c.get("risk_type") not in RISK_TYPES
+            ]
+            if unlabelled:
+                reasons.append(
+                    "absolute_vs_relative_risk_separated asserted while claims carry a risk "
+                    f"magnitude with no risk_type from {list(RISK_TYPES)}: {unlabelled[:5]}"
+                )
+
+        if audit.get("report_has_technical_and_lay_layers") is True:
+            # Section 148. What the engine can establish is that the manifest names both
+            # layers and that each names a section this manifest actually carries; that the
+            # rendered document really contains them is checked at render time, by the sealed
+            # template contract. This refuses the bare boolean, not more than that.
+            layers = manifest.get("report_layers")
+            layers = layers if isinstance(layers, dict) else {}
+            section_ids = {s.get("id") for s in sections if isinstance(s, dict)}
+            for layer in ("technical", "lay"):
+                reference = layers.get(layer)
+                if not str(reference or "").strip():
+                    reasons.append(
+                        f"report_has_technical_and_lay_layers asserted while report_layers "
+                        f"names no {layer!r} layer"
+                    )
+                elif reference not in section_ids:
+                    reasons.append(
+                        f"report_layers.{layer} points at {reference!r}, which is not a "
+                        "section this manifest carries"
+                    )
+
+        if audit.get("scientific_novelty_radar") is True:
+            # Sections 143 and 217: the radar is the act of re-consulting, and what shows it
+            # happened is a query manifest whose entries say when they were run.
+            undated = [
+                entry.get("database") for entry in queries
+                if not isinstance(entry, dict) or not _parse_iso_date(str(entry.get("queried_at", "")))
+            ]
+            if undated or not queries:
+                reasons.append(
+                    "scientific_novelty_radar asserted while the query manifest carries no "
+                    f"readable queried_at: {undated[:5] if undated else 'no queries at all'}"
+                )
         return reasons
 
     def _post_deployment_gate(self, manifest: dict[str, Any]):

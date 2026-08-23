@@ -349,7 +349,17 @@ def build_manifest(
             # rather than take the attestation's word for it. The PGS Catalog is used to
             # curate which loci are worth interrogating; it is not used to score the case.
             "PRS": {"status": "NÃO DISPONÍVEL", "reason": "no polygenic score is computed by this lane; the PGS Catalog is used only to curate target loci"},
-            "genome_wide_negative": {"status": "NÃO DISPONÍVEL", "reason": "non-assayed loci cannot be treated as negative evidence"}
+            "genome_wide_negative": {"status": "NÃO DISPONÍVEL", "reason": "non-assayed loci cannot be treated as negative evidence"},
+            # Section 117 names the classes a negative conclusion must account for, and the
+            # matrix used to omit indel, mtDNA, KIR, noncoding and mosaicism entirely — so for
+            # those a negative had nothing to be scoped against, which is the false negative
+            # the section exists to prevent, achieved by leaving the row out. Each carries the
+            # reason its own assay gives, which is also its limit of detection under §232.
+            "SNV": {"status": "EXECUTADO", "method": assay.assayed_loci_method},
+            **{
+                key: {"status": "NÃO DISPONÍVEL", "reason": reason}
+                for key, reason in assay.variant_class_reasons.items()
+            },
         },
         "sources": sources,
         "claims": [],

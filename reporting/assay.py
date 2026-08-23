@@ -63,6 +63,11 @@ class Assay:
     #: Why CYP2D6 diplotyping is NÃO DISPONÍVEL here. Same verdict for both assays, different
     #: reason: an array lacks the SNPs, a generic VCF lacks structure, hybrids and phase.
     cyp2d6_reason: str
+    #: Why each variant class section 117 names is or is not established here. The capability
+    #: matrix used to omit indel, mtDNA, KIR, noncoding and mosaicism entirely, so a negative
+    #: conclusion had nothing to be scoped against for them — which is the false negative
+    #: section 117 exists to prevent, achieved by leaving the row out.
+    variant_class_reasons: dict[str, str]
 
 
 ARRAY_DEPTH_NOTE = (
@@ -85,6 +90,32 @@ PROJECTION_GENOME_WIDE = (
     "callability não foi interrogado."
 )
 
+#: Keyed by the class names `variant_class_coverage_explicit` checks for.
+ARRAY_CLASS_REASONS = {
+    "indel": "genotipagem em array chama SNPs em posições fixas; indels não são ensaiados",
+    "mtDNA": "os marcadores mitocondriais do chip não sustentam heteroplasmia nem haplogrupo terminal",
+    "KIR": "tipagem de KIR exige pipeline especializado sobre sequenciamento",
+    "noncoding": "o array cobre marcadores catalogados, não regiões regulatórias",
+    "mosaicism": "genotipagem em array reporta genótipos discretos, sem fração alélica",
+    "SMN1_SMN2": "SMN1/SMN2 exigem dosagem de cópias, que o array não mede",
+    "PMS2": "PMS2 exige discriminação de pseudogene por sequenciamento",
+    "GBA1": "GBA1 exige discriminação de pseudogene por sequenciamento",
+}
+
+PROJECTION_CLASS_REASONS = {
+    "indel": (
+        "o VCF de origem pode conter indels e a tabela projetada expressa apenas SNV diploide; "
+        "cada indel é registrado como no-call com o motivo, nunca omitido"
+    ),
+    "mtDNA": "a projeção cobre os alvos mitocondriais catalogados, sem profundidade ao longo do mtDNA",
+    "KIR": "tipagem de KIR exige caller especializado sobre leituras alinhadas",
+    "noncoding": "a projeção retém apenas os alvos do registro curado, não regiões regulatórias",
+    "mosaicism": "a projeção não lê o campo AD e portanto não estima fração alélica",
+    "SMN1_SMN2": "SMN1/SMN2 exigem dosagem de cópias, ausente de um VCF de variantes pequenas",
+    "PMS2": "PMS2 exige caller que discrimine o pseudogene; o VCF genérico não basta",
+    "GBA1": "GBA1 exige caller que discrimine o pseudogene; o VCF genérico não basta",
+}
+
 ARRAY_MANIFEST = {
     "evidence_prefix": "array",
     "input_kind": "snp-array-export",
@@ -100,6 +131,7 @@ ARRAY_MANIFEST = {
     "cyp2d6_reason": (
         "array SNPs are insufficient for structural/hybrid/copy-number diplotyping"
     ),
+    "variant_class_reasons": ARRAY_CLASS_REASONS,
 }
 
 ASSAYS: dict[str, Assay] = {
@@ -156,6 +188,7 @@ ASSAYS: dict[str, Assay] = {
             "a generic VCF is insufficient for CYP2D6: structural variants, hybrid alleles "
             "and phase require a specialized haplotype workflow"
         ),
+        variant_class_reasons=PROJECTION_CLASS_REASONS,
     ),
 }
 

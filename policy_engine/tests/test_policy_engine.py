@@ -47,10 +47,20 @@ class PolicyEngineTests(unittest.TestCase):
   complete over nothing. This fixture supplies what those booleans claim exists.
   """
   m=self.valid_analysis_manifest(); m["operation"]["output"]="FINAL_AUDITED_REPORT"
-  m["claims"]=[{"id":"c1","nature":"ASSOCIAÇÃO","domain":"PESQUISA","status":"INFERIDO","priority":"P5","evidence_refs":["fixture:attestation"]}]
-  m["sections"]=[{"id":"s1","title":"Resumo","body":"conteúdo do fixture"}]
+  m["claims"]=[{"id":"c1","nature":"ASSOCIAÇÃO","domain":"PESQUISA","status":"INFERIDO","priority":"P5","evidence_refs":["fixture:attestation"],"ancestry_context":"coorte de descoberta do fixture, ancestralidade declarada"}]
+  m["sections"]=[{"id":"s1","title":"Resumo","body":"conteúdo do fixture"},{"id":"s-tec","title":"Camada técnica","body":"t"},{"id":"s-leigo","title":"Camada simples","body":"l"}]
+  m["report_layers"]={"technical":"s-tec","lay":"s-leigo"}
   m["remaining_gaps"]=["nenhuma região difícil foi interrogada por este fixture"]
   m["database_query_manifest"]=[{"database":"fixture","version":"1","queried_at":"2026-08-15"}]
+  # The classes section 117 requires accounted for and the loci sections 174/238 name, each
+  # with the reason that is its limit of detection. Asserting the booleans without these is
+  # what `_final_audit_substance_reasons` now refuses.
+  m["capability_matrix"]={
+   **{k:{"status":"NÃO DISPONÍVEL","reason":f"{k} não é medido por este fixture"}
+      for k in ("indel","CNV","SV","repeat_expansion","mtDNA","HLA","KIR","noncoding","mosaicism",
+                "CYP2D6","SMN1_SMN2","PMS2","GBA1")},
+   "SNV":{"status":"EXECUTADO","method":"fixture de teste"},
+  }
   m["final_audit"]={k:True for k in CRITICAL_FINAL_AUDIT_KEYS}
   return m
  def test_final_audit_requires_all_15_criteria(self):
@@ -137,6 +147,61 @@ class SelfAttestationBypassTests(unittest.TestCase):
  def test_domains_separated_is_checked_against_the_claims(self):
   m=self._base(); m["claims"]=[{"id":"c1","nature":"ASSOCIAÇÃO","domain":"","status":"INFERIDO","priority":"P5","evidence_refs":["fixture:attestation"]}]
   self.assertIn("domains_separated"," ".join(self._gate(m,"FINAL_AUDIT_GATE").reasons))
+
+ def test_every_one_of_the_fifteen_criteria_now_has_a_check_behind_it(self):
+  """Seven of the fifteen were checked; the other eight were booleans the manifest set.
+
+  A final audited report could therefore declare its variant-class coverage explicit with no
+  capability matrix at all, its complex regions flagged with none named, its ancestry
+  references considered over associations that named no cohort, and its two reading layers
+  present with no layer anywhere in the manifest. Each row below removes exactly the
+  substance one criterion asserts and requires the gate to name that criterion.
+  """
+  for key,mutate,needle in (
+   ("critical_databases_current",
+    lambda m: m["sources"].append({"id":"mutavel","mutable":True,"status":"VERIFICADO","accessible":True,"version":"1","locator":"https://x","retrieval_evidence":{"method":"f","result_digest":"sha256:f"}}),
+    "no readable checked_at"),
+   ("variant_class_coverage_explicit",
+    lambda m: m["capability_matrix"].pop("mtDNA",None),
+    "carry no declared status"),
+   ("lod_described",
+    lambda m: m["capability_matrix"].update({"CNV":{"status":"NÃO DISPONÍVEL"}}),
+    "neither a method nor a reason"),
+   ("complex_regions_flagged",
+    lambda m: m["capability_matrix"].pop("CYP2D6",None),
+    "absent from the capability matrix"),
+   ("ancestry_reference_considered",
+    lambda m: m["claims"][0].pop("ancestry_context",None),
+    "carry no ancestry_context"),
+   ("absolute_vs_relative_risk_separated",
+    lambda m: m["claims"][0].update({"odds_ratio":1.4}),
+    "no risk_type"),
+   ("report_has_technical_and_lay_layers",
+    lambda m: m.pop("report_layers",None),
+    "names no 'technical' layer"),
+   ("scientific_novelty_radar",
+    lambda m: m["database_query_manifest"][0].pop("queried_at",None),
+    "no readable queried_at"),
+  ):
+   with self.subTest(criterion=key):
+    m=self._base(); mutate(m)
+    joined=" ".join(self._gate(m,"FINAL_AUDIT_GATE").reasons)
+    self.assertIn(needle,joined)
+    self.assertIn(key,joined)
+
+ def test_a_limit_of_detection_for_no_variant_class_is_not_a_limit_of_detection(self):
+  """`all(...)` over an empty matrix is true, and so is "no entry lacks a reason"."""
+  m=self._base(); m["capability_matrix"]={}
+  self.assertIn("no capability matrix"," ".join(self._gate(m,"FINAL_AUDIT_GATE").reasons))
+
+ def test_a_risk_magnitude_with_a_declared_type_is_accepted(self):
+  # Negative control: the check refuses an unlabelled magnitude, not every magnitude.
+  m=self._base(); m["claims"][0].update({"odds_ratio":1.4,"risk_type":"OR"})
+  self.assertEqual(self._gate(m,"FINAL_AUDIT_GATE").state.value,"PASS")
+
+ def test_a_layer_pointing_at_a_section_that_does_not_exist_is_refused(self):
+  m=self._base(); m["report_layers"]={"technical":"s-tec","lay":"s-inexistente"}
+  self.assertIn("not a section this manifest carries"," ".join(self._gate(m,"FINAL_AUDIT_GATE").reasons))
 
  def test_a_substantive_final_manifest_still_passes(self):
   # Negative control: the refusals must not have made publication impossible in general.
