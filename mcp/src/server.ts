@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { chmod, mkdir, open, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -12,6 +12,7 @@ import {
   type AuditRecord,
   readAuditRecord,
   resolveDirectoryUnderRoot,
+  resolveUnderRoot,
   sanitizeError,
   sanitizeToolArguments,
   writeAuditRecord,
@@ -193,6 +194,55 @@ async function persistOutcome(
   await writeAuditRecord(options.auditRoot, record);
 }
 
+type RequestClaim = {
+  claimPath: string;
+  handle: Awaited<ReturnType<typeof open>>;
+};
+
+async function acquireRequestClaim(
+  options: GenomeServerOptions,
+  requestId: string,
+  tool: string,
+): Promise<RequestClaim> {
+  const root = path.resolve(options.auditRoot);
+  await mkdir(root, { recursive: true, mode: 0o700 });
+  await chmod(root, 0o700);
+  const claimPath = `${resolveUnderRoot(root, requestId)}.claim`;
+  try {
+    const handle = await open(claimPath, "wx", 0o600);
+    await handle.writeFile(
+      `${JSON.stringify({ requestId, tool, claimedAt: new Date().toISOString() })}\n`,
+      "utf8",
+    );
+    return { claimPath, handle };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      throw error;
+    }
+    const completed = await loadAuditRecord(options.auditRoot, requestId);
+    if (completed) {
+      assertMatchingTool(completed, tool);
+      const prior = decodeCompletedResult<unknown>(completed);
+      if (prior.kind === "fail") {
+        throw new Error(prior.error);
+      }
+      throw new Error("request id completed while another caller held its claim");
+    }
+    throw new Error("request id is already in progress");
+  }
+}
+
+async function releaseRequestClaim(claim: RequestClaim): Promise<void> {
+  await claim.handle.close();
+  try {
+    await unlink(claim.claimPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
 /** @internal Exported for deterministic idempotency and redaction tests. */
 export async function runAudited<T>(
   options: GenomeServerOptions,
@@ -210,34 +260,52 @@ export async function runAudited<T>(
     throw new Error(prior.error);
   }
 
+  // O_EXCL establishes ownership before the operation begins. Concurrent callers with
+  // the same requestId cannot both cross this point, including across server processes.
+  const claim = await acquireRequestClaim(options, requestId, tool);
   const startedAt = new Date().toISOString();
   const started = Date.now();
   try {
-    const result = await operation();
-    const record: AuditRecord = {
-      requestId,
+    const afterClaim = decodePriorResult<T>(
+      await loadAuditRecord(options.auditRoot, requestId),
       tool,
-      arguments: sanitizeToolArguments({ ...args, requestId }),
-      status: "PASS",
-      startedAt,
-      durationMs: Date.now() - started,
-      result,
-    };
-    await persistOutcome(options, record);
-    return result;
-  } catch (error) {
-    const sanitized = sanitizeError(error);
-    const record: AuditRecord = {
-      requestId,
-      tool,
-      arguments: sanitizeToolArguments({ ...args, requestId }),
-      status: "FAIL",
-      startedAt,
-      durationMs: Date.now() - started,
-      error: sanitized,
-    };
-    await persistOutcome(options, record);
-    throw new Error(sanitized);
+    );
+    if (afterClaim.kind === "pass") {
+      return afterClaim.value;
+    }
+    if (afterClaim.kind === "fail") {
+      throw new Error(afterClaim.error);
+    }
+
+    try {
+      const result = await operation();
+      const record: AuditRecord = {
+        requestId,
+        tool,
+        arguments: sanitizeToolArguments({ ...args, requestId }),
+        status: "PASS",
+        startedAt,
+        durationMs: Date.now() - started,
+        result,
+      };
+      await persistOutcome(options, record);
+      return result;
+    } catch (error) {
+      const sanitized = sanitizeError(error);
+      const record: AuditRecord = {
+        requestId,
+        tool,
+        arguments: sanitizeToolArguments({ ...args, requestId }),
+        status: "FAIL",
+        startedAt,
+        durationMs: Date.now() - started,
+        error: sanitized,
+      };
+      await persistOutcome(options, record);
+      throw new Error(sanitized);
+    }
+  } finally {
+    await releaseRequestClaim(claim);
   }
 }
 
