@@ -10,6 +10,7 @@ import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -110,6 +111,30 @@ class SupersededIdentityStillBlockedTest(unittest.TestCase):
         # The suffix guard still applies to weak tokens: an unrelated dated line in a
         # non-declarative file is not an active normative declaration.
         self.assertEqual(_scan({"data/export.csv": "run,date\n1,2026-08-14\n"}), [])
+
+    def test_oserror_reading_identity_surface_is_reported_fail_closed(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            history_marker = root / "docs" / "history" / "v3.3" / "superseded-identities.json"
+            history_marker.parent.mkdir(parents=True, exist_ok=True)
+            history_marker.write_text("{}\n", encoding="utf-8")
+            target = root / "notes.md"
+            target.write_text("identity surface\n", encoding="utf-8")
+            original_read_text = Path.read_text
+
+            def read_text(path: Path, *args, **kwargs):
+                if path == target:
+                    raise OSError("permission denied")
+                return original_read_text(path, *args, **kwargs)
+
+            errors: list[str] = []
+            with mock.patch.object(Path, "read_text", autospec=True, side_effect=read_text):
+                validate_superseded_identity_locations(root, errors)
+
+        self.assertTrue(
+            any("unreadable identity surface cannot be scanned: notes.md" in error for error in errors),
+            errors,
+        )
 
 
 class HistoricalOccurrenceIsAllowedTest(unittest.TestCase):
