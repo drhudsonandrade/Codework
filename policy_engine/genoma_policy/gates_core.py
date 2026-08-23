@@ -34,6 +34,8 @@ class CoreGates:
                 reasons.append("manifest ruleset version differs from canonical v3.4")
             if declared.get("effective_date") != self.ruleset.effective_date:
                 reasons.append("manifest ruleset effective date differs from canonical ruleset")
+            if declared.get("canonical_filename") != self.ruleset.canonical_filename:
+                reasons.append("manifest ruleset canonical filename differs from canonical ruleset")
             if declared.get("sha256") != self.ruleset.sha256:
                 reasons.append("manifest ruleset SHA-256 differs from canonical ruleset")
         return _gate("RULESET_GATE", not reasons, reasons)
