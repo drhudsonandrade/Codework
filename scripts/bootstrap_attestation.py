@@ -22,6 +22,7 @@ import json
 import re
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -85,6 +86,24 @@ class BootstrapAttestationError(RuntimeError):
 
 def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _require_verified_at(value: Any) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise BootstrapAttestationError("bootstrap attestation verified_at is missing")
+    candidate = value.strip()
+    if "T" not in candidate and " " not in candidate:
+        raise BootstrapAttestationError(
+            "bootstrap attestation verified_at must be a parseable ISO 8601 datetime"
+        )
+    normalized = candidate[:-1] + "+00:00" if candidate.endswith("Z") else candidate
+    try:
+        datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise BootstrapAttestationError(
+            "bootstrap attestation verified_at must be a parseable ISO 8601 datetime"
+        ) from exc
+    return candidate
 
 
 def _require_source_revision(revision: Any, *, root: Path = ROOT) -> str:
@@ -246,8 +265,7 @@ def verify_bootstrap_attestation(
         raise BootstrapAttestationError(
             f"bootstrap checks are not satisfied by the sealed ruleset: {unsatisfied}"
         )
-    if not isinstance(payload.get("verified_at"), str) or not payload["verified_at"].strip():
-        raise BootstrapAttestationError("bootstrap attestation verified_at is missing")
+    _require_verified_at(payload.get("verified_at"))
     _require_reproducible_method(payload, evidence, root=root)
 
     checks = payload.get("checks")
@@ -277,6 +295,7 @@ def build_attestation(
     verified_at: str,
 ) -> dict[str, Any]:
     """Produce the attestation payload from a verifier run, never from prose."""
+    verified_at = _require_verified_at(verified_at)
     evidence = verify_project_bootstrap(sealed_dir)
     source_revision = _require_source_revision(_source_revision(root), root=root)
     unsatisfied = sorted(name for name, result in evidence["checks"].items() if not result["satisfied"])
