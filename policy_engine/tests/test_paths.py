@@ -20,8 +20,12 @@ class PathResolutionTests(unittest.TestCase):
     def tearDown(self):
         if self._ruleset_env is not None:
             os.environ["GENOMA_RULESET_PATH"] = self._ruleset_env
+        else:
+            os.environ.pop("GENOMA_RULESET_PATH", None)
         if self._manifest_env is not None:
             os.environ["GENOMA_RULESET_SHA_MANIFEST"] = self._manifest_env
+        else:
+            os.environ.pop("GENOMA_RULESET_SHA_MANIFEST", None)
 
     def test_nested_engine_resolves_single_parent_ruleset(self):
         with tempfile.TemporaryDirectory() as td:
