@@ -20,7 +20,7 @@ base := {
 test_valid_baseline if guard.allow with input as base
 
 test_reject_missing_ruleset_status if {
-  input_doc := object.union(base, {"ruleset": object.remove(base_ruleset, {"status"})})
+  input_doc := object.union(object.remove(base, {"ruleset"}), {"ruleset": object.remove(base_ruleset, {"status"})})
   not guard.allow with input as input_doc
 }
 
