@@ -142,26 +142,33 @@ class ZipSourceHandleTest(unittest.TestCase):
         self._assert_no_leak(build, ValueError)
 
     def test_unreadable_member_closes_its_archive(self):
-        def build(archive: Path) -> None:
-            with zipfile.ZipFile(archive, "w") as zf:
-                zf.writestr("a.csv", "RSID\nrs1\n")
-            # Corrupt the stored member so opening it fails after inspection succeeded.
-            raw = bytearray(archive.read_bytes())
-            raw[:4] = b"\x00\x00\x00\x00"
-            archive.write_bytes(bytes(raw))
-
         with tempfile.TemporaryDirectory() as td:
             archive = Path(td) / "input.zip"
-            build(archive)
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("a.csv", "RSID\nrs1\n")
+            with zipfile.ZipFile(archive) as zf:
+                member = zf.getinfo("a.csv")
+                header_offset = member.header_offset
+
+            # Corrupt only the member's local-file-header signature. The central directory
+            # remains readable, so ZIP inspection succeeds and opening the sole member is
+            # guaranteed to exercise the exact post-inspection failure path in _text_stream.
+            raw = bytearray(archive.read_bytes())
+            raw[header_offset:header_offset + 4] = b"\x00\x00\x00\x00"
+            archive.write_bytes(bytes(raw))
+
+            with zipfile.ZipFile(archive) as probe:
+                members = [item for item in probe.infolist() if not item.is_dir()]
+                self.assertEqual(len(members), 1)
+                with self.assertRaises(zipfile.BadZipFile):
+                    probe.open(members[0], "r")
+
             gc.collect()
             before = self._open_zip_handles()
-            try:
-                stream, _ = _text_stream(archive)
-            except Exception:
-                gc.collect()
-                self.assertEqual(self._open_zip_handles(), before, "ZipFile handle leaked on the failure path")
-            else:
-                stream.close()
+            with self.assertRaises(zipfile.BadZipFile):
+                _text_stream(archive)
+            gc.collect()
+            self.assertEqual(self._open_zip_handles(), before, "ZipFile handle leaked on the failure path")
 
     def test_single_member_zip_is_read_successfully(self):
         with tempfile.TemporaryDirectory() as td:
