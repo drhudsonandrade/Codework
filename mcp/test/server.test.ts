@@ -58,23 +58,33 @@ test("runAudited atomically prevents concurrent duplicate execution", async () =
     auditRoot,
   };
   let executions = 0;
+  let markStarted!: () => void;
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  let releaseOperation!: () => void;
+  const blocked = new Promise<void>((resolve) => {
+    releaseOperation = resolve;
+  });
   const operation = async () => {
     executions += 1;
-    await sleep(100);
+    markStarted();
+    await blocked;
     return { status: "PASS" };
   };
-  const settled = await Promise.allSettled([
-    runAudited(options, "runtime_status", { requestId: "race-1" }, operation),
-    runAudited(options, "runtime_status", { requestId: "race-1" }, operation),
-  ]);
+
+  const first = runAudited(options, "runtime_status", { requestId: "race-1" }, operation);
+  await started;
+  try {
+    await assert.rejects(
+      runAudited(options, "runtime_status", { requestId: "race-1" }, operation),
+      /already in progress/,
+    );
+  } finally {
+    releaseOperation();
+  }
+  assert.deepEqual(await first, { status: "PASS" });
   assert.equal(executions, 1, "same requestId must not execute the operation twice");
-  assert.equal(settled.filter((item) => item.status === "fulfilled").length, 1);
-  assert.equal(settled.filter((item) => item.status === "rejected").length, 1);
-  const rejected = settled.find((item) => item.status === "rejected");
-  assert.match(
-    String(rejected && rejected.status === "rejected" ? rejected.reason : ""),
-    /already in progress/,
-  );
 });
 
 test("runAudited stores and replays a sanitized failure", async () => {
@@ -155,6 +165,12 @@ test("runFixedScript returns stdout and sanitizes retained stderr on failure", a
   assert.equal(await runFixedScript(ok, [], process.env, 10_000), "hello");
   await assert.rejects(
     runFixedScript(bad, [], process.env, 10_000),
-    /exited with code 7:.*\[REDACTED_TOKEN\].*\[REDACTED_PATH\]/,
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /exited with code 7:.*\[REDACTED_TOKEN\].*\[REDACTED_PATH\]/);
+      assert.doesNotMatch(error.message, /private-token/);
+      assert.doesNotMatch(error.message, /\/srv\/genome\/data\/sample\.bam/);
+      return true;
+    },
   );
 });
