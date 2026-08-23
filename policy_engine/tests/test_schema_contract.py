@@ -7,6 +7,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = ROOT / "policy" / "schema" / "execution-manifest.schema.json"
+CANONICAL_FILENAME = "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
 
 
 def _minimal_object_contract_errors(contract: dict[str, Any], instance: object) -> list[str]:
@@ -38,6 +39,7 @@ class ExecutionSchemaContractTests(unittest.TestCase):
         base = {
             "version": "v3.4",
             "effective_date": "17/08/2026",
+            "canonical_filename": CANONICAL_FILENAME,
             "sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
         }
         missing = dict(base)
