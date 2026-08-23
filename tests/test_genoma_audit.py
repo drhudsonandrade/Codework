@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import os
-import subprocess
 import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 from scripts.genoma_audit import _decode_tail, audit, run
 
@@ -41,18 +39,16 @@ class GenomaAuditTest(unittest.TestCase):
         self.assertIn("STDERR\nerr-marker", evidence)
 
     def test_run_timeout_is_fail_closed_and_preserves_partial_output(self):
-        expired = subprocess.TimeoutExpired(
-            cmd=["fixture"],
-            timeout=1,
-            output=b"partial-stdout",
-            stderr=b"partial-stderr",
+        rc, evidence = run(
+            [
+                sys.executable,
+                "-c",
+                "import sys,time; print('partial-stdout', flush=True); print('partial-stderr', file=sys.stderr, flush=True); time.sleep(5)",
+            ],
+            timeout_seconds=0.25,
         )
-        with patch("scripts.genoma_audit.subprocess.Popen.communicate", side_effect=expired):
-            with patch("scripts.genoma_audit.subprocess.Popen.poll", return_value=None):
-                with patch("scripts.genoma_audit.os.killpg"):
-                    rc, evidence = run(["fixture"], timeout_seconds=1)
         self.assertEqual(rc, 124)
-        self.assertIn("TIMEOUT after 1s", evidence)
+        self.assertIn("TIMEOUT after 0.25s", evidence)
         self.assertIn("partial-stdout", evidence)
         self.assertIn("partial-stderr", evidence)
 
