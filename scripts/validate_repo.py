@@ -245,10 +245,7 @@ def _python_constant_strings(text: str) -> tuple[str, ...]:
     Constant folding is what stops a superseded identity from being smuggled past a
     raw-text scan as ``"GENOMA-V3." + "3"`` or ``f"GENOMA-V3.{3}"``.
     """
-    try:
-        tree = ast.parse(text)
-    except SyntaxError:
-        return ()
+    tree = ast.parse(text)
     values = (_constant_string(node) for node in ast.walk(tree))
     return tuple(dict.fromkeys(value for value in values if value is not None))
 
@@ -261,10 +258,7 @@ def _identity_declaration_strings(text: str) -> tuple[str, ...]:
     literals such as test timestamps are excluded by construction, so a historical
     mention can never be mistaken for an active normative source.
     """
-    try:
-        tree = ast.parse(text)
-    except SyntaxError:
-        return ()
+    tree = ast.parse(text)
     declarations: list[str] = []
     for node in ast.walk(tree):
         values: list[ast.AST] = []
@@ -348,8 +342,17 @@ def validate_superseded_identity_locations(root: Path, errors: list[str]) -> Non
         # superseded identity just as effectively as a .py or .md, so the suffix guard
         # below applies only to the weak, declaration-scoped tokens.
         strong_surfaces = [text]
+        python_declarations: tuple[str, ...] | None = None
         if path.suffix.lower() == ".py":
-            strong_surfaces.extend(_python_constant_strings(text))
+            try:
+                strong_surfaces.extend(_python_constant_strings(text))
+                python_declarations = _identity_declaration_strings(text)
+            except SyntaxError as exc:
+                errors.append(
+                    f"unparseable Python surface cannot be identity-scanned: {relative}: "
+                    f"{exc.msg} (line {exc.lineno})"
+                )
+                continue
         errors.extend(
             f"superseded identity outside explicit history: {relative}: {token}"
             for token in SUPERSEDED_STRONG_TOKENS
@@ -358,7 +361,7 @@ def validate_superseded_identity_locations(root: Path, errors: list[str]) -> Non
 
         if path.suffix.lower() not in TEXT_IDENTITY_SUFFIXES and path.name not in {"Dockerfile", "AGENTS.md"}:
             continue
-        declarations = _active_declaration_context(path, text)
+        declarations = python_declarations if python_declarations is not None else _active_declaration_context(path, text)
         if not declarations:
             continue
         errors.extend(
