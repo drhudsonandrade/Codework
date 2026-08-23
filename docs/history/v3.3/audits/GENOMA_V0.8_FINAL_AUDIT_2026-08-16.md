@@ -44,7 +44,7 @@ SHA-256 canônico: `187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68
 - **VERIFICADO** — identidades SHA-256, tamanho e page count dos 11 PDFs anexos foram selados em `template_store/v3.0/MANIFEST.json` e cruzados com `reporting/reference_v3_manifest.json`.
 - **EXECUTADO** — política de imutabilidade: um ID v3.0 não pode trocar bytes sob a mesma versão.
 - **NÃO DISPONÍVEL** — transporte binário dos 11 PDFs dentro do GitHub ainda depende da materialização dos chunks selados. O conector de escrita utilizado nesta sessão aceita texto/blobs fornecidos no payload, mas não expõe upload binário direto a partir do arquivo local; por isso os bytes não são falsamente declarados presentes.
-- **VERIFICADO** — um source pack determinístico exato foi produzido fora do repo e pode ser usado para completar essa materialização sem alterar os hashes aprovados.
+- **NÃO DISPONÍVEL / HISTÓRICO NÃO VERIFICÁVEL** — este registro histórico afirma que um source pack determinístico exato foi produzido fora do repositório, mas não preserva locator imutável nem SHA-256 do artefato. Portanto sua existência e identidade não podem ser verificadas a partir desta evidência e ele não deve ser usado como prova até que um locator recuperável e o digest correspondente sejam registrados.
 
 ## GRCh38 / high memory
 
