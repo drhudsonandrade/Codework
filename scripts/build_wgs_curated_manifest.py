@@ -6,7 +6,9 @@ import hashlib
 import json
 from pathlib import Path
 
-RULESET_SHA = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
+from scripts.sealed_ruleset import EXPECTED_DATE, EXPECTED_NAME, EXPECTED_SHA, EXPECTED_VERSION, verify_transport
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def sha256_file(path: Path) -> str:
@@ -28,6 +30,26 @@ def count_vcf_records(path: Path) -> int:
     return count
 
 
+def _verified_ruleset_identity() -> dict[str, str]:
+    evidence = verify_transport(ROOT / "normative" / "sealed")
+    expected = {
+        "canonical_filename": EXPECTED_NAME,
+        "raw_sha256": EXPECTED_SHA,
+        "version": EXPECTED_VERSION,
+        "effective_date": EXPECTED_DATE,
+    }
+    mismatches = {key: (evidence.get(key), value) for key, value in expected.items() if evidence.get(key) != value}
+    if mismatches:
+        raise SystemExit(f"RULESET NÃO DISPONÍVEL/CONFLITANTE: sealed transport identity mismatch: {mismatches}")
+    return {
+        "status": "VIGENTE",
+        "version": str(evidence["version"]),
+        "effective_date": str(evidence["effective_date"]),
+        "sha256": str(evidence["raw_sha256"]),
+        "canonical_filename": str(evidence["canonical_filename"]),
+    }
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--case-id", required=True)
@@ -38,6 +60,7 @@ def main() -> int:
     p.add_argument("--output", required=True)
     args = p.parse_args()
 
+    ruleset_identity = _verified_ruleset_identity()
     vcf = Path(args.vcf)
     runtime = json.loads(Path(args.runtime_gate).read_text(encoding="utf-8"))
     if runtime.get("ready_for_real_calling") is not True or runtime.get("status") != "EXECUTADO":
@@ -63,7 +86,7 @@ def main() -> int:
         "schema": "genoma-wgs-curation-manifest-v1",
         "case_id": args.case_id,
         "sample_id": args.sample_id,
-        "ruleset": {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026", "sha256": RULESET_SHA},
+        "ruleset": ruleset_identity,
         "summary": "Pipeline técnico executado para SNV/indel. Interpretação clínica e publicação final permanecem bloqueadas até curadoria, Evidence Gate e Final Audit.",
         "wgs_artifacts": {
             "normalized_vcf": str(vcf),
