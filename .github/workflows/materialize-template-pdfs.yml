@@ -5,6 +5,9 @@ on:
     branches: [feature/materialize-physical-pdfs-v3-1]
     paths:
       - 'template_store/v3.0/inbox/GENOMA_REPORT_TEMPLATES_v3.0_DETERMINISTIC.zip'
+      - 'manifests/RULESET_V3.4.sha256'
+      - 'normative/sealed/MANIFEST.json'
+      - '.github/workflows/materialize-template-pdfs.yml'
 
 permissions:
   contents: write
@@ -27,6 +30,32 @@ jobs:
           python3 - <<'PY'
           import hashlib,json,os,shutil,tempfile,zipfile
           from pathlib import Path,PurePosixPath
+
+          canonical={
+              'status':'VIGENTE',
+              'version':'v3.4',
+              'formal_date':'17/08/2026',
+              'effective_date':'17/08/2026',
+              'filename':'REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt',
+              'sha256':'ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580',
+          }
+          sha_manifest=Path('manifests/RULESET_V3.4.sha256')
+          fields=sha_manifest.read_text(encoding='ascii').strip().split()
+          if fields != [canonical['sha256'], canonical['filename']]:
+              raise SystemExit('canonical ruleset SHA manifest mismatch')
+          sealed_manifest_path=Path('normative/sealed/MANIFEST.json')
+          sealed=json.loads(sealed_manifest_path.read_text(encoding='utf-8'))
+          expected_sealed={
+              'status':canonical['status'],
+              'version':canonical['version'],
+              'effective_date':canonical['effective_date'],
+              'canonical_filename':canonical['filename'],
+              'raw_sha256':canonical['sha256'],
+          }
+          mismatches={k:(sealed.get(k),v) for k,v in expected_sealed.items() if sealed.get(k)!=v}
+          if mismatches:
+              raise SystemExit(f'canonical sealed ruleset identity mismatch: {mismatches}')
+
           root=Path('template_store/v3.0'); zp=Path(os.environ['ZIP'])
           mp=root/'MANIFEST.json'; m=json.loads(mp.read_text(encoding='utf-8')); reports=m['reports']
           expected={v['filename'] for v in reports.values()}
@@ -51,7 +80,30 @@ jobs:
           old=dict(m.get('storage',{}))
           m['storage']={'mode':'git-binary-materialized','materialized_dir':'template_store/v3.0/materialized','report_count':11,'source_transport_sha256':os.environ['ZIP_SHA'],'legacy_transport':old}
           m.pop('parts',None); mp.write_text(json.dumps(m,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
-          att={'schema':'genoma-template-materialization-attestation-v1','ruleset':{'status':'VIGENTE','version':'v3.4','formal_date':'17/08/2026','sha256':'ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580'},'template_version':'v3.0','source_transport_sha256':os.environ['ZIP_SHA'],'report_count':11,'reports':verified,'materialization_status':'VERIFICADO','traceability':{'workflow':'.github/workflows/materialize-template-pdfs.yml','run_id':os.environ.get('GITHUB_RUN_ID',''),'source_commit':os.environ.get('GITHUB_SHA','')}}
+          att={
+              'schema':'genoma-template-materialization-attestation-v1',
+              'ruleset':{
+                  'status':canonical['status'],
+                  'version':canonical['version'],
+                  'formal_date':canonical['formal_date'],
+                  'sha256':canonical['sha256'],
+                  'canonical_filename':canonical['filename'],
+              },
+              'ruleset_evidence':{
+                  'sha_manifest':str(sha_manifest),
+                  'sealed_manifest':str(sealed_manifest_path),
+              },
+              'template_version':'v3.0',
+              'source_transport_sha256':os.environ['ZIP_SHA'],
+              'report_count':11,
+              'reports':verified,
+              'materialization_status':'VERIFICADO',
+              'traceability':{
+                  'workflow':'.github/workflows/materialize-template-pdfs.yml',
+                  'run_id':os.environ.get('GITHUB_RUN_ID',''),
+                  'source_commit':os.environ.get('GITHUB_SHA',''),
+              },
+          }
           (root/'MATERIALIZATION_ATTESTATION.json').write_text(json.dumps(att,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
           PY
       - name: Commit physical PDFs and delete one-time transport
