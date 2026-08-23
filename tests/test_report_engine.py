@@ -2,6 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from ruleset_test_support import RULESET
+
 
 def passing_policy_evaluation():
     return {
@@ -20,6 +22,17 @@ def passing_policy_evaluation():
 
 
 class ReportEngineTest(unittest.TestCase):
+    def assert_release_rejected(self, callable_, expected_reason=None):
+        from reporting.engine import ReportReleaseError
+
+        try:
+            callable_()
+        except ReportReleaseError as exc:
+            if expected_reason is not None:
+                self.assertIn(expected_reason, str(exc))
+            return
+        self.fail("expected ReportReleaseError")
+
     def test_catalog_contains_all_eleven_v3_models(self):
         from reporting.engine import load_catalog
 
@@ -34,38 +47,85 @@ class ReportEngineTest(unittest.TestCase):
         result = render_document("01", {}, mode="MODEL")
         self.assertIn("MODELO — NÃO É RESULTADO GENÉTICO", result["markdown"])
         self.assertEqual(result["metadata"]["mode"], "MODEL")
+        self.assertEqual(result["metadata"]["ruleset_required"], RULESET)
 
     def test_final_mode_fails_closed_without_publication_gate(self):
-        from reporting.engine import ReportReleaseError, render_document
+        from reporting.engine import render_document
 
-        with self.assertRaises(ReportReleaseError):
-            render_document("01", {"case_id": "CASE-001"}, mode="FINAL")
+        self.assert_release_rejected(
+            lambda: render_document("01", {"case_id": "CASE-001"}, mode="FINAL"),
+            expected_reason="publication_gate:passed",
+        )
+
+    def test_final_mode_rejects_wrong_ruleset_digest(self):
+        from reporting.engine import render_document
+
+        bad_ruleset = dict(RULESET)
+        bad_ruleset["sha256"] = "0" * 64
+        data = {
+            "case_id": "CASE-001",
+            "ruleset": bad_ruleset,
+            "publication_gate": {
+                "passed": True,
+                "consent_verified": True,
+                "qc_verified": True,
+                "evidence_verified": True,
+                "placeholders_resolved": True,
+            },
+            "policy_evaluation": passing_policy_evaluation(),
+        }
+        self.assert_release_rejected(
+            lambda: render_document("01", data, mode="FINAL"),
+            expected_reason="ruleset:sha256",
+        )
 
     def test_final_mode_rejects_unready_policy_evaluation(self):
-        from reporting.engine import ReportReleaseError, render_document
+        from reporting.engine import render_document
 
         data = {
             "case_id": "CASE-001",
-            "ruleset": {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026"},
-            "publication_gate": {"passed": True, "consent_verified": True, "qc_verified": True, "evidence_verified": True, "placeholders_resolved": True},
-            "policy_evaluation": {"ready_for_requested_operation": False, "planes": {}, "gates": []},
+            "ruleset": dict(RULESET),
+            "publication_gate": {
+                "passed": True,
+                "consent_verified": True,
+                "qc_verified": True,
+                "evidence_verified": True,
+                "placeholders_resolved": True,
+            },
+            "policy_evaluation": {
+                "ready_for_requested_operation": False,
+                "planes": {},
+                "gates": [],
+            },
         }
-        with self.assertRaises(ReportReleaseError):
-            render_document("01", data, mode="FINAL")
+        self.assert_release_rejected(
+            lambda: render_document("01", data, mode="FINAL"),
+            expected_reason="policy_evaluation:ready_for_requested_operation",
+        )
 
     def test_final_mode_requires_final_audit_pass(self):
-        from reporting.engine import ReportReleaseError, render_document
+        from reporting.engine import render_document
 
         policy = passing_policy_evaluation()
-        policy["gates"] = [{"gate": "FINAL_AUDIT_GATE", "state": "FAIL", "blocking": True}]
+        policy["gates"] = [
+            {"gate": "FINAL_AUDIT_GATE", "state": "FAIL", "blocking": True}
+        ]
         data = {
             "case_id": "CASE-001",
-            "ruleset": {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026"},
-            "publication_gate": {"passed": True, "consent_verified": True, "qc_verified": True, "evidence_verified": True, "placeholders_resolved": True},
+            "ruleset": dict(RULESET),
+            "publication_gate": {
+                "passed": True,
+                "consent_verified": True,
+                "qc_verified": True,
+                "evidence_verified": True,
+                "placeholders_resolved": True,
+            },
             "policy_evaluation": policy,
         }
-        with self.assertRaises(ReportReleaseError):
-            render_document("01", data, mode="FINAL")
+        self.assert_release_rejected(
+            lambda: render_document("01", data, mode="FINAL"),
+            expected_reason="policy_evaluation:FINAL_AUDIT_GATE",
+        )
 
     def test_final_mode_writes_json_markdown_and_html_when_gate_passes(self):
         from reporting.engine import render_document, write_bundle
@@ -73,7 +133,7 @@ class ReportEngineTest(unittest.TestCase):
         data = {
             "case_id": "CASE-001",
             "summary": "Nenhum achado fictício é inserido pelo motor.",
-            "ruleset": {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026"},
+            "ruleset": dict(RULESET),
             "publication_gate": {
                 "passed": True,
                 "consent_verified": True,
@@ -90,7 +150,10 @@ class ReportEngineTest(unittest.TestCase):
             self.assertEqual(set(paths), {"json", "markdown", "html"})
             self.assertTrue(all(path.is_file() for path in paths.values()))
             self.assertNotIn("[[", paths["markdown"].read_text(encoding="utf-8"))
-            self.assertIn("POST-DEPLOYMENT: PENDENTE", paths["markdown"].read_text(encoding="utf-8"))
+            markdown = paths["markdown"].read_text(encoding="utf-8")
+            self.assertIn("POST-DEPLOYMENT: PENDENTE", markdown)
+            self.assertIn("Ruleset: v3.4 / VIGENTE / 17/08/2026", markdown)
+            self.assertIn(RULESET["sha256"], markdown)
 
 
 if __name__ == "__main__":

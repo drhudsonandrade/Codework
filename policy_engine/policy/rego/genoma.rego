@@ -9,9 +9,10 @@ allowed_nature := {"FATO CONFIRMADO", "INFERÊNCIA", "ASSOCIAÇÃO", "HIPÓTESE"
 allowed_domain := {"CLÍNICO", "PREDISPOSIÇÃO", "PESQUISA", "CURIOSIDADE"}
 allowed_priority := {"P1", "P2", "P3", "P4", "P5"}
 
-deny contains "RULESET: version must be v3.3" if input.ruleset.version != "v3.3"
-deny contains "RULESET: effective date must be 14/08/2026" if input.ruleset.effective_date != "14/08/2026"
-deny contains "RULESET: canonical SHA-256 mismatch" if input.ruleset.sha256 != "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a"
+deny contains "RULESET: status must be VIGENTE" if object.get(input.ruleset, "status", "") != "VIGENTE"
+deny contains "RULESET: version must be v3.4" if input.ruleset.version != "v3.4"
+deny contains "RULESET: effective date must be 17/08/2026" if input.ruleset.effective_date != "17/08/2026"
+deny contains "RULESET: canonical SHA-256 mismatch" if input.ruleset.sha256 != "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
 
 deny contains "DATA-FIRST: analysis-relevant operation requires input artifacts" if {
   input.operation.analysis_relevant == true

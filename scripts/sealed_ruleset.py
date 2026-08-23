@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Single implementation of the GENOMA v3.3 sealed normative transport contract.
+"""Single implementation of the GENOMA v3.4 sealed normative transport contract.
 
 The repository keeps the normative TXT inactive at rest as content-addressed Base64
 chunks. This module is the ONLY implementation allowed to decode, verify, and
@@ -20,12 +20,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-EXPECTED_SHA = "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a"
-EXPECTED_NAME = "REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt"
+EXPECTED_SHA = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
+EXPECTED_NAME = "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
 EXPECTED_STATUS = "VIGENTE"
-EXPECTED_VERSION = "v3.3"
-EXPECTED_DATE = "14/08/2026"
+EXPECTED_VERSION = "v3.4"
+EXPECTED_DATE = "17/08/2026"
 EXPECTED_SECTIONS = 263
+EXPECTED_TRANSPORT_PARTS = tuple(f"parts/part-{index:03d}.b64" for index in range(13))
 MANIFEST_NAME = "MANIFEST.json"
 
 
@@ -94,8 +95,13 @@ def read_transport(sealed_dir: str | Path, manifest: dict[str, Any] | None = Non
     root = Path(sealed_dir)
     manifest = manifest or load_manifest(root)
     parts = manifest.get("transport_parts")
-    if not isinstance(parts, list) or not parts:
-        raise SealedRulesetError("sealed transport must declare one or more chunks")
+    if not isinstance(parts, list):
+        raise SealedRulesetError("sealed transport must declare transport_parts as a list")
+    declared_parts = [item.get("file") if isinstance(item, dict) else None for item in parts]
+    if declared_parts != list(EXPECTED_TRANSPORT_PARTS):
+        raise SealedRulesetError(
+            "sealed transport must declare exactly parts/part-000.b64 through parts/part-012.b64 in canonical order"
+        )
 
     assembled: list[bytes] = []
     evidence: list[dict[str, Any]] = []
@@ -215,15 +221,55 @@ def _active_vigente_files(output_dir: Path) -> list[Path]:
     return active
 
 
+def _already_materialized(destination: Path, active: list[Path], raw: bytes) -> Path | None:
+    """The one case where re-materializing is a safe no-op.
+
+    Every condition must hold: exactly one active VIGENTE file, it is the canonical
+    filename, its bytes are byte-identical to the verified sealed payload, and it is
+    already read-only. Anything else — a second VIGENTE, a different filename, drifted
+    bytes, a writable file — is a conflict and must keep blocking.
+    """
+    if len(active) != 1:
+        return None
+    existing = active[0]
+    if existing.name != EXPECTED_NAME or existing != destination / EXPECTED_NAME:
+        return None
+    try:
+        current = existing.read_bytes()
+    except OSError:
+        return None
+    if current != raw or sha256_bytes(current) != EXPECTED_SHA:
+        return None
+    if existing.stat().st_mode & 0o222:
+        return None
+    return existing
+
+
 def materialize(sealed_dir: str | Path, output_dir: str | Path) -> tuple[Path, dict[str, Any]]:
+    # Provenance is verified before anything on disk is trusted or written.
     raw, evidence = decode_verified_payload(sealed_dir)
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
     active = _active_vigente_files(destination)
     if active:
-        raise SealedRulesetError(
-            f"refusing to activate beside an existing VIGENTE ruleset: {[p.name for p in active]}"
+        reusable = _already_materialized(destination, active, raw)
+        if reusable is None:
+            raise SealedRulesetError(
+                f"refusing to activate beside an existing VIGENTE ruleset: {[p.name for p in active]}"
+            )
+        mode = reusable.stat().st_mode & 0o777
+        evidence = dict(evidence)
+        evidence.update(
+            {
+                "materialized_path": str(reusable),
+                "mode_octal": oct(mode),
+                "host": socket.gethostname(),
+                "materialized_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "idempotent_reuse": True,
+                "idempotent_reason": "canonical VIGENTE already materialized byte-identical to the verified sealed payload",
+            }
         )
+        return reusable, evidence
 
     target = destination / EXPECTED_NAME
     fd, tmp_name = tempfile.mkstemp(prefix=f".{EXPECTED_NAME}.", dir=destination)
@@ -249,6 +295,7 @@ def materialize(sealed_dir: str | Path, output_dir: str | Path) -> tuple[Path, d
             "mode_octal": oct(mode),
             "host": socket.gethostname(),
             "materialized_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "idempotent_reuse": False,
         }
     )
     return target, evidence

@@ -3,6 +3,8 @@ import unittest
 import zipfile
 from pathlib import Path
 
+from ruleset_test_support import RULESET
+
 
 PASSING_POLICY = {
     "ready_for_requested_operation": True,
@@ -20,7 +22,7 @@ def final_data():
     return {
         "case_id": "CASE-VISUAL-001",
         "summary": "Conteúdo rastreável para teste editorial.",
-        "ruleset": {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026"},
+        "ruleset": dict(RULESET),
         "publication_gate": {
             "passed": True,
             "consent_verified": True,
@@ -29,7 +31,7 @@ def final_data():
             "placeholders_resolved": True,
         },
         "policy_evaluation": PASSING_POLICY,
-        "post_deployment_status": "PASS",
+        "post_deployment_status": "PENDENTE",
         "sections": {"Resumo clínico executivo": "Teste de conteúdo sem interpretação genética nova."},
         "findings": [],
         "execution_manifest": {"status": "VERIFICADO"},

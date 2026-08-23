@@ -17,7 +17,16 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent
 CATALOG_PATH = ROOT / "catalog.json"
-EXPECTED_RULESET = {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026"}
+EXPECTED_RULESET = {
+    "status": "VIGENTE",
+    "version": "v3.4",
+    "effective_date": "17/08/2026",
+    "sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
+}
+RULESET_LABEL = (
+    f"{EXPECTED_RULESET['version']} / {EXPECTED_RULESET['status']} / "
+    f"{EXPECTED_RULESET['effective_date']}"
+)
 REQUIRED_PLANES = ("policy_control", "scientific_data", "evidence", "audit")
 
 
@@ -58,7 +67,10 @@ def _publication_blockers(data: dict[str, Any]) -> list[str]:
             blockers.append(f"policy_evaluation:plane:{plane_name}")
 
     gates = policy.get("gates") if isinstance(policy.get("gates"), list) else []
-    final_audit = next((g for g in gates if isinstance(g, dict) and g.get("gate") == "FINAL_AUDIT_GATE"), None)
+    final_audit = next(
+        (g for g in gates if isinstance(g, dict) and g.get("gate") == "FINAL_AUDIT_GATE"),
+        None,
+    )
     if not isinstance(final_audit, dict) or final_audit.get("state") != "PASS":
         blockers.append("policy_evaluation:FINAL_AUDIT_GATE")
     return blockers
@@ -80,7 +92,7 @@ def _model_markdown(report_id: str, model: dict[str, Any]) -> str:
         "",
         "**MODELO — NÃO É RESULTADO GENÉTICO**",
         "",
-        f"Modelo GENOMA v3.0 / {model['code']}. Ruleset exigido: v3.3 / VIGENTE / 14/08/2026.",
+        f"Modelo GENOMA v3.0 / {model['code']}. Ruleset exigido: {RULESET_LABEL}.",
         "",
         f"Finalidade: {model['purpose']}",
         f"Público: {model['audience']}",
@@ -109,7 +121,8 @@ def _final_markdown(report_id: str, model: dict[str, Any], data: dict[str, Any])
         "",
         f"Caso: {_safe(data.get('case_id'))}",
         f"Versão do modelo: v3.0/{model['code']}",
-        "Ruleset: v3.3 / VIGENTE / 14/08/2026",
+        f"Ruleset: {RULESET_LABEL}",
+        f"Ruleset SHA-256: {EXPECTED_RULESET['sha256']}",
         f"POST-DEPLOYMENT: {_safe(data.get('post_deployment_status'), 'PENDENTE')}",
         "",
         "## Finalidade",
@@ -265,7 +278,10 @@ def write_bundle(rendered: dict[str, Any], output_dir: Path, *, stem: str | None
             "html": hashlib.sha256(rendered["html"].encode("utf-8")).hexdigest(),
         },
     }
-    paths["json"].write_text(json.dumps(bundle_json, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    paths["json"].write_text(
+        json.dumps(bundle_json, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     paths["markdown"].write_text(rendered["markdown"] + "\n", encoding="utf-8")
     paths["html"].write_text(rendered["html"] + "\n", encoding="utf-8")
     return paths

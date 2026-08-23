@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "genoma-policy-engine"
-version = "0.3.0"
-description = "Executable policy engine for GENOMA ruleset v3.3"
+version = "0.4.0"
+description = "Executable policy engine for GENOMA ruleset v3.4"
 readme = "README_GENOMA_POLICY.md"
 requires-python = ">=3.11"
 authors = [{name = "Projeto GENOMA"}]

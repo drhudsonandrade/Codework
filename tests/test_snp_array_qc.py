@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import gc
 import gzip
 import hashlib
 import json
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
-from array_pipeline.qc import inspect_array
+from array_pipeline.qc import _text_stream, inspect_array
 
 
 class ArrayQCTest(unittest.TestCase):
@@ -104,6 +106,74 @@ class ArrayQCTest(unittest.TestCase):
         self.assertEqual(r["gates"]["BUILD_STRAND_GATE"]["state"], "PASS")
         self.assertEqual(r["input"]["build"], "GRCh37")
         self.assertEqual(r["input"]["strand"], "forward")
+
+
+class ZipSourceHandleTest(unittest.TestCase):
+    """A rejected ZIP must not leave its archive handle open."""
+
+    @staticmethod
+    def _open_zip_handles() -> int:
+        return sum(1 for obj in gc.get_objects() if isinstance(obj, zipfile.ZipFile) and obj.fp is not None)
+
+    def _assert_no_leak(self, build: "callable[[Path], None]", expected: type[Exception]):
+        with tempfile.TemporaryDirectory() as td:
+            archive = Path(td) / "input.zip"
+            build(archive)
+            gc.collect()
+            before = self._open_zip_handles()
+            with self.assertRaises(expected):
+                _text_stream(archive)
+            gc.collect()
+            self.assertEqual(self._open_zip_handles(), before, "ZipFile handle leaked on the failure path")
+
+    def test_multi_member_zip_closes_its_archive(self):
+        def build(archive: Path) -> None:
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("a.csv", "RSID\nrs1\n")
+                zf.writestr("b.csv", "RSID\nrs2\n")
+
+        self._assert_no_leak(build, ValueError)
+
+    def test_empty_zip_closes_its_archive(self):
+        def build(archive: Path) -> None:
+            with zipfile.ZipFile(archive, "w"):
+                pass
+
+        self._assert_no_leak(build, ValueError)
+
+    def test_unreadable_member_closes_its_archive(self):
+        def build(archive: Path) -> None:
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("a.csv", "RSID\nrs1\n")
+            # Corrupt the stored member so opening it fails after inspection succeeded.
+            raw = bytearray(archive.read_bytes())
+            raw[:4] = b"\x00\x00\x00\x00"
+            archive.write_bytes(bytes(raw))
+
+        with tempfile.TemporaryDirectory() as td:
+            archive = Path(td) / "input.zip"
+            build(archive)
+            gc.collect()
+            before = self._open_zip_handles()
+            try:
+                stream, _ = _text_stream(archive)
+            except Exception:
+                gc.collect()
+                self.assertEqual(self._open_zip_handles(), before, "ZipFile handle leaked on the failure path")
+            else:
+                stream.close()
+
+    def test_single_member_zip_is_read_successfully(self):
+        with tempfile.TemporaryDirectory() as td:
+            archive = Path(td) / "input.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("data.csv", "RSID,CHROMOSOME,POSITION,RESULT\nrs1,1,100,AA\n")
+            stream, source = _text_stream(archive)
+            try:
+                self.assertEqual(source.kind, "zip")
+                self.assertIn("RSID", stream.readline())
+            finally:
+                stream.close()
 
 
 if __name__ == "__main__":

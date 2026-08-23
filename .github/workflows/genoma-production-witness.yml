@@ -1,18 +1,8 @@
 name: GENOMA Production Witness
 
 on:
-  pull_request:
-    paths:
-      - 'normative/**'
-      - 'manifests/RULESET_V3.3.sha256'
-      - 'policy_engine/**'
-      - 'scripts/materialize_ruleset.py'
-      - 'scripts/run_live_post_deployment_smoke.py'
-      - 'deploy/attestations/bootstrap-project-v3.3.json'
-      - '.github/workflows/genoma-production-witness.yml'
   push:
     branches: [main]
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -35,19 +25,21 @@ jobs:
           python-version: '3.12'
       - name: Validate repository and canonical sealed transport
         run: python3 scripts/validate_repo.py
-      - name: Materialize exact canonical v3.3 as immutable runtime file
+      - name: Materialize exact canonical v3.4 as immutable runtime file
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/genoma-normative" evidence
           python3 scripts/materialize_ruleset.py \
             --output-dir "$RUNNER_TEMP/genoma-normative" \
             --evidence evidence/ruleset-materialization.json
-          canonical="$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt"
+          canonical="$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
           test "$(stat -c '%a' "$canonical")" = 444
-          printf '%s  %s\n' '187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a' "$canonical" | sha256sum -c -
-          echo "GENOMA_RULESET_PATH=$canonical" >> "$GITHUB_ENV"
-          echo "GENOMA_RULESET_SHA_MANIFEST=$GITHUB_WORKSPACE/manifests/RULESET_V3.3.sha256" >> "$GITHUB_ENV"
-          echo 'GENOMA_EXPECT_CANONICAL_SHA=1' >> "$GITHUB_ENV"
+          printf '%s  %s\n' 'ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580' "$canonical" | sha256sum -c -
+          {
+            echo "GENOMA_RULESET_PATH=$canonical"
+            echo "GENOMA_RULESET_SHA_MANIFEST=$GITHUB_WORKSPACE/manifests/RULESET_V3.4.sha256"
+            echo 'GENOMA_EXPECT_CANONICAL_SHA=1'
+          } >> "$GITHUB_ENV"
       - name: Build exact policy image
         run: |
           docker build -f policy_engine/Dockerfile -t genoma-policy-witness:${GITHUB_SHA} .
@@ -61,8 +53,8 @@ jobs:
             --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m \
             --cap-drop ALL \
             --security-opt no-new-privileges:true \
-            -v "$GENOMA_RULESET_PATH:/run/genoma/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt:ro" \
-            -v "$GENOMA_RULESET_SHA_MANIFEST:/run/genoma/manifests/RULESET_V3.3.sha256:ro" \
+            -v "$GENOMA_RULESET_PATH:/run/genoma/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt:ro" \
+            -v "$GENOMA_RULESET_SHA_MANIFEST:/run/genoma/manifests/RULESET_V3.4.sha256:ro" \
             -p 127.0.0.1:8787:8787 \
             genoma-policy-witness:${GITHUB_SHA})
           echo "$cid" | tee evidence/container-id.txt
@@ -74,15 +66,15 @@ jobs:
           curl -fsS http://127.0.0.1:8787/v1/ruleset > evidence/live-ruleset.json
           docker inspect "$cid" > evidence/docker-inspect.json
           test "$(docker inspect "$cid" --format '{{.HostConfig.ReadonlyRootfs}}')" = true
-          test "$(docker inspect "$cid" --format '{{range .Mounts}}{{if eq .Destination "/run/genoma/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt"}}{{.RW}}{{end}}{{end}}')" = false
+          test "$(docker inspect "$cid" --format '{{range .Mounts}}{{if eq .Destination "/run/genoma/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"}}{{.RW}}{{end}}{{end}}')" = false
           python - <<'PY'
           import json
           from pathlib import Path
           p=json.loads(Path('evidence/live-ruleset.json').read_text())
           assert p['status']=='VIGENTE'
-          assert p['version']=='v3.3'
-          assert p['effective_date']=='14/08/2026'
-          assert p['sha256']=='187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a'
+          assert p['version']=='v3.4'
+          assert p['effective_date']=='17/08/2026'
+          assert p['sha256']=='ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580'
           assert p['section_count']==263
           PY
       - name: Execute all 15 section-260 scenarios through the live HTTP instance
@@ -90,7 +82,7 @@ jobs:
           mkdir -p evidence/live-section-260
           python3 scripts/run_live_post_deployment_smoke.py \
             --base-url http://127.0.0.1:8787 \
-            --bootstrap-attestation deploy/attestations/bootstrap-project-v3.3.json \
+            --bootstrap-attestation deploy/attestations/bootstrap-project-v3.4.json \
             --deployment-id "witness-${GITHUB_RUN_ID}-${GITHUB_SHA}" \
             --output evidence/live-section-260/summary.json
           jq -e '.passed == 15 and .total == 15 and .critical_failures == 0 and .post_deployment_status == "PASS"' evidence/live-section-260/summary.json >/dev/null
@@ -123,7 +115,7 @@ jobs:
               'schema':'genoma-production-witness-v1',
               'operational_status':'VERIFICADO',
               'post_deployment_status':'PASS',
-              'ruleset':{'status':'VIGENTE','version':'v3.3','effective_date':'14/08/2026','sha256':'187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a'},
+              'ruleset':{'status':'VIGENTE','version':'v3.4','effective_date':'17/08/2026','sha256':'ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580'},
               'section_260':{'passed':15,'total':15,'critical_failures':0},
               'git_sha':os.environ['GITHUB_SHA'],
               'workflow_run_id':os.environ['GITHUB_RUN_ID'],

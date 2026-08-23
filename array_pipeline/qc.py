@@ -15,9 +15,9 @@ from typing import Any, TextIO
 
 RULESET = {
     "status": "VIGENTE",
-    "version": "v3.3",
-    "effective_date": "14/08/2026",
-    "sha256": "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a",
+    "version": "v3.4",
+    "effective_date": "17/08/2026",
+    "sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
 }
 
 HARMONIZED_COLUMNS = [
@@ -61,12 +61,21 @@ def _text_stream(path: Path) -> tuple[TextIO, SourceInfo]:
         return fh, SourceInfo("gzip", None, {})
     if lower.endswith(".zip"):
         zf = zipfile.ZipFile(path)
-        members = [x for x in zf.infolist() if not x.is_dir()]
-        if len(members) != 1:
+        # The archive handle outlives this function only on the success path; any
+        # failure while inspecting or opening the member must close it here.
+        try:
+            members = [x for x in zf.infolist() if not x.is_dir()]
+            if len(members) != 1:
+                raise ValueError(f"ZIP must contain exactly one data file; found {len(members)}")
+            raw = zf.open(members[0], "r")
+            try:
+                text = io.TextIOWrapper(raw, encoding="utf-8-sig", errors="replace", newline="")
+            except Exception:
+                raw.close()
+                raise
+        except Exception:
             zf.close()
-            raise ValueError(f"ZIP must contain exactly one data file; found {len(members)}")
-        raw = zf.open(members[0], "r")
-        text = io.TextIOWrapper(raw, encoding="utf-8-sig", errors="replace", newline="")
+            raise
         text._genoma_zipfile = zf  # type: ignore[attr-defined]
         return text, SourceInfo("zip", members[0].filename, {})
     return path.open("rt", encoding="utf-8-sig", errors="replace", newline=""), SourceInfo("plain", None, {})

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Materialize the canonical GENOMA v3.3 ruleset using the shared sealed contract."""
+"""Materialize the canonical GENOMA v3.4 ruleset using the shared sealed contract."""
 from __future__ import annotations
 
 import argparse

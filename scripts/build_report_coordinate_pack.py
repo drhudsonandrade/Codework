@@ -15,13 +15,15 @@ import fitz
 
 COMPILER_ID = "fitz-1.26.7-genoma-v2"
 TOKEN_RE = re.compile(r"\[\[.*?\]\]", re.S)
+RULESET_CONTROL_RE = re.compile(r"GENOMA-HUDSON-RULESET-v\d+(?:\.\d+)+")
+RULESET_CONTROL_PREFIX = "GENOMA-HUDSON-RULESET-v"
+CANONICAL_RULESET_CONTROL = "GENOMA-HUDSON-RULESET-v3.4"
 CONTROLLED = [
     "MODELO REUTILIZÁVEL v3.0",
     "MODELO EDITÁVEL",
     "NÃO INSERIDOS",
     "MODELO — NÃO É RESULTADO GENÉTICO",
     "MODELO — NÃO É RESULTADO",
-    "GENOMA-HUDSON-RULESET-v3.3",
     "MODELO SEM DADOS PESSOAIS",
     "Campos em azul são placeholders obrigatórios ou condicionais; preencher com dado rastreável ou declarar NÃO DISPONÍVEL.",
 ]
@@ -137,10 +139,37 @@ def _tokens(page: fitz.Page) -> list[tuple[str, fitz.Rect, dict[str, Any]]]:
     return found
 
 
+def _ruleset_control_sources(text: str) -> list[str]:
+    sources: list[str] = []
+    offset = 0
+    while True:
+        start = text.find(RULESET_CONTROL_PREFIX, offset)
+        if start < 0:
+            break
+        match = RULESET_CONTROL_RE.match(text, start)
+        if match is None:
+            raise RuntimeError("malformed GENOMA ruleset control marker")
+        marker = match.group(0)
+        before = text[start - 1] if start else ""
+        after = text[match.end()] if match.end() < len(text) else ""
+        if before and (before.isalnum() or before in "_-"):
+            raise RuntimeError(f"malformed GENOMA ruleset control marker: {marker!r}")
+        if after and (after.isalnum() or after in "._-"):
+            raise RuntimeError(f"malformed GENOMA ruleset control marker: {marker + after!r}")
+        if marker != CANONICAL_RULESET_CONTROL:
+            raise RuntimeError(f"noncanonical GENOMA ruleset control marker: {marker}")
+        if marker not in sources:
+            sources.append(marker)
+        offset = match.end()
+    return sources
+
+
 def _controls(page: fitz.Page) -> list[tuple[str, fitz.Rect, dict[str, Any]]]:
     spans = _spans(page)
     result: list[tuple[str, fitz.Rect, dict[str, Any]]] = []
-    for source in CONTROLLED:
+    sources = list(CONTROLLED)
+    sources.extend(_ruleset_control_sources(page.get_text("text", sort=True)))
+    for source in dict.fromkeys(sources):
         for rect in page.search_for(source):
             first = next((s for s in spans if (s["bbox"] & rect).get_area() > 0), None)
             result.append((source, rect, first or {"size": 7.0, "font": "DejaVuSans", "color": 0}))
@@ -199,7 +228,17 @@ def compile_pack(template_dir: Path, reference_index: Path) -> dict[str, Any]:
                 f"placeholder inventory mismatch for {report_id}: {len(fields)} != {expected['placeholder_count']}"
             )
         reports[report_id] = {
-            **{k: expected[k] for k in ("filename", "sha256", "size_bytes", "page_count", "page_size_pt", "placeholder_count")},
+            **{
+                k: expected[k]
+                for k in (
+                    "filename",
+                    "sha256",
+                    "size_bytes",
+                    "page_count",
+                    "page_size_pt",
+                    "placeholder_count",
+                )
+            },
             "fields": fields,
             "controlled_spans": controls,
         }
@@ -215,7 +254,9 @@ def write_pack(payload: dict[str, Any], output_dir: Path) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     manifest = output_dir / "GENOMA_V3_TEMPLATE_MANIFEST.v2.json"
     detail = output_dir / "reference_v3_manifest.v2.json.gz.b64"
-    raw = (json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+    raw = (
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode("utf-8")
     manifest.write_bytes(raw)
     compressed = gzip.compress(raw, mtime=0)
     detail.write_text(base64.b64encode(compressed).decode("ascii") + "\n", encoding="ascii")
@@ -223,8 +264,16 @@ def write_pack(payload: dict[str, Any], output_dir: Path) -> dict[str, Any]:
         "schema": "genoma-editorial-coordinate-build-v2",
         "status": "VERIFICADO",
         "compiler": COMPILER_ID,
-        "manifest": {"path": str(manifest), "sha256": _sha256(manifest), "size_bytes": manifest.stat().st_size},
-        "detail": {"path": str(detail), "sha256": _sha256(detail), "size_bytes": detail.stat().st_size},
+        "manifest": {
+            "path": str(manifest),
+            "sha256": _sha256(manifest),
+            "size_bytes": manifest.stat().st_size,
+        },
+        "detail": {
+            "path": str(detail),
+            "sha256": _sha256(detail),
+            "size_bytes": detail.stat().st_size,
+        },
         "reports": len(payload["reports"]),
         "pages": sum(int(x["page_count"]) for x in payload["reports"].values()),
         "placeholders": sum(len(x["fields"]) for x in payload["reports"].values()),

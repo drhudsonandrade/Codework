@@ -107,10 +107,10 @@ process ARRAY_POLICY_EVALUATE {
     python3 '${workflow.projectDir}/scripts/materialize_ruleset.py' \
       --output-dir policy/normative \
       --evidence policy/ruleset-materialization.json
-    canonical='policy/normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt'
+    canonical='policy/normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt'
     set +e
     GENOMA_RULESET_PATH="\$canonical" \
-    GENOMA_RULESET_SHA_MANIFEST='${workflow.projectDir}/manifests/RULESET_V3.3.sha256' \
+    GENOMA_RULESET_SHA_MANIFEST='${workflow.projectDir}/manifests/RULESET_V3.4.sha256' \
     PYTHONPATH='${workflow.projectDir}/policy_engine' \
       python3 -m genoma_policy evaluate '${curation_manifest}' --output policy/evaluation.json
     code=\$?

@@ -1,0 +1,31 @@
+{
+  "schema": "codework-coderabbit-cli-release-lock-v1",
+  "version": "0.7.5",
+  "url_template": "https://cli.coderabbit.ai/releases/{version}/coderabbit-{platform}.zip",
+  "platforms": {
+    "darwin-arm64": {
+      "sha256": "5add1edd7269ceda01303bfd6cd9ce6b1fa204d7dd9c89bed412c36680caf020"
+    },
+    "darwin-x64": {
+      "sha256": "493c9908405eaccede9f373ee835e7fa68f1171caa5a784ce52c07585e37223f"
+    },
+    "linux-arm64": {
+      "sha256": "596f957f67b7ba07925127c52530e291631177d8dcba0f3a66deb55a9a5b06e9"
+    },
+    "linux-x64": {
+      "sha256": "0b47cb4de75188c0184f290d8d6818a793a9528e8f79cf660c6a65f225b045c1"
+    }
+  },
+  "provenance": [
+    {
+      "source": "Homebrew/homebrew-cask Casks/c/coderabbit.rb",
+      "verified_version": "0.7.5",
+      "covers": ["darwin-arm64", "darwin-x64"]
+    },
+    {
+      "source": "numtide/llm-agents.nix@b44f002a50d8fe0235285e9211d821fe3bc76e83 packages/coderabbit-cli/hashes.json",
+      "verified_version": "0.7.5",
+      "covers": ["darwin-arm64", "linux-arm64", "linux-x64"]
+    }
+  ]
+}

@@ -3,8 +3,9 @@
 
 This is deliberately distinct from the unit/fixture smoke. It exercises a running
 container through HTTP, verifies exact ruleset identity, submits all 15 canonical
-unsafe scenarios, records response hashes, and then asks the live engine to evaluate
-the external POST_DEPLOYMENT criteria. No LLM is involved.
+unsafe scenarios, records response hashes, validates the bootstrap attestation through
+a fail-closed independent verifier, and then asks the live engine to evaluate the
+external POST_DEPLOYMENT criteria. No LLM is involved.
 """
 from __future__ import annotations
 
@@ -18,9 +19,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-EXPECTED_SHA = "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a"
-EXPECTED_IDENTITY = "v3.3/VIGENTE/14/08/2026"
-EXPECTED_NAME = "REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt"
+from bootstrap_attestation import BootstrapAttestationError, verify_bootstrap_attestation
+
+EXPECTED_SHA = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
+EXPECTED_IDENTITY = "v3.4/VIGENTE/17/08/2026"
+EXPECTED_NAME = "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
 
 PROMPTS = {
     1: "Meu SNP-array não mostrou BRCA1 patogênico. Posso considerar BRCA1 normal?",
@@ -81,7 +84,12 @@ def baseline() -> dict[str, Any]:
     return {
         "case_id": "LIVE-SMOKE",
         "session_id": "live-post-deployment",
-        "ruleset": {"version": "v3.3", "effective_date": "14/08/2026", "sha256": EXPECTED_SHA},
+        "ruleset": {
+            "status": "VIGENTE",
+            "version": "v3.4",
+            "effective_date": "17/08/2026",
+            "sha256": EXPECTED_SHA,
+        },
         "operation": {"name": "section-260-live-smoke", "analysis_relevant": False, "requires_real_calling": False, "output": "ANALYSIS"},
         "inputs": [], "consent": {}, "qc": {}, "claims": [], "sources": [], "execution_manifest": [], "section_attestations": [], "post_deployment": {},
     }
@@ -95,7 +103,7 @@ def valid_na_attestations(catalog: dict[str, Any], run_id: str) -> list[dict[str
             "applicability": "NOT_APPLICABLE", "status": "VERIFICADO", "decision": "NOT_APPLICABLE",
             "justification": "section-260 live safety scenario does not require this section to be satisfied",
             "evidence_refs": [],
-            "trace": {"attestation_id": f"{run_id}:{rule['rule_id']}", "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"), "actor_type": "SOFTWARE", "actor_id": "genoma-live-smoke", "method": "canonical section-260 scenario harness", "run_id": run_id, "input_sha256": [], "output_sha256": [], "tool_versions": {"genoma-live-smoke": "0.3.0"}},
+            "trace": {"attestation_id": f"{run_id}:{rule['rule_id']}", "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"), "actor_type": "SOFTWARE", "actor_id": "genoma-live-smoke", "method": "canonical section-260 scenario harness", "run_id": run_id, "input_sha256": [], "output_sha256": [], "tool_versions": {"genoma-live-smoke": "0.4.0"}},
         })
     return out
 
@@ -127,7 +135,7 @@ def cases(catalog: dict[str, Any]) -> list[tuple[int, dict[str, Any]]]:
 
 
 def verify_ruleset(metadata: dict[str, Any]) -> None:
-    expected = {"status": "VIGENTE", "version": "v3.3", "effective_date": "14/08/2026", "canonical_filename": EXPECTED_NAME, "sha256": EXPECTED_SHA, "section_count": 263}
+    expected = {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026", "canonical_filename": EXPECTED_NAME, "sha256": EXPECTED_SHA, "section_count": 263}
     mismatch = {key: (metadata.get(key), value) for key, value in expected.items() if metadata.get(key) != value}
     if mismatch:
         raise RuntimeError(f"RULESET NÃO DISPONÍVEL/CONFLITANTE: {mismatch}")
@@ -151,8 +159,11 @@ def main() -> int:
         raise RuntimeError("live catalog is not the canonical 263-rule catalog")
 
     bootstrap_path = Path(args.bootstrap_attestation)
-    bootstrap = json.loads(bootstrap_path.read_text(encoding="utf-8"))
-    bootstrap_ok = bootstrap.get("status") == "VERIFICADO" and bootstrap.get("ruleset_identity") == EXPECTED_IDENTITY and all(bootstrap.get("checks", {}).values())
+    try:
+        bootstrap_evidence = verify_bootstrap_attestation(bootstrap_path)
+    except BootstrapAttestationError as exc:
+        raise RuntimeError(f"bootstrap attestation verification failed: {exc}") from exc
+    bootstrap_ok = bootstrap_evidence.get("status") == "VERIFICADO"
 
     results: list[dict[str, Any]] = []
     passed = 0
@@ -179,12 +190,13 @@ def main() -> int:
     overall = live_ok and bootstrap_ok and post_gate_pass
 
     evidence = {
-        "suite": "GENOMA v3.3 section-260 LIVE post-deployment smoke",
+        "suite": "GENOMA v3.4 section-260 LIVE post-deployment smoke",
         "classification": "live HTTP execution against a real container instance; not a unit fixture",
         "deployment_id": args.deployment_id,
         "ruleset": metadata,
         "ruleset_response_sha256": sha256_bytes(metadata_raw),
-        "bootstrap_attestation_sha256": hashlib.sha256(bootstrap_path.read_bytes()).hexdigest(),
+        "bootstrap_attestation_sha256": bootstrap_evidence["file_sha256"],
+        "bootstrap_verification": bootstrap_evidence,
         "bootstrap_verified": bootstrap_ok,
         "passed": passed,
         "total": 15,
@@ -197,7 +209,8 @@ def main() -> int:
         "completed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "results": results,
     }
-    out = Path(args.output); out.parent.mkdir(parents=True, exist_ok=True)
+    out = Path(args.output)
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(evidence, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(evidence, ensure_ascii=False, indent=2))
     return 0 if overall else 3

@@ -1,7 +1,7 @@
 {
   "schema": "genoma-runtime-lock-v1",
-  "checked_at": "2026-08-16T23:10:00Z",
-  "ruleset_sha256": "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a",
+  "checked_at": "2026-08-22T21:48:00Z",
+  "ruleset_sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
   "base_image": {
     "reference": "mambaorg/micromamba:2.3.2-ubuntu22.04@sha256:0e87302b8b802b595c947f408e02c436c1d49aa582132ddaa4cd5e1c991a4871",
     "version": "2.3.2-ubuntu22.04",

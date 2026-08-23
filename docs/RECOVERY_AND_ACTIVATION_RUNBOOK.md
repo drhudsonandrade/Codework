@@ -8,8 +8,9 @@ This repository is the reproducible control plane for the genomics runtime. It c
 version pins, workflow definitions, tests, manifests and operating instructions. It intentionally
 contains no personal DNA, no GRCh38 payload, no approved external lock and no credentials.
 
-Do not record `POST-DEPLOYMENT PASS` until the future target VM is online and the section 260 live
-suite passes 15/15 with no critical failure.
+Do not record `POST-DEPLOYMENT PASS` until the target deployment is online and the section 260 live
+suite proves `passed == 15`, `total == 15`, `critical_failures == 0` and
+`post_deployment_status == "PASS"` on the exact merged `main` SHA.
 
 ## Durable sources of truth
 
@@ -29,11 +30,11 @@ keeping at least two independent copies and retaining the manifests needed to ve
 
 - Container toolchain pinned in `environment.yml` and verified by `scripts/check_versions.sh`.
 - npm dependency graph pinned in `mcp/package-lock.json`.
-- Fallow action and CLI pinned to 3.16.0.
+- Fallow Action pinned to `fallow-rs/fallow@45fd28766199acb1f939f6862274a37aad12770b`; Fallow CLI pinned to `3.16.0`.
 - GRCh38 acquisition targets declared in `manifests/GRCh38.sources.tsv`.
-- External ruleset identity pinned in `manifests/RULESET_V3.3.sha256`.
+- External ruleset identity pinned in `manifests/RULESET_V3.4.sha256` for canonical `VIGENTE / v3.4 / 17/08/2026`.
 - Synthetic FASTQ, BAM and dual-caller VCF generation is deterministic.
-- GitHub main pushes build a SHA-tagged GHCR image and record its immutable digest.
+- Successful protected-main workflows can build SHA-tagged GHCR images and record immutable digests.
 - A successful canary includes an explicit Conda package lock generated from the built image.
 
 ## Clean recovery from GitHub and GHCR
@@ -93,7 +94,7 @@ The MCP server exposes only `runtime_status`, `reference_status`, `run_synthetic
 `audit_record`. It does not expose arbitrary shell execution, uploads, deletes or raw genomic
 contents.
 
-After the future VM exists:
+After the target VM exists:
 
 1. Start `deploy/docker-compose.yml` with a digest-pinned `GENOME_IMAGE`.
 2. Verify `GET http://127.0.0.1:3000/healthz` and inspect `/mcp` locally.
@@ -105,9 +106,8 @@ After the future VM exists:
    error in `/srv/genome/audit`.
 
 ChatGPT plugins are installed in ChatGPT, not in GitHub. Fallow is also represented in GitHub by the
-pinned `fallow-rs/fallow@v3.16.0` Action. Cloudflare, Supabase, Temporal, Flower, Vercel and research
-connectors are not dependencies of the genomic data plane and therefore are not copied into the
-repository or container.
+pinned Fallow Action. Cloudflare, Supabase, Temporal, Flower, Vercel and research connectors are not
+dependencies of the genomic data plane and therefore are not copied into the repository or container.
 
 ## Future GRCh38 and WGS activation
 
