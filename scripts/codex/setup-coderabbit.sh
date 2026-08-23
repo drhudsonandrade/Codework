@@ -68,7 +68,9 @@ release_url="${lock_template//\{version\}/$CODERABBIT_VERSION}"
 release_url="${release_url//\{platform\}/$platform}"
 [[ "$release_url" == "https://cli.coderabbit.ai/releases/${CODERABBIT_VERSION}/coderabbit-${platform}.zip" ]] \
   || fail "URL de release derivada do lock não é a origem oficial esperada."
-curl --fail --location --silent --show-error --output "$archive" "$release_url"
+curl --fail --location --silent --show-error \
+  --proto '=https' --proto-redir '=https' --tlsv1.2 \
+  --output "$archive" "$release_url"
 observed_archive_sha="$(sha256_file "$archive")"
 [[ "$observed_archive_sha" == "$expected_archive_sha" ]] || fail "SHA-256 do archive CodeRabbit diverge do lock versionado."
 unzip -q "$archive" -d "$extract_dir"
