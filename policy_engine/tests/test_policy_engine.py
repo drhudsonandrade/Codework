@@ -19,7 +19,9 @@ REPO_ROOT = ROOT.parent
 RULESET = resolve_ruleset_path(ROOT)
 HASH_MANIFEST = resolve_manifest_path(RULESET, ROOT)
 EXPECTED_SHA256 = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
-HISTORICAL_IDENTITY_FIXTURE = next((REPO_ROOT / "docs" / "history").glob("*/superseded-identities.json"))
+HISTORICAL_IDENTITY_FIXTURE = REPO_ROOT / "docs" / "history" / "v3.3" / "superseded-identities.json"
+if not HISTORICAL_IDENTITY_FIXTURE.is_file():
+    raise RuntimeError(f"superseded identity fixture missing: {HISTORICAL_IDENTITY_FIXTURE}")
 HISTORICAL_IDENTITY = json.loads(HISTORICAL_IDENTITY_FIXTURE.read_text(encoding="utf-8"))
 
 
@@ -89,6 +91,22 @@ class PolicyEngineTests(unittest.TestCase):
                 {"run_id": "test-session", "created_at": "2026-08-22T18:46:00-03:00"}
             )
         return manifest
+
+    def test_ruleset_gate_rejects_missing_status(self):
+        manifest = self.valid_analysis_manifest()
+        manifest["ruleset"].pop("status")
+        report = self.engine.evaluate(manifest)
+        gate = next(gate for gate in report.gates if gate.gate == "RULESET_GATE")
+        self.assertEqual(gate.state.value, "FAIL")
+        self.assertFalse(report.ready)
+
+    def test_ruleset_gate_rejects_non_vigente_status(self):
+        manifest = self.valid_analysis_manifest()
+        manifest["ruleset"]["status"] = "PENDENTE"
+        report = self.engine.evaluate(manifest)
+        gate = next(gate for gate in report.gates if gate.gate == "RULESET_GATE")
+        self.assertEqual(gate.state.value, "FAIL")
+        self.assertFalse(report.ready)
 
     def test_post_deployment_is_nonblocking_pending_by_default(self):
         report = self.engine.evaluate(self.valid_analysis_manifest())
