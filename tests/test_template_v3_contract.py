@@ -131,7 +131,6 @@ class TemplateV3ContractTest(unittest.TestCase):
                 _patch_docx_svg(malicious, [])
 
     def test_docx_svg_patch_rejects_duplicate_archive_members(self):
-        """extractall writes members in order, so a repeated name overwrites the first."""
         from reporting.template_v3 import TemplateV3Error, _patch_docx_svg
 
         with tempfile.TemporaryDirectory() as td:
@@ -139,11 +138,10 @@ class TemplateV3ContractTest(unittest.TestCase):
             with zipfile.ZipFile(duplicated, "w") as archive:
                 archive.writestr("word/document.xml", "<original/>")
                 archive.writestr("word/document.xml", "<replacement/>")
-            with self.assertRaisesRegex(TemplateV3Error, "duplicate DOCX archive member"):
+            with self.assertRaisesRegex(TemplateV3Error, "duplicate DOCX extraction target"):
                 _patch_docx_svg(duplicated, [])
 
     def test_docx_svg_patch_rejects_members_with_same_normalized_target(self):
-        """Distinct ZIP names must not be allowed to overwrite one extraction target."""
         from reporting.template_v3 import TemplateV3Error, _patch_docx_svg
 
         with tempfile.TemporaryDirectory() as td:
@@ -151,11 +149,10 @@ class TemplateV3ContractTest(unittest.TestCase):
             with zipfile.ZipFile(duplicated, "w") as archive:
                 archive.writestr("word/document.xml", "<original/>")
                 archive.writestr("word/./document.xml", "<replacement/>")
-            with self.assertRaisesRegex(TemplateV3Error, "duplicate DOCX archive member"):
+            with self.assertRaisesRegex(TemplateV3Error, "duplicate DOCX extraction target"):
                 _patch_docx_svg(duplicated, [])
 
     def test_poppler_failure_keeps_the_converter_diagnostics(self):
-        """A conversion failure must carry Poppler's own reason, not just an exit code."""
         import subprocess
 
         from reporting.template_v3 import TemplateV3Error, _run_poppler
@@ -175,8 +172,23 @@ class TemplateV3ContractTest(unittest.TestCase):
         self.assertIn("Couldn't find trailer dictionary", message)
         self.assertNotIsInstance(caught.exception, subprocess.CalledProcessError)
 
+    def test_poppler_timeout_fails_closed_with_page_context(self):
+        import subprocess
+        from unittest.mock import patch
+
+        from reporting.template_v3 import POPPLER_TIMEOUT_SECONDS, TemplateV3Error, _run_poppler
+
+        with patch(
+            "reporting.template_v3.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd=["pdftoppm"], timeout=POPPLER_TIMEOUT_SECONDS),
+        ):
+            with self.assertRaisesRegex(
+                TemplateV3Error,
+                rf"pdftoppm timed out on template page 4 after {POPPLER_TIMEOUT_SECONDS}s",
+            ):
+                _run_poppler(["pdftoppm"], 4)
+
     def test_single_line_fit_shrinks_for_the_box_height_too(self):
-        """Width-only fitting lets Word clip a line that is too tall for its textbox."""
         from reporting.template_v3 import SINGLE_LINE_LEADING, _fit_single_line_size
 
         wide_box = 10_000.0
