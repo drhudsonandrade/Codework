@@ -49,6 +49,17 @@ class ReportCoordinatePackRulesetMarkerTests(unittest.TestCase):
         self.assertLessEqual(rect.y0, first_line.y0)
         self.assertGreaterEqual(rect.y1, second_line.y1)
 
+    def test_disjoint_fragments_do_not_form_a_canonical_marker(self) -> None:
+        doc = fitz.open()
+        page = doc.new_page()
+        page.insert_text((72, 72), "GENOMA-HUDSON-", fontsize=12)
+        page.insert_text((320, 520), "RULESET-v3.4", fontsize=12)
+        try:
+            controls = [item for item in _controls(page) if item[0] == CANONICAL_RULESET_CONTROL]
+        finally:
+            doc.close()
+        self.assertEqual(controls, [])
+
     def test_compile_pack_fails_closed_if_canonical_occurrence_lacks_controlled_span(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
