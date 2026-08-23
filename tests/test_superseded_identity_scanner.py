@@ -6,7 +6,6 @@ prose, dated filenames, unrelated timestamps and negative regression fixtures.
 """
 from __future__ import annotations
 
-import shutil
 import sys
 import unittest
 from pathlib import Path
@@ -26,7 +25,9 @@ from scripts.validate_repo import (
 def _scan(files: dict[str, str]) -> list[str]:
     with TemporaryDirectory() as td:
         root = Path(td)
-        shutil.copytree(ROOT / "docs" / "history", root / "docs" / "history")
+        history_marker = root / "docs" / "history" / "v3.3" / "superseded-identities.json"
+        history_marker.parent.mkdir(parents=True, exist_ok=True)
+        history_marker.write_text("{}\n", encoding="utf-8")
         for relative, content in files.items():
             target = root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -77,6 +78,13 @@ class SupersededIdentityStillBlockedTest(unittest.TestCase):
     def test_fstring_constant_declaring_the_old_version_is_rejected(self):
         errors = _scan({"stamp.py": 'code = "01"\nCURRENT_RULESET_LABEL = f"GENOMA,{code},v3.3,report"\n'})
         self.assertTrue(any("declared as active" in e for e in errors), errors)
+
+    def test_malformed_python_is_rejected_instead_of_skipping_ast_identity_scan(self):
+        errors = _scan({"config.py": 'CANONICAL_RULESET_VERSION = "v3." + "3"\nif (\n'})
+        self.assertTrue(
+            any("unparseable Python surface cannot be identity-scanned: config.py" in e for e in errors),
+            errors,
+        )
 
     def test_declaration_line_in_markdown_is_rejected(self):
         errors = _scan({"doc.md": "STATUS NORMATIVO: VIGENTE — v3.3\n"})
