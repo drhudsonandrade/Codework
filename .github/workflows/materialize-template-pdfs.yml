@@ -11,6 +11,10 @@ on:
       - 'scripts/sealed_ruleset.py'
       - '.github/workflows/materialize-template-pdfs.yml'
 
+concurrency:
+  group: genoma-materialize-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -35,14 +39,14 @@ jobs:
           from scripts import sealed_ruleset
 
           canonical={
-              'status':'VIGENTE',
-              'version':'v3.4',
-              'formal_date':'17/08/2026',
-              'effective_date':'17/08/2026',
-              'filename':'REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt',
-              'sha256':'ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580',
+              'status':sealed_ruleset.EXPECTED_STATUS,
+              'version':sealed_ruleset.EXPECTED_VERSION,
+              'formal_date':sealed_ruleset.EXPECTED_DATE,
+              'effective_date':sealed_ruleset.EXPECTED_DATE,
+              'filename':sealed_ruleset.EXPECTED_NAME,
+              'sha256':sealed_ruleset.EXPECTED_SHA,
           }
-          expected_transport_parts=[f'parts/part-{index:03d}.b64' for index in range(13)]
+          expected_transport_parts=list(sealed_ruleset.EXPECTED_TRANSPORT_PARTS)
           sha_manifest=Path('manifests/RULESET_V3.4.sha256')
           fields=sha_manifest.read_text(encoding='ascii').strip().split()
           if fields != [canonical['sha256'], canonical['filename']]:
