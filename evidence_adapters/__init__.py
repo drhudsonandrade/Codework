@@ -40,7 +40,8 @@ def _first_header(headers: Mapping[str, tuple[str, ...]], name: str) -> str | No
 
 def _default_transport(request: urllib.request.Request) -> tuple[bytes, Mapping[str, HeaderValue]]:
     _validate_request(request)
-    opener = urllib.request.build_opener(_AllowlistedRedirectHandler())
+    initial_host = urllib.parse.urlparse(request.full_url).hostname
+    opener = urllib.request.build_opener(_AllowlistedRedirectHandler(initial_host))
     with opener.open(request, timeout=30) as response:
         headers: dict[str, tuple[str, ...]] = {}
         for name in response.headers.keys():
@@ -77,7 +78,7 @@ ALLOWED_HOSTS = frozenset(
 )
 
 
-def _validate_url(url: str) -> None:
+def _validate_url(url: str, *, expected_host: str | None = None) -> None:
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme.lower() != "https":
         raise EvidenceURLPolicyError("evidence adapters require HTTPS")
@@ -85,6 +86,8 @@ def _validate_url(url: str) -> None:
         raise EvidenceURLPolicyError("credentials are not allowed in evidence URLs")
     if parsed.hostname not in ALLOWED_HOSTS:
         raise EvidenceURLPolicyError("evidence host is not allowlisted")
+    if expected_host is not None and parsed.hostname != expected_host:
+        raise EvidenceURLPolicyError("evidence request changed its configured host")
     try:
         port = parsed.port
     except ValueError as exc:
@@ -95,13 +98,17 @@ def _validate_url(url: str) -> None:
         raise EvidenceURLPolicyError("URL fragments are not allowed in evidence requests")
 
 
-def _validate_request(request: urllib.request.Request) -> None:
-    _validate_url(request.full_url)
+def _validate_request(request: urllib.request.Request, *, expected_host: str | None = None) -> None:
+    _validate_url(request.full_url, expected_host=expected_host)
 
 
 class _AllowlistedRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def __init__(self, expected_host: str | None):
+        super().__init__()
+        self.expected_host = expected_host
+
     def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
-        _validate_url(newurl)
+        _validate_url(newurl, expected_host=self.expected_host)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
@@ -171,7 +178,8 @@ class EvidenceAdapter:
             "retrieval_evidence": {"method": "HTTPS"},
         }
         try:
-            _validate_request(request)
+            expected_host = urllib.parse.urlparse(self.spec.base_url).hostname
+            _validate_request(request, expected_host=expected_host)
             payload, headers = self.transport(request)
             normalized_headers = _normalize_headers(headers)
             json.loads(payload.decode("utf-8"))
