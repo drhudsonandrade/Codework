@@ -9,7 +9,8 @@ version pins, workflow definitions, tests, manifests and operating instructions.
 contains no personal DNA, no GRCh38 payload, no approved external lock and no credentials.
 
 Do not record `POST-DEPLOYMENT PASS` until the target deployment is online and the section 260 live
-suite passes 15/15 with no critical failure.
+suite proves `passed == 15`, `total == 15`, `critical_failures == 0` and
+`post_deployment_status == "PASS"` on the exact merged `main` SHA.
 
 ## Durable sources of truth
 
