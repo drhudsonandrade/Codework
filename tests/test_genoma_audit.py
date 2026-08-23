@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
+import tempfile
+import time
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from scripts.genoma_audit import _decode_tail, audit, run
@@ -43,12 +47,37 @@ class GenomaAuditTest(unittest.TestCase):
             output=b"partial-stdout",
             stderr=b"partial-stderr",
         )
-        with patch("scripts.genoma_audit.subprocess.run", side_effect=expired):
-            rc, evidence = run(["fixture"], timeout_seconds=1)
+        with patch("scripts.genoma_audit.subprocess.Popen.communicate", side_effect=expired):
+            with patch("scripts.genoma_audit.subprocess.Popen.poll", return_value=None):
+                with patch("scripts.genoma_audit.os.killpg"):
+                    rc, evidence = run(["fixture"], timeout_seconds=1)
         self.assertEqual(rc, 124)
         self.assertIn("TIMEOUT after 1s", evidence)
         self.assertIn("partial-stdout", evidence)
         self.assertIn("partial-stderr", evidence)
+
+    @unittest.skipUnless(os.name == "posix" and Path("/proc").is_dir(), "requires POSIX /proc")
+    def test_run_timeout_terminates_descendant_process_group_promptly(self):
+        with tempfile.TemporaryDirectory() as td:
+            pid_file = Path(td) / "child.pid"
+            child = "import time; time.sleep(5)"
+            parent = (
+                "import pathlib,subprocess,sys,time; "
+                f"p=subprocess.Popen([sys.executable,'-c',{child!r}]); "
+                f"pathlib.Path({str(pid_file)!r}).write_text(str(p.pid)); "
+                "time.sleep(5)"
+            )
+            started = time.monotonic()
+            rc, evidence = run([sys.executable, "-c", parent], timeout_seconds=0.25)
+            elapsed = time.monotonic() - started
+            self.assertEqual(rc, 124, evidence)
+            self.assertLess(elapsed, 2.0, evidence)
+            self.assertTrue(pid_file.is_file(), evidence)
+            child_pid = int(pid_file.read_text())
+            deadline = time.monotonic() + 1.0
+            while Path(f"/proc/{child_pid}").exists() and time.monotonic() < deadline:
+                time.sleep(0.05)
+            self.assertFalse(Path(f"/proc/{child_pid}").exists(), f"descendant survived timeout: {child_pid}")
 
     def test_multibyte_tail_decoding_is_robust_when_slice_starts_mid_character(self):
         raw = ("á" * 4000).encode("utf-8")
