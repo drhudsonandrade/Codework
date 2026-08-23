@@ -60,7 +60,9 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         success = script.index("CodeRabbit Codex plugin + CLI configurados")
         self.assertLess(script.index("marketplace_present()"), success)
         self.assertLess(script.index("plugin_installed()"), success)
-        self.assertIn('.marketplaces[]? | select(.name == "codework-codex")', script)
+        self.assertIn('.marketplaces[]?', script)
+        self.assertIn('.name == "codework-codex"', script)
+        self.assertIn('.root == $expected_marketplace_source', script)
         self.assertIn('.marketplaceSource.sourceType == "local"', script)
         self.assertIn('.marketplaceSource.source == $expected_marketplace_source', script)
         self.assertIn('.installed[]?', script)
@@ -73,10 +75,10 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         self.assertLess(script.rindex('marketplace_present <<<"$marketplaces_json"'), success)
         self.assertLess(script.rindex('plugin_installed <<<"$plugins_json"'), success)
 
-    def _run_setup_with_fake_codex(self, *, marketplace_source: str) -> tuple[subprocess.CompletedProcess[str], bool]:
+    def _run_setup_with_fake_codex(self, *, adulterated_marketplace: bool) -> tuple[subprocess.CompletedProcess[str], bool]:
         self.assertIsNotNone(shutil.which("jq"), "jq is required by the live setup contract")
         setup_script = ROOT / "scripts" / "codex" / "setup-coderabbit.sh"
-        marketplace_source_file = ROOT / ".agents" / "plugins" / "marketplace.json"
+        marketplace_manifest = ROOT / ".agents" / "plugins" / "marketplace.json"
 
         td = tempfile.TemporaryDirectory()
         self.addCleanup(td.cleanup)
@@ -86,7 +88,8 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         marker = sandbox / "plugin-installed"
         (repo / ".agents" / "plugins").mkdir(parents=True)
         fake_bin.mkdir()
-        shutil.copy2(marketplace_source_file, repo / ".agents" / "plugins" / "marketplace.json")
+        shutil.copy2(marketplace_manifest, repo / ".agents" / "plugins" / "marketplace.json")
+        marketplace_source = str(sandbox / "unreviewed-marketplace") if adulterated_marketplace else str(repo)
 
         fake_git = fake_bin / "git"
         fake_git.write_text(
@@ -110,6 +113,11 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         )
         installed = "{" + plugin_common + ',"installed":true,"enabled":true}'
         available = "{" + plugin_common + ',"installed":false,"enabled":false}'
+        marketplace_entry = (
+            '{"name":"codework-codex",'
+            f'"root":"{marketplace_source}",'
+            f'"marketplaceSource":{{"sourceType":"local","source":"{marketplace_source}"}}}}'
+        )
 
         fake_codex = fake_bin / "codex"
         fake_codex.write_text(
@@ -119,7 +127,7 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
                 set -euo pipefail
                 case "$*" in
                   "plugin marketplace list --json")
-                    printf '%s\\n' '{{"marketplaces":[{{"name":"codework-codex","root":"{repo}","marketplaceSource":{{"sourceType":"local","source":"{marketplace_source}"}}}}]}}'
+                    printf '%s\\n' '{{"marketplaces":[{marketplace_entry}]}}'
                     ;;
                   plugin\ marketplace\ add*)
                     printf '%s\\n' '{{}}'
@@ -185,17 +193,16 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         return result, marker.is_file()
 
     def test_available_plugin_is_installed_before_success(self) -> None:
-        # The reviewed local marketplace source must be the repository root used by the setup flow.
-        with tempfile.TemporaryDirectory() as probe:
-            # _run_setup creates its own repository, so use a sentinel expanded by the fake Codex fixture.
-            pass
-        script = (ROOT / "scripts" / "codex" / "setup-coderabbit.sh").read_text(encoding="utf-8")
-        self.assertIn('expected_marketplace_source="$REPO_ROOT"', script)
+        result, marker_created = self._run_setup_with_fake_codex(adulterated_marketplace=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(marker_created, "available-only plugin must be installed before success")
+        self.assertIn("CodeRabbit Codex plugin + CLI configurados", result.stdout)
 
     def test_adulterated_marketplace_source_is_rejected(self) -> None:
-        script = (ROOT / "scripts" / "codex" / "setup-coderabbit.sh").read_text(encoding="utf-8")
-        self.assertIn('expected_marketplace_source="$REPO_ROOT"', script)
-        self.assertIn('.marketplaceSource.source == $expected_marketplace_source', script)
+        result, marker_created = self._run_setup_with_fake_codex(adulterated_marketplace=True)
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse(marker_created)
+        self.assertNotIn("CodeRabbit Codex plugin + CLI configurados", result.stdout)
 
 
 if __name__ == "__main__":
