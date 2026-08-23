@@ -27,7 +27,9 @@ EXPECTED_DATE = "17/08/2026"
 EXPECTED_ARCHIVED_BOOTSTRAP_SHA = "87af4f99bcd6b6f3f857a1ca725103e95dabf70c3c926d7f0d4e83b037e69fd8"
 EXPECTED_SUPERSEDED_FIXTURE_SHA = "5a6f888f176ed4c963c43c24f38697ea363f5772be06c63e70d6a8f5c497e503"
 HISTORY_ROOT = ROOT / "docs" / "history"
-SUPERSEDED_FIXTURE = next(HISTORY_ROOT.glob("*/superseded-identities.json"))
+SUPERSEDED_FIXTURE = HISTORY_ROOT / "v3.3" / "superseded-identities.json"
+if not SUPERSEDED_FIXTURE.is_file():
+    raise RuntimeError(f"superseded identity fixture missing: {SUPERSEDED_FIXTURE}")
 SUPERSEDED = json.loads(SUPERSEDED_FIXTURE.read_text(encoding="utf-8"))
 EXPECTED_SUPERSEDED_TOKENS = frozenset(
     {
@@ -179,6 +181,23 @@ class V34ActivationContractTests(unittest.TestCase):
                 errors,
             )
 
+    def test_constant_fstring_superseded_identity_outside_history_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            stray = root / "reporting" / "fstring_identity.py"
+            stray.parent.mkdir(parents=True, exist_ok=True)
+            stray.write_text('RULESET = f"GENOMA-V3.{3}"\n', encoding="utf-8")
+            errors = validate(root)
+            self.assertTrue(
+                any(
+                    "reporting/fstring_identity.py" in error
+                    and "superseded identity outside explicit history" in error
+                    and SUPERSEDED["rule_id_prefix"] in error
+                    for error in errors
+                ),
+                errors,
+            )
+
     def test_bootstrap_attestation_is_digest_bound_and_complete(self) -> None:
         path = ROOT / "deploy" / "attestations" / "bootstrap-project-v3.4.json"
         evidence = verify_bootstrap_attestation(path)
@@ -204,6 +223,7 @@ class V34ActivationContractTests(unittest.TestCase):
                 "case_id": "VERSION",
                 "session_id": "VERSION",
                 "ruleset": {
+                    "status": "VIGENTE",
                     "version": EXPECTED_VERSION,
                     "effective_date": EXPECTED_DATE,
                     "sha256": EXPECTED_SHA,
