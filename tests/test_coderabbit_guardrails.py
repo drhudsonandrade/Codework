@@ -323,6 +323,14 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         result, marker_created = self._run_setup_with_fakes(adulterated_marketplace=True)
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertFalse(marker_created)
+        # A non-zero exit alone would also be produced by an unrelated failure — a missing
+        # tool, a bad sandbox path — so the marketplace confirmation message is what proves
+        # the run stopped for the reason under test.
+        self.assertIn(
+            "marketplace codework-codex não foi confirmado no root local revisado",
+            result.stderr,
+            result.stdout + result.stderr,
+        )
         self.assertNotIn("configurados a partir de release checksum-locked", result.stdout)
 
     def test_disabled_installed_plugin_is_rejected(self) -> None:

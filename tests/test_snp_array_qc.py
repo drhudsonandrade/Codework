@@ -175,6 +175,30 @@ class ZipSourceHandleTest(unittest.TestCase):
             finally:
                 stream.close()
 
+    def test_successful_read_releases_its_archive_on_close(self):
+        """The success path leaks too if only the member stream is closed.
+
+        Every caller in the pipeline closes the returned stream and nothing else, so
+        closing it has to release the enclosing ZipFile as well.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            archive = Path(td) / "input.zip"
+            with zipfile.ZipFile(archive, "w") as zf:
+                zf.writestr("data.csv", "RSID,CHROMOSOME,POSITION,RESULT\nrs1,1,100,AA\n")
+            gc.collect()
+            before = self._open_zip_handles()
+            stream, _ = _text_stream(archive)
+            self.assertEqual(self._open_zip_handles(), before + 1, "the archive should be open while reading")
+            self.assertIsInstance(getattr(stream, "_genoma_zipfile", None), zipfile.ZipFile)
+            stream.close()
+            gc.collect()
+            self.assertEqual(
+                self._open_zip_handles(),
+                before,
+                "ZipFile handle leaked on the success path",
+            )
+            self.assertTrue(stream._genoma_zipfile.fp is None)
+
 
 if __name__ == "__main__":
     unittest.main()

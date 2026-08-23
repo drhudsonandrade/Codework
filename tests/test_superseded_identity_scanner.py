@@ -82,6 +82,27 @@ class SupersededIdentityStillBlockedTest(unittest.TestCase):
         errors = _scan({"doc.md": "STATUS NORMATIVO: VIGENTE — v3.3\n"})
         self.assertTrue(any("declared as active" in e for e in errors), errors)
 
+    def test_strong_token_in_a_file_with_an_unlisted_suffix_is_rejected(self):
+        # A checksum manifest is not in TEXT_IDENTITY_SUFFIXES, but the superseded raw
+        # SHA-256 re-pins the obsolete ruleset from there just as effectively as from a
+        # .py or .md. The strong-token scan must not be gated behind the suffix list.
+        errors = _scan(
+            {
+                "manifests/legacy.sha256.example": (
+                    "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a  ruleset.txt\n"
+                )
+            }
+        )
+        self.assertTrue(
+            any("outside explicit history" in e and "manifests/legacy.sha256.example" in e for e in errors),
+            errors,
+        )
+
+    def test_weak_token_in_a_file_with_an_unlisted_suffix_stays_allowed(self):
+        # The suffix guard still applies to weak tokens: an unrelated dated line in a
+        # non-declarative file is not an active normative declaration.
+        self.assertEqual(_scan({"data/export.csv": "run,date\n1,2026-08-14\n"}), [])
+
 
 class HistoricalOccurrenceIsAllowedTest(unittest.TestCase):
     """A permitted historical occurrence is not an active normative source."""

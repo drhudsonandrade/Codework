@@ -24,6 +24,12 @@ test_reject_missing_ruleset_status if {
   not guard.allow with input as input_doc
 }
 
+# An entirely absent ruleset is a different input shape from a ruleset that is present
+# but incomplete; each one has to fail closed on its own.
+test_reject_absent_ruleset if {
+  not guard.allow with input as object.remove(base, {"ruleset"})
+}
+
 test_ruleset_status_deny_message_is_stable if {
   input_doc := object.union(base, {"ruleset": object.union(base_ruleset, {"status": "PENDENTE"})})
   denials := guard.deny with input as input_doc

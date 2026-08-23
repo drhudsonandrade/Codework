@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { promisify } from "node:util";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -19,7 +18,6 @@ import {
 } from "./core.js";
 import { TOOL_DEFINITIONS } from "./toolDefinitions.js";
 
-const execFileAsync = promisify(execFile);
 const requestIdSchema = z
   .string()
   .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/)
@@ -54,20 +52,91 @@ export const TOOL_TIMEOUTS_MS = {
 } as const;
 
 const SCRIPT_OUTPUT_MAX_BYTES = 5 * 1024 * 1024;
+/** Time a terminated process group gets to exit before it is killed outright. */
+const GROUP_TERMINATION_GRACE_MS = 5_000;
+/** POSIX only: a negative pid signals the whole process group instead of one process. */
+const USE_PROCESS_GROUP = process.platform !== "win32";
 
-async function runFixedScript(
+/**
+ * @internal Exported so the timeout containment contract can be tested directly.
+ *
+ * The script runs in its own process group. `scripts/run_canary.sh` starts pipelines and
+ * background tools, so signalling only the direct child on timeout leaves those
+ * descendants running against the same results directory after the tool has already
+ * failed. Every timeout therefore terminates the whole group.
+ */
+export async function runFixedScript(
   script: string,
   args: string[],
   env: NodeJS.ProcessEnv,
   timeout: number,
 ): Promise<string> {
-  const { stdout } = await execFileAsync(script, args, {
+  const child = spawn(script, args, {
     env,
-    maxBuffer: SCRIPT_OUTPUT_MAX_BYTES,
-    timeout,
     windowsHide: true,
+    detached: USE_PROCESS_GROUP,
+    stdio: ["ignore", "pipe", "pipe"],
   });
-  return stdout.trim();
+
+  const terminate = (signal: NodeJS.Signals): void => {
+    const pid = child.pid;
+    if (pid === undefined) {
+      return;
+    }
+    try {
+      process.kill(USE_PROCESS_GROUP ? -pid : pid, signal);
+    } catch {
+      // The group has already exited; nothing left to signal.
+    }
+  };
+
+  let stdout = "";
+  let stdoutBytes = 0;
+  let overflowed = false;
+  child.stdout.setEncoding("utf8");
+  child.stdout.on("data", (chunk: string) => {
+    stdoutBytes += Buffer.byteLength(chunk, "utf8");
+    if (stdoutBytes > SCRIPT_OUTPUT_MAX_BYTES) {
+      overflowed = true;
+      terminate("SIGKILL");
+      return;
+    }
+    stdout += chunk;
+  });
+  // Drained so a chatty script cannot block on a full stderr pipe.
+  child.stderr.resume();
+
+  let timedOut = false;
+  let killTimer: NodeJS.Timeout | undefined;
+  const timeoutTimer = setTimeout(() => {
+    timedOut = true;
+    terminate("SIGTERM");
+    killTimer = setTimeout(() => terminate("SIGKILL"), GROUP_TERMINATION_GRACE_MS);
+    killTimer.unref();
+  }, timeout);
+
+  try {
+    const code = await new Promise<number | null>((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", (exitCode) => resolve(exitCode));
+    });
+    if (timedOut) {
+      throw new Error(`fixed script timed out after ${timeout}ms and its process group was terminated`);
+    }
+    if (overflowed) {
+      throw new Error(`fixed script exceeded the ${SCRIPT_OUTPUT_MAX_BYTES} byte output budget`);
+    }
+    if (code !== 0) {
+      throw new Error(`fixed script exited with code ${code}`);
+    }
+    return stdout.trim();
+  } finally {
+    clearTimeout(timeoutTimer);
+    if (killTimer !== undefined) {
+      clearTimeout(killTimer);
+    }
+    terminate("SIGKILL");
+  }
 }
 
 type PriorResult<T> =

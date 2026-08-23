@@ -223,10 +223,15 @@ class EvidenceAdapter:
             })
             return base
         except Exception as exc:
+            # The published artifact deliberately carries only PUBLIC_RETRIEVAL_ERROR, so the
+            # operator log is the single place a root cause can still survive. Without the
+            # traceback a TLS rejection, a refused redirect and an oversized body are
+            # indistinguishable everywhere.
             LOGGER.warning(
                 "evidence retrieval failed adapter=%s error_class=%s",
                 self.key,
                 type(exc).__name__,
+                exc_info=True,
             )
             base["error_class"] = type(exc).__name__
             base["error"] = PUBLIC_RETRIEVAL_ERROR

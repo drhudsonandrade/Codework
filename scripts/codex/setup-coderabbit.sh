@@ -79,7 +79,7 @@ verified_binary="$extract_dir/coderabbit"
   || fail "archive CodeRabbit verificado não contém o binário regular esperado."
 chmod 0755 "$verified_binary"
 
-verified_version_output="$($verified_binary --version 2>&1)"
+verified_version_output="$("$verified_binary" --version 2>&1)"
 verified_version_token="$(awk 'NF { token=$NF } END { print token }' <<<"$verified_version_output")"
 [[ "$verified_version_token" == "$CODERABBIT_VERSION" ]] || {
   echo "ERROR: release CodeRabbit verificado reporta versão inesperada: ${verified_version_output}" >&2
@@ -92,7 +92,7 @@ installed_path="$INSTALL_BIN_DIR/coderabbit"
 install -m 0755 "$verified_binary" "$installed_path"
 installed_sha="$(sha256_file "$installed_path")"
 [[ "$installed_sha" == "$verified_binary_sha" ]] || fail "binário CodeRabbit instalado diverge do binário extraído do archive verificado."
-installed_version_output="$($installed_path --version 2>&1)"
+installed_version_output="$("$installed_path" --version 2>&1)"
 installed_version_token="$(awk 'NF { token=$NF } END { print token }' <<<"$installed_version_output")"
 [[ "$installed_version_token" == "$CODERABBIT_VERSION" ]] || fail "binário CodeRabbit instalado não preservou a versão fixada."
 

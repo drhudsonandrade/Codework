@@ -165,5 +165,107 @@ class EvidenceAdapterTest(unittest.TestCase):
         self.assertNotIn("limit", parse_qs(urlparse(snapshot["locator"]).query))
 
 
+class EvidenceUrlPolicyTest(unittest.TestCase):
+    """Every rejection branch of the outbound URL policy is pinned independently.
+
+    An allowlisted host is not sufficient on its own: embedded credentials, a port other
+    than 443 and a fragment each have to fail closed by themselves, otherwise a single
+    surviving branch is enough to reach an unintended endpoint.
+    """
+
+    def _assert_rejected(self, url, message):
+        from evidence_adapters import EvidenceURLPolicyError, _validate_url
+
+        with self.assertRaises(EvidenceURLPolicyError) as caught:
+            _validate_url(url)
+        self.assertIn(message, str(caught.exception))
+
+    def test_allowlisted_https_url_on_the_default_port_is_accepted(self):
+        from evidence_adapters import _validate_url
+
+        _validate_url("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=clinvar")
+        _validate_url("https://eutils.ncbi.nlm.nih.gov:443/entrez/eutils/esearch.fcgi")
+
+    def test_embedded_credentials_are_rejected(self):
+        self._assert_rejected(
+            "https://user:secret@eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
+            "credentials are not allowed",
+        )
+
+    def test_non_default_port_is_rejected(self):
+        self._assert_rejected(
+            "https://eutils.ncbi.nlm.nih.gov:8443/entrez/eutils/esearch.fcgi",
+            "only allow HTTPS port 443",
+        )
+
+    def test_invalid_port_is_rejected_without_crashing(self):
+        self._assert_rejected(
+            "https://eutils.ncbi.nlm.nih.gov:notaport/entrez/eutils/esearch.fcgi",
+            "invalid port",
+        )
+
+    def test_fragment_is_rejected(self):
+        self._assert_rejected(
+            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi#fragment",
+            "fragments are not allowed",
+        )
+
+    def test_expected_host_pins_the_adapter_to_its_own_provider(self):
+        from evidence_adapters import EvidenceURLPolicyError, _validate_url
+
+        with self.assertRaises(EvidenceURLPolicyError) as caught:
+            _validate_url(
+                "https://www.pgscatalog.org/rest/info",
+                expected_host="eutils.ncbi.nlm.nih.gov",
+            )
+        self.assertIn("changed its configured host", str(caught.exception))
+
+
+class AllowlistedRedirectHandlerTest(unittest.TestCase):
+    """A redirect is an outbound request too, and obeys the same host pin."""
+
+    def _redirect(self, new_url, expected_host="eutils.ncbi.nlm.nih.gov"):
+        from evidence_adapters import _AllowlistedRedirectHandler
+
+        handler = _AllowlistedRedirectHandler(expected_host)
+        request = urllib.request.Request(
+            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+        )
+        return handler.redirect_request(request, None, 302, "Found", {}, new_url)
+
+    def test_redirect_to_another_allowlisted_host_is_rejected(self):
+        from evidence_adapters import EvidenceURLPolicyError
+
+        with self.assertRaises(EvidenceURLPolicyError) as caught:
+            self._redirect("https://www.pgscatalog.org/rest/info")
+        self.assertIn("changed its configured host", str(caught.exception))
+
+    def test_redirect_to_a_non_allowlisted_host_is_rejected(self):
+        from evidence_adapters import EvidenceURLPolicyError
+
+        with self.assertRaises(EvidenceURLPolicyError):
+            self._redirect("https://attacker.example/entrez")
+
+    def test_redirect_downgrade_to_http_is_rejected(self):
+        from evidence_adapters import EvidenceURLPolicyError
+
+        with self.assertRaises(EvidenceURLPolicyError) as caught:
+            self._redirect("http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi")
+        self.assertIn("require HTTPS", str(caught.exception))
+
+    def test_redirect_with_credentials_is_rejected(self):
+        from evidence_adapters import EvidenceURLPolicyError
+
+        with self.assertRaises(EvidenceURLPolicyError):
+            self._redirect("https://user:secret@eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi")
+
+    def test_same_host_redirect_is_delegated_to_the_standard_handler(self):
+        redirected = self._redirect("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi")
+        self.assertEqual(
+            redirected.full_url,
+            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

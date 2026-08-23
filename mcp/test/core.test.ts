@@ -23,7 +23,11 @@ test("resolveUnderRoot rejects traversal and separators", () => {
 });
 
 test("resolveUnderRoot rejects every traversal encoding, before and after resolution", () => {
-  const traversals = [
+  // Asserting only "it threw" cannot tell a real rejection from an unrelated error, and
+  // it would keep passing if identifier validation were removed and containment happened
+  // to catch the value instead. Every case below is pinned to the guard that must reject
+  // it: validateIdentifier speaks of a bounded identifier, containment of the root.
+  const rejectedByIdentifier = [
     "..",
     "../..",
     "..%2Fsecret",
@@ -41,9 +45,33 @@ test("resolveUnderRoot rejects every traversal encoding, before and after resolu
     "trailing ",
     "a".repeat(65),
   ];
-  for (const value of traversals) {
-    assert.throws(() => resolveUnderRoot("/srv/genome/audit", value), Error, `accepted: ${JSON.stringify(value)}`);
+  for (const value of rejectedByIdentifier) {
+    assert.throws(
+      () => resolveUnderRoot("/srv/genome/audit", value),
+      /invalid bounded identifier/,
+      `not rejected by validateIdentifier: ${JSON.stringify(value)}`,
+    );
   }
+});
+
+test("every bounded identifier that passes validation also stays under the root", () => {
+  // The containment check is the second, independent guard. No value accepted by
+  // validateIdentifier may reach it and escape, so the two are asserted separately
+  // instead of being collapsed into one "it throws" assertion.
+  const accepted = ["canary-1", "a", "A.b_c-1", "0".repeat(64), "x".repeat(64)];
+  for (const value of accepted) {
+    const resolved = resolveUnderRoot("/srv/genome/audit", value);
+    assert.equal(resolved, `/srv/genome/audit${path.sep}${value}.json`);
+  }
+});
+
+test("the containment guard is reachable and reports a distinct failure", () => {
+  // path.resolve("/", "x.json") is "/x.json", which is not under "/" + separator, so the
+  // root check — not validateIdentifier — is what rejects this one.
+  assert.throws(
+    () => resolveUnderRoot(path.parse(process.cwd()).root, "x"),
+    /identifier resolves outside configured root/,
+  );
 });
 
 test("resolveUnderRoot never returns a path outside the configured root", () => {

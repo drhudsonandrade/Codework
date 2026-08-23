@@ -9,6 +9,11 @@ allowed_nature := {"FATO CONFIRMADO", "INFERÊNCIA", "ASSOCIAÇÃO", "HIPÓTESE"
 allowed_domain := {"CLÍNICO", "PREDISPOSIÇÃO", "PESQUISA", "CURIOSIDADE"}
 allowed_priority := {"P1", "P2", "P3", "P4", "P5"}
 
+# Without this the checks below are all undefined when `ruleset` is absent, so no deny
+# fires and a manifest carrying no ruleset at all is allowed. object.get supplies a
+# defined default, since a built-in applied to a missing key is undefined rather than false.
+deny contains "RULESET: ruleset block is required" if not is_object(object.get(input, "ruleset", null))
+
 deny contains "RULESET: status must be VIGENTE" if object.get(input.ruleset, "status", "") != "VIGENTE"
 deny contains "RULESET: version must be v3.4" if input.ruleset.version != "v3.4"
 deny contains "RULESET: effective date must be 17/08/2026" if input.ruleset.effective_date != "17/08/2026"

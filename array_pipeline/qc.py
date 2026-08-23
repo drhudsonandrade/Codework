@@ -53,6 +53,22 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+class _ZipBackedTextStream(io.TextIOWrapper):
+    """A ZIP member stream that releases its archive when the caller closes it.
+
+    Closing a plain TextIOWrapper releases only the member; the enclosing ZipFile stays
+    open and leaks a descriptor for every array processed on the success path.
+    """
+
+    def close(self) -> None:
+        try:
+            super().close()
+        finally:
+            archive = getattr(self, "_genoma_zipfile", None)
+            if archive is not None:
+                archive.close()
+
+
 def _text_stream(path: Path) -> tuple[TextIO, SourceInfo]:
     """Open plain/gzip/zip CSV text. ZIP must contain exactly one regular data file."""
     lower = path.name.lower()
@@ -69,7 +85,7 @@ def _text_stream(path: Path) -> tuple[TextIO, SourceInfo]:
                 raise ValueError(f"ZIP must contain exactly one data file; found {len(members)}")
             raw = zf.open(members[0], "r")
             try:
-                text = io.TextIOWrapper(raw, encoding="utf-8-sig", errors="replace", newline="")
+                text = _ZipBackedTextStream(raw, encoding="utf-8-sig", errors="replace", newline="")
             except Exception:
                 raw.close()
                 raise

@@ -23,6 +23,8 @@ MANIFEST_PATH = Path(__file__).with_name("reference_v3_manifest.json")
 RULESET_TEMPLATE_PREFIX = "GENOMA-HUDSON-RULESET-v"
 CURRENT_RULESET_TEMPLATE_SOURCE = "GENOMA-HUDSON-RULESET-v3.4"
 CURRENT_RULESET_TEMPLATE_LABEL = "GENOMA-RULESET-v3.4"
+# Leading applied to one rendered line; a line taller than its box is clipped by Word.
+SINGLE_LINE_LEADING = 1.2
 
 SYSTEM_REPLACEMENTS = {
     "MODELO REUTILIZÁVEL v3.0": "RESULTADO GENÔMICO v3.0",
@@ -234,10 +236,19 @@ def _fit_single_line_size(
     max_width: float,
     start_size: float,
     font_name: str,
+    max_height: float | None = None,
 ) -> float:
+    """Shrink a single line until it fits the box on both axes.
+
+    Width alone is not enough: the DOCX renderer clips a line whose leading exceeds the
+    textbox height, so a value that fits horizontally can still be cut off vertically.
+    """
     text = " ".join(str(text).split())
     size = float(start_size)
-    while size > 4.2 and pdfmetrics.stringWidth(text, font_name, size) > max_width:
+    while size > 4.2 and (
+        pdfmetrics.stringWidth(text, font_name, size) > max_width
+        or (max_height is not None and size * SINGLE_LINE_LEADING > max_height)
+    ):
         size -= 0.2
     return max(4.2, size)
 
@@ -580,6 +591,27 @@ def _add_vml_textbox(
     paragraph._p.append(run)
 
 
+def _run_poppler(command: list[str], page: int) -> None:
+    """Run a Poppler converter, keeping its diagnostics instead of discarding them.
+
+    Poppler reports the actual reason a page could not be converted on stderr. Dropping
+    it leaves a bare CalledProcessError, which is the one place the failure could still
+    be diagnosed.
+    """
+    result = subprocess.run(
+        command,
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or b"").decode("utf-8", errors="replace").strip()
+        raise TemplateV3Error(
+            f"{command[0]} failed on template page {page} with exit code {result.returncode}"
+            + (f": {detail[-500:]}" if detail else "")
+        )
+
+
 def _convert_template_pages(
     template_pdf: Path,
     work: Path,
@@ -594,15 +626,13 @@ def _convert_template_pages(
     for page in range(1, page_count + 1):
         svg = work / f"page-{page}.svg"
         raw = work / f"page-{page}.svg.raw"
-        subprocess.run(
+        _run_poppler(
             ["pdftocairo", "-f", str(page), "-l", str(page), "-svg", str(template_pdf), str(raw)],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            page,
         )
         raw.rename(svg)
         stem = work / f"page-{page}-fallback"
-        subprocess.run(
+        _run_poppler(
             [
                 "pdftoppm",
                 "-f",
@@ -616,9 +646,7 @@ def _convert_template_pages(
                 str(template_pdf),
                 str(stem),
             ],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            page,
         )
         svgs.append(svg)
         pngs.append(Path(str(stem) + ".png"))
@@ -632,6 +660,7 @@ def _patch_docx_svg(docx_path: Path, svgs: list[Path]) -> None:
     try:
         with zipfile.ZipFile(docx_path) as archive:
             base = temp_dir.resolve()
+            seen: set[str] = set()
             for member in archive.infolist():
                 member_path = PurePosixPath(member.filename)
                 if member_path.is_absolute() or ".." in member_path.parts:
@@ -639,6 +668,11 @@ def _patch_docx_svg(docx_path: Path, svgs: list[Path]) -> None:
                 target = (base / Path(*member_path.parts)).resolve()
                 if target != base and base not in target.parents:
                     raise TemplateV3Error(f"unsafe DOCX archive member: {member.filename}")
+                # extractall writes members in order, so a repeated name silently replaces
+                # the entry that was already validated and extracted.
+                if member.filename in seen:
+                    raise TemplateV3Error(f"duplicate DOCX archive member: {member.filename}")
+                seen.add(member.filename)
             archive.extractall(temp_dir)
         media = temp_dir / "word" / "media"
         media.mkdir(parents=True, exist_ok=True)
@@ -833,6 +867,7 @@ def render_docx_from_template(
                     width,
                     font_size,
                     bold_font,
+                    max_height=height,
                 )
                 _add_vml_textbox(
                     paragraph,

@@ -33,9 +33,11 @@ The independent `genoma-policy smoke` suite remains separate and can never grant
 
 ## 4. Bootstrap attestation
 
-`deploy/attestations/bootstrap-project-v3.4.json` is consumed only through `scripts/bootstrap_attestation.py`. The verifier binds the exact attestation bytes to a pinned SHA-256, checks the complete expected bootstrap-check set and requires the canonical `v3.4/VIGENTE/17/08/2026` identity. Self-declared JSON status alone cannot grant PASS.
+`deploy/attestations/bootstrap-project-v3.4.json` is generated and consumed only through `scripts/bootstrap_attestation.py`; it must never be edited by hand. Regenerate it with `python3 -m scripts.bootstrap_attestation --write`.
 
-The core does not depend on ChatGPT; the bootstrap attestation closes the project-specific bootstrap criterion and must be renewed when Project Instructions change.
+Every bootstrap check is re-derived at verification time from the sealed canonical ruleset — a digest-pinned immutable input — so the recorded status is reproducible rather than declared. The attestation stores that provenance under `method`: verifier id and version, the exact command, the input path with its `raw_sha256`/`transport_sha256`, the repository revision the verifier read, the result locator, and the per-check clause digest and line. Verification recomputes all of it and fails closed on any drift; the status is `PENDENTE` unless the verifier satisfies every check. Prose in `method` and a self-declared `VERIFICADO` status are both rejected.
+
+The core does not depend on any assistant; the bootstrap attestation closes the project-specific bootstrap criterion and must be regenerated when the canonical ruleset or the verifier changes.
 
 ## 5. Evidence package
 

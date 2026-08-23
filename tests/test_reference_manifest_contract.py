@@ -20,7 +20,9 @@ from scripts.sealed_ruleset import EXPECTED_DATE, EXPECTED_SHA, EXPECTED_VERSION
 
 MANIFEST_PATH = ROOT / "reporting" / "reference_v3_manifest.json"
 MANIFEST = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-ABSOLUTE_PATH = re.compile(r"(?:^|[\"\s:=])(?:/(?:Users|home|Volumes|private|opt/homebrew)/|[A-Za-z]:\\\\)")
+# A real Windows path has a single backslash after the drive letter (C:\Users\...), so the
+# drive-letter branch matches exactly one; requiring two never matched anything at all.
+ABSOLUTE_PATH = re.compile(r"(?:^|[\"\s:=])(?:/(?:Users|home|Volumes|private|opt/homebrew)/|[A-Za-z]:\\)")
 
 
 def _strings(value: object) -> list[str]:
@@ -47,6 +49,37 @@ class ReferenceManifestLifecycleTest(unittest.TestCase):
         for consumer in consumers:
             text = (ROOT / consumer).read_text(encoding="utf-8")
             self.assertIn("reference_v3_manifest.json", text, consumer)
+
+
+class AbsolutePathDetectorTest(unittest.TestCase):
+    """The detector itself is pinned; a pattern that matches nothing proves nothing."""
+
+    NON_PORTABLE = (
+        r"C:\Users\dev\file.pdf",
+        r"d:\Volumes\build\out.pdf",
+        '"C:\\Users\\dev\\file.pdf"',
+        "/Users/dev/file.pdf",
+        "/home/dev/file.pdf",
+        "/Volumes/External/file.pdf",
+        "/opt/homebrew/bin/pdftocairo",
+        'source = "/home/dev/file.pdf"',
+    )
+    PORTABLE = (
+        "template_store/v3.0/MANIFEST.json",
+        "reporting/reference_v3_manifest.json",
+        "scripts/build_report_coordinate_pack.py",
+        "GENOMA v3.0",
+    )
+
+    def test_machine_local_paths_are_detected(self):
+        for value in self.NON_PORTABLE:
+            with self.subTest(value=value):
+                self.assertIsNotNone(ABSOLUTE_PATH.search(value))
+
+    def test_repository_relative_paths_are_not_flagged(self):
+        for value in self.PORTABLE:
+            with self.subTest(value=value):
+                self.assertIsNone(ABSOLUTE_PATH.search(value))
 
 
 class ReferenceManifestPortabilityTest(unittest.TestCase):

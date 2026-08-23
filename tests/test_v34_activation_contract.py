@@ -6,11 +6,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from unittest.mock import patch
+
 from policy_engine.genoma_policy import __version__
 from policy_engine.genoma_policy import paths as policy_paths
 from policy_engine.genoma_policy import ruleset as policy_ruleset
 from policy_engine.genoma_policy.engine import PolicyEngine
-from scripts import sealed_ruleset
+from scripts import bootstrap_attestation, sealed_ruleset
 from scripts.bootstrap_attestation import BootstrapAttestationError, verify_bootstrap_attestation
 from scripts.validate_repo import (
     FORBIDDEN_ACTIVE_PATHS,
@@ -26,7 +28,7 @@ EXPECTED_VERSION = "v3.4"
 EXPECTED_DATE = "17/08/2026"
 EXPECTED_ARCHIVED_BOOTSTRAP_SHA = "87af4f99bcd6b6f3f857a1ca725103e95dabf70c3c926d7f0d4e83b037e69fd8"
 EXPECTED_SUPERSEDED_FIXTURE_SHA = "5a6f888f176ed4c963c43c24f38697ea363f5772be06c63e70d6a8f5c497e503"
-EXPECTED_BOOTSTRAP_ATTESTATION_SHA = "dbe574cff326d3a0b429de8a2450359024be97d7bb1c64468bf6a96b8d77d5b9"
+EXPECTED_BOOTSTRAP_ATTESTATION_SHA = "3b0b062ff44710edfd91408452d31c7f7baaeb40f377a23a6146e6bb38f28f8f"
 EXPECTED_BOOTSTRAP_CHECKS = frozenset(
     {
         "consult_ruleset_before_relevant_genetic_analysis",
@@ -255,6 +257,94 @@ class V34ActivationContractTests(unittest.TestCase):
             }
             report = engine.evaluate(manifest)
             self.assertEqual(report.metadata["engine_version"], __version__)
+
+
+class BootstrapAttestationReproducibilityTests(unittest.TestCase):
+    """VERIFICADO has to be re-derivable, never merely declared.
+
+    The attestation records how it was produced — verifier, immutable input digests,
+    command, result locator and per-check evidence — and verification recomputes all of
+    it from the sealed canonical ruleset. Prose, or evidence that no longer matches the
+    ruleset, must fail closed.
+    """
+
+    ATTESTATION = ROOT / "deploy" / "attestations" / "bootstrap-project-v3.4.json"
+
+    def _verify_mutated(self, mutate) -> None:
+        """Write a mutated attestation, re-pin its digest, and verify it."""
+        payload = json.loads(self.ATTESTATION.read_text(encoding="utf-8"))
+        mutate(payload)
+        raw = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / self.ATTESTATION.name
+            target.write_text(raw, encoding="utf-8")
+            digest = hashlib.sha256(target.read_bytes()).hexdigest()
+            # Re-pinning isolates the method check from the byte-digest check, which would
+            # otherwise reject every mutation before the method is even read.
+            with patch.object(bootstrap_attestation, "EXPECTED_FILE_SHA256", digest):
+                bootstrap_attestation.verify_bootstrap_attestation(target)
+
+    def test_committed_attestation_records_reproducible_verifier_metadata(self) -> None:
+        payload = json.loads(self.ATTESTATION.read_text(encoding="utf-8"))
+        method = payload["method"]
+        self.assertEqual(method["kind"], "DETERMINISTIC_VERIFIER")
+        self.assertEqual(method["verifier"]["id"], bootstrap_attestation.VERIFIER_ID)
+        self.assertEqual(method["verifier"]["version"], bootstrap_attestation.VERIFIER_VERSION)
+        self.assertEqual(method["verifier"]["command"], bootstrap_attestation.VERIFIER_COMMAND)
+        self.assertEqual(method["input"]["raw_sha256"], EXPECTED_SHA)
+        self.assertEqual(method["input"]["canonical_filename"], EXPECTED_NAME)
+        self.assertRegex(method["source_commit_sha"], r"^[0-9a-f]{40}$")
+        self.assertEqual(method["result_locator"], bootstrap_attestation.RESULT_LOCATOR)
+        self.assertEqual(set(method["checks_evidence"]), EXPECTED_BOOTSTRAP_CHECKS)
+
+    def test_every_check_is_re_derived_from_the_sealed_ruleset(self) -> None:
+        evidence = bootstrap_attestation.verify_project_bootstrap()
+        self.assertEqual(set(evidence["checks"]), EXPECTED_BOOTSTRAP_CHECKS)
+        for name, result in evidence["checks"].items():
+            with self.subTest(check=name):
+                self.assertTrue(result["satisfied"])
+                self.assertIsInstance(result["line"], int)
+                self.assertRegex(result["clause_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_prose_method_is_rejected(self) -> None:
+        def to_prose(payload):
+            payload["method"] = "direct verification of the active project instructions"
+
+        with self.assertRaisesRegex(BootstrapAttestationError, "not prose"):
+            self._verify_mutated(to_prose)
+
+    def test_missing_source_commit_sha_is_rejected(self) -> None:
+        with self.assertRaisesRegex(BootstrapAttestationError, "source_commit_sha"):
+            self._verify_mutated(lambda payload: payload["method"].pop("source_commit_sha"))
+
+    def test_input_digest_that_does_not_match_the_sealed_transport_is_rejected(self) -> None:
+        def drift(payload):
+            payload["method"]["input"]["raw_sha256"] = "0" * 64
+
+        with self.assertRaisesRegex(BootstrapAttestationError, "input does not match"):
+            self._verify_mutated(drift)
+
+    def test_check_evidence_that_is_not_reproducible_is_rejected(self) -> None:
+        def drift(payload):
+            payload["method"]["checks_evidence"]["require_version_v3_4"]["line"] = 9999
+
+        with self.assertRaisesRegex(BootstrapAttestationError, "not reproducible"):
+            self._verify_mutated(drift)
+
+    def test_a_clause_absent_from_the_ruleset_yields_a_pending_status(self) -> None:
+        clauses = dict(bootstrap_attestation.BOOTSTRAP_CLAUSES)
+        clauses["require_version_v3_4"] = "VERSÃO NORMATIVA: v9.9-not-in-this-ruleset"
+        with patch.object(bootstrap_attestation, "BOOTSTRAP_CLAUSES", clauses):
+            payload = bootstrap_attestation.build_attestation(verified_at="2026-08-22T18:46:00-03:00")
+        self.assertEqual(payload["status"], "PENDENTE")
+        self.assertFalse(payload["checks"]["require_version_v3_4"])
+
+    def test_regenerating_the_attestation_is_byte_stable(self) -> None:
+        committed = json.loads(self.ATTESTATION.read_text(encoding="utf-8"))
+        regenerated = bootstrap_attestation.build_attestation(verified_at=committed["verified_at"])
+        # source_commit_sha moves with HEAD by design; everything else must reproduce.
+        regenerated["method"]["source_commit_sha"] = committed["method"]["source_commit_sha"]
+        self.assertEqual(regenerated, committed)
 
 
 if __name__ == "__main__":

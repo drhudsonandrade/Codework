@@ -4,11 +4,17 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 from pathlib import Path
 
-from scripts.sealed_ruleset import EXPECTED_DATE, EXPECTED_NAME, EXPECTED_SHA, EXPECTED_VERSION, verify_transport
-
 ROOT = Path(__file__).resolve().parents[1]
+# Nextflow runs this file directly (workflows/wgs.nf BUILD_CURATED_MANIFEST), which puts
+# scripts/ — not the repository root — on sys.path. Both that mode and
+# `python -m scripts.build_wgs_curated_manifest` must resolve the sealed transport module.
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.sealed_ruleset import EXPECTED_DATE, EXPECTED_NAME, EXPECTED_SHA, EXPECTED_VERSION, verify_transport
 
 
 def sha256_file(path: Path) -> str:
