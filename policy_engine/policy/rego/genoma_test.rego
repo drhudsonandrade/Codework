@@ -7,6 +7,7 @@ base_ruleset := {
   "status": "VIGENTE",
   "version": "v3.4",
   "effective_date": "17/08/2026",
+  "canonical_filename": "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt",
   "sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
 }
 
@@ -21,6 +22,26 @@ test_valid_baseline if guard.allow with input as base
 
 test_reject_missing_ruleset_status if {
   input_doc := object.union(object.remove(base, {"ruleset"}), {"ruleset": object.remove(base_ruleset, {"status"})})
+  not guard.allow with input as input_doc
+}
+
+test_reject_missing_ruleset_version if {
+  input_doc := object.union(object.remove(base, {"ruleset"}), {"ruleset": object.remove(base_ruleset, {"version"})})
+  not guard.allow with input as input_doc
+}
+
+test_reject_missing_ruleset_effective_date if {
+  input_doc := object.union(object.remove(base, {"ruleset"}), {"ruleset": object.remove(base_ruleset, {"effective_date"})})
+  not guard.allow with input as input_doc
+}
+
+test_reject_missing_ruleset_canonical_filename if {
+  input_doc := object.union(object.remove(base, {"ruleset"}), {"ruleset": object.remove(base_ruleset, {"canonical_filename"})})
+  not guard.allow with input as input_doc
+}
+
+test_reject_missing_ruleset_sha256 if {
+  input_doc := object.union(object.remove(base, {"ruleset"}), {"ruleset": object.remove(base_ruleset, {"sha256"})})
   not guard.allow with input as input_doc
 }
 
