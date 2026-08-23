@@ -214,7 +214,7 @@ def _active_vigente_files(output_dir: Path) -> list[Path]:
     for candidate in output_dir.glob("REGRAS_PROJETO_GENOMA*.txt"):
         try:
             text = candidate.read_text(encoding="utf-8")
-        except UnicodeError:
+        except (OSError, UnicodeError):
             continue
         if re.search(r"^STATUS NORMATIVO:\s*VIGENTE\s*$", text, re.MULTILINE):
             active.append(candidate)
@@ -225,22 +225,26 @@ def _already_materialized(destination: Path, active: list[Path], raw: bytes) -> 
     """The one case where re-materializing is a safe no-op.
 
     Every condition must hold: exactly one active VIGENTE file, it is the canonical
-    filename, its bytes are byte-identical to the verified sealed payload, and it is
-    already read-only. Anything else — a second VIGENTE, a different filename, drifted
-    bytes, a writable file — is a conflict and must keep blocking.
+    filename, it is a regular non-symlink file, its bytes are byte-identical to the
+    verified sealed payload, and its permission bits are exactly 0444. Anything else —
+    a second VIGENTE, a different filename, drifted bytes, a symlink or a different
+    mode — is a conflict and must keep blocking.
     """
     if len(active) != 1:
         return None
     existing = active[0]
     if existing.name != EXPECTED_NAME or existing != destination / EXPECTED_NAME:
         return None
+    if existing.is_symlink() or not existing.is_file():
+        return None
     try:
         current = existing.read_bytes()
+        mode = os.lstat(existing).st_mode & 0o777
     except OSError:
         return None
     if current != raw or sha256_bytes(current) != EXPECTED_SHA:
         return None
-    if existing.stat().st_mode & 0o222:
+    if mode != 0o444:
         return None
     return existing
 
@@ -257,7 +261,7 @@ def materialize(sealed_dir: str | Path, output_dir: str | Path) -> tuple[Path, d
             raise SealedRulesetError(
                 f"refusing to activate beside an existing VIGENTE ruleset: {[p.name for p in active]}"
             )
-        mode = reusable.stat().st_mode & 0o777
+        mode = os.lstat(reusable).st_mode & 0o777
         evidence = dict(evidence)
         evidence.update(
             {
@@ -283,9 +287,11 @@ def materialize(sealed_dir: str | Path, output_dir: str | Path) -> tuple[Path, d
     finally:
         Path(tmp_name).unlink(missing_ok=True)
 
-    mode = target.stat().st_mode & 0o777
-    if mode & 0o222:
-        raise SealedRulesetError("materialized ruleset is writable")
+    if target.is_symlink() or not target.is_file():
+        raise SealedRulesetError("materialized ruleset is not a regular file")
+    mode = os.lstat(target).st_mode & 0o777
+    if mode != 0o444:
+        raise SealedRulesetError(f"materialized ruleset mode mismatch: {oct(mode)}")
     if sha256_bytes(target.read_bytes()) != EXPECTED_SHA:
         raise SealedRulesetError("post-write canonical ruleset SHA-256 mismatch")
     evidence = dict(evidence)
