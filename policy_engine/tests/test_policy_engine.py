@@ -20,8 +20,15 @@ RULESET = resolve_ruleset_path(ROOT)
 HASH_MANIFEST = resolve_manifest_path(RULESET, ROOT)
 EXPECTED_SHA256 = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
 HISTORICAL_IDENTITY_FIXTURE = REPO_ROOT / "docs" / "history" / "v3.3" / "superseded-identities.json"
+
+
+class HistoricalIdentityFixtureMissingError(RuntimeError):
+    def __init__(self, path: Path):
+        super().__init__(f"superseded identity fixture missing: {path}")
+
+
 if not HISTORICAL_IDENTITY_FIXTURE.is_file():
-    raise RuntimeError(f"superseded identity fixture missing: {HISTORICAL_IDENTITY_FIXTURE}")
+    raise HistoricalIdentityFixtureMissingError(HISTORICAL_IDENTITY_FIXTURE)
 HISTORICAL_IDENTITY = json.loads(HISTORICAL_IDENTITY_FIXTURE.read_text(encoding="utf-8"))
 
 
