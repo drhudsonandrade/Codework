@@ -10,6 +10,30 @@ from scripts import bootstrap_attestation
 
 
 class BootstrapAttestationCliTests(unittest.TestCase):
+    @staticmethod
+    def _reproducible_evidence() -> dict:
+        return {
+            "verifier": {"id": "test", "version": "1", "command": "test"},
+            "input": {"raw_sha256": "0" * 64},
+            "result_locator": "test#/checks",
+            "checks": {"fixture": {"satisfied": True}},
+        }
+
+    @classmethod
+    def _payload_with_revision(cls, revision: str) -> tuple[dict, dict]:
+        evidence = cls._reproducible_evidence()
+        payload = {
+            "method": {
+                "kind": "DETERMINISTIC_VERIFIER",
+                "verifier": evidence["verifier"],
+                "source_commit_sha": revision,
+                "input": evidence["input"],
+                "result_locator": evidence["result_locator"],
+                "checks_evidence": evidence["checks"],
+            }
+        }
+        return payload, evidence
+
     def test_write_requires_fresh_verified_at_even_when_prior_file_exists(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             output = Path(td) / "bootstrap.json"
@@ -42,6 +66,37 @@ class BootstrapAttestationCliTests(unittest.TestCase):
                 )
             self.assertEqual(rc, 0)
             self.assertEqual(json.loads(output.read_text(encoding="utf-8")), payload)
+
+    def test_reproducible_method_rejects_unknown_source_revision(self) -> None:
+        payload, evidence = self._payload_with_revision("UNKNOWN")
+        with self.assertRaisesRegex(
+            bootstrap_attestation.BootstrapAttestationError,
+            "source_commit_sha is UNKNOWN",
+        ):
+            bootstrap_attestation._require_reproducible_method(payload, evidence)
+
+    def test_reproducible_method_rejects_malformed_source_revisions(self) -> None:
+        for revision in ("a" * 39, "g" * 40, "A" * 40, "0" * 41):
+            with self.subTest(revision=revision):
+                payload, evidence = self._payload_with_revision(revision)
+                with self.assertRaisesRegex(
+                    bootstrap_attestation.BootstrapAttestationError,
+                    "full 40-character lowercase hex Git commit SHA",
+                ):
+                    bootstrap_attestation._require_reproducible_method(payload, evidence)
+
+    def test_build_attestation_rejects_invalid_source_revision_before_write(self) -> None:
+        evidence = self._reproducible_evidence()
+        for revision in ("UNKNOWN", "not-a-full-git-sha"):
+            with self.subTest(revision=revision):
+                with (
+                    patch.object(bootstrap_attestation, "verify_project_bootstrap", return_value=evidence),
+                    patch.object(bootstrap_attestation, "_source_revision", return_value=revision),
+                    self.assertRaises(bootstrap_attestation.BootstrapAttestationError),
+                ):
+                    bootstrap_attestation.build_attestation(
+                        verified_at="2026-08-23T20:26:00-03:00"
+                    )
 
 
 if __name__ == "__main__":
