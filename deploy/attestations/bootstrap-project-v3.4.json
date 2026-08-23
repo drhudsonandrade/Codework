@@ -4,7 +4,7 @@
   "ruleset_identity": "v3.4/VIGENTE/17/08/2026",
   "canonical_filename": "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt",
   "canonical_sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
-  "verified_at": "2026-08-22T18:46:00-03:00",
+  "verified_at": "2026-08-23T19:22:37-03:00",
   "actor_type": "SERVICE",
   "actor_id": "genoma-project-bootstrap-verifier",
   "method": {
@@ -14,7 +14,7 @@
       "version": "2.0.0",
       "command": "python3 -m scripts.bootstrap_attestation --write"
     },
-    "source_commit_sha": "8d3341a8592ec602494f394e7783243996e93ef6",
+    "source_commit_sha": "5f930973cd9f56c40b0b41169fd5153b4f94d563",
     "input": {
       "path": "normative/sealed",
       "canonical_filename": "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt",
