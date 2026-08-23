@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
-import { mkdtemp, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { createGenomeMcpServer, runAudited, runFixedScript } from "../src/server.js";
+import {
+  createGenomeMcpServer,
+  releaseRequestClaim,
+  runAudited,
+  runFixedScript,
+} from "../src/server.js";
 
 test("MCP initialization lists only approved tools with annotations", async () => {
   const server = createGenomeMcpServer({
@@ -87,6 +92,36 @@ test("runAudited atomically prevents concurrent duplicate execution", async () =
   assert.equal(executions, 1, "same requestId must not execute the operation twice");
 });
 
+test("runAudited recovers a stale request claim before executing", async () => {
+  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-stale-"));
+  const options = {
+    projectRoot: "/opt/codework",
+    referenceRoot: "/refs",
+    resultsRoot: "/results",
+    auditRoot,
+  };
+  const claimPath = path.join(auditRoot, "stale-1.json.claim");
+  await writeFile(
+    claimPath,
+    `${JSON.stringify({
+      requestId: "stale-1",
+      tool: "runtime_status",
+      claimedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    })}\n`,
+    { mode: 0o600 },
+  );
+
+  const result = await runAudited(
+    options,
+    "runtime_status",
+    { requestId: "stale-1" },
+    async () => ({ status: "PASS" }),
+  );
+
+  assert.deepEqual(result, { status: "PASS" });
+  await assert.rejects(stat(claimPath), /ENOENT/);
+});
+
 test("runAudited stores and replays a sanitized failure", async () => {
   const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-fail-"));
   const options = {
@@ -106,6 +141,52 @@ test("runAudited stores and replays a sanitized failure", async () => {
     runAudited(options, "runtime_status", { requestId: "fail-1" }, async () => ({ status: "wrong" })),
     /\[REDACTED_TOKEN\].*\[REDACTED_PATH\]/,
   );
+});
+
+test("releaseRequestClaim still unlinks when handle close fails", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-release-close-"));
+  const claimPath = path.join(dir, "claim");
+  await writeFile(claimPath, "claim\n");
+  const warnings: unknown[][] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args);
+  };
+  try {
+    await releaseRequestClaim({
+      claimPath,
+      handle: {
+        close: async () => {
+          throw Object.assign(new Error("close failed"), { code: "EIO" });
+        },
+      } as never,
+    });
+  } finally {
+    console.warn = originalWarn;
+  }
+  await assert.rejects(stat(claimPath), /ENOENT/);
+  assert.equal(warnings.length, 1);
+});
+
+test("releaseRequestClaim does not replace the operation outcome when unlink fails", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-release-unlink-"));
+  const claimPath = path.join(dir, "claim-directory");
+  await mkdir(claimPath);
+  const warnings: unknown[][] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args);
+  };
+  try {
+    await releaseRequestClaim({
+      claimPath,
+      handle: { close: async () => undefined } as never,
+    });
+  } finally {
+    console.warn = originalWarn;
+    await rm(claimPath, { recursive: true, force: true });
+  }
+  assert.equal(warnings.length, 1);
 });
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
