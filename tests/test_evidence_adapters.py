@@ -85,6 +85,18 @@ class EvidenceAdapterTest(unittest.TestCase):
         self.assertEqual(snapshot["error_class"], "EvidenceURLPolicyError")
         self.assertEqual(transport.calls, [])
 
+    def test_adapter_cannot_switch_to_another_allowlisted_provider_host(self):
+        from evidence_adapters import get_adapter
+
+        transport = FakeTransport({"unexpected": True})
+        adapter = get_adapter("clinvar", transport=transport)
+        cross_provider = urllib.request.Request("https://www.pgscatalog.org/rest/info")
+        with patch.object(adapter, "_request", return_value=cross_provider):
+            snapshot = adapter.query({}, checked_at="2026-08-16T14:00:00Z")
+        self.assertEqual(snapshot["status"], "NÃO DISPONÍVEL")
+        self.assertEqual(snapshot["error_class"], "EvidenceURLPolicyError")
+        self.assertEqual(transport.calls, [])
+
     def test_non_https_url_is_rejected_before_transport(self):
         from evidence_adapters import get_adapter
 
