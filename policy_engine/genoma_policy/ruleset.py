@@ -11,6 +11,7 @@ EXPECTED_STATUS = "VIGENTE"
 EXPECTED_VERSION = "v3.4"
 EXPECTED_DATE = "17/08/2026"
 EXPECTED_CANONICAL = "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
+EXPECTED_SHA256 = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
 EXPECTED_SECTIONS = 263
 EXPECTED_LAST_SECTION = 262
 
@@ -122,6 +123,8 @@ def validate_normative_identity(ruleset: Ruleset) -> None:
         mismatches.append(f"canonical_filename={ruleset.canonical_filename!r}")
     if ruleset.path.name != EXPECTED_CANONICAL:
         mismatches.append(f"actual_filename={ruleset.path.name!r}")
+    if ruleset.sha256 != EXPECTED_SHA256:
+        mismatches.append(f"sha256={ruleset.sha256!r}")
     if len(ruleset.sections) != EXPECTED_SECTIONS:
         mismatches.append(f"section_count={len(ruleset.sections)}")
     if mismatches:
