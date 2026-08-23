@@ -4,6 +4,8 @@ This ceremony converts an inactive, content-addressed normative transport into a
 
 ## 1. Normative activation
 
+The authoritative repository evidence for the active identity is `manifests/RULESET_V3.4.sha256` plus `normative/sealed/MANIFEST.json`. Both must agree on `VIGENTE / v3.4 / 17/08/2026`, canonical filename `REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt`, raw SHA-256 `ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580`, and the sealed 13-part transport before activation.
+
 `scripts/materialize_ruleset.py` decodes the sealed transport entirely under a controlled runtime path, verifies the transport SHA-256, gzip SHA-256, raw canonical SHA-256 `ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580`, exact normative identity and sequential sections 0–262. It atomically writes exactly `REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt` as mode `0444`.
 
 The repository continues to contain zero active plaintext rulesets. `scripts/validate_repo.py` decodes the transport **in memory** during CI and verifies that it is byte-exact before any activation.
