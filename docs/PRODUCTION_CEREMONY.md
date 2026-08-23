@@ -33,7 +33,7 @@ The independent `genoma-policy smoke` suite remains separate and can never grant
 
 ## 4. Bootstrap attestation
 
-`deploy/attestations/bootstrap-project-v3.4.json` is generated and consumed only through `scripts/bootstrap_attestation.py`; it must never be edited by hand. Regenerate it with `python3 -m scripts.bootstrap_attestation --write`.
+`deploy/attestations/bootstrap-project-v3.4.json` is generated and consumed only through `scripts/bootstrap_attestation.py`; it must never be edited by hand. Regenerate it with `python3 -m scripts.bootstrap_attestation --write --verified-at <ISO8601>`.
 
 Every bootstrap check is re-derived at verification time from the sealed canonical ruleset — a digest-pinned immutable input — so the recorded status is reproducible rather than declared. The attestation stores that provenance under `method`: verifier id and version, the exact command, the input path with its `raw_sha256`/`transport_sha256`, the repository revision the verifier read, the result locator, and the per-check clause digest and line. Verification recomputes all of it and fails closed on any drift; the status is `PENDENTE` unless the verifier satisfies every check. Prose in `method` and a self-declared `VERIFICADO` status are both rejected.
 
