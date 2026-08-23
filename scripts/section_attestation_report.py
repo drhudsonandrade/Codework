@@ -40,6 +40,7 @@ sys.path.insert(0, str(ROOT / "policy_engine"))
 from reporting.section_attestations import (  # noqa: E402
     CurationError,
     coverage_report,
+    curation_for_schema,
     load_curation,
     validate_curation,
 )
@@ -68,6 +69,11 @@ def live_sections() -> list[Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument(
+        "--assay", default="raw_snp_array_v1",
+        help="which lane's curation to read; each assay has its own, and reading the "
+             "wrong one reports judgements about a different operation",
+    )
     parser.add_argument("--all", action="store_true", help="one line per section")
     parser.add_argument("--section", type=int, help="show one section in full")
     parser.add_argument("--text", action="store_true", help="with --section, print the rule text")
@@ -75,7 +81,12 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        curation = load_curation()
+        curation_path = curation_for_schema(args.assay)
+        if curation_path is None:
+            raise SystemExit(
+                f"nenhuma curadoria foi escrita para o ensaio {args.assay!r}"
+            )
+        curation = load_curation(curation_path)
     except CurationError as exc:
         print(f"CURADORIA NÃO DISPONÍVEL: {exc}", file=sys.stderr)
         return 2

@@ -47,7 +47,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.ngs_formats import FormatError, open_vcf_text, probe_vcf
+from scripts.ngs_formats import FormatError, open_vcf_text, probe_vcf, sha256_of
 
 #: The header the projected table carries. Deliberately not `RAW_COLUMNS`: those four columns
 #: make `array_pipeline.qc` name the schema `raw_snp_array_v1`, and calling a WGS-derived
@@ -488,6 +488,10 @@ def project(
         "build": SUPPORTED_BUILD,
         "vcf": {
             "path": str(vcf_path),
+            # The digest of the file actually read. Without it nothing binds the projected
+            # table — nor the laboratory's section-6 QC record — to the VCF they describe,
+            # and a QC report from another sample would certify this one.
+            "sha256": sha256_of(vcf_path),
             "version": vcf_facts.get("version"),
             "compression": vcf_facts.get("compression"),
             "samples": vcf_facts.get("samples"),

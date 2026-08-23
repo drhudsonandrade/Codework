@@ -44,6 +44,7 @@ if str(ROOT) not in sys.path:
 
 import normative
 from reporting.provenance import witness_verdict
+from attestations import wgs_qc_record
 from scripts.vcf_projection import _covered_by_bed, _load_callable_bed, load_targets, project
 
 TARGET = {
@@ -135,12 +136,52 @@ class CurationBelongsToOneAssayTest(unittest.TestCase):
             sorted(curation["applies_to_schemas"]),
         )
 
-    def test_no_curation_exists_for_the_projection_and_that_is_said_plainly(self):
-        from reporting.section_attestations import curation_for_schema
+    def test_each_assay_resolves_to_the_curation_written_about_it(self):
+        from reporting.section_attestations import (
+            ARRAY_CURATION_PATH, VCF_CURATION_PATH, curation_for_schema,
+        )
 
-        self.assertIsNotNone(curation_for_schema("harmonized_genera_myheritage_v1"))
-        self.assertIsNotNone(curation_for_schema("raw_snp_array_v1"))
-        self.assertIsNone(curation_for_schema("wgs_vcf_projection_v1"))
+        self.assertEqual(ARRAY_CURATION_PATH, curation_for_schema("harmonized_genera_myheritage_v1"))
+        self.assertEqual(ARRAY_CURATION_PATH, curation_for_schema("raw_snp_array_v1"))
+        self.assertEqual(VCF_CURATION_PATH, curation_for_schema("wgs_vcf_projection_v1"))
+        self.assertIsNone(curation_for_schema("algum_formato_novo_v1"))
+
+    def test_the_two_curations_answer_differently_where_the_operation_differs(self):
+        """Carrying one lane's judgements to the other is what this pair exists to prevent."""
+        from reporting.section_attestations import (
+            ARRAY_CURATION_PATH, VCF_CURATION_PATH, load_curation,
+        )
+
+        array = load_curation(ARRAY_CURATION_PATH)["sections"]
+        vcf = load_curation(VCF_CURATION_PATH)["sections"]
+        # 6 is the mandatory WGS audit, 8 variant normalisation, 9 the master variant table:
+        # inapplicable to an array export, applicable the moment a VCF is what was analysed.
+        for number in ("6", "8", "9"):
+            with self.subTest(section=number):
+                self.assertEqual("NOT_APPLICABLE", array[number]["applicability"])
+                self.assertEqual("APPLICABLE", vcf[number]["applicability"])
+        # 4 is the harmonised bank's own state, and 7 the WGS-vs-array comparison: the array
+        # run answers 4, the projection has neither the bank nor the array side.
+        self.assertEqual("APPLICABLE", array["4"]["applicability"])
+        self.assertEqual("NOT_APPLICABLE", vcf["4"]["applicability"])
+        self.assertEqual("NOT_APPLICABLE", vcf["7"]["applicability"])
+        # And no justification is shared verbatim where the verdicts differ.
+        differing = [n for n in array if array[n]["applicability"] != vcf[n]["applicability"]]
+        self.assertTrue(differing)
+        for number in differing:
+            with self.subTest(section=number):
+                self.assertNotEqual(array[number]["justification"], vcf[number]["justification"])
+
+    def test_the_vcf_curation_cites_only_ids_a_projection_run_produces(self):
+        from reporting.section_attestations import VCF_CURATION_PATH, load_curation
+
+        allowed = {"projection-input", "projection-qc", "partial-annotation",
+                   "ruleset-v3.4", "wgs-qc-report"}
+        cited = {r for e in load_curation(VCF_CURATION_PATH)["sections"].values()
+                 for r in e["evidence_refs"]}
+        self.assertEqual(set(), cited - allowed)
+        self.assertNotIn("array-input", cited)
+        self.assertNotIn("array-qc", cited)
 
     def test_a_curation_without_a_declared_scope_is_refused(self):
         from reporting.section_attestations import CurationError, load_curation
@@ -154,7 +195,7 @@ class CurationBelongsToOneAssayTest(unittest.TestCase):
                 load_curation(path)
         self.assertIn("applies_to_schemas", str(caught.exception))
 
-    def _manifest(self, schema: str) -> dict:
+    def _manifest(self, schema: str, *, with_wgs_qc: bool = False) -> dict:
         from scripts.build_array_case_manifest import build_manifest
 
         with tempfile.TemporaryDirectory() as td:
@@ -174,15 +215,32 @@ class CurationBelongsToOneAssayTest(unittest.TestCase):
             }
             qc_path.write_text(json.dumps(qc), encoding="utf-8")
             annotation_path.write_text(json.dumps(annotation), encoding="utf-8")
-            return build_manifest(qc, annotation, qc_path, annotation_path)
+            extra = {}
+            if with_wgs_qc:
+                extra = {"wgs_qc": wgs_qc_record(case_id="CASO-A"), "wgs_qc_sha256": "b" * 64}
+            return build_manifest(qc, annotation, qc_path, annotation_path, **extra)
 
-    def test_a_projection_run_attaches_no_array_judgement(self):
+    def test_a_projection_run_without_the_wgs_qc_record_builds_no_attestation(self):
+        """Sections 6 and 114 are unconditional; a VCF alone cannot answer them.
+
+        The run is refused for the true reason — the laboratory's QC record is missing —
+        rather than for the old one, that nobody had judged the ruleset against this lane.
+        """
         manifest = self._manifest("wgs_vcf_projection_v1")
         self.assertEqual([], manifest["section_attestations"])
         state = manifest["section_attestation_curation"]
         self.assertEqual("PENDENTE", state["status"])
-        self.assertIn("nenhuma curadoria", state["reason"])
+        self.assertIn("wgs-qc-report", state["reason"])
         self.assertEqual("wgs_vcf_projection_v1", state["assay"])
+        self.assertEqual("NÃO DISPONÍVEL", manifest["wgs_qc_audit"]["status"])
+
+    def test_a_projection_run_with_the_wgs_qc_record_attaches_its_263(self):
+        manifest = self._manifest("wgs_vcf_projection_v1", with_wgs_qc=True)
+        self.assertEqual(normative.SECTION_COUNT, len(manifest["section_attestations"]))
+        state = manifest["section_attestation_curation"]
+        self.assertEqual("COMPLETA", state["status"])
+        self.assertEqual("section_attestations_wgs_vcf.json", state["curation"])
+        self.assertEqual("VERIFICADO", manifest["wgs_qc_audit"]["status"])
 
     def test_an_array_run_still_attaches_its_263(self):
         manifest = self._manifest("harmonized_genera_myheritage_v1")

@@ -44,6 +44,25 @@ class Assay:
     genome_wide_note: str
     #: What the coverage matrix is a coverage matrix *of*.
     coverage_subject: str
+    #: Prefix for the run's own evidence ids (`{prefix}-input`, `{prefix}-qc`). The case
+    #: manifest registered them as the literals `array-input`/`array-qc`, so a projection run
+    #: cited "array" artifacts in the very attestations RULE_COVERAGE_GATE resolves.
+    evidence_prefix: str
+    #: `inputs[].kind` for the analysed file.
+    input_kind: str
+    #: `inputs[].source` for the analysed file.
+    input_source: str
+    #: The first step of the execution manifest.
+    ingest_step: str
+    #: The manifest's one-line summary of what the Scientific Data Plane did.
+    plane_summary: str
+    #: How the interrogated loci were established, for the capability matrix.
+    assayed_loci_method: str
+    #: Why CNV/SV/repeat expansions are NÃO DISPONÍVEL here.
+    not_established_reason: str
+    #: Why CYP2D6 diplotyping is NÃO DISPONÍVEL here. Same verdict for both assays, different
+    #: reason: an array lacks the SNPs, a generic VCF lacks structure, hybrids and phase.
+    cyp2d6_reason: str
 
 
 ARRAY_DEPTH_NOTE = (
@@ -66,6 +85,23 @@ PROJECTION_GENOME_WIDE = (
     "callability não foi interrogado."
 )
 
+ARRAY_MANIFEST = {
+    "evidence_prefix": "array",
+    "input_kind": "snp-array-export",
+    "input_source": "consumer genotyping export, harmonized",
+    "ingest_step": "SNP-array ingest/QC",
+    "plane_summary": (
+        "SNP-array Scientific Data Plane executed for interrogated target loci only. Clinical "
+        "interpretation remains bounded by assay coverage, current evidence and confirmation "
+        "requirements."
+    ),
+    "assayed_loci_method": "SNP-array observation + QC",
+    "not_established_reason": "not established by this SNP-array lane",
+    "cyp2d6_reason": (
+        "array SNPs are insufficient for structural/hybrid/copy-number diplotyping"
+    ),
+}
+
 ASSAYS: dict[str, Assay] = {
     "harmonized_genera_myheritage_v1": Assay(
         schema="harmonized_genera_myheritage_v1",
@@ -76,6 +112,7 @@ ASSAYS: dict[str, Assay] = {
         absence_note="locus não presente no arquivo do array; nada foi interrogado",
         genome_wide_note=ARRAY_GENOME_WIDE,
         coverage_subject="cobertura do array",
+        **ARRAY_MANIFEST,
     ),
     "raw_snp_array_v1": Assay(
         schema="raw_snp_array_v1",
@@ -86,6 +123,7 @@ ASSAYS: dict[str, Assay] = {
         absence_note="locus não presente no arquivo do array; nada foi interrogado",
         genome_wide_note=ARRAY_GENOME_WIDE,
         coverage_subject="cobertura do array",
+        **ARRAY_MANIFEST,
     ),
     "wgs_vcf_projection_v1": Assay(
         schema="wgs_vcf_projection_v1",
@@ -99,6 +137,25 @@ ASSAYS: dict[str, Assay] = {
         ),
         genome_wide_note=PROJECTION_GENOME_WIDE,
         coverage_subject="cobertura desta projeção sobre o registro de alvos",
+        evidence_prefix="projection",
+        input_kind="wgs-vcf-projection",
+        input_source="scripts/vcf_projection.py, VCF de WGS projetado sobre o registro de alvos",
+        ingest_step="VCF projection ingest/QC",
+        plane_summary=(
+            "Projected-VCF Scientific Data Plane executed for the curated target loci only. "
+            "The source VCF may cover the whole genome; this lane interprets the projected "
+            "targets, and clinical interpretation remains bounded by that projection, by "
+            "current evidence and by confirmation requirements."
+        ),
+        assayed_loci_method="projeção do VCF sobre o registro de alvos + QC",
+        not_established_reason=(
+            "not established by this lane: the projection reads SNV/indel calls at target "
+            "loci and computes no copy-number, structural or repeat-length call"
+        ),
+        cyp2d6_reason=(
+            "a generic VCF is insufficient for CYP2D6: structural variants, hybrid alleles "
+            "and phase require a specialized haplotype workflow"
+        ),
     ),
 }
 

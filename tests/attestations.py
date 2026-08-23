@@ -142,3 +142,54 @@ def consent_for(root: Path, artifact_path: Path, **kwargs: Any) -> Path:
     """
     payload = json.loads(Path(artifact_path).read_text(encoding="utf-8"))
     return consent_file(root, case_id=str(payload.get("case_id")), **kwargs)
+
+
+def wgs_qc_record(*, case_id: str, vcf_sha256: str = "b" * 64, **overrides: Any) -> dict[str, Any]:
+    """A complete section-6 WGS QC record, as `reporting.wgs_qc_record` validates it.
+
+    Every required determination carries a plausible measurement, because most tests are
+    about something else; tests about a gap pass the explicit-unavailable form for the one
+    metric they mean.
+    """
+    from reporting.wgs_qc_record import REQUIRED_METRICS, SCHEMA as WGS_QC_SCHEMA
+
+    plausible = {
+        "mean_depth": 32.4, "pct_bases_10x": 98.7, "pct_bases_20x": 96.1,
+        "pct_bases_30x": 88.4, "pct_exons_20x": 97.2, "pct_clinical_genes_20x": 98.0,
+        "heterozygosity_rate": 0.0012, "ti_tv": 2.01, "snv_count": 4_100_000,
+        "indel_count": 780_000, "cnv_count": 1_240, "sv_count": 9_800,
+        "mtdna_mean_depth": 2_450.0, "contamination_estimate": 0.004,
+    }
+    assert set(plausible) == set(REQUIRED_METRICS), "fixture drifted from the required set"
+    record = {
+        "schema": WGS_QC_SCHEMA,
+        "case_id": case_id,
+        "vcf_sha256": vcf_sha256,
+        "laboratory": "Laboratório de teste",
+        "report_date": "2026-08-01",
+        "source": "relatório de QC entregue com o WGS",
+        "captured_by": "tests.attestations",
+        "biological_material": "SANGUE",
+        "read_layout": "PAIRED-END",
+        "sequencing_platform": "plataforma de teste",
+        "read_length": "2x150",
+        "reference_build": "GRCh38",
+        "pipeline_version": "pipeline de teste v1",
+        "metrics": dict(plausible),
+        "reliability_map": {
+            "alta_confianca": "92% do genoma",
+            "confianca_moderada": "5%",
+            "baixa_cobertura": "2%",
+            "mapeamento_dificil": "1%",
+            "nao_resolvidas": "regiões centroméricas",
+        },
+    }
+    record.update(overrides)
+    return record
+
+
+def wgs_qc_file(root: Path, **kwargs: Any) -> Path:
+    """Write a WGS QC record into `root` and return its path."""
+    path = Path(root) / "wgs-qc-record.json"
+    path.write_text(json.dumps(wgs_qc_record(**kwargs), ensure_ascii=False), encoding="utf-8")
+    return path

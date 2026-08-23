@@ -41,6 +41,12 @@ ROOT = Path(__file__).resolve().parents[1]
 #: prevent.
 ARRAY_CURATION_PATH = ROOT / "config/section_attestations_array.json"
 
+#: The curation for the projected-VCF lane. Fifteen sections answer differently there — the
+#: source hierarchy puts a VCF at Nível 1, the mandatory WGS audit of §6 applies, variant
+#: normalisation and the Master Variant Database stop being array concerns, and the meaning of
+#: a locus's absence changes from "not on the chip" to "no record and no callability evidence".
+VCF_CURATION_PATH = ROOT / "config/section_attestations_wgs_vcf.json"
+
 #: Which genotype-table schemas each curation file was written against. A curation declares
 #: this itself, in `applies_to_schemas`, and `curation_for_schema` refuses outside it.
 #:
@@ -52,7 +58,7 @@ ARRAY_CURATION_PATH = ROOT / "config/section_attestations_array.json"
 #: judgements were outright false about the run they were certifying, and RULE_COVERAGE_GATE
 #: would have passed on them. Judgements made about one operation certifying another is the
 #: inheritance this gate exists to prevent.
-CURATIONS = (ARRAY_CURATION_PATH,)
+CURATIONS = (ARRAY_CURATION_PATH, VCF_CURATION_PATH)
 
 ALLOWED_APPLICABILITY = ("APPLICABLE", "NOT_APPLICABLE", "UNRESOLVED")
 ALLOWED_DECISIONS = ("SATISFIED", "BLOCKED", "NOT_APPLICABLE", "UNRESOLVED")

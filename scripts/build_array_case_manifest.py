@@ -14,6 +14,12 @@ if str(ROOT) not in sys.path:
 
 import normative
 from reporting.consent import ConsentError, validate_record as validate_consent
+from reporting.wgs_qc_record import (
+    WGS_QC_ARTIFACT,
+    WgsQcError,
+    audit_summary as wgs_qc_summary,
+    validate_record as validate_wgs_qc,
+)
 from reporting.assay import UnknownAssayError, assay_for
 from reporting.section_attestations import (
     CurationError,
@@ -47,8 +53,10 @@ def build_manifest(
     consent: dict[str, Any] | None = None,
     consent_sha256: str | None = None,
     witness: dict[str, Any] | None = None,
+    wgs_qc: dict[str, Any] | None = None,
+    wgs_qc_sha256: str | None = None,
 ) -> dict[str, Any]:
-    """Assemble the manifest the policy engine evaluates for one array case.
+    """Assemble the manifest the policy engine evaluates for one curated-interpretation case.
 
     Three fields the `MANIFEST_STRUCTURE_GATE` requires — `session_id`, `operation` and
     `section_attestations` — were absent, and their absence did more than fail that gate.
@@ -64,7 +72,7 @@ def build_manifest(
     CONSENT_GATE. That is the intended outcome — the gate is answering, not being skipped.
     """
     if qc.get("operational_status") != "VERIFICADO" or qc.get("gates", {}).get("LIMITED_INTERPRETATION_GATE", {}).get("state") != "PASS":
-        raise ValueError("array QC is not VERIFICADO/PASS")
+        raise ValueError("genotype-table QC is not VERIFICADO/PASS")
     if annotation.get("case_id") != qc.get("case_id") or annotation.get("input_sha256") != qc.get("input", {}).get("sha256"):
         raise ValueError("annotation does not bind to the same case/input as QC")
 
@@ -74,15 +82,47 @@ def build_manifest(
     input_sha = str(qc.get("input", {}).get("sha256") or "")
     qc_sha, annotation_sha = sha256_file(qc_path), sha256_file(annotation_path)
 
+    # Which assay produced these genotypes, read from the schema the QC measured off the
+    # input header. It decides what this operation is called, which curation was ever written
+    # about it, and — since the run's own artifacts are cited by that curation — what the
+    # evidence ids are named. They were the literals `array-input`/`array-qc`, so a projection
+    # run registered "array" artifacts and its attestations cited them by that name.
+    try:
+        assay = assay_for(qc)
+    except UnknownAssayError as exc:
+        # Consistent with the QC guards above: an artifact this builder cannot describe is
+        # refused with the reason, not with a KeyError from three modules away. Every QC
+        # `array_pipeline.qc` writes records `input.schema`; one that does not is not a QC
+        # artifact this manifest can name an operation from.
+        raise ValueError(f"QC artifact does not name its assay: {exc}") from exc
+    input_id = f"{assay.evidence_prefix}-input"
+    qc_id = f"{assay.evidence_prefix}-qc"
+
     # The run's own artifacts, registered as evidence sources. RULE_COVERAGE_GATE resolves
     # every attestation's `evidence_refs` against `sources`, and `sources` held only external
     # retrievals — so no section attestation could cite the QC report or the ruleset that
     # actually satisfies it, and none could be SATISFIED. Each is immutable and content-
     # addressed, so `locator` and `retrieval_evidence` are the digest itself rather than a
     # claim about a remote database.
+    # Sections 6 and 114 are unconditional obligations a VCF cannot answer: the complete
+    # WGS audit and the biological material. When the operator supplies the laboratory's
+    # measurements they become a run artifact the curation can cite; when they do not, the
+    # id is absent, `build_attestations` refuses the citation, and the gate reports the gap
+    # instead of the run publishing without a section-6 audit.
+    wgs_qc_block: dict[str, Any] | None = None
+    if wgs_qc is not None:
+        problems = validate_wgs_qc(wgs_qc, case_id=str(qc.get("case_id")))
+        if problems:
+            raise WgsQcError(
+                "o registro de QC de WGS não sustenta a auditoria da seção 6:\n  - "
+                + "\n  - ".join(problems)
+            )
+        wgs_qc_block = wgs_qc_summary(wgs_qc)
+        wgs_qc_block["record_sha256"] = wgs_qc_sha256
+
     run_artifacts = {
-        "array-input": (input_sha, "export de genotipagem analisado nesta execução"),
-        "array-qc": (qc_sha, "artefato de QC produzido por array_pipeline.qc nesta execução"),
+        input_id: (input_sha, f"{assay.name}: arquivo analisado nesta execução"),
+        qc_id: (qc_sha, "artefato de QC produzido por array_pipeline.qc nesta execução"),
         "partial-annotation": (
             annotation_sha,
             "extração de observações nos alvos produzida nesta execução",
@@ -92,6 +132,11 @@ def build_manifest(
             "artefato normativo vigente conferido contra o manifesto de hashes",
         ),
     }
+    if wgs_qc_block is not None and wgs_qc_sha256:
+        run_artifacts[WGS_QC_ARTIFACT] = (
+            wgs_qc_sha256,
+            "registro de QC de WGS do laboratório, vinculado ao SHA-256 do VCF interpretado",
+        )
     sources = sources + [
         {
             "id": source_id,
@@ -109,17 +154,6 @@ def build_manifest(
         }
         for source_id, (digest, note) in run_artifacts.items()
     ]
-    # Which assay produced these genotypes, read from the schema the QC measured off the
-    # input header. It decides both what this operation is called and which curation, if any,
-    # was ever written about it.
-    try:
-        assay = assay_for(qc)
-    except UnknownAssayError as exc:
-        # Consistent with the QC guards above: an artifact this builder cannot describe is
-        # refused with the reason, not with a KeyError from three modules away. Every QC
-        # `array_pipeline.qc` writes records `input.schema`; one that does not is not a QC
-        # artifact this manifest can name an operation from.
-        raise ValueError(f"QC artifact does not name its assay: {exc}") from exc
     attestations: list[dict[str, Any]] = []
     attestation_state: dict[str, Any] = {"status": "PENDENTE"}
     curation_path = curation_for_schema(assay.schema)
@@ -145,7 +179,7 @@ def build_manifest(
                 curation,
                 artifact_sha256={key: value[0] for key, value in run_artifacts.items()},
                 input_sha256=input_sha,
-                run_id=f"array-{qc.get('case_id')}-{input_sha[:16]}",
+                run_id=f"{assay.evidence_prefix}-{qc.get('case_id')}-{input_sha[:16]}",
             )
             attestation_state = {
                 "status": "COMPLETA",
@@ -166,9 +200,17 @@ def build_manifest(
             ),
         }
     except CurationError as exc:
-        # Refused, not defaulted: a run whose curation cannot be read attests nothing, and
-        # RULE_COVERAGE_GATE then reports 263 rules not considered — which is true.
-        attestation_state = {"status": "PENDENTE", "reason": str(exc)}
+        # Refused, not defaulted: a run whose curation cannot be built attests nothing, and
+        # RULE_COVERAGE_GATE then reports 263 rules not considered — which is true. The most
+        # common cause is a cited evidence id this run does not produce, which is how the
+        # projection lane refuses to publish without the section-6 WGS QC record: the reason
+        # names the missing artifact, so the operator learns what to supply.
+        attestation_state = {
+            "status": "PENDENTE",
+            "assay": assay.schema,
+            "curation": curation_path.name if curation_path is not None else None,
+            "reason": str(exc),
+        }
     consent_block: dict[str, Any] = {
         "verified": False,
         "version": None,
@@ -215,11 +257,11 @@ def build_manifest(
             post_deployment_claim = dict(claim)
             post_deployment_status = "PASS"
     payload: dict[str, Any] = {
-        "schema": "genoma-array-curation-manifest-v1",
+        "schema": "genoma-curated-interpretation-manifest-v1",
         "case_id": qc.get("case_id"),
         # Derived from the case and the exact bytes analysed, so the identifier is
         # reproducible from the artifacts and cannot be reused across inputs.
-        "session_id": f"array-{qc.get('case_id')}-{input_sha[:16]}",
+        "session_id": f"{assay.evidence_prefix}-{qc.get('case_id')}-{input_sha[:16]}",
         "operation": {
             # Named from the assay, not from a constant. A WGS projection declaring itself
             # "SNP-array curated interpretation" is a false statement in the very manifest the
@@ -229,9 +271,10 @@ def build_manifest(
             # gates back on. Declaring false to make them pass would be the silencing this
             # manifest previously achieved by omission.
             "analysis_relevant": True,
-            # False on evidence: this lane observes an array export. It performs no read
-            # alignment or variant calling, so the NGS runtime gate does not apply — and
-            # says so explicitly instead of leaving the field absent.
+            # False on evidence: this lane reads an already-called genotype table — an array
+            # export, or a projection of calls a VCF already contains. It performs no read
+            # alignment and no variant calling of its own, so the NGS runtime gate does not
+            # apply — and says so explicitly instead of leaving the field absent.
             "requires_real_calling": False,
             "output": "ANALYSIS",
         },
@@ -244,17 +287,17 @@ def build_manifest(
         "qc": {
             "status": qc.get("operational_status"),
             "passed": qc.get("gates", {}).get("LIMITED_INTERPRETATION_GATE", {}).get("state") == "PASS",
-            "evidence_refs": [f"array-qc:{qc_sha}"],
+            "evidence_refs": [f"{qc_id}:{qc_sha}"],
         },
         "inputs": [
             {
-                "id": "array-input",
-                "kind": "snp-array-export",
-                "source": "consumer genotyping export, harmonized",
+                "id": input_id,
+                "kind": assay.input_kind,
+                "source": assay.input_source,
                 "sha256": input_sha,
             },
             {
-                "id": "array-qc",
+                "id": qc_id,
                 "kind": "qc-artifact",
                 "source": "array_pipeline.qc",
                 "sha256": sha256_file(qc_path),
@@ -273,8 +316,8 @@ def build_manifest(
         "section_attestations": attestations,
         "section_attestation_curation": attestation_state,
         "ruleset": normative.attested_ruleset_block(),
-        "summary": "SNP-array Scientific Data Plane executed for interrogated target loci only. Clinical interpretation remains bounded by assay coverage, current evidence and confirmation requirements.",
-        "array_artifacts": {
+        "summary": assay.plane_summary,
+        "genotype_artifacts": {
             "input_sha256": qc.get("input", {}).get("sha256"),
             "qc_sha256": qc_sha,
             "annotation_sha256": annotation_sha,
@@ -283,14 +326,24 @@ def build_manifest(
             "unique_rsids": qc.get("metrics", {}).get("unique_rsids"),
             "call_rate": qc.get("metrics", {}).get("call_rate"),
         },
+        # The section-6 audit, or its absence stated as such. A reader must be able to see
+        # whether the complete WGS QC exists for this run without inferring it from whether
+        # the attestations built.
+        "wgs_qc_audit": wgs_qc_block or {
+            "status": "NÃO DISPONÍVEL",
+            "basis": (
+                "nenhum registro de QC de WGS foi fornecido; as seções 6 e 114 exigem a "
+                "auditoria completa e o material biológico, que um VCF não traz"
+            ),
+        },
         "capability_matrix": {
-            "assayed_SNP_loci": {"status": "EXECUTADO", "method": "SNP-array observation + QC"},
+            "assayed_SNP_loci": {"status": "EXECUTADO", "method": assay.assayed_loci_method},
             "targeted_evidence_retrieval": {"status": "VERIFICADO" if evidence_verified else ("PROPOSTO" if annotation.get("mode") == "plan-only" else "NÃO DISPONÍVEL"), "method": "bounded source-specific HTTPS adapters"},
-            "CNV": {"status": "NÃO DISPONÍVEL", "reason": "not established by this SNP-array lane"},
-            "SV": {"status": "NÃO DISPONÍVEL", "reason": "not established by this SNP-array lane"},
-            "repeat_expansion": {"status": "NÃO DISPONÍVEL", "reason": "not established by this SNP-array lane"},
+            "CNV": {"status": "NÃO DISPONÍVEL", "reason": assay.not_established_reason},
+            "SV": {"status": "NÃO DISPONÍVEL", "reason": assay.not_established_reason},
+            "repeat_expansion": {"status": "NÃO DISPONÍVEL", "reason": assay.not_established_reason},
             "HLA": {"status": "NÃO DISPONÍVEL", "reason": "specialized HLA typing not executed"},
-            "CYP2D6": {"status": "NÃO DISPONÍVEL", "reason": "array SNPs are insufficient for structural/hybrid/copy-number diplotyping"},
+            "CYP2D6": {"status": "NÃO DISPONÍVEL", "reason": assay.cyp2d6_reason},
             # Declared because section 68 is attested NOT_APPLICABLE on the grounds that no
             # score is produced, and a reader must be able to check that against the manifest
             # rather than take the attestation's word for it. The PGS Catalog is used to
@@ -302,12 +355,12 @@ def build_manifest(
         "claims": [],
         "findings": [],
         "sections": {
-            "array_observations": observed,
-            "array_qc": qc.get("gates", {}),
+            "genotype_observations": observed,
+            "genotype_qc": qc.get("gates", {}),
         },
         "limitations": annotation.get("limitations", []) + qc.get("limitations", []),
         "execution_manifest": [
-            {"step": "SNP-array ingest/QC", "status": "EXECUTADO", "evidence_refs": ["array-qc"]},
+            {"step": assay.ingest_step, "status": "EXECUTADO", "evidence_refs": [qc_id]},
             {"step": "target observation extraction", "status": "EXECUTADO", "evidence_refs": ["partial-annotation"]},
             {"step": "external evidence retrieval", "status": "VERIFICADO" if evidence_verified else ("PROPOSTO" if annotation.get("mode") == "plan-only" else "NÃO DISPONÍVEL"), "evidence_refs": [x.get("id") for x in sources]},
             {"step": "clinical curation", "status": "PROPOSTO", "evidence_refs": []},
