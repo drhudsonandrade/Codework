@@ -25,10 +25,16 @@ class CoreGates:
         except RulesetError as exc:
             reasons.append(str(exc))
         declared = manifest.get("ruleset", {}) if isinstance(manifest.get("ruleset"), dict) else {}
-        if declared:
-            if declared.get("version") not in (None, self.ruleset.version):
+        if not declared:
+            reasons.append("manifest ruleset identity is missing")
+        else:
+            if declared.get("status") != self.ruleset.status:
+                reasons.append("manifest ruleset status differs from canonical VIGENTE")
+            if declared.get("version") != self.ruleset.version:
                 reasons.append("manifest ruleset version differs from canonical v3.4")
-            if declared.get("sha256") not in (None, self.ruleset.sha256):
+            if declared.get("effective_date") != self.ruleset.effective_date:
+                reasons.append("manifest ruleset effective date differs from canonical ruleset")
+            if declared.get("sha256") != self.ruleset.sha256:
                 reasons.append("manifest ruleset SHA-256 differs from canonical ruleset")
         return _gate("RULESET_GATE", not reasons, reasons)
 
