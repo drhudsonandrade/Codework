@@ -3,17 +3,54 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RULESET_SHA = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
+COMMAND_TIMEOUT_SECONDS = 180
+OUTPUT_TAIL_BYTES = 6000
 
 
-def run(cmd: list[str]) -> tuple[int, str]:
-    p = subprocess.run(cmd, cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
-    return p.returncode, p.stdout[-12000:]
+def _decode_tail(value: bytes | str | None, *, limit: int = OUTPUT_TAIL_BYTES) -> str:
+    if value is None:
+        return ""
+    raw = value.encode("utf-8", errors="replace") if isinstance(value, str) else value
+    return raw[-limit:].decode("utf-8", errors="replace")
+
+
+def _command_evidence(stdout: bytes | str | None, stderr: bytes | str | None) -> str:
+    return "STDOUT\n" + _decode_tail(stdout) + "\nSTDERR\n" + _decode_tail(stderr)
+
+
+def run(cmd: list[str], *, timeout_seconds: int = COMMAND_TIMEOUT_SECONDS) -> tuple[int, str]:
+    try:
+        p = subprocess.run(
+            cmd,
+            cwd=ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as exc:
+        evidence = _command_evidence(exc.stdout, exc.stderr)
+        return 124, f"TIMEOUT after {timeout_seconds}s\n{evidence}"
+    return p.returncode, _command_evidence(p.stdout, p.stderr)
+
+
+def _python_runtime_evidence() -> tuple[bool, str]:
+    executable = Path(sys.executable) if sys.executable else Path()
+    payload = {
+        "python_executable": sys.executable,
+        "python_prefix": sys.prefix,
+        "python_base_prefix": sys.base_prefix,
+        "virtualenv_active": bool(os.environ.get("VIRTUAL_ENV")) or sys.prefix != sys.base_prefix,
+    }
+    return bool(sys.executable) and executable.is_file(), json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
 
 def check(name: str, ok: bool, evidence: str, *, blocking: bool = True, status_if_ok: str = "VERIFICADO") -> dict:
@@ -29,13 +66,16 @@ def check(name: str, ok: bool, evidence: str, *, blocking: bool = True, status_i
 def audit(*, allow_template_sealed_only: bool = False) -> dict:
     checks: list[dict] = []
 
-    rc, out = run(["python3", "scripts/validate_repo.py"])
+    runtime_ok, runtime_evidence = _python_runtime_evidence()
+    checks.append(check("PYTHON_RUNTIME", runtime_ok, runtime_evidence))
+
+    rc, out = run([sys.executable, "scripts/validate_repo.py"])
     checks.append(check("REPOSITORY_CONTRACT", rc == 0, out))
 
-    rc, out = run(["python3", "scripts/verify_supply_chain_lock.py"])
+    rc, out = run([sys.executable, "scripts/verify_supply_chain_lock.py"])
     checks.append(check("SUPPLY_CHAIN_LOCK", rc == 0, out))
 
-    cmd = ["python3", "scripts/verify_template_store.py"]
+    cmd = [sys.executable, "scripts/verify_template_store.py"]
     if allow_template_sealed_only:
         cmd.append("--allow-sealed-only")
     rc, out = run(cmd)
@@ -72,7 +112,7 @@ def audit(*, allow_template_sealed_only: bool = False) -> dict:
     checks.append(check("NO_PERSONAL_GENOTYPE_FIXTURES", not tracked_like, json.dumps(tracked_like)))
 
     planes = {
-        "policy_control": "PASS" if all(c["state"] == "PASS" for c in checks if c["id"] in {"REPOSITORY_CONTRACT", "SUPPLY_CHAIN_LOCK"}) else "BLOCKED",
+        "policy_control": "PASS" if all(c["state"] == "PASS" for c in checks if c["id"] in {"PYTHON_RUNTIME", "REPOSITORY_CONTRACT", "SUPPLY_CHAIN_LOCK"}) else "BLOCKED",
         "scientific_data": "PASS" if next(c for c in checks if c["id"] == "SCIENTIFIC_DATA_PLANE_ARRAY")["state"] == "PASS" else "BLOCKED",
         "evidence": "PASS" if next(c for c in checks if c["id"] == "EVIDENCE_ANNOTATION_PLANE")["state"] == "PASS" else "BLOCKED",
         "audit": "PASS" if all(c["state"] == "PASS" for c in checks if c["blocking"]) else "BLOCKED",
