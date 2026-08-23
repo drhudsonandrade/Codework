@@ -3,9 +3,31 @@ package genoma.guard_test
 import rego.v1
 import data.genoma.guard
 
-base := {"ruleset":{"version":"v3.4","effective_date":"17/08/2026","sha256":"ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"},"operation":{"analysis_relevant":false},"claims":[],"sources":[]}
+base_ruleset := {
+  "status": "VIGENTE",
+  "version": "v3.4",
+  "effective_date": "17/08/2026",
+  "sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
+}
+
+base := {
+  "ruleset": base_ruleset,
+  "operation": {"analysis_relevant": false},
+  "claims": [],
+  "sources": [],
+}
 
 test_valid_baseline if guard.allow with input as base
+
+test_reject_missing_ruleset_status if {
+  input_doc := object.union(base, {"ruleset": object.remove(base_ruleset, {"status"})})
+  not guard.allow with input as input_doc
+}
+
+test_reject_non_vigente_ruleset_status if {
+  input_doc := object.union(base, {"ruleset": object.union(base_ruleset, {"status": "PENDENTE"})})
+  not guard.allow with input as input_doc
+}
 
 test_reject_vus_conduct if {
   input_doc := object.union(base, {"claims":[{"nature":"INFERÊNCIA","domain":"CLÍNICO","status":"INFERIDO","priority":"P2","variant_classification":"VUS","changes_conduct":true,"confirmation":{"status":"PROPOSTO"}}]})
