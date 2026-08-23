@@ -64,7 +64,14 @@ TEXT_IDENTITY_SUFFIXES = {
     ".json", ".md", ".nf", ".py", ".rego", ".sh", ".toml", ".ts", ".txt", ".yaml", ".yml",
 }
 HISTORICAL_V33_ROOT = Path("docs/history/v3.3")
-SUPERSEDED_IDENTITY_EXEMPT_PATHS = {
+HISTORICAL_SUPERSEDED_IDENTITY_PATHS = {
+    Path("docs/PRE_DEPLOYMENT_VALIDATION_2026-08-15.md"),
+    Path("docs/audits/GENOMA_V0.8_FINAL_AUDIT_2026-08-16.md"),
+    Path("docs/audits/GENOMA_V0.8_PREIMPLEMENTATION_AUDIT_2026-08-16.md"),
+    Path("docs/superpowers/plans/2026-08-14-magalu-private-mcp.md"),
+    Path("docs/superpowers/plans/2026-08-16-genoma-array-evidence-template-lock-v0.8.md"),
+}
+SUPERSEDED_IDENTITY_GUARDRAIL_PATHS = {
     Path("scripts/validate_repo.py"),
     Path("tests/test_v34_activation_contract.py"),
 }
@@ -118,12 +125,14 @@ def validate_active_identity_text(text: str, relative: str, errors: list[str]) -
 
 
 def validate_superseded_identity_locations(root: Path, errors: list[str]) -> None:
-    """Reject superseded identity tokens everywhere except explicit history and guardrail fixtures."""
+    """Reject superseded identities globally except immutable historical records and guardrail fixtures."""
     for path in root.rglob("*"):
         if not path.is_file() or any(part in SKIP_PARTS for part in path.parts):
             continue
         relative = path.relative_to(root)
-        if relative in SUPERSEDED_IDENTITY_EXEMPT_PATHS:
+        if relative in SUPERSEDED_IDENTITY_GUARDRAIL_PATHS:
+            continue
+        if relative in HISTORICAL_SUPERSEDED_IDENTITY_PATHS:
             continue
         if relative == HISTORICAL_V33_ROOT or HISTORICAL_V33_ROOT in relative.parents:
             continue
