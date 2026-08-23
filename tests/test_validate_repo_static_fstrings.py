@@ -29,14 +29,16 @@ class ValidateRepoStaticFstringTests(unittest.TestCase):
 
     def test_registered_test_fixtures_do_not_block_the_current_checkout(self) -> None:
         errors = validate(ROOT)
+        allowed = {
+            "tests/test_v34_activation_contract.py",
+            "tests/test_validate_repo_static_fstrings.py",
+            "policy_engine/tests/test_policy_engine.py",
+        }
         blocked_fixture_errors = [
             error
             for error in errors
             if "superseded identity outside explicit history" in error
-            and (
-                "tests/test_v34_activation_contract.py" in error
-                or "tests/test_validate_repo_static_fstrings.py" in error
-            )
+            and any(relative in error for relative in allowed)
         ]
         self.assertEqual(blocked_fixture_errors, [])
 
