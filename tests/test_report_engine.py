@@ -27,6 +27,15 @@ def passing_policy_evaluation():
 
 
 class ReportEngineTest(unittest.TestCase):
+    def assert_release_rejected(self, callable_):
+        from reporting.engine import ReportReleaseError
+
+        try:
+            callable_()
+        except ReportReleaseError:
+            return
+        self.fail("expected ReportReleaseError")
+
     def test_catalog_contains_all_eleven_v3_models(self):
         from reporting.engine import load_catalog
 
@@ -44,50 +53,64 @@ class ReportEngineTest(unittest.TestCase):
         self.assertEqual(result["metadata"]["ruleset_required"], RULESET)
 
     def test_final_mode_fails_closed_without_publication_gate(self):
-        from reporting.engine import ReportReleaseError, render_document
+        from reporting.engine import render_document
 
-        with self.assertRaises(ReportReleaseError):
-            render_document("01", {"case_id": "CASE-001"}, mode="FINAL")
+        self.assert_release_rejected(lambda: render_document("01", {"case_id": "CASE-001"}, mode="FINAL"))
 
     def test_final_mode_rejects_wrong_ruleset_digest(self):
-        from reporting.engine import ReportReleaseError, render_document
+        from reporting.engine import render_document
 
         bad_ruleset = dict(RULESET)
         bad_ruleset["sha256"] = "0" * 64
         data = {
             "case_id": "CASE-001",
             "ruleset": bad_ruleset,
-            "publication_gate": {"passed": True, "consent_verified": True, "qc_verified": True, "evidence_verified": True, "placeholders_resolved": True},
+            "publication_gate": {
+                "passed": True,
+                "consent_verified": True,
+                "qc_verified": True,
+                "evidence_verified": True,
+                "placeholders_resolved": True,
+            },
             "policy_evaluation": passing_policy_evaluation(),
         }
-        with self.assertRaises(ReportReleaseError):
-            render_document("01", data, mode="FINAL")
+        self.assert_release_rejected(lambda: render_document("01", data, mode="FINAL"))
 
     def test_final_mode_rejects_unready_policy_evaluation(self):
-        from reporting.engine import ReportReleaseError, render_document
+        from reporting.engine import render_document
 
         data = {
             "case_id": "CASE-001",
             "ruleset": dict(RULESET),
-            "publication_gate": {"passed": True, "consent_verified": True, "qc_verified": True, "evidence_verified": True, "placeholders_resolved": True},
+            "publication_gate": {
+                "passed": True,
+                "consent_verified": True,
+                "qc_verified": True,
+                "evidence_verified": True,
+                "placeholders_resolved": True,
+            },
             "policy_evaluation": {"ready_for_requested_operation": False, "planes": {}, "gates": []},
         }
-        with self.assertRaises(ReportReleaseError):
-            render_document("01", data, mode="FINAL")
+        self.assert_release_rejected(lambda: render_document("01", data, mode="FINAL"))
 
     def test_final_mode_requires_final_audit_pass(self):
-        from reporting.engine import ReportReleaseError, render_document
+        from reporting.engine import render_document
 
         policy = passing_policy_evaluation()
         policy["gates"] = [{"gate": "FINAL_AUDIT_GATE", "state": "FAIL", "blocking": True}]
         data = {
             "case_id": "CASE-001",
             "ruleset": dict(RULESET),
-            "publication_gate": {"passed": True, "consent_verified": True, "qc_verified": True, "evidence_verified": True, "placeholders_resolved": True},
+            "publication_gate": {
+                "passed": True,
+                "consent_verified": True,
+                "qc_verified": True,
+                "evidence_verified": True,
+                "placeholders_resolved": True,
+            },
             "policy_evaluation": policy,
         }
-        with self.assertRaises(ReportReleaseError):
-            render_document("01", data, mode="FINAL")
+        self.assert_release_rejected(lambda: render_document("01", data, mode="FINAL"))
 
     def test_final_mode_writes_json_markdown_and_html_when_gate_passes(self):
         from reporting.engine import render_document, write_bundle
