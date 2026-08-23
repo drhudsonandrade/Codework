@@ -140,11 +140,17 @@ def _tokens(page: fitz.Page) -> list[tuple[str, fitz.Rect, dict[str, Any]]]:
 
 
 def _ruleset_control_sources(text: str) -> list[str]:
-    matches = list(RULESET_CONTROL_RE.finditer(text))
     sources: list[str] = []
-    for match in matches:
+    offset = 0
+    while True:
+        start = text.find(RULESET_CONTROL_PREFIX, offset)
+        if start < 0:
+            break
+        match = RULESET_CONTROL_RE.match(text, start)
+        if match is None:
+            raise RuntimeError("malformed GENOMA ruleset control marker")
         marker = match.group(0)
-        before = text[match.start() - 1] if match.start() else ""
+        before = text[start - 1] if start else ""
         after = text[match.end()] if match.end() < len(text) else ""
         if before and (before.isalnum() or before in "_-"):
             raise RuntimeError(f"malformed GENOMA ruleset control marker: {marker!r}")
@@ -154,8 +160,7 @@ def _ruleset_control_sources(text: str) -> list[str]:
             raise RuntimeError(f"noncanonical GENOMA ruleset control marker: {marker}")
         if marker not in sources:
             sources.append(marker)
-    if RULESET_CONTROL_PREFIX in text and not matches:
-        raise RuntimeError("malformed GENOMA ruleset control marker")
+        offset = match.end()
     return sources
 
 
