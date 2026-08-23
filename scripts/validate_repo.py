@@ -60,6 +60,14 @@ EXPECTED_ARTIFACTS = {
 EXPECTED_EVIDENCE_ADAPTERS = {"clinvar", "clingen", "cpic", "clinpgx", "gnomad", "pgs_catalog"}
 FORBIDDEN_SUFFIXES = (".fastq", ".fq", ".bam", ".bai", ".cram", ".crai", ".vcf", ".tbi")
 SKIP_PARTS = {".git", "node_modules", "dist", "__pycache__", ".pytest_cache"}
+TEXT_IDENTITY_SUFFIXES = {
+    ".json", ".md", ".nf", ".py", ".rego", ".sh", ".toml", ".ts", ".txt", ".yaml", ".yml",
+}
+HISTORICAL_V33_ROOT = Path("docs/history/v3.3")
+SUPERSEDED_IDENTITY_EXEMPT_PATHS = {
+    Path("scripts/validate_repo.py"),
+    Path("tests/test_v34_activation_contract.py"),
+}
 FORBIDDEN_ACTIVE_PATHS = (
     "manifests/RULESET_V3.3.sha256",
     "deploy/attestations/bootstrap-project-v3.3.json",
@@ -109,6 +117,27 @@ def validate_active_identity_text(text: str, relative: str, errors: list[str]) -
             errors.append(f"active ruleset surface still references superseded identity: {relative}: {token}")
 
 
+def validate_superseded_identity_locations(root: Path, errors: list[str]) -> None:
+    """Reject superseded identity tokens everywhere except explicit history and guardrail fixtures."""
+    for path in root.rglob("*"):
+        if not path.is_file() or any(part in SKIP_PARTS for part in path.parts):
+            continue
+        relative = path.relative_to(root)
+        if relative in SUPERSEDED_IDENTITY_EXEMPT_PATHS:
+            continue
+        if relative == HISTORICAL_V33_ROOT or HISTORICAL_V33_ROOT in relative.parents:
+            continue
+        if path.suffix.lower() not in TEXT_IDENTITY_SUFFIXES and path.name not in {"Dockerfile", "AGENTS.md"}:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        for token in OLD_ACTIVE_TOKENS:
+            if token in text:
+                errors.append(f"superseded identity outside explicit history: {relative}: {token}")
+
+
 def validate(root: Path) -> list[str]:
     errors: list[str] = []
     errors.extend(
@@ -121,6 +150,7 @@ def validate(root: Path) -> list[str]:
         for relative in FORBIDDEN_ACTIVE_PATHS
         if (root / relative).exists()
     )
+    validate_superseded_identity_locations(root, errors)
 
     active = []
     for candidate in root.rglob("REGRAS_PROJETO_GENOMA*.txt"):
