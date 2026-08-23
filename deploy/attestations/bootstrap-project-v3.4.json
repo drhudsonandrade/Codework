@@ -1,22 +1,33 @@
 {
+  "actor_id": "genoma-project-bootstrap-verifier",
+  "actor_type": "SERVICE",
   "attestation_type": "GENOMA_PROJECT_BOOTSTRAP",
-  "status": "VERIFICADO",
-  "ruleset_identity": "v3.4/VIGENTE/17/08/2026",
   "canonical_filename": "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt",
   "canonical_sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
-  "verified_at": "2026-08-22T18:46:00-03:00",
-  "actor_type": "SERVICE",
-  "actor_id": "genoma-project-bootstrap-verifier",
-  "method": "direct verification of the active project instructions supplied to this session",
   "checks": {
     "consult_ruleset_before_relevant_genetic_analysis": true,
+    "fail_closed_on_missing_or_conflicting_ruleset": true,
+    "operational_status_contract_present": true,
+    "post_deployment_requires_live_15_of_15_zero_critical": true,
+    "require_effective_date_2026_08_17": true,
     "require_status_vigente": true,
     "require_version_v3_4": true,
-    "require_effective_date_2026_08_17": true,
-    "fail_closed_on_missing_or_conflicting_ruleset": true,
-    "runtime_resource_gate_before_real_calling": true,
-    "operational_status_contract_present": true,
-    "post_deployment_requires_live_15_of_15_zero_critical": true
+    "runtime_resource_gate_before_real_calling": true
   },
-  "limitations": "This attestation records the bootstrap present in the active project instructions for this verification session. The deterministic core does not depend on the surrounding assistant or interface. Renew this attestation whenever project instructions or the canonical ruleset change."
+  "limitations": "Every check in this attestation was re-derived by executing it against the repository artifacts named in verifier.inputs; none is a textual claim. The attestation covers the deterministic core only: it does not attest to any surrounding assistant, interface or session. Regenerate it whenever the canonical ruleset, the execution schema or the verifier changes.",
+  "method": "deterministic re-derivation of every check by python3 scripts/verify_project_bootstrap.py --check",
+  "ruleset_identity": "v3.4/VIGENTE/17/08/2026",
+  "status": "VERIFICADO",
+  "verified_at": "2026-08-22T18:46:00-03:00",
+  "verifier": {
+    "command": "python3 scripts/verify_project_bootstrap.py --check",
+    "inputs": {
+      "canonical_ruleset_raw_sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
+      "normative/sealed/MANIFEST.json": "3926adb962509f430434eaa0d8d7ac3a1d93ee0185c786b37456ef3963d0298a",
+      "policy_engine/policy/schema/execution-manifest.schema.json": "907d4406d3a81c0e33a262918ee1a9bbde62fc875987acd8bce092be654df5eb"
+    },
+    "name": "genoma-project-bootstrap-verifier",
+    "result_locator": "deploy/attestations/bootstrap-project-v3.4.json#/checks",
+    "version": "0.4.0"
+  }
 }

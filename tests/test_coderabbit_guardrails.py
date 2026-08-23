@@ -344,6 +344,15 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         result, marker_created = self._run_setup_with_fakes(adulterated_marketplace=True)
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertFalse(marker_created)
+        # Any non-zero exit would satisfy a bare returncode assertion — including a
+        # missing jq, a syntax error or an unrelated early failure. Naming the
+        # message is what proves the marketplace provenance check is the gate that
+        # rejected it.
+        self.assertIn(
+            "marketplace codework-codex não foi confirmado no root local revisado",
+            result.stderr,
+            result.stdout + result.stderr,
+        )
         self.assertNotIn("configurados a partir de release checksum-locked", result.stdout)
 
     def test_disabled_installed_plugin_is_rejected(self) -> None:

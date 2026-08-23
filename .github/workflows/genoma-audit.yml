@@ -24,6 +24,11 @@ jobs:
         run: |
           python3 scripts/validate_repo.py
           python3 scripts/verify_supply_chain_lock.py
+      - name: Bootstrap attestation is reproducible from its declared inputs
+        # Re-derives every check and rebuilds the document, so a committed
+        # attestation that no longer follows from its inputs fails here rather
+        # than being trusted because it is well-formed.
+        run: python3 scripts/verify_project_bootstrap.py --check
       - name: Unit tests for v0.8 architecture
         run: |
           python3 -m unittest \

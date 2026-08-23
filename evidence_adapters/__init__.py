@@ -223,10 +223,15 @@ class EvidenceAdapter:
             })
             return base
         except Exception as exc:
+            # The traceback goes to the operator's log, never to the artifact.
+            # Without it every failure class reads the same downstream, and a
+            # TLS rejection, a redirect refusal and an oversized body become
+            # indistinguishable at the only place they could still be diagnosed.
             LOGGER.warning(
                 "evidence retrieval failed adapter=%s error_class=%s",
                 self.key,
                 type(exc).__name__,
+                exc_info=True,
             )
             base["error_class"] = type(exc).__name__
             base["error"] = PUBLIC_RETRIEVAL_ERROR

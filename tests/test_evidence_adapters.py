@@ -85,6 +85,31 @@ class EvidenceAdapterTest(unittest.TestCase):
         self.assertNotIn(secret, serialized)
         self.assertEqual(snapshot["error_class"], "OSError")
 
+    def test_the_operator_log_keeps_the_traceback_the_artifact_redacts(self):
+        """Redaction protects the artifact; it must not blind the operator.
+
+        The published snapshot stays generic, so distinct failures look identical
+        downstream. The log is the only place left where a TLS rejection can be
+        told apart from an oversized body, and it needs the traceback to do it.
+        """
+        from evidence_adapters import get_adapter
+
+        secret = "token-should-not-leak-1234567890"
+
+        def failing(_request):
+            raise OSError(f"upstream error token={secret}")
+
+        adapter = get_adapter("clinvar", transport=failing)
+        with self.assertLogs("evidence_adapters", level="WARNING") as captured:
+            snapshot = adapter.query({"term": "BRCA1[gene]"}, checked_at="2026-08-16T14:00:00Z")
+
+        logged = "\n".join(captured.output)
+        self.assertIn("Traceback (most recent call last)", logged)
+        self.assertIn("OSError", logged)
+        # The artifact stays redacted regardless of what the log records.
+        self.assertEqual(snapshot["error"], "evidence source retrieval failed")
+        self.assertNotIn(secret, json.dumps(snapshot, ensure_ascii=False))
+
     def test_non_allowlisted_host_is_rejected_before_transport(self):
         from evidence_adapters import get_adapter
 

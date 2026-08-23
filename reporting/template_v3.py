@@ -586,28 +586,49 @@ def _add_vml_textbox(
 PAGE_CONVERSION_TIMEOUT_SECONDS = 120
 
 
+# Poppler's diagnostics are short; this bounds a pathological writer without
+# truncating the one line that usually names the cause.
+CONVERTER_STDERR_EXCERPT_BYTES = 2000
+
+
+def _converter_detail(stream: bytes | str | None) -> str:
+    """The converter's own diagnosis, bounded, for the domain exception."""
+    if not stream:
+        return ""
+    text = stream.decode("utf-8", errors="replace") if isinstance(stream, bytes) else stream
+    excerpt = text.strip()[-CONVERTER_STDERR_EXCERPT_BYTES:].strip()
+    return f": {excerpt}" if excerpt else ""
+
+
 def _run_page_converter(argv: list[str], *, tool: str, page: int) -> None:
     """Run one converter under an explicit budget, in this renderer's error currency.
 
     Both failure modes reach the caller as TemplateV3Error: a non-zero exit and a
     timeout would otherwise escape as CalledProcessError/TimeoutExpired and break
     the renderer's single error contract.
+
+    stderr is captured rather than discarded. An exit status alone cannot separate
+    a malformed PDF from a missing font or an unwritable output path, and Poppler
+    says which on stderr — dropping it leaves the failure undiagnosable at exactly
+    the moment someone needs to act on it.
     """
     try:
         subprocess.run(
             argv,
             check=True,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             timeout=PAGE_CONVERSION_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired as exc:
         raise TemplateV3Error(
             f"{tool} exceeded {PAGE_CONVERSION_TIMEOUT_SECONDS}s converting template page {page}"
+            f"{_converter_detail(exc.stderr)}"
         ) from exc
     except subprocess.CalledProcessError as exc:
         raise TemplateV3Error(
             f"{tool} failed with exit status {exc.returncode} converting template page {page}"
+            f"{_converter_detail(exc.stderr)}"
         ) from exc
     except OSError as exc:
         raise TemplateV3Error(f"{tool} could not be executed for template page {page}: {exc}") from exc

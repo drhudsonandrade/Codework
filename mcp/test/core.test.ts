@@ -45,8 +45,31 @@ test("resolveUnderRoot rejects every traversal encoding, before and after resolu
     "a".repeat(65),
   ];
   for (const value of traversals) {
-    assert.throws(() => resolveUnderRoot("/srv/genome/audit", value), Error, `accepted: ${JSON.stringify(value)}`);
+    // Pin which control rejects: every one of these is refused by the identifier
+    // regex, so the containment check below is never what saves us here. Asserting
+    // only "some Error" would let a weakened regex pass on the strength of a
+    // different rejection — or of no rejection reaching an assertion at all.
+    assert.throws(
+      () => resolveUnderRoot("/srv/genome/audit", value),
+      /invalid bounded identifier/,
+      `accepted or rejected for the wrong reason: ${JSON.stringify(value)}`,
+    );
   }
+});
+
+test("containment rejects an escaping suffix that the identifier regex never sees", () => {
+  // The traversal list above is fully absorbed by validateIdentifier, which leaves
+  // resolveChildUnderRoot's containment proof unexercised. The suffix is the one
+  // caller-supplied part that bypasses the regex, so it is what proves containment
+  // is load-bearing rather than decorative.
+  assert.throws(
+    () => resolveUnderRoot("/srv/genome/audit", "canary", "/../../etc/passwd"),
+    /identifier resolves outside configured root/,
+  );
+  assert.throws(
+    () => resolveUnderRoot("/srv/genome/audit", "canary", "/../sibling.json"),
+    /identifier resolves outside configured root/,
+  );
 });
 
 test("resolveUnderRoot never returns a path outside the configured root", () => {

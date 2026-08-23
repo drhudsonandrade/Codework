@@ -27,7 +27,7 @@ EXPECTED_VERSION = "v3.4"
 EXPECTED_DATE = "17/08/2026"
 EXPECTED_ARCHIVED_BOOTSTRAP_SHA = "87af4f99bcd6b6f3f857a1ca725103e95dabf70c3c926d7f0d4e83b037e69fd8"
 EXPECTED_SUPERSEDED_FIXTURE_SHA = "5a6f888f176ed4c963c43c24f38697ea363f5772be06c63e70d6a8f5c497e503"
-EXPECTED_BOOTSTRAP_ATTESTATION_SHA = "dbe574cff326d3a0b429de8a2450359024be97d7bb1c64468bf6a96b8d77d5b9"
+EXPECTED_BOOTSTRAP_ATTESTATION_SHA = "e2af0ef46e5bc26f45cc2c0b38047481bab1cd64d5a5d97f5d3cde2b2d947575"
 EXPECTED_BOOTSTRAP_CHECKS = frozenset(
     {
         "consult_ruleset_before_relevant_genetic_analysis",
@@ -231,6 +231,82 @@ class V34ActivationContractTests(unittest.TestCase):
             # even if the check semantics were never evaluated at all.
             with self.assertRaisesRegex(BootstrapAttestationError, "digest mismatch"):
                 verify_bootstrap_attestation(tampered)
+
+    def test_bootstrap_attestation_is_reproducible_from_its_declared_inputs(self) -> None:
+        """The committed attestation must be re-derivable, not merely well-formed.
+
+        This is what separates evidence from assertion: the verifier executes every
+        check again and rebuilds the document, and the committed bytes have to match.
+        A hand-edited attestation, or one whose inputs moved underneath it, fails here.
+        """
+        from scripts import verify_project_bootstrap
+
+        path = ROOT / "deploy" / "attestations" / "bootstrap-project-v3.4.json"
+        committed = json.loads(path.read_text(encoding="utf-8"))
+        rebuilt = verify_project_bootstrap.build_attestation(verified_at=committed["verified_at"])
+        self.assertEqual(verify_project_bootstrap.render(rebuilt), path.read_text(encoding="utf-8"))
+        self.assertEqual(verify_project_bootstrap.main(["--check"]), 0)
+
+    def test_every_declared_check_is_derived_by_execution(self) -> None:
+        """No check may be a literal: each one is the result of running a probe."""
+        from scripts import verify_project_bootstrap
+
+        derived = verify_project_bootstrap.derive_checks()
+        self.assertEqual(frozenset(derived), EXPECTED_BOOTSTRAP_CHECKS)
+        self.assertTrue(all(derived.values()), derived)
+
+    def test_the_verifier_refuses_to_attest_when_a_check_does_not_hold(self) -> None:
+        """A failing derivation must block the attestation, not be written as false."""
+        from scripts import verify_project_bootstrap
+
+        with mock.patch.object(
+            verify_project_bootstrap,
+            "derive_checks",
+            return_value={name: name != "require_status_vigente" for name in EXPECTED_BOOTSTRAP_CHECKS},
+        ):
+            with self.assertRaisesRegex(
+                verify_project_bootstrap.BootstrapVerificationError, "require_status_vigente"
+            ):
+                verify_project_bootstrap.build_attestation(verified_at="2026-08-22T18:46:00-03:00")
+
+    def test_an_attestation_without_reproducible_provenance_is_rejected(self) -> None:
+        """A prose method with no command, inputs or locator is not technical evidence."""
+        path = ROOT / "deploy" / "attestations" / "bootstrap-project-v3.4.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+
+        for mutation, expected in (
+            (lambda p: p.pop("verifier"), "no verifier provenance"),
+            (lambda p: p["verifier"].pop("command"), "provenance is incomplete"),
+            (lambda p: p["verifier"].pop("result_locator"), "provenance is incomplete"),
+            (lambda p: p["verifier"]["inputs"].pop("normative/sealed/MANIFEST.json"), "inputs are incomplete"),
+            (lambda p: p["verifier"]["inputs"].update({"normative/sealed/MANIFEST.json": "not-a-digest"}),
+             "not content-addressed"),
+            (lambda p: p["verifier"]["inputs"].update({"canonical_ruleset_raw_sha256": "0" * 64}),
+             "different canonical ruleset"),
+        ):
+            with self.subTest(expected=expected):
+                mutated = json.loads(json.dumps(payload))
+                mutation(mutated)
+                blob = json.dumps(mutated, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
+                with tempfile.TemporaryDirectory() as td:
+                    target = Path(td) / path.name
+                    target.write_bytes(blob)
+                    # Pin the digest to the mutated file so verification reaches the
+                    # provenance rules instead of stopping at the file binding.
+                    with mock.patch.object(
+                        bootstrap_attestation,
+                        "EXPECTED_FILE_SHA256",
+                        hashlib.sha256(blob).hexdigest(),
+                    ):
+                        with self.assertRaisesRegex(BootstrapAttestationError, expected):
+                            verify_bootstrap_attestation(target)
+
+    def test_verification_returns_how_to_reproduce_it(self) -> None:
+        path = ROOT / "deploy" / "attestations" / "bootstrap-project-v3.4.json"
+        evidence = verify_bootstrap_attestation(path)
+        self.assertIn("verify_project_bootstrap.py", evidence["verifier_command"])
+        self.assertEqual(evidence["verifier_inputs"]["canonical_ruleset_raw_sha256"], EXPECTED_SHA)
+        self.assertTrue(evidence["result_locator"])
 
     def test_bootstrap_attestation_rejects_a_failed_check_on_its_own(self) -> None:
         """Check semantics, isolated from the digest binding that normally fires first.
