@@ -66,6 +66,7 @@ TEXT_IDENTITY_SUFFIXES = {
 }
 SUPERSEDED_IDENTITY_TEST_FIXTURES = frozenset(
     {
+        "policy_engine/tests/test_policy_engine.py",
         "tests/test_v34_activation_contract.py",
         "tests/test_validate_repo_static_fstrings.py",
     }
