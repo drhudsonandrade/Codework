@@ -75,7 +75,12 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         self.assertLess(script.rindex('marketplace_present <<<"$marketplaces_json"'), success)
         self.assertLess(script.rindex('plugin_installed <<<"$plugins_json"'), success)
 
-    def _run_setup_with_fake_codex(self, *, adulterated_marketplace: bool) -> tuple[subprocess.CompletedProcess[str], bool]:
+    def _run_setup_with_fake_codex(
+        self,
+        *,
+        adulterated_marketplace: bool,
+        coderabbit_version_output: str = "coderabbit 0.7.5",
+    ) -> tuple[subprocess.CompletedProcess[str], bool]:
         self.assertIsNotNone(shutil.which("jq"), "jq is required by the live setup contract")
         setup_script = ROOT / "scripts" / "codex" / "setup-coderabbit.sh"
         marketplace_manifest = ROOT / ".agents" / "plugins" / "marketplace.json"
@@ -129,7 +134,7 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
                   "plugin marketplace list --json")
                     printf '%s\\n' '{{"marketplaces":[{marketplace_entry}]}}'
                     ;;
-                  plugin\ marketplace\ add*)
+                  "plugin marketplace add"*)
                     printf '%s\\n' '{{}}'
                     ;;
                   "plugin list --marketplace codework-codex --json --available")
@@ -164,7 +169,7 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         fake_coderabbit.write_text(
             "#!/usr/bin/env bash\n"
             "set -euo pipefail\n"
-            "if [[ \"${1:-}\" == \"--version\" ]]; then echo 'coderabbit 0.7.5'; exit 0; fi\n"
+            f"if [[ \"${{1:-}}\" == \"--version\" ]]; then echo {coderabbit_version_output!r}; exit 0; fi\n"
             "if [[ \"${1:-}\" == \"auth\" && \"${2:-}\" == \"status\" && \"${3:-}\" == \"--agent\" ]]; then exit 0; fi\n"
             "exit 11\n",
             encoding="utf-8",
@@ -202,6 +207,14 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         result, marker_created = self._run_setup_with_fake_codex(adulterated_marketplace=True)
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertFalse(marker_created)
+        self.assertNotIn("CodeRabbit Codex plugin + CLI configurados", result.stdout)
+
+    def test_version_prefix_does_not_satisfy_exact_cli_pin(self) -> None:
+        result, _ = self._run_setup_with_fake_codex(
+            adulterated_marketplace=False,
+            coderabbit_version_output="coderabbit 0.7.50",
+        )
+        self.assertEqual(result.returncode, 5, result.stdout + result.stderr)
         self.assertNotIn("CodeRabbit Codex plugin + CLI configurados", result.stdout)
 
 
