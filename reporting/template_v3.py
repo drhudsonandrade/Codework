@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from pypdf import PdfReader, PdfWriter
@@ -354,7 +354,7 @@ def render_pdf_from_template(
             if raw is None:
                 continue
             value = _normalize_value(raw, default_color=item.get("color", "#17212B"))
-            x0, y0, x1, y1 = [float(value) for value in item["bbox"]]
+            x0, y0, x1, y1 = [float(number) for number in item["bbox"]]
             background = str(item["background"])
             c.setFillColorRGB(*_hex_to_rgb(background))
             c.rect(
@@ -600,6 +600,14 @@ def _patch_docx_svg(docx_path: Path, svgs: list[Path]) -> None:
     temp_dir = Path(tempfile.mkdtemp(prefix="genoma-docx-svg-"))
     try:
         with zipfile.ZipFile(docx_path) as archive:
+            base = temp_dir.resolve()
+            for member in archive.infolist():
+                member_path = PurePosixPath(member.filename)
+                if member_path.is_absolute() or ".." in member_path.parts:
+                    raise TemplateV3Error(f"unsafe DOCX archive member: {member.filename}")
+                target = (base / Path(*member_path.parts)).resolve()
+                if target != base and base not in target.parents:
+                    raise TemplateV3Error(f"unsafe DOCX archive member: {member.filename}")
             archive.extractall(temp_dir)
         media = temp_dir / "word" / "media"
         media.mkdir(parents=True, exist_ok=True)
@@ -751,7 +759,7 @@ def render_docx_from_template(
                 if raw is None:
                     continue
                 value = _normalize_value(raw, default_color=item.get("color", "#17212B"))
-                bbox = [float(value) for value in item["bbox"]]
+                bbox = [float(number) for number in item["bbox"]]
                 background = str(item["background"])
                 font_size = float(value["font_size_pt"] or item.get("font_size_pt") or 7.0)
                 font_size = _fit_single_line_size(
