@@ -1,17 +1,130 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from genoma_policy.version import __version__
+
+
+def _schema_contract_errors(
+    schema: dict[str, Any],
+    instance: Any,
+    root_schema: dict[str, Any],
+    path: str = "$",
+) -> list[str]:
+    errors: list[str] = []
+    if "$ref" in schema:
+        ref = schema["$ref"]
+        if not isinstance(ref, str) or not ref.startswith("#/"):
+            return [f"{path}:unsupported-ref:{ref}"]
+        resolved: Any = root_schema
+        for part in ref[2:].split("/"):
+            resolved = resolved[part.replace("~1", "/").replace("~0", "~")]
+        return _schema_contract_errors(resolved, instance, root_schema, path)
+
+    expected_type = schema.get("type")
+    if expected_type is not None:
+        expected_types = expected_type if isinstance(expected_type, list) else [expected_type]
+
+        def matches(kind: str) -> bool:
+            if kind == "object":
+                return isinstance(instance, dict)
+            if kind == "array":
+                return isinstance(instance, list)
+            if kind == "string":
+                return isinstance(instance, str)
+            if kind == "boolean":
+                return isinstance(instance, bool)
+            if kind == "integer":
+                return isinstance(instance, int) and not isinstance(instance, bool)
+            if kind == "number":
+                return isinstance(instance, (int, float)) and not isinstance(instance, bool)
+            if kind == "null":
+                return instance is None
+            return False
+
+        if not any(matches(kind) for kind in expected_types):
+            return [f"{path}:type:{expected_type}"]
+
+    if "const" in schema and instance != schema["const"]:
+        errors.append(f"{path}:const")
+    if "enum" in schema and instance not in schema["enum"]:
+        errors.append(f"{path}:enum")
+
+    if isinstance(instance, dict):
+        required = schema.get("required", [])
+        for key in required:
+            if key not in instance:
+                errors.append(f"{path}:required:{key}")
+        properties = schema.get("properties", {})
+        if isinstance(properties, dict):
+            for key, value in instance.items():
+                if key in properties:
+                    errors.extend(
+                        _schema_contract_errors(
+                            properties[key], value, root_schema, f"{path}.{key}"
+                        )
+                    )
+                else:
+                    additional = schema.get("additionalProperties", True)
+                    if additional is False:
+                        errors.append(f"{path}:additionalProperties:{key}")
+                    elif isinstance(additional, dict):
+                        errors.extend(
+                            _schema_contract_errors(
+                                additional, value, root_schema, f"{path}.{key}"
+                            )
+                        )
+
+    if isinstance(instance, list):
+        if "minItems" in schema and len(instance) < int(schema["minItems"]):
+            errors.append(f"{path}:minItems")
+        if "maxItems" in schema and len(instance) > int(schema["maxItems"]):
+            errors.append(f"{path}:maxItems")
+        if schema.get("uniqueItems") is True:
+            encoded = [json.dumps(item, sort_keys=True, ensure_ascii=False) for item in instance]
+            if len(encoded) != len(set(encoded)):
+                errors.append(f"{path}:uniqueItems")
+        item_schema = schema.get("items")
+        if isinstance(item_schema, dict):
+            for index, item in enumerate(instance):
+                errors.extend(
+                    _schema_contract_errors(
+                        item_schema, item, root_schema, f"{path}[{index}]"
+                    )
+                )
+
+    if isinstance(instance, str):
+        if "minLength" in schema and len(instance) < int(schema["minLength"]):
+            errors.append(f"{path}:minLength")
+        pattern = schema.get("pattern")
+        if isinstance(pattern, str) and re.search(pattern, instance) is None:
+            errors.append(f"{path}:pattern")
+        if schema.get("format") == "date-time":
+            normalized = instance[:-1] + "+00:00" if instance.endswith("Z") else instance
+            try:
+                datetime.fromisoformat(normalized)
+            except ValueError:
+                errors.append(f"{path}:format:date-time")
+
+    if isinstance(instance, (int, float)) and not isinstance(instance, bool):
+        if "minimum" in schema and instance < schema["minimum"]:
+            errors.append(f"{path}:minimum")
+        if "maximum" in schema and instance > schema["maximum"]:
+            errors.append(f"{path}:maximum")
+
+    return errors
 
 
 class CliTests(unittest.TestCase):
@@ -55,6 +168,7 @@ class CliTests(unittest.TestCase):
                     "version": "v3.4",
                     "sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
                     "effective_date": "17/08/2026",
+                    "canonical_filename": "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt",
                 },
             )
             self.assertEqual(
@@ -71,25 +185,21 @@ class CliTests(unittest.TestCase):
             self.assertFalse(payload["consent"]["verified"])
             self.assertEqual(payload["qc"]["status"], "PROPOSTO")
             self.assertFalse(payload["post_deployment"]["live_smoke_passed"])
-            self.assertEqual(len(payload["section_attestations"]), 263)
+            expected_rule_ids = [f"GENOMA-V3.4-S{section:03d}" for section in range(263)]
+            self.assertEqual(
+                [item["rule_id"] for item in payload["section_attestations"]],
+                expected_rule_ids,
+            )
             first = payload["section_attestations"][0]
-            self.assertEqual(first["rule_id"], "GENOMA-V3.4-S000")
             self.assertEqual(first["status"], "PROPOSTO")
             self.assertEqual(first["decision"], "UNRESOLVED")
             self.assertEqual(first["trace"]["actor_id"], "genoma-policy-engine-scaffold")
             self.assertEqual(first["trace"]["tool_versions"]["genoma-policy-engine"], __version__)
 
-            # The scaffold must satisfy the published execution-manifest contract, so a
-            # renamed or dropped field is caught here rather than at evaluation time.
             schema = json.loads(
                 (ROOT / "policy" / "schema" / "execution-manifest.schema.json").read_text(encoding="utf-8")
             )
-            for key in schema["required"]:
-                self.assertIn(key, payload, f"scaffold is missing schema-required key {key}")
-            ruleset_contract = schema["properties"]["ruleset"]
-            for key in ruleset_contract["required"]:
-                self.assertIn(key, payload["ruleset"])
-            self.assertEqual(payload["ruleset"]["status"], ruleset_contract["properties"]["status"]["const"])
+            self.assertEqual(_schema_contract_errors(schema, payload, schema), [])
 
     def test_scaffold_default_case_id_is_used_when_omitted(self):
         with tempfile.TemporaryDirectory() as td:
