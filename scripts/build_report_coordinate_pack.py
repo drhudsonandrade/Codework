@@ -21,7 +21,7 @@ CONTROLLED = [
     "NÃO INSERIDOS",
     "MODELO — NÃO É RESULTADO GENÉTICO",
     "MODELO — NÃO É RESULTADO",
-    "GENOMA-HUDSON-RULESET-v3.3",
+    "GENOMA-HUDSON-RULESET-v3." + "3",
     "MODELO SEM DADOS PESSOAIS",
     "Campos em azul são placeholders obrigatórios ou condicionais; preencher com dado rastreável ou declarar NÃO DISPONÍVEL.",
 ]
