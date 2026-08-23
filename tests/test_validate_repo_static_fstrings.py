@@ -6,6 +6,8 @@ from pathlib import Path
 
 from scripts.validate_repo import _missing_path_error, validate
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 class ValidateRepoStaticFstringTests(unittest.TestCase):
     def test_static_fstring_format_spec_cannot_hide_superseded_identity(self) -> None:
@@ -18,6 +20,36 @@ class ValidateRepoStaticFstringTests(unittest.TestCase):
             self.assertTrue(
                 any(
                     "reporting/formatted_identity.py" in error
+                    and "superseded identity outside explicit history" in error
+                    and "GENOMA-V3.3" in error
+                    for error in errors
+                ),
+                errors,
+            )
+
+    def test_registered_test_fixtures_do_not_block_the_current_checkout(self) -> None:
+        errors = validate(ROOT)
+        blocked_fixture_errors = [
+            error
+            for error in errors
+            if "superseded identity outside explicit history" in error
+            and (
+                "tests/test_v34_activation_contract.py" in error
+                or "tests/test_validate_repo_static_fstrings.py" in error
+            )
+        ]
+        self.assertEqual(blocked_fixture_errors, [])
+
+    def test_unregistered_test_file_with_superseded_identity_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            stray = root / "tests" / "test_unregistered_history_fixture.py"
+            stray.parent.mkdir(parents=True, exist_ok=True)
+            stray.write_text('RULESET = "GENOMA-V3.3"\n', encoding="utf-8")
+            errors = validate(root)
+            self.assertTrue(
+                any(
+                    "tests/test_unregistered_history_fixture.py" in error
                     and "superseded identity outside explicit history" in error
                     and "GENOMA-V3.3" in error
                     for error in errors
