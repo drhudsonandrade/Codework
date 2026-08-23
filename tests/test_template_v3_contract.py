@@ -1,16 +1,29 @@
+import json
 import os
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
 
+from ruleset_test_support import RULESET
+
 ROOT = Path(__file__).resolve().parents[1]
-RULESET = {
-    "status": "VIGENTE",
-    "version": "v3.4",
-    "effective_date": "17/08/2026",
-    "sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
-}
+
+
+def _minimal_reference_manifest() -> dict:
+    reports = {
+        f"{index:02d}": {
+            "filename": f"{index:02d}.pdf",
+            "sha256": "0" * 64,
+            "page_count": 1,
+            "page_size_pt": [595.303955, 841.889771],
+        }
+        for index in range(1, 12)
+    }
+    return {
+        "schema": "genoma-editorial-v3-reference-manifest-v1",
+        "reports": reports,
+    }
 
 
 class TemplateV3ContractTest(unittest.TestCase):
@@ -35,8 +48,32 @@ class TemplateV3ContractTest(unittest.TestCase):
         self.assertEqual({rid: int(meta["page_count"]) for rid, meta in manifest["reports"].items()}, expected_pages)
         for meta in manifest["reports"].values():
             self.assertRegex(meta["sha256"], r"^[0-9a-f]{64}$")
+            self.assertEqual(len(meta["page_size_pt"]), 2)
+            self.assertTrue(all(float(value) > 0 for value in meta["page_size_pt"]))
         self.assertRegex(manifest["external_coordinate_manifest"]["sha256"], r"^[0-9a-f]{64}$")
         self.assertRegex(manifest["external_coordinate_detail"]["sha256"], r"^[0-9a-f]{64}$")
+
+    def test_reference_manifest_rejects_missing_page_size_without_external_pack(self):
+        from reporting.template_v3 import TemplateV3Error, load_reference_manifest
+
+        manifest = _minimal_reference_manifest()
+        manifest["reports"]["04"].pop("page_size_pt")
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "reference.json"
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaisesRegex(TemplateV3Error, "page_size_pt"):
+                load_reference_manifest(path)
+
+    def test_reference_manifest_rejects_malformed_page_size_without_external_pack(self):
+        from reporting.template_v3 import TemplateV3Error, load_reference_manifest
+
+        manifest = _minimal_reference_manifest()
+        manifest["reports"]["07"]["page_size_pt"] = [595.303955]
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "reference.json"
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaisesRegex(TemplateV3Error, "page_size_pt"):
+                load_reference_manifest(path)
 
     def test_missing_or_wrong_template_pack_fails_closed(self):
         from reporting.template_v3 import TemplateV3Error, verify_template_pack
@@ -94,18 +131,11 @@ class TemplateV3ContractTest(unittest.TestCase):
         from reporting.template_v3 import TemplateV3Error, _patch_docx_svg
 
         with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            malicious = root / "malicious.docx"
-            escaped = root / "escaped.txt"
+            malicious = Path(td) / "malicious.docx"
             with zipfile.ZipFile(malicious, "w") as archive:
                 archive.writestr("../escaped.txt", "no")
-            try:
+            with self.assertRaisesRegex(TemplateV3Error, "unsafe DOCX archive member"):
                 _patch_docx_svg(malicious, [])
-            except TemplateV3Error:
-                pass
-            else:
-                self.fail("unsafe DOCX member path must fail closed")
-            self.assertFalse(escaped.exists())
 
     @unittest.skipUnless(os.environ.get("GENOMA_REPORT_TEMPLATE_DIR"), "external v3 template pack not mounted")
     def test_external_template_pack_verifies_and_report10_strict_docx_is_editable(self):
