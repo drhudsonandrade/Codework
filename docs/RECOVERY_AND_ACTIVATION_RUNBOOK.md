@@ -29,7 +29,7 @@ keeping at least two independent copies and retaining the manifests needed to ve
 
 - Container toolchain pinned in `environment.yml` and verified by `scripts/check_versions.sh`.
 - npm dependency graph pinned in `mcp/package-lock.json`.
-- Fallow action and CLI pinned to 3.16.0.
+- Fallow Action pinned to `fallow-rs/fallow@45fd28766199acb1f939f6862274a37aad12770b`; Fallow CLI pinned to `3.16.0`.
 - GRCh38 acquisition targets declared in `manifests/GRCh38.sources.tsv`.
 - External ruleset identity pinned in `manifests/RULESET_V3.4.sha256` for canonical `VIGENTE / v3.4 / 17/08/2026`.
 - Synthetic FASTQ, BAM and dual-caller VCF generation is deterministic.
