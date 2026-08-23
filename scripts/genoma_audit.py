@@ -378,6 +378,9 @@ def audit(*, allow_template_sealed_only: bool = False) -> dict:
     }
     blocking_failures = [c["id"] for c in checks if c["blocking"] and c["result"] != PASS]
     unavailable = [c["id"] for c in checks if c["operational_status"] == UNAVAILABLE]
+    blocking_unavailable = [
+        c["id"] for c in checks if c["blocking"] and c["operational_status"] == UNAVAILABLE
+    ]
 
     # The normative gate binds the ruleset block to the checks that prove it. A failing
     # or unverifiable ruleset blocks the audit instead of being reported as VIGENTE.
@@ -391,7 +394,7 @@ def audit(*, allow_template_sealed_only: bool = False) -> dict:
         "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "ruleset": ruleset_block,
         "operational_status": UNAVAILABLE if unavailable else EXECUTED,
-        "result": PASS if not blocking_failures else (ERROR if unavailable else FAIL),
+        "result": PASS if not blocking_failures else (ERROR if blocking_unavailable else FAIL),
         "four_planes": planes,
         "checks": checks,
         "blocking_failures": blocking_failures,
@@ -409,7 +412,7 @@ def main() -> int:
     payload = audit(allow_template_sealed_only=args.allow_template_sealed_only)
     Path(args.output).write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
-    # Fail closed on both axes: a check that could not run is as blocking as one that failed.
+    # Exit status follows the blocking result axis; availability is reported independently.
     return 0 if payload["result"] == PASS else 2
 
 
