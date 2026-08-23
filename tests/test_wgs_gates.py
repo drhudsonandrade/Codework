@@ -1,4 +1,5 @@
 import json
+import sys
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -86,31 +87,134 @@ class WgsGateTest(unittest.TestCase):
         self.assertEqual(binding["boot_id"], read_boot_id())
         self.assertIsNotNone(binding["created_at"])
 
-    def test_consent_gate_passes_only_for_explicit_verified_genomic_analysis_scope(self):
-        from scripts.wgs_consent_gate import evaluate_consent
-        manifest = {
-            "sample_id": "S1",
-            "consent": {
-                "status": "VERIFICADO",
-                "consent_id": "consent-1",
-                "version": "1",
-                "purposes": ["genomic_analysis", "clinical_report"],
-                "secondary_findings": "AUTHORIZED",
-            },
-            "provenance": {
-                "status": "VERIFICADO",
-                "source": "laboratory-export",
-                "chain_of_custody_ref": "custody-1",
-            },
-        }
-        result = evaluate_consent(manifest, requested_purpose="genomic_analysis")
-        self.assertEqual(result["status"], "VERIFICADO")
-        self.assertTrue(result["ready_for_first_dna_read"])
 
-    def test_consent_gate_blocks_missing_or_unverified_scope(self):
+class TheFirstReadOfRawDnaNeedsARealConsentTest(unittest.TestCase):
+    """This gate stands between a person's FASTQ/BAM and the first byte of analysis.
+
+    It used to be cleared by six strings typed into the manifest, including the
+    `consent.status: "VERIFICADO"` it then read back as its own verdict, with nothing tying
+    any of it to the bytes about to be read.
+    """
+
+    MANIFEST = {
+        "sample_id": "CASO-WGS",
+        "provenance": {"source": "laboratory-export", "chain_of_custody_ref": "custody-1"},
+    }
+
+    def _files(self, root: Path) -> list[Path]:
+        one, two = root / "R1.fastq", root / "R2.fastq"
+        one.write_text("@r1\nACGT\n+\nIIII\n", encoding="utf-8")
+        two.write_text("@r2\nTGCA\n+\nIIII\n", encoding="utf-8")
+        return [one, two]
+
+    def _consent(self, root: Path, files: list[Path], **overrides):
+        from reporting.consent import input_set_sha256
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from attestations import consent_record
+
+        composite, _ = input_set_sha256(files)
+        record = consent_record(case_id="CASO-WGS", input_sha256=composite, **overrides)
+        path = root / "consent.json"
+        path.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+        return path
+
+    def _evaluate(self, root, manifest=None, consent=None, files=None, domain="TÉCNICO"):
         from scripts.wgs_consent_gate import evaluate_consent
-        result = evaluate_consent({"sample_id": "S1", "consent": {"status": "PROPOSTO"}}, requested_purpose="genomic_analysis")
-        self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+
+        files = files if files is not None else self._files(root)
+        return evaluate_consent(
+            manifest if manifest is not None else dict(self.MANIFEST),
+            requested_domain=domain,
+            consent_path=consent if consent is not None else self._consent(root, files),
+            input_paths=files,
+        )
+
+    def test_a_real_record_bound_to_these_files_grants_the_read(self):
+        with tempfile.TemporaryDirectory() as td:
+            result = self._evaluate(Path(td))
+        self.assertTrue(result["ready_for_first_dna_read"], result["errors"])
+        self.assertEqual("VERIFICADO", result["status"])
+        self.assertEqual(2, len(result["inputs"]))
+        self.assertEqual(64, len(result["input_set_sha256"]))
+
+    def test_the_old_manifest_shape_is_refused_outright(self):
+        """Six typed strings used to reach `ready_for_first_dna_read: true`."""
+        from scripts.wgs_consent_gate import ConsentGateError
+
+        manifest = dict(self.MANIFEST) | {
+            "consent": {"status": "VERIFICADO", "consent_id": "a", "version": "1",
+                        "purposes": ["genomic_analysis"]},
+        }
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaises(ConsentGateError) as caught:
+                self._evaluate(Path(td), manifest=manifest)
+        self.assertIn("bloco `consent`", str(caught.exception))
+
+    def test_a_consent_for_other_files_does_not_authorise_these(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            files = self._files(root)
+            other = root / "other.fastq"
+            other.write_text("@x\nAAAA\n+\nIIII\n", encoding="utf-8")
+            consent = self._consent(root, [other])
+            result = self._evaluate(root, consent=consent, files=files)
+        self.assertFalse(result["ready_for_first_dna_read"])
+        self.assertTrue(any("consentimento" in e for e in result["errors"]), result["errors"])
+
+    def test_adding_a_file_after_consent_was_given_invalidates_it(self):
+        """The digest covers the set, so an unconsented third file is caught."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            files = self._files(root)
+            consent = self._consent(root, files)
+            extra = root / "R3.fastq"
+            extra.write_text("@r3\nGGGG\n+\nIIII\n", encoding="utf-8")
+            result = self._evaluate(root, consent=consent, files=files + [extra])
+        self.assertFalse(result["ready_for_first_dna_read"])
+
+    def test_a_domain_the_record_does_not_authorise_is_refused(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            files = self._files(root)
+            consent = self._consent(root, files, authorized_domains=["ANCESTRALIDADE"])
+            result = self._evaluate(root, consent=consent, files=files, domain="CLÍNICO")
+        self.assertFalse(result["ready_for_first_dna_read"])
+        self.assertTrue(any("não está autorizado" in e for e in result["errors"]), result["errors"])
+
+    def test_a_domain_outside_the_vocabulary_is_refused_before_anything_is_read(self):
+        from scripts.wgs_consent_gate import ConsentGateError
+
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaises(ConsentGateError):
+                self._evaluate(Path(td), domain="genomic_analysis")
+
+    def test_chain_of_custody_is_recorded_as_a_declaration_and_grants_nothing(self):
+        with tempfile.TemporaryDirectory() as td:
+            result = self._evaluate(Path(td))
+        custody = result["chain_of_custody"]
+        self.assertEqual("DECLARADO PELO OPERADOR", custody["status"])
+        self.assertIn("não concede este gate", custody["note"])
+
+    def test_a_missing_chain_of_custody_still_blocks(self):
+        with tempfile.TemporaryDirectory() as td:
+            result = self._evaluate(Path(td), manifest={"sample_id": "CASO-WGS"})
+        self.assertFalse(result["ready_for_first_dna_read"])
+        self.assertTrue(any("chain_of_custody_ref" in e for e in result["errors"]))
+
+    def test_a_consent_for_another_case_does_not_authorise_this_sample(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            files = self._files(root)
+            from reporting.consent import input_set_sha256
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            from attestations import consent_record
+
+            composite, _ = input_set_sha256(files)
+            path = root / "consent.json"
+            path.write_text(json.dumps(
+                consent_record(case_id="OUTRO-CASO", input_sha256=composite), ensure_ascii=False,
+            ), encoding="utf-8")
+            result = self._evaluate(root, consent=path, files=files)
         self.assertFalse(result["ready_for_first_dna_read"])
 
     def test_fastq_manifest_requires_declared_read_group(self):

@@ -56,6 +56,7 @@ from reporting.consent import (
     REQUIRED_AFFIRMATIONS,
     SCHEMA,
     ConsentError,
+    input_set_sha256,
     sha256_file,
     validate_record,
 )
@@ -114,18 +115,23 @@ def _affirmations(args: argparse.Namespace) -> dict[str, bool]:
 
 
 def build_record(args: argparse.Namespace) -> dict[str, Any]:
-    input_path = Path(args.input)
-    if not input_path.is_file():
-        raise ConsentError(f"arquivo de entrada não encontrado: {input_path}")
+    paths = [Path(item) for item in args.input]
+    for candidate in paths:
+        if not candidate.is_file():
+            raise ConsentError(f"arquivo de entrada não encontrado: {candidate}")
+    composite, inputs = input_set_sha256(paths)
     affirmations = _affirmations(args)
     return {
         "schema": SCHEMA,
         "subject_id": args.subject_id,
         "case_id": args.case_id,
         # Hashed here rather than copied from a QC report: the record must be bound to the
-        # bytes even when it is captured before any analysis has run.
-        "input_sha256": sha256_file(input_path),
-        "input_name": input_path.name,
+        # bytes even when it is captured before any analysis has run. A WGS submission is
+        # rarely one file, so the digest is over the whole set — binding to only the first
+        # would leave the rest unconsented.
+        "input_sha256": composite,
+        "input_name": ", ".join(item["name"] for item in inputs),
+        "input_files": inputs,
         "version": args.version,
         "authorized_domains": list(dict.fromkeys(args.domain)),
         "granted_at": args.granted_at,
@@ -154,7 +160,11 @@ def main() -> int:
     )
     parser.add_argument("--case-id", required=True)
     parser.add_argument("--subject-id", required=True, help="identifier of the person assessed")
-    parser.add_argument("--input", required=True, help="the file the consent authorises")
+    parser.add_argument(
+        "--input", required=True, action="append",
+        help="a file the consent authorises; repeat for a multi-file submission "
+             "(FASTQ R1/R2, BAM+BAI). The record binds to the digest of the whole set.",
+    )
     parser.add_argument("--version", required=True, help="version of the consent instrument")
     parser.add_argument("--instrument", required=True, help="what was signed or recorded")
     parser.add_argument("--instrument-version", required=True)

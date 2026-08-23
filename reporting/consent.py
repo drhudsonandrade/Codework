@@ -136,6 +136,37 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def input_set_sha256(paths: "list[Path | str]") -> tuple[str, list[dict[str, Any]]]:
+    """One digest over a set of files, and the per-file digests it was built from.
+
+    A consent record binds to `input_sha256`, and a WGS submission is rarely one file: FASTQ
+    R1 and R2, or a BAM with its index. Binding to only the first would leave the rest
+    unconsented, and binding to a concatenation would depend on the order the operator
+    happened to list them. The digest is taken over the sorted `sha256  basename` lines, so
+    it is the same whichever order the files arrive in and changes if any file does.
+
+    Two files with the same basename are refused rather than silently deduplicated: the line
+    set could not then distinguish them, and a substituted file would hash the same.
+    """
+    entries: list[dict[str, Any]] = []
+    seen: dict[str, str] = {}
+    for path in paths:
+        resolved = Path(path)
+        digest = sha256_file(resolved)
+        if resolved.name in seen and seen[resolved.name] != digest:
+            raise ConsentError(
+                f"dois arquivos distintos chamados {resolved.name!r} na entrada; renomeie um "
+                "deles, porque o vínculo do consentimento não conseguiria distingui-los"
+            )
+        seen[resolved.name] = digest
+        entries.append({"name": resolved.name, "sha256": digest, "size_bytes": resolved.stat().st_size})
+    if not entries:
+        raise ConsentError("nenhum arquivo de entrada foi informado; não há a que vincular o consentimento")
+    lines = sorted(f"{item['sha256']}  {item['name']}" for item in entries)
+    composite = hashlib.sha256(("\n".join(lines) + "\n").encode("utf-8")).hexdigest()
+    return composite, sorted(entries, key=lambda item: item["name"])
+
+
 def domain_for(report_id: str) -> str:
     """The consent domain a report falls in, or a refusal for a report with no entry.
 
