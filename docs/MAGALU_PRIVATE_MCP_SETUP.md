@@ -6,7 +6,7 @@
 
 Repository creation, CI success and a synthetic canary do not establish post-deployment status. Promotion requires deployment on the target VM, current runtime/resource gates, a live MCP canary, and the section 260 suite at 15/15 with no critical failure.
 
-The external ruleset manifest is `manifests/RULESET_V3.4.sha256`. The executable normative source is the sealed 13-part repository transport materialized at runtime by the reviewed materializer; do not maintain a second active ruleset TXT in ChatGPT Project sources or another operational path. The ChatGPT Project may retain only procedural bootstrap instructions plus the canonical identity/digest needed to verify the runtime source.
+The external ruleset manifest is `manifests/RULESET_V3.4.sha256`, and the sealed 13-part transport composition is defined by `normative/sealed/MANIFEST.json`. The executable normative source is that sealed repository transport materialized at runtime by the reviewed materializer; do not maintain a second active ruleset TXT in ChatGPT Project sources or another operational path. The ChatGPT Project may retain only procedural bootstrap instructions plus the canonical identity/digest needed to verify the runtime source.
 
 To verify a securely materialized runtime copy when operating on the target host:
 
@@ -108,7 +108,6 @@ docker run --rm -it \
   -v /srv/genome/refs:/refs \
   codework-genome:local \
   /opt/codework/scripts/build_bwa_mem2_index.sh
-
 docker run --rm -it \
   -e REF_ROOT=/refs \
   -v /srv/genome/refs:/refs:ro \
