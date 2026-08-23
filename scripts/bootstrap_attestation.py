@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -49,6 +50,7 @@ VERIFIER_COMMAND = "python3 -m scripts.bootstrap_attestation --write"
 RESULT_LOCATOR = "deploy/attestations/bootstrap-project-v3.4.json#/checks"
 PENDING_STATUS = "PENDENTE"
 VERIFIED_STATUS = "VERIFICADO"
+FULL_GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 # Every bootstrap check is a literal clause of the sealed canonical ruleset. The check is
 # satisfied only when the clause is found in the verified payload, so the answer is
@@ -85,6 +87,17 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _require_source_revision(revision: Any) -> str:
+    """Require the full lowercase 40-hex Git commit identity used by this project."""
+    if revision == "UNKNOWN":
+        raise BootstrapAttestationError("bootstrap attestation source_commit_sha is UNKNOWN")
+    if not isinstance(revision, str) or FULL_GIT_SHA_RE.fullmatch(revision) is None:
+        raise BootstrapAttestationError(
+            "bootstrap attestation source_commit_sha must be a full 40-character lowercase hex Git commit SHA"
+        )
+    return revision
+
+
 def _source_revision(root: Path) -> str:
     """Repository revision the verifier read, recorded as provenance.
 
@@ -101,7 +114,7 @@ def _source_revision(root: Path) -> str:
     except OSError:
         return "UNKNOWN"
     revision = result.stdout.strip()
-    return revision if result.returncode == 0 and len(revision) == 40 else "UNKNOWN"
+    return revision if result.returncode == 0 and FULL_GIT_SHA_RE.fullmatch(revision) else "UNKNOWN"
 
 
 def verify_project_bootstrap(sealed_dir: str | Path = SEALED_DIR) -> dict[str, Any]:
@@ -160,9 +173,7 @@ def _require_reproducible_method(payload: dict[str, Any], evidence: dict[str, An
         )
     if method.get("kind") != "DETERMINISTIC_VERIFIER":
         raise BootstrapAttestationError("bootstrap attestation method kind is not DETERMINISTIC_VERIFIER")
-    revision = method.get("source_commit_sha")
-    if not isinstance(revision, str) or not revision.strip():
-        raise BootstrapAttestationError("bootstrap attestation is missing source_commit_sha")
+    _require_source_revision(method.get("source_commit_sha"))
     for field in ("verifier", "input", "result_locator"):
         if method.get(field) != evidence[field]:
             raise BootstrapAttestationError(
@@ -245,6 +256,7 @@ def build_attestation(
 ) -> dict[str, Any]:
     """Produce the attestation payload from a verifier run, never from prose."""
     evidence = verify_project_bootstrap(sealed_dir)
+    source_revision = _require_source_revision(_source_revision(root))
     unsatisfied = sorted(name for name, result in evidence["checks"].items() if not result["satisfied"])
     return {
         "attestation_type": "GENOMA_PROJECT_BOOTSTRAP",
@@ -258,7 +270,7 @@ def build_attestation(
         "method": {
             "kind": "DETERMINISTIC_VERIFIER",
             "verifier": evidence["verifier"],
-            "source_commit_sha": _source_revision(root),
+            "source_commit_sha": source_revision,
             "input": evidence["input"],
             "result_locator": evidence["result_locator"],
             "checks_evidence": evidence["checks"],
