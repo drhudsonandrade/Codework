@@ -85,5 +85,48 @@ class PostDeploymentBootstrapTest(unittest.TestCase):
         self.assertFalse(ok)
 
 
+class TheBootstrapMustBelongToTheTargetBeingSmokedTest(unittest.TestCase):
+    """A VERIFICADO attestation is about one deployment, and only that one.
+
+    The smoke read the attestation's status and checks and asked nothing about *which*
+    deployment had been probed, so an attestation earned last month against a different
+    host certified today's target — the inherited PASS section 259 exists to forbid.
+    """
+
+    def _bound(self, base_url: str, **overrides):
+        return _full(deployment={"base_url": base_url, "deployment_id": "d", "revision": "r"},
+                     **overrides)
+
+    def test_an_attestation_bound_to_this_target_passes(self):
+        ok, reasons = evaluate_bootstrap(
+            self._bound("http://127.0.0.1:8787"), "http://127.0.0.1:8787"
+        )
+        self.assertTrue(ok, reasons)
+
+    def test_an_attestation_earned_against_another_host_is_refused(self):
+        ok, reasons = evaluate_bootstrap(
+            self._bound("https://genoma.example.org"), "http://127.0.0.1:8787"
+        )
+        self.assertFalse(ok)
+        self.assertTrue(any("different deployments" in r for r in reasons))
+
+    def test_a_different_port_on_the_same_host_is_a_different_deployment(self):
+        ok, _ = evaluate_bootstrap(
+            self._bound("http://127.0.0.1:9999"), "http://127.0.0.1:8787"
+        )
+        self.assertFalse(ok)
+
+    def test_a_trailing_slash_or_a_path_is_not_a_different_deployment(self):
+        ok, reasons = evaluate_bootstrap(
+            self._bound("http://127.0.0.1:8787/"), "http://127.0.0.1:8787/v1/ruleset"
+        )
+        self.assertTrue(ok, reasons)
+
+    def test_an_attestation_naming_no_deployment_cannot_certify_one(self):
+        ok, reasons = evaluate_bootstrap(_full(), "http://127.0.0.1:8787")
+        self.assertFalse(ok)
+        self.assertTrue(any("does not name the deployment" in r for r in reasons))
+
+
 if __name__ == "__main__":
     unittest.main()

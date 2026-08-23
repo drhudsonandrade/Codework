@@ -24,6 +24,7 @@ if str(ROOT.parent) not in sys.path:
 
 import normative
 
+from reporting import deployment_target
 from reporting.provenance import provenance_blockers
 
 CATALOG_PATH = ROOT / "catalog.json"
@@ -126,6 +127,22 @@ def _safe(value: Any, default: str = "NÃO DISPONÍVEL") -> str:
     return str(value)
 
 
+def _post_deployment_qualifier(data: dict[str, Any]) -> str:
+    """What the POST-DEPLOYMENT verdict was taken against, printed next to the verdict.
+
+    The header printed the bare word PASS. Section 260's ceremony can be run against a
+    container on a CI runner or against a deployed host, and both write a truthful PASS, so
+    the reader of the strongest claim this project makes was given no way to tell which.
+    `provenance_blockers` refuses a payload whose target contradicts its own addresses, so
+    what is printed here cannot be improved by hand-editing the payload.
+    """
+    detail = data.get("post_deployment")
+    if not isinstance(detail, dict):
+        return ""
+    clause = deployment_target.qualifier(detail.get("target"))
+    return f" — {clause}" if clause else ""
+
+
 def _model_markdown(report_id: str, model: dict[str, Any]) -> str:
     lines = [
         f"# {model['title']}",
@@ -164,7 +181,8 @@ def _final_markdown(report_id: str, model: dict[str, Any], data: dict[str, Any])
         f"Caso: {_safe(data.get('case_id'))}",
         f"Versão do modelo: v3.0/{model['code']}",
         "Ruleset: v3.4 / VIGENTE / 17/08/2026",
-        f"POST-DEPLOYMENT: {_safe(data.get('post_deployment_status'), 'PENDENTE')}",
+        f"POST-DEPLOYMENT: {_safe(data.get('post_deployment_status'), 'PENDENTE')}"
+        f"{_post_deployment_qualifier(data)}",
         "",
         "## Finalidade",
         "",

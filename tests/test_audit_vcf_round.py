@@ -229,6 +229,11 @@ class TheWitnessIsReadExactlyAsWrittenTest(unittest.TestCase):
             "post_deployment_status": "PASS", "all_pass": True, "bootstrap_verified": True,
             "critical_failures": 0,
             "ruleset": {"sha256": normative.RAW_SHA256},
+            "target": {
+                "authority": "http://127.0.0.1:8787",
+                "resolved_addresses": ["127.0.0.1"],
+                "network_class": "loopback",
+            },
             "completed_at": datetime.datetime.now(datetime.timezone.utc)
             .isoformat().replace("+00:00", "Z"),
         }

@@ -24,6 +24,7 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 import normative
+from reporting import deployment_target
 
 # Taken from the single source of truth rather than restated: a duplicated identity here
 # would let the live ceremony verify against a version the rest of the repository no longer
@@ -47,13 +48,27 @@ REQUIRED_BOOTSTRAP_CHECKS = (
 )
 
 
-def evaluate_bootstrap(bootstrap: dict[str, Any]) -> tuple[bool, list[str]]:
-    """Ruleset v3.4 section 258: the bootstrap must be really installed and really verified."""
+def evaluate_bootstrap(bootstrap: dict[str, Any], base_url: str | None = None) -> tuple[bool, list[str]]:
+    """Ruleset v3.4 section 258: the bootstrap must be really installed and really verified.
+
+    `base_url` is what makes the attestation *this* deployment's. Without it the smoke
+    accepted any VERIFICADO attestation, so a bootstrap verified last month against a
+    different host certified today's target — the inheritance section 259 forbids.
+    """
     reasons: list[str] = []
     if bootstrap.get("status") != "VERIFICADO":
         reasons.append(f"bootstrap status is {bootstrap.get('status')!r}, not VERIFICADO")
     if bootstrap.get("ruleset_identity") != EXPECTED_IDENTITY:
         reasons.append(f"bootstrap ruleset_identity is {bootstrap.get('ruleset_identity')!r}")
+    if base_url is not None:
+        declared = (bootstrap.get("deployment") or {}).get("base_url")
+        if not declared:
+            reasons.append("bootstrap does not name the deployment it was verified against")
+        elif deployment_target.authority(declared) != deployment_target.authority(base_url):
+            reasons.append(
+                f"bootstrap was verified against {declared!r}, and this smoke is running "
+                f"against {base_url!r}: different deployments"
+            )
     checks = bootstrap.get("checks")
     if not isinstance(checks, dict) or not checks:
         reasons.append("bootstrap declares no checks")
@@ -185,6 +200,11 @@ def main() -> int:
     args = p.parse_args()
     started = time.time()
 
+    # Measured before the first request, from the URL actually about to be dialled. The
+    # ceremony used to point at 127.0.0.1 and still write "against a real container
+    # instance" into the witness; what the run certifies is now read off the target.
+    target = deployment_target.classify(args.base_url)
+
     code, metadata, metadata_raw = http_json(args.base_url, "GET", "/v1/ruleset")
     if code != 200:
         raise RuntimeError(f"live ruleset endpoint returned HTTP {code}")
@@ -195,7 +215,7 @@ def main() -> int:
 
     bootstrap_path = Path(args.bootstrap_attestation)
     bootstrap = json.loads(bootstrap_path.read_text(encoding="utf-8"))
-    bootstrap_ok, bootstrap_reasons = evaluate_bootstrap(bootstrap)
+    bootstrap_ok, bootstrap_reasons = evaluate_bootstrap(bootstrap, args.base_url)
 
     results: list[dict[str, Any]] = []
     passed = 0
@@ -238,7 +258,15 @@ def main() -> int:
 
     evidence = {
         "suite": "GENOMA v3.4 section-260 LIVE post-deployment smoke",
-        "classification": "live HTTP execution against a real container instance; not a unit fixture",
+        # Derived from `target`, not written as a constant. The previous fixed string said
+        # "a real container instance" for every run, including one against a deployed host,
+        # and would have said it for a loopback run too.
+        "classification": (
+            "execução HTTP ao vivo contra "
+            + deployment_target.describe(target)
+            + "; não é fixture de unidade"
+        ),
+        "target": target,
         "deployment_id": args.deployment_id,
         "ruleset": metadata,
         "ruleset_response_sha256": sha256_bytes(metadata_raw),
@@ -255,6 +283,19 @@ def main() -> int:
         # what was actually verified instead of reconstructing it from the summary numbers.
         "post_deployment_claim": post_manifest["post_deployment"],
         "post_deployment_status": "PASS" if overall else "FAIL",
+        # Stated on the face of the evidence so that reading only the summary numbers still
+        # tells you what they cover. A 15/15 against loopback is a true statement about a
+        # process on the verifier's own machine and nothing more.
+        "limitations": [
+            f"O alvo certificado foi {target['authority']!r} "
+            f"({target['network_class']}: {target['note']}).",
+            (
+                "Esta execução não certifica nenhum outro host: um serviço implantado em "
+                "endereço distinto exige nova cerimônia contra a sua própria URL."
+                if not target["reachable_beyond_this_machine"]
+                else "Esta execução certifica o alvo acima; nenhum outro endereço foi contatado."
+            ),
+        ],
         "started_at": datetime.fromtimestamp(started, timezone.utc).isoformat().replace("+00:00", "Z"),
         "completed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "results": results,

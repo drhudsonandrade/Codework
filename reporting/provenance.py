@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Any
 
 import normative
+from reporting import deployment_target
 from reporting.consent import (
     ALLOWED_DOMAINS as ALLOWED_CONSENT_DOMAINS,
     CONSENT_ARTIFACT,
@@ -140,6 +141,9 @@ def _witness_binding_refusal(payload: dict[str, Any]) -> str | None:
     *what* it ran against or *when*, so a witness satisfying them would certify every report
     the project ever produces, including reports built on a ruleset it never saw.
     """
+    target = deployment_target.refusal(payload.get("target"))
+    if target is not None:
+        return target
     ruleset = payload.get("ruleset") if isinstance(payload.get("ruleset"), dict) else {}
     observed = ruleset.get("sha256")
     if observed != normative.RAW_SHA256:
@@ -226,13 +230,19 @@ def witness_verdict(
             else (
                 f"{payload.get('passed')}/{payload.get('total')} casos do conjunto "
                 f"{payload.get('suite')!r} contra a implantação "
-                f"{payload.get('deployment_id')!r}, bootstrap verificado ao vivo, "
-                f"{payload.get('critical_failures')} falhas críticas"
+                f"{payload.get('deployment_id')!r} — "
+                f"{deployment_target.describe(payload.get('target'))} —, bootstrap "
+                f"verificado ao vivo, {payload.get('critical_failures')} falhas críticas"
             )
         ),
         "witness_sha256": sha256,
         "witness_path": path,
         "deployment_id": payload.get("deployment_id"),
+        # What the run reached, carried beside the verdict. A PASS taken against a container
+        # on a CI runner and a PASS taken against a deployed host are both real results and
+        # certify different things; the reader has to be able to tell them apart without
+        # opening the witness file.
+        "target": payload.get("target") if not fixture else None,
         "classification": payload.get("classification"),
         # Named for the same reason the policy verdict names its origin: a reader must be
         # able to tell a live witness from the layout-QA fixture without reading anchors.
@@ -1234,6 +1244,13 @@ def provenance_blockers(data: dict[str, Any]) -> list[str]:
     detail = data.get("post_deployment")
     if isinstance(detail, dict) and detail.get("status") != data.get("post_deployment_status"):
         blockers.append("provenance:post_deployment_disagreement")
+    # The header prints what the verdict was taken against, and that clause is read from
+    # this block rather than from an anchor. Recompute the target's class from the addresses
+    # the block itself records, so editing "loopback" up to "public-host" is caught here
+    # exactly as `witness_verdict` catches it on the way in.
+    if isinstance(detail, dict) and detail.get("target") is not None:
+        if deployment_target.refusal(detail.get("target")) is not None:
+            blockers.append("provenance:post_deployment_target")
 
     declared = data.get("operational_status")
     floor = block.get("operational_status_floor")

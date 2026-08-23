@@ -1,7 +1,33 @@
 name: GENOMA canonical production ceremony
 
+# Two targets, one ceremony.
+#
+#   * `base_url` empty  -> the job builds the exact image for this commit, runs it hardened
+#     on the runner and certifies that container. Real HTTP, real gates, but an ephemeral
+#     CI container: it does not exist once the job ends.
+#   * `base_url` set    -> the job certifies the service already running at that URL and
+#     provisions nothing. This is the only shape that certifies a deployed host.
+#
+# The evidence never has to be trusted on this point: the smoke resolves the URL it dials
+# and records the address class, so a loopback run cannot be published as a host run.
+
 on:
   workflow_dispatch:
+    inputs:
+      base_url:
+        description: >-
+          URL of an already-deployed policy service to certify, e.g.
+          https://genoma.example.org. Leave empty to build and certify a container on this
+          runner instead.
+        required: false
+        type: string
+      require_deployed_host:
+        description: >-
+          Fail the ceremony unless the target resolves to an address reachable beyond this
+          runner. Use it when the run is meant to certify a deployment.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -28,11 +54,13 @@ jobs:
           test "$(stat -c '%a' "$canonical")" = 444
           echo 'ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580  '"$canonical" | sha256sum -c -
       - name: Build exact policy image for this commit
+        if: inputs.base_url == ''
         run: |
           docker build --file policy_engine/Dockerfile --tag genoma-policy-live:${{ github.sha }} .
           docker image inspect genoma-policy-live:${{ github.sha }} --format '{{.Id}}' | tee production-evidence/container-image-id.txt
       - name: Deploy hardened live instance with read-only canonical TXT
         id: deploy
+        if: inputs.base_url == ''
         shell: bash
         run: |
           set -euo pipefail
@@ -46,12 +74,42 @@ jobs:
             -p 127.0.0.1:8787:8787 \
             genoma-policy-live:${{ github.sha }})
           echo "$cid" > production-evidence/container-id.txt
+          echo "GENOMA_BASE_URL=http://127.0.0.1:8787" >> "$GITHUB_ENV"
           for _ in $(seq 1 30); do
             curl -fsS http://127.0.0.1:8787/healthz > production-evidence/healthz.json && break
             sleep 1
           done
-          curl -fsS http://127.0.0.1:8787/v1/ruleset > production-evidence/live-ruleset.json
           docker inspect "$cid" > production-evidence/container-inspect.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          inspect=json.loads(Path('production-evidence/container-inspect.json').read_text())[0]
+          mount=next(m for m in inspect['Mounts'] if m['Destination'].endswith('REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt'))
+          assert mount['RW'] is False
+          assert inspect['HostConfig']['ReadonlyRootfs'] is True
+          assert inspect['HostConfig']['CapDrop']==['ALL']
+          PY
+      # `GENOMA_BASE_URL` is only ever set through the environment file, by exactly one of
+      # these two steps, so there is no job-level default for `$GITHUB_ENV` to have to win
+      # against. The input reaches the shell as a variable rather than as interpolated text.
+      - name: Reach the operator-supplied deployment
+        if: inputs.base_url != ''
+        shell: bash
+        env:
+          SUPPLIED_BASE_URL: ${{ inputs.base_url }}
+        run: |
+          set -euo pipefail
+          echo "GENOMA_BASE_URL=$SUPPLIED_BASE_URL" >> "$GITHUB_ENV"
+          for _ in $(seq 1 30); do
+            curl -fsS "$SUPPLIED_BASE_URL/healthz" > production-evidence/healthz.json && break
+            sleep 2
+          done
+          test -s production-evidence/healthz.json
+      - name: Record the ruleset identity the target actually serves
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS "$GENOMA_BASE_URL/v1/ruleset" > production-evidence/live-ruleset.json
           python - <<'PY'
           import json
           from pathlib import Path
@@ -59,31 +117,51 @@ jobs:
           assert p['status']=='VIGENTE'; assert p['version']=='v3.4'; assert p['effective_date']=='17/08/2026'
           assert p['sha256']=='ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580'
           assert p['section_count']==263
-          inspect=json.loads(Path('production-evidence/container-inspect.json').read_text())[0]
-          mount=next(m for m in inspect['Mounts'] if m['Destination'].endswith('REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt'))
-          assert mount['RW'] is False
-          assert inspect['HostConfig']['ReadonlyRootfs'] is True
-          assert inspect['HostConfig']['CapDrop']==['ALL']
           PY
+      # The committed attestation is the honest PROPOSTO stub, every check false: feeding it
+      # to the smoke makes the ceremony fail, correctly and always. The bootstrap has to be
+      # established against the same target in the same run — a VERIFICADO from another
+      # deployment is exactly the inherited PASS section 259 forbids, and the smoke now
+      # refuses an attestation whose base URL is not the one it is dialling.
+      - name: Establish the bootstrap attestation against this target
+        run: |
+          python3 scripts/verify_bootstrap_live.py \
+            --base-url "$GENOMA_BASE_URL" \
+            --deployment-id "github-${GITHUB_RUN_ID}-${GITHUB_SHA}" \
+            --revision "${GITHUB_SHA}" \
+            --output production-evidence/bootstrap-live.json \
+            --attestation-out production-evidence/bootstrap-attestation.json
       - name: Execute canonical section-260 live smoke through HTTP
         run: |
           python3 scripts/run_live_post_deployment_smoke.py \
-            --base-url http://127.0.0.1:8787 \
-            --bootstrap-attestation deploy/attestations/bootstrap-project-v3.4.json \
+            --base-url "$GENOMA_BASE_URL" \
+            --bootstrap-attestation production-evidence/bootstrap-attestation.json \
             --deployment-id "github-${GITHUB_RUN_ID}-${GITHUB_SHA}" \
             --output production-evidence/live-section-260.json
       - name: Hash complete evidence bundle and verify result
+        env:
+          REQUIRE_DEPLOYED_HOST: ${{ inputs.require_deployed_host }}
         run: |
           jq -e '.passed == 15 and .total == 15 and .critical_failures == 0 and .post_deployment_status == "PASS"' production-evidence/live-section-260.json >/dev/null
+          # The measured target class, not the input that was typed: if the supplied URL
+          # happened to point back at this runner, the ceremony says so and stops.
+          if [ "${REQUIRE_DEPLOYED_HOST}" = "true" ]; then
+            jq -e '.target.reachable_beyond_this_machine == true' production-evidence/live-section-260.json >/dev/null \
+              || { echo "::error::require_deployed_host was set, but the target resolved to $(jq -r '.target.network_class' production-evidence/live-section-260.json)"; exit 1; }
+          fi
           (cd production-evidence && sha256sum * | sort) > production-evidence.sha256
           python3 - <<'PY'
           import json
           from pathlib import Path
           p=json.loads(Path('production-evidence/live-section-260.json').read_text())
+          t=p['target']
           print(f"POST-DEPLOYMENT {p['post_deployment_status']}: {p['passed']}/{p['total']}, critical_failures={p['critical_failures']}")
+          print(f"target: {t['authority']} -> {t['resolved_addresses']} [{t['network_class']}]")
+          for line in p['limitations']:
+              print(f"  - {line}")
           PY
       - name: Stop live instance after evidence capture
-        if: always()
+        if: always() && inputs.base_url == ''
         run: |
           docker logs genoma-policy-live > production-evidence/container.log 2>&1 || true
           docker rm -f genoma-policy-live >/dev/null 2>&1 || true

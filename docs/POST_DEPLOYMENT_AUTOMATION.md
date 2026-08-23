@@ -52,6 +52,60 @@ This is strictly stronger evidence than inspection: it tests the running system.
 fact any probe can establish. `--deployment-id` and `--revision` are therefore required and
 recorded: the machine proves the behaviour, the caller names the target.
 
+## What the ceremony certifies, and how you can tell
+
+`genoma-production-ceremony.yml` and `genoma-production-witness.yml` used to do one thing:
+`docker build`, `docker run` on the GitHub runner, and smoke `http://127.0.0.1:8787`. That
+is a real live HTTP execution against a real container — and it is an **ephemeral CI
+container** that ceases to exist when the job ends. The witness recorded the fixed string
+*"live HTTP execution against a real container instance"* whichever address had been
+dialled, so nothing downstream could tell that run from one against a laboratory's server.
+
+Both workflows now take a `base_url` input:
+
+| `base_url` | what happens | what it certifies |
+|---|---|---|
+| empty | builds the image for this commit and runs it hardened on the runner | that container, for the life of the job |
+| set | provisions nothing, smokes the service already at that URL | that deployment |
+
+The distinction is **measured, not declared**. `reporting/deployment_target.py` parses the
+URL the smoke is about to dial, resolves it, and classifies the addresses as `loopback`,
+`private-network`, `public-host` or `unresolved`. A `--deployment-kind deployed-host` flag
+would have been one more self-declared field feeding the gate that reads it; a loopback run
+records loopback whatever its operator intended, and a name resolving to several addresses
+takes the weakest class, because which one was reached is not recorded.
+
+That target travels the whole way:
+
+- into the smoke's `classification` and `limitations`, replacing the fixed string;
+- into `witness.json`, which the workflow refuses to write without one;
+- into `witness_verdict`, which returns PENDENTE for a witness that does not say what it
+  certified, and **recomputes the class from the addresses the witness itself records** — so
+  editing `"network_class": "public-host"` into a loopback witness does not survive a read;
+- onto the report's identity header, which now prints
+  `POST-DEPLOYMENT: PASS — verificado contra serviço local ou contêiner efêmero, não um host
+  implantado (http://127.0.0.1:8787)` instead of the bare word;
+- through `provenance_blockers`, which re-runs the same recomputation on the compiled
+  payload, so the printed clause cannot be improved by hand-editing.
+
+`require_deployed_host: true` on the ceremony fails the run unless the measured class is
+reachable beyond the runner — for when the run is *meant* to certify a deployment.
+
+### The bootstrap is established in the same run, against the same target
+
+Both workflows passed `deploy/attestations/bootstrap-project-v3.4.json` to the smoke. That
+file is the honest PROPOSTO stub with all eight checks `false`, so the ceremony could only
+ever fail. Worse, the fix of committing a VERIFICADO one would be an inherited PASS —
+exactly what section 259 forbids. The workflows now run `verify_bootstrap_live.py` against
+`$GENOMA_BASE_URL` first and feed the smoke *that* attestation, and the smoke refuses an
+attestation whose `deployment.base_url` is not the URL it is dialling:
+
+```
+bootstrap_blockers: ["bootstrap was verified against 'https://genoma.example.org',
+                     and this smoke is running against 'http://127.0.0.1:8787':
+                     different deployments"]
+```
+
 ## The chain, verified end to end
 
 Against the real policy engine (`python3 -m genoma_policy serve`):
@@ -99,9 +153,13 @@ python3 scripts/verify_bootstrap_live.py \
 
 python3 scripts/run_live_post_deployment_smoke.py \
   --base-url https://your-deployment \
-  --bootstrap-attestation deploy/attestations/bootstrap-project-v3.4.json \
+  --bootstrap-attestation evidence/bootstrap-live-attestation.json \
   --deployment-id prod-2026-08-19 \
   --output evidence/live-smoke.json
 ```
+
+The smoke's `--bootstrap-attestation` must be the one `--attestation-out` just wrote for the
+same URL; the committed `deploy/attestations/bootstrap-project-v3.4.json` is the PROPOSTO
+stub and will correctly fail the run.
 
 Both exit non-zero when the deployment does not earn the verdict.
