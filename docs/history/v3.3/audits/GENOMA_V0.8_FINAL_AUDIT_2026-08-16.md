@@ -58,7 +58,7 @@ SHA-256 canônico: `187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68
 
 - Dados genéticos pessoais não são commitados no GitHub nem usados como fixture de CI.
 - SNP-array real e WGS real permanecem separados de fixtures sintéticas.
-- Etapas não executadas permanecem PROPOSTO/NÃO DISPONÍVEL.
+- Etapas não executadas têm status PROPOSTO ou NÃO DISPONÍVEL.
 
 ## Gate final
 
