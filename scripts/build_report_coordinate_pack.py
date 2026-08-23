@@ -164,15 +164,63 @@ def _ruleset_control_sources(text: str) -> list[str]:
     return sources
 
 
+def _ruleset_control_occurrences(page: fitz.Page) -> list[tuple[str, fitz.Rect, dict[str, Any]]]:
+    """Locate every ruleset marker from layout spans, including line-split markers.
+
+    ``Page.search_for`` does not reliably match a marker whose text is split across
+    separate PDF lines. Compacting only whitespace while retaining a character-to-span
+    owner map lets the compiler validate the complete marker and recover one union bbox
+    for each physical occurrence without trusting plain-text extraction alone.
+    """
+    spans = _spans(page)
+    compact_chars: list[str] = []
+    owners: list[int] = []
+    for index, span in enumerate(spans):
+        for char in str(span["text"]):
+            if char.isspace():
+                continue
+            compact_chars.append(char)
+            owners.append(index)
+    compact = "".join(compact_chars)
+    found: list[tuple[str, fitz.Rect, dict[str, Any]]] = []
+    offset = 0
+    while True:
+        start = compact.find(RULESET_CONTROL_PREFIX, offset)
+        if start < 0:
+            break
+        match = RULESET_CONTROL_RE.match(compact, start)
+        if match is None:
+            raise RuntimeError("malformed GENOMA ruleset control marker")
+        marker = match.group(0)
+        before = compact[start - 1] if start else ""
+        after = compact[match.end()] if match.end() < len(compact) else ""
+        if before and (before.isalnum() or before in "_-"):
+            raise RuntimeError(f"malformed GENOMA ruleset control marker: {marker!r}")
+        if after and (after.isalnum() or after in "._-"):
+            raise RuntimeError(f"malformed GENOMA ruleset control marker: {marker + after!r}")
+        if marker != CANONICAL_RULESET_CONTROL:
+            raise RuntimeError(f"noncanonical GENOMA ruleset control marker: {marker}")
+        indices = sorted(set(owners[start:match.end()]))
+        if not indices:
+            raise RuntimeError("canonical GENOMA ruleset control marker has no layout span")
+        rect = _union([spans[index]["bbox"] for index in indices])
+        found.append((marker, rect, spans[indices[0]]))
+        offset = match.end()
+    return found
+
+
+def _control_signature(rect: fitz.Rect) -> tuple[float, float, float, float]:
+    return tuple(round(value, 3) for value in (rect.x0, rect.y0, rect.x1, rect.y1))
+
+
 def _controls(page: fitz.Page) -> list[tuple[str, fitz.Rect, dict[str, Any]]]:
     spans = _spans(page)
     result: list[tuple[str, fitz.Rect, dict[str, Any]]] = []
-    sources = list(CONTROLLED)
-    sources.extend(_ruleset_control_sources(page.get_text("text", sort=True)))
-    for source in dict.fromkeys(sources):
+    for source in CONTROLLED:
         for rect in page.search_for(source):
             first = next((s for s in spans if (s["bbox"] & rect).get_area() > 0), None)
             result.append((source, rect, first or {"size": 7.0, "font": "DejaVuSans", "color": 0}))
+    result.extend(_ruleset_control_occurrences(page))
     return result
 
 
@@ -211,7 +259,22 @@ def compile_pack(template_dir: Path, reference_index: Path) -> dict[str, Any]:
                         "guidance_only": token == "[[CAMPO]]",
                     }
                 )
-            for source_text, rect, span in _controls(page):
+            expected_ruleset_controls = Counter(
+                _control_signature(rect)
+                for _, rect, _ in _ruleset_control_occurrences(page)
+            )
+            page_controls = _controls(page)
+            actual_ruleset_controls = Counter(
+                _control_signature(rect)
+                for source_text, rect, _ in page_controls
+                if source_text == CANONICAL_RULESET_CONTROL
+            )
+            if actual_ruleset_controls != expected_ruleset_controls:
+                raise RuntimeError(
+                    f"canonical ruleset controlled-span mismatch on report {report_id} page {page_number}: "
+                    f"expected {sum(expected_ruleset_controls.values())}, got {sum(actual_ruleset_controls.values())}"
+                )
+            for source_text, rect, span in page_controls:
                 controls.append(
                     {
                         "source_text": source_text,
