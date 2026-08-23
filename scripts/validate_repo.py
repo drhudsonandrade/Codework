@@ -64,6 +64,11 @@ SKIP_PARTS = {".git", "node_modules", "dist", "__pycache__", ".pytest_cache"}
 TEXT_IDENTITY_SUFFIXES = {
     ".json", ".md", ".nf", ".py", ".rego", ".sh", ".toml", ".ts", ".txt", ".yaml", ".yml",
 }
+MISSING_PATH_HINTS = {
+    "manifests/GRCh38.sources.tsv": "restore the tracked GRCh38 source manifest before running the Runtime/Resource Gate",
+    "manifests/RULESET_V3.4.sha256": "restore the tracked canonical SHA manifest; do not add an active plaintext ruleset to the repository",
+    "normative/sealed/MANIFEST.json": "restore the sealed transport manifest; materialization is runtime-only after the transport is valid",
+}
 ACTIVE_IDENTITY_SURFACES = (
     "scripts/run_live_post_deployment_smoke.py", "scripts/verify_ruleset.sh", "scripts/genoma_audit.py",
     "scripts/run_snp_array.py", "scripts/annotate_partial_genome.py", "scripts/build_wgs_curated_manifest.py",
@@ -134,6 +139,31 @@ def _constant_value(node: ast.AST) -> str | int | float | bool | None:
     return None
 
 
+def _formatted_constant(value: ast.FormattedValue) -> str | None:
+    constant = _constant_value(value.value)
+    if constant is None:
+        return None
+    if value.conversion == -1:
+        converted: object = constant
+    elif value.conversion == 115:  # !s
+        converted = str(constant)
+    elif value.conversion == 114:  # !r
+        converted = repr(constant)
+    elif value.conversion == 97:  # !a
+        converted = ascii(constant)
+    else:
+        return None
+    if value.format_spec is None:
+        return str(converted)
+    format_spec = _constant_string(value.format_spec)
+    if format_spec is None:
+        return None
+    try:
+        return format(converted, format_spec)
+    except (TypeError, ValueError):
+        return None
+
+
 def _constant_string(node: ast.AST) -> str | None:
     """Fold static string expressions without executing repository code."""
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
@@ -151,10 +181,10 @@ def _constant_string(node: ast.AST) -> str | None:
                 parts.append(value.value)
                 continue
             if isinstance(value, ast.FormattedValue):
-                constant = _constant_value(value.value)
-                if constant is None or value.format_spec is not None or value.conversion not in {-1, 115}:
+                rendered = _formatted_constant(value)
+                if rendered is None:
                     return None
-                parts.append(str(constant))
+                parts.append(rendered)
                 continue
             return None
         return "".join(parts)
@@ -211,10 +241,17 @@ def validate_superseded_identity_locations(root: Path, errors: list[str]) -> Non
                 errors.append(f"superseded identity outside explicit history: {relative}: {token}")
 
 
+def _missing_path_error(relative: str) -> str:
+    hint = MISSING_PATH_HINTS.get(relative)
+    if hint:
+        return f"missing required path: {relative} — {hint}"
+    return f"missing required path: {relative}"
+
+
 def validate(root: Path) -> list[str]:
     errors: list[str] = []
     errors.extend(
-        f"missing required path: {relative}"
+        _missing_path_error(relative)
         for relative in REQUIRED_PATHS
         if not (root / relative).is_file()
     )
