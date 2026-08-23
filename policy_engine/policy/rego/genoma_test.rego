@@ -40,6 +40,11 @@ test_reject_missing_ruleset_canonical_filename if {
   not guard.allow with input as input_doc
 }
 
+test_reject_wrong_ruleset_canonical_filename if {
+  input_doc := object.union(base, {"ruleset": object.union(base_ruleset, {"canonical_filename": "outro.txt"})})
+  not guard.allow with input as input_doc
+}
+
 test_reject_missing_ruleset_sha256 if {
   input_doc := object.union(object.remove(base, {"ruleset"}), {"ruleset": object.remove(base_ruleset, {"sha256"})})
   not guard.allow with input as input_doc
