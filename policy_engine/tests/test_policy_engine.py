@@ -23,7 +23,7 @@ HISTORICAL_IDENTITY_FIXTURE = REPO_ROOT / "docs" / "history" / "v3.3" / "superse
 
 
 class HistoricalIdentityFixtureMissingError(RuntimeError):
-    def __init__(self, path: Path):
+    def __init__(self, path: Path) -> None:
         super().__init__(f"superseded identity fixture missing: {path}")
 
 
@@ -99,21 +99,41 @@ class PolicyEngineTests(unittest.TestCase):
             )
         return manifest
 
-    def test_ruleset_gate_rejects_missing_status(self):
-        manifest = self.valid_analysis_manifest()
-        manifest["ruleset"].pop("status")
+    def _assert_ruleset_gate_rejects(self, manifest):
         report = self.engine.evaluate(manifest)
         gate = next(gate for gate in report.gates if gate.gate == "RULESET_GATE")
         self.assertEqual(gate.state.value, "FAIL")
         self.assertFalse(report.ready)
 
+    def test_ruleset_gate_rejects_missing_ruleset_object(self):
+        manifest = self.valid_analysis_manifest()
+        manifest.pop("ruleset")
+        self._assert_ruleset_gate_rejects(manifest)
+
+    def test_ruleset_gate_rejects_missing_status(self):
+        manifest = self.valid_analysis_manifest()
+        manifest["ruleset"].pop("status")
+        self._assert_ruleset_gate_rejects(manifest)
+
     def test_ruleset_gate_rejects_non_vigente_status(self):
         manifest = self.valid_analysis_manifest()
         manifest["ruleset"]["status"] = "PENDENTE"
-        report = self.engine.evaluate(manifest)
-        gate = next(gate for gate in report.gates if gate.gate == "RULESET_GATE")
-        self.assertEqual(gate.state.value, "FAIL")
-        self.assertFalse(report.ready)
+        self._assert_ruleset_gate_rejects(manifest)
+
+    def test_ruleset_gate_rejects_wrong_version(self):
+        manifest = self.valid_analysis_manifest()
+        manifest["ruleset"]["version"] = "v3.5"
+        self._assert_ruleset_gate_rejects(manifest)
+
+    def test_ruleset_gate_rejects_wrong_effective_date(self):
+        manifest = self.valid_analysis_manifest()
+        manifest["ruleset"]["effective_date"] = "18/08/2026"
+        self._assert_ruleset_gate_rejects(manifest)
+
+    def test_ruleset_gate_rejects_wrong_sha256(self):
+        manifest = self.valid_analysis_manifest()
+        manifest["ruleset"]["sha256"] = "0" * 64
+        self._assert_ruleset_gate_rejects(manifest)
 
     def test_post_deployment_is_nonblocking_pending_by_default(self):
         report = self.engine.evaluate(self.valid_analysis_manifest())
