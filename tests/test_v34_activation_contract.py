@@ -107,6 +107,22 @@ class V34ActivationContractTests(unittest.TestCase):
         self.assertFalse((ROOT / "manifests" / "RULESET_V3.3.sha256").exists())
         self.assertFalse((ROOT / "deploy" / "attestations" / "bootstrap-project-v3.3.json").exists())
 
+    def test_stray_superseded_identity_outside_history_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            stray = root / "policy_engine" / "docs" / "stray.md"
+            stray.parent.mkdir(parents=True, exist_ok=True)
+            stray.write_text("compiled rule GENOMA-V3.3-S001", encoding="utf-8")
+            errors = validate(root)
+            self.assertTrue(
+                any(
+                    "policy_engine/docs/stray.md" in error
+                    and "superseded identity outside explicit history" in error
+                    for error in errors
+                ),
+                errors,
+            )
+
     def test_bootstrap_attestation_is_digest_bound_and_complete(self) -> None:
         path = ROOT / "deploy" / "attestations" / "bootstrap-project-v3.4.json"
         evidence = verify_bootstrap_attestation(path)
