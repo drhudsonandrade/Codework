@@ -97,7 +97,17 @@ ACTIVE_IDENTITY_SURFACES = (
     ".github/workflows/genoma-ngs-runtime-gate.yml", ".github/workflows/genoma-snp-array.yml",
     "docs/DETERMINISTIC_ENGINE.md", "docs/PRODUCTION_CEREMONY.md", "docs/MAGALU_PRIVATE_MCP_SETUP.md",
     "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md", "docs/SNP_ARRAY_PARTIAL_GENOME.md", "docs/PR_BODY.md",
+    "docs/GRCH38_COMPUTE_STRATEGY.md", "docs/HIGHMEM_GRCH38_RUNNER.md", "docs/PORTABILITY_MATRIX.md",
+    "docs/EDITORIAL_V3_PIXEL_QA.md", "docs/GITHUB_MOBILE_IMPORT.md", "docs/FALLOW_SECURITY_REVIEW.md",
 )
+
+# Live documentation carries the active identity and must migrate with it. Dated
+# records — audits, plans and validations named for the day they describe — are
+# point-in-time evidence like docs/history, so pinning them to the current
+# version would falsify what they recorded. Any other doc must be registered
+# above; DOCUMENTATION_SURFACE_COVERAGE below is what enforces that, so a new
+# document cannot quietly become an unchecked home for a superseded identity.
+HISTORICAL_DOC_PATTERN = re.compile(r"(?:^|/)(?:history|audits|plans)/|\d{4}-\d{2}-\d{2}")
 
 
 # A superseded identity is only dangerous when something can activate it. These keys
@@ -163,6 +173,30 @@ def validate_active_identity_text(text: str, relative: str, errors: list[str]) -
     for token in OLD_ACTIVE_TOKENS:
         if token in text:
             errors.append(f"active ruleset surface still references superseded identity: {relative}: {token}")
+
+
+def validate_documentation_surface_coverage(root: Path, errors: list[str]) -> None:
+    """Every live document must be a declared identity surface.
+
+    An unregistered document is never scanned, so a superseded identity can sit
+    in it indefinitely and survive a migration untouched — which is exactly how
+    the v3.3 Runtime/Resource Gate reference outlived the move to v3.4. Checking
+    only the registered files makes the registry itself the weak point, so the
+    registry is checked for completeness here rather than trusted.
+    """
+    docs = root / "docs"
+    if not docs.is_dir():
+        return
+    registered = set(ACTIVE_IDENTITY_SURFACES)
+    for path in sorted(docs.rglob("*.md")):
+        relative = path.relative_to(root).as_posix()
+        if HISTORICAL_DOC_PATTERN.search(relative) or relative in registered:
+            continue
+        errors.append(
+            f"documentation surface is not covered by the identity scanner: {relative}; "
+            "add it to ACTIVE_IDENTITY_SURFACES, or place it under a dated/historical path "
+            "if it is a point-in-time record"
+        )
 
 
 def _constant_value(node: ast.AST) -> str | int | float | bool | None:
@@ -408,6 +442,8 @@ def validate(root: Path) -> list[str]:
         path = root / relative
         if path.is_file():
             validate_active_identity_text(path.read_text(encoding="utf-8", errors="replace"), relative, errors)
+
+    validate_documentation_surface_coverage(root, errors)
 
     manifest = root / "manifests/GRCh38.sources.tsv"
     if manifest.is_file():

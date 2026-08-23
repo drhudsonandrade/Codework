@@ -17,8 +17,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.validate_repo import (
+    ACTIVE_IDENTITY_SURFACES,
     SUPERSEDED_STRONG_TOKENS,
     SUPERSEDED_WEAK_TOKENS,
+    validate_active_identity_text,
+    validate_documentation_surface_coverage,
     validate_superseded_identity_locations,
 )
 
@@ -111,6 +114,56 @@ class RepositoryIsCleanUnderTheScannerTest(unittest.TestCase):
     def test_repository_has_no_superseded_identity_findings(self):
         errors: list[str] = []
         validate_superseded_identity_locations(ROOT, errors)
+        self.assertEqual(errors, [])
+
+
+class DocumentationSurfaceCoverageTest(unittest.TestCase):
+    """The registry of scanned surfaces must itself be complete.
+
+    A document nobody registered is a document nobody scans, which is how the
+    v3.3 Runtime/Resource Gate reference in docs/GRCH38_COMPUTE_STRATEGY.md
+    survived the migration to v3.4 untouched. Asserting only that the registered
+    files are clean would leave that gap open for the next document.
+    """
+
+    def _coverage_errors(self, extra: dict[str, str] | None = None) -> list[str]:
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            shutil.copytree(ROOT / "docs", root / "docs")
+            for relative, content in (extra or {}).items():
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content, encoding="utf-8")
+            errors: list[str] = []
+            validate_documentation_surface_coverage(root, errors)
+            return errors
+
+    def test_every_live_document_in_this_checkout_is_a_declared_surface(self) -> None:
+        self.assertEqual(self._coverage_errors(), [])
+
+    def test_an_unregistered_live_document_is_rejected(self) -> None:
+        errors = self._coverage_errors({"docs/NEW_STRATEGY.md": "# New strategy\n"})
+        self.assertTrue(
+            any("docs/NEW_STRATEGY.md" in error and "not covered by the identity scanner" in error for error in errors),
+            errors,
+        )
+
+    def test_dated_and_historical_records_stay_exempt(self) -> None:
+        """Point-in-time evidence must keep the version it actually recorded."""
+        exempt = {
+            "docs/PRE_DEPLOYMENT_VALIDATION_2026-08-15.md": "Recorded under v3.3.\n",
+            "docs/audits/GENOMA_AUDIT_2026-08-16.md": "Audited v3.3 before migration.\n",
+            "docs/superpowers/plans/2026-08-14-private-mcp.md": "Planned against v3.3.\n",
+            "docs/history/v3.3/notes.md": "Historical.\n",
+        }
+        self.assertEqual(self._coverage_errors(exempt), [])
+
+    def test_the_compute_strategy_doc_is_registered_and_declares_the_active_version(self) -> None:
+        """The exact surface that went stale, pinned from both sides."""
+        self.assertIn("docs/GRCH38_COMPUTE_STRATEGY.md", ACTIVE_IDENTITY_SURFACES)
+        text = (ROOT / "docs" / "GRCH38_COMPUTE_STRATEGY.md").read_text(encoding="utf-8")
+        errors: list[str] = []
+        validate_active_identity_text(text, "docs/GRCH38_COMPUTE_STRATEGY.md", errors)
         self.assertEqual(errors, [])
 
 

@@ -2,7 +2,7 @@
 
 ## Objective
 
-Eliminate the need for a permanently running >=96 GiB physical runner **without weakening** the GENOMA v3.3 Runtime/Resource Gate.
+Eliminate the need for a permanently running >=96 GiB physical runner **without weakening** the GENOMA v3.4 Runtime/Resource Gate.
 
 ## Constraint verified from primary sources
 
