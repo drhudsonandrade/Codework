@@ -33,14 +33,37 @@ marketplace_present() {
   jq -e '[.marketplaces[]? | select(.name == "codework-codex")] | length == 1' >/dev/null
 }
 
-plugin_present() {
-  jq -e '[
-    .installed[]?, .available[]?
+plugin_available() {
+  jq -e --arg expected_sha "$CODERABBIT_PLUGIN_SOURCE_SHA" '[
+    .available[]?
     | select(
-        (.pluginId == "coderabbit@codework-codex")
-        or (.name == "coderabbit" and .marketplaceName == "codework-codex")
+        .pluginId == "coderabbit@codework-codex"
+        and .name == "coderabbit"
+        and .marketplaceName == "codework-codex"
+        and .installed == false
+        and .source.source == "git-subdir"
+        and .source.url == "openai/plugins"
+        and .source.path == "plugins/coderabbit"
+        and .source.sha == $expected_sha
       )
-  ] | length >= 1' >/dev/null
+  ] | length == 1' >/dev/null
+}
+
+plugin_installed() {
+  jq -e --arg expected_sha "$CODERABBIT_PLUGIN_SOURCE_SHA" '[
+    .installed[]?
+    | select(
+        .pluginId == "coderabbit@codework-codex"
+        and .name == "coderabbit"
+        and .marketplaceName == "codework-codex"
+        and .installed == true
+        and .enabled == true
+        and .source.source == "git-subdir"
+        and .source.url == "openai/plugins"
+        and .source.path == "plugins/coderabbit"
+        and .source.sha == $expected_sha
+      )
+  ] | length == 1' >/dev/null
 }
 
 marketplaces_json="$(codex plugin marketplace list --json)"
@@ -50,12 +73,15 @@ fi
 marketplaces_json="$(codex plugin marketplace list --json)"
 marketplace_present <<<"$marketplaces_json" || fail "marketplace codework-codex não foi confirmado por campo de identidade após registro."
 
+# Availability is discovery only. Success requires an installed+enabled plugin whose
+# resolved source still matches the reviewed git-subdir SHA.
 plugins_json="$(codex plugin list --marketplace codework-codex --json --available)"
-if ! plugin_present <<<"$plugins_json"; then
+if ! plugin_installed <<<"$plugins_json"; then
+  plugin_available <<<"$plugins_json" || fail "plugin coderabbit não está disponível a partir do source SHA revisado."
   codex plugin add coderabbit@codework-codex --json >/dev/null
 fi
-plugins_json="$(codex plugin list --marketplace codework-codex --json --available)"
-plugin_present <<<"$plugins_json" || fail "plugin coderabbit não foi confirmado por identidade no marketplace codework-codex."
+plugins_json="$(codex plugin list --marketplace codework-codex --json)"
+plugin_installed <<<"$plugins_json" || fail "plugin coderabbit não foi confirmado como instalado, habilitado e preso ao source SHA revisado."
 
 if ! command -v coderabbit >/dev/null 2>&1; then
   cat >&2 <<EOF
@@ -96,10 +122,10 @@ if ! coderabbit auth status --agent >/dev/null 2>&1; then
 fi
 coderabbit auth status --agent >/dev/null
 
-# Final confirmation uses the same structured predicates as the installation path.
+# Final confirmation repeats the installed-only, source-bound predicates.
 marketplaces_json="$(codex plugin marketplace list --json)"
-plugins_json="$(codex plugin list --marketplace codework-codex --json --available)"
+plugins_json="$(codex plugin list --marketplace codework-codex --json)"
 marketplace_present <<<"$marketplaces_json" || fail "marketplace perdeu a identidade esperada antes da confirmação final."
-plugin_present <<<"$plugins_json" || fail "plugin perdeu a identidade esperada antes da confirmação final."
+plugin_installed <<<"$plugins_json" || fail "plugin perdeu o estado instalado/habilitado ou o source SHA esperado antes da confirmação final."
 
 echo "CodeRabbit Codex plugin + CLI configurados para este workspace. Reinicie/abra nova sessão do Codex antes de usar o plugin."
