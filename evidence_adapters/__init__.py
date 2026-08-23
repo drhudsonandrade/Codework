@@ -53,7 +53,15 @@ def _default_transport(request: urllib.request.Request) -> tuple[bytes, Mapping[
             values = response.headers.get_all(name) or []
             if values:
                 headers[str(name).lower()] = tuple(str(value) for value in values)
-        payload = response.read(MAX_RESPONSE_BYTES + 1)
+        chunks: list[bytes] = []
+        total = 0
+        while total <= MAX_RESPONSE_BYTES:
+            chunk = response.read(min(64 * 1024, MAX_RESPONSE_BYTES + 1 - total))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+        payload = b"".join(chunks)
         if len(payload) > MAX_RESPONSE_BYTES:
             raise EvidenceResponseTooLargeError(
                 f"evidence response exceeds {MAX_RESPONSE_BYTES} bytes"
