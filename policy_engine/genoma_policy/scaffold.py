@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from .ruleset import Ruleset
+from .version import __version__
 
 
 def scaffold_manifest(ruleset: Ruleset, *, case_id: str = "CASE-ID") -> dict[str, Any]:
@@ -47,7 +48,7 @@ def scaffold_manifest(ruleset: Ruleset, *, case_id: str = "CASE-ID") -> dict[str
                     "run_id": "UNASSIGNED",
                     "input_sha256": [],
                     "output_sha256": [],
-                    "tool_versions": {"genoma-policy-engine": "0.2.0"},
+                    "tool_versions": {"genoma-policy-engine": __version__},
                 },
             }
             for section in ruleset.sections
