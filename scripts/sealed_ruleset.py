@@ -214,7 +214,9 @@ def _active_vigente_files(output_dir: Path) -> list[Path]:
     for candidate in output_dir.glob("REGRAS_PROJETO_GENOMA*.txt"):
         try:
             text = candidate.read_text(encoding="utf-8")
-        except (OSError, UnicodeError):
+        except OSError as exc:
+            raise SealedRulesetError(f"could not read candidate active ruleset: {candidate}") from exc
+        except UnicodeError:
             continue
         if re.search(r"^STATUS NORMATIVO:\s*VIGENTE\s*$", text, re.MULTILINE):
             active.append(candidate)
