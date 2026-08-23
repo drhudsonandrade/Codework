@@ -2,6 +2,7 @@
 """Validate static repository safety and the shared GENOMA v3.4 sealed contract."""
 from __future__ import annotations
 
+import ast
 import csv
 import json
 import re
@@ -124,6 +125,35 @@ def validate_active_identity_text(text: str, relative: str, errors: list[str]) -
             errors.append(f"active ruleset surface still references superseded identity: {relative}: {token}")
 
 
+def _constant_string(node: ast.AST) -> str | None:
+    """Fold only literal string concatenations; never execute repository code."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left = _constant_string(node.left)
+        right = _constant_string(node.right)
+        if left is not None and right is not None:
+            return left + right
+    return None
+
+
+def _python_constant_strings(text: str) -> tuple[str, ...]:
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return ()
+    values = (_constant_string(node) for node in ast.walk(tree))
+    return tuple(dict.fromkeys(value for value in values if value is not None))
+
+
+def _is_historical_superseded_identity_path(relative: Path) -> bool:
+    return (
+        relative in HISTORICAL_SUPERSEDED_IDENTITY_PATHS
+        or relative == HISTORICAL_V33_ROOT
+        or HISTORICAL_V33_ROOT in relative.parents
+    )
+
+
 def validate_superseded_identity_locations(root: Path, errors: list[str]) -> None:
     """Reject superseded identities globally except immutable historical records and guardrail fixtures."""
     for path in root.rglob("*"):
@@ -132,18 +162,21 @@ def validate_superseded_identity_locations(root: Path, errors: list[str]) -> Non
         relative = path.relative_to(root)
         if relative in SUPERSEDED_IDENTITY_GUARDRAIL_PATHS:
             continue
-        if relative in HISTORICAL_SUPERSEDED_IDENTITY_PATHS:
+        if _is_historical_superseded_identity_path(relative):
             continue
-        if relative == HISTORICAL_V33_ROOT or HISTORICAL_V33_ROOT in relative.parents:
-            continue
+        if "v3.3" in relative.as_posix().lower():
+            errors.append(f"superseded identity path outside explicit history: {relative}")
         if path.suffix.lower() not in TEXT_IDENTITY_SUFFIXES and path.name not in {"Dockerfile", "AGENTS.md"}:
             continue
         try:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
+        candidates = [text]
+        if path.suffix.lower() == ".py":
+            candidates.extend(_python_constant_strings(text))
         for token in OLD_ACTIVE_TOKENS:
-            if token in text:
+            if any(token in candidate for candidate in candidates):
                 errors.append(f"superseded identity outside explicit history: {relative}: {token}")
 
 
