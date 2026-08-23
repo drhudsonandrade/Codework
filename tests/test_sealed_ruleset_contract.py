@@ -1,3 +1,4 @@
+import json
 import os
 import stat
 import tempfile
@@ -10,6 +11,8 @@ EXPECTED_STATUS = "VIGENTE"
 EXPECTED_VERSION = "v3.4"
 EXPECTED_DATE = "17/08/2026"
 EXPECTED_SHA = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
+SUPERSEDED_FIXTURE = next((ROOT / "docs" / "history").glob("*/superseded-identities.json"))
+SUPERSEDED = json.loads(SUPERSEDED_FIXTURE.read_text(encoding="utf-8"))
 
 
 class SealedRulesetContractTest(unittest.TestCase):
@@ -23,10 +26,14 @@ class SealedRulesetContractTest(unittest.TestCase):
         self.assertEqual(manifest["effective_date"], EXPECTED_DATE)
         self.assertEqual(manifest["raw_sha256"], EXPECTED_SHA)
         self.assertEqual(len(manifest["transport_parts"]), 13)
-        self.assertFalse((ROOT / "normative" / "sealed" / "GENOMA_RULESET_v3.3.txt.gz.b64").exists())
-        self.assertFalse((ROOT / "normative" / "sealed" / "GENOMA_RULESET_v3.4.txt.gz.b64").exists())
 
-        evidence = verify_transport(ROOT / "normative" / "sealed")
+        sealed_root = ROOT / "normative" / "sealed"
+        legacy_monolith = sealed_root / f"GENOMA_RULESET_{SUPERSEDED['version']}.txt.gz.b64"
+        current_monolith = sealed_root / f"GENOMA_RULESET_{EXPECTED_VERSION}.txt.gz.b64"
+        self.assertFalse(legacy_monolith.exists())
+        self.assertFalse(current_monolith.exists())
+
+        evidence = verify_transport(sealed_root)
         self.assertEqual(evidence["canonical_filename"], EXPECTED_NAME)
         self.assertEqual(evidence["status"], EXPECTED_STATUS)
         self.assertEqual(evidence["version"], EXPECTED_VERSION)
@@ -42,7 +49,10 @@ class SealedRulesetContractTest(unittest.TestCase):
             target, evidence = materialize(ROOT / "normative" / "sealed", Path(td))
             self.assertEqual(evidence["raw_sha256"], EXPECTED_SHA)
             self.assertEqual(stat.S_IMODE(os.stat(target).st_mode), 0o444)
-            self.assertFalse(os.access(target, os.W_OK) and (stat.S_IMODE(os.stat(target).st_mode) & 0o222))
+            self.assertFalse(
+                os.access(target, os.W_OK)
+                and (stat.S_IMODE(os.stat(target).st_mode) & 0o222)
+            )
 
 
 if __name__ == "__main__":
