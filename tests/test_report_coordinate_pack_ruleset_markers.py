@@ -39,12 +39,15 @@ class ReportCoordinatePackRulesetMarkerTests(unittest.TestCase):
         page.insert_text((72, 72), "GENOMA-HUDSON-RULESET-", fontsize=12)
         page.insert_text((72, 90), "v3.4", fontsize=12)
         try:
+            first_line = page.search_for("GENOMA-HUDSON-RULESET-")[0]
+            second_line = page.search_for("v3.4")[0]
             controls = [item for item in _controls(page) if item[0] == CANONICAL_RULESET_CONTROL]
         finally:
             doc.close()
         self.assertEqual(len(controls), 1)
         _, rect, _ = controls[0]
-        self.assertGreater(rect.height, 12, "the controlled span must cover both physical lines")
+        self.assertLessEqual(rect.y0, first_line.y0)
+        self.assertGreaterEqual(rect.y1, second_line.y1)
 
     def test_compile_pack_fails_closed_if_canonical_occurrence_lacks_controlled_span(self) -> None:
         with tempfile.TemporaryDirectory() as td:
