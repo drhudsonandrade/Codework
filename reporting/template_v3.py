@@ -5,6 +5,7 @@ import gzip
 import hashlib
 import io
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -61,19 +62,25 @@ def _validate_controlled_span_sources(payload: dict[str, Any]) -> None:
 
 def _validate_page_size_pt(report_id: str, meta: dict[str, Any]) -> None:
     page_size = meta.get("page_size_pt")
-    if (
-        not isinstance(page_size, list)
-        or len(page_size) != 2
-        or any(
-            isinstance(value, bool)
-            or not isinstance(value, (int, float))
-            or float(value) <= 0
-            for value in page_size
-        )
-    ):
+    if not isinstance(page_size, list) or len(page_size) != 2:
         raise TemplateV3Error(
             f"invalid page_size_pt for v3 reference report {report_id}: {page_size!r}"
         )
+    for value in page_size:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TemplateV3Error(
+                f"invalid page_size_pt for v3 reference report {report_id}: {page_size!r}"
+            )
+        try:
+            number = float(value)
+        except (OverflowError, TypeError, ValueError) as exc:
+            raise TemplateV3Error(
+                f"invalid page_size_pt for v3 reference report {report_id}: {page_size!r}"
+            ) from exc
+        if not math.isfinite(number) or number <= 0:
+            raise TemplateV3Error(
+                f"invalid page_size_pt for v3 reference report {report_id}: {page_size!r}"
+            )
 
 
 def load_reference_manifest(path: Path = MANIFEST_PATH) -> dict[str, Any]:
