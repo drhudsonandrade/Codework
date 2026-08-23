@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.validate_repo import SUPERSEDED, _missing_path_error, validate
+from scripts.validate_repo import _missing_path_error, validate
 
 
 class ValidateRepoStaticFstringTests(unittest.TestCase):
@@ -19,7 +19,7 @@ class ValidateRepoStaticFstringTests(unittest.TestCase):
                 any(
                     "reporting/formatted_identity.py" in error
                     and "superseded identity outside explicit history" in error
-                    and SUPERSEDED["rule_id_prefix"] in error
+                    and "GENOMA-V3.3" in error
                     for error in errors
                 ),
                 errors,
