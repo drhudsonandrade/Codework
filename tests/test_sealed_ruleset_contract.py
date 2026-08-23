@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import stat
@@ -48,6 +49,7 @@ class SealedRulesetContractTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             target, evidence = materialize(ROOT / "normative" / "sealed", Path(td))
             self.assertEqual(evidence["raw_sha256"], EXPECTED_SHA)
+            self.assertEqual(hashlib.sha256(Path(target).read_bytes()).hexdigest(), EXPECTED_SHA)
             self.assertEqual(stat.S_IMODE(os.stat(target).st_mode), 0o444)
             self.assertFalse(
                 os.access(target, os.W_OK)
