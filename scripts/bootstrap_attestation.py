@@ -35,13 +35,14 @@ def verify_bootstrap_attestation(path: str | Path) -> dict[str, Any]:
     source = Path(path)
     if not source.is_file():
         raise BootstrapAttestationError("bootstrap attestation is missing")
-    observed_sha = sha256_file(source)
+    raw = source.read_bytes()
+    observed_sha = hashlib.sha256(raw).hexdigest()
     if observed_sha != EXPECTED_FILE_SHA256:
         raise BootstrapAttestationError(
             f"bootstrap attestation digest mismatch: expected {EXPECTED_FILE_SHA256}, observed {observed_sha}"
         )
     try:
-        payload = json.loads(source.read_text(encoding="utf-8"))
+        payload = json.loads(raw)
     except (UnicodeError, json.JSONDecodeError) as exc:
         raise BootstrapAttestationError(f"bootstrap attestation is invalid JSON: {exc}") from exc
     if not isinstance(payload, dict):
