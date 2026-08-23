@@ -7,6 +7,8 @@ on:
       - 'template_store/v3.0/inbox/GENOMA_REPORT_TEMPLATES_v3.0_DETERMINISTIC.zip'
       - 'manifests/RULESET_V3.4.sha256'
       - 'normative/sealed/MANIFEST.json'
+      - 'normative/sealed/**'
+      - 'scripts/sealed_ruleset.py'
       - '.github/workflows/materialize-template-pdfs.yml'
 
 permissions:
@@ -30,6 +32,7 @@ jobs:
           python3 - <<'PY'
           import hashlib,json,os,shutil,tempfile,zipfile
           from pathlib import Path,PurePosixPath
+          from scripts import sealed_ruleset
 
           canonical={
               'status':'VIGENTE',
@@ -55,6 +58,17 @@ jobs:
           mismatches={k:(sealed.get(k),v) for k,v in expected_sealed.items() if sealed.get(k)!=v}
           if mismatches:
               raise SystemExit(f'canonical sealed ruleset identity mismatch: {mismatches}')
+
+          ruleset_tmp=Path(tempfile.mkdtemp(prefix='genoma-ruleset-'))
+          try:
+              materialized_ruleset, ruleset_evidence=sealed_ruleset.materialize(Path('normative/sealed'), ruleset_tmp)
+              actual_ruleset_sha=hashlib.sha256(materialized_ruleset.read_bytes()).hexdigest()
+              if materialized_ruleset.name != canonical['filename'] or actual_ruleset_sha != canonical['sha256']:
+                  raise SystemExit('materialized ruleset bytes do not match canonical identity')
+              if ruleset_evidence.get('raw_sha256') != canonical['sha256']:
+                  raise SystemExit('sealed ruleset transport evidence does not match canonical digest')
+          finally:
+              shutil.rmtree(ruleset_tmp,ignore_errors=True)
 
           root=Path('template_store/v3.0'); zp=Path(os.environ['ZIP'])
           mp=root/'MANIFEST.json'; m=json.loads(mp.read_text(encoding='utf-8')); reports=m['reports']
@@ -92,6 +106,8 @@ jobs:
               'ruleset_evidence':{
                   'sha_manifest':str(sha_manifest),
                   'sealed_manifest':str(sealed_manifest_path),
+                  'materialized_raw_sha256':actual_ruleset_sha,
+                  'transport_parts':ruleset_evidence.get('transport_parts'),
               },
               'template_version':'v3.0',
               'source_transport_sha256':os.environ['ZIP_SHA'],
