@@ -35,7 +35,11 @@ class _ShortReadResponse:
     def read(self, _size=-1):
         if not self._chunks:
             return b""
-        return self._chunks.pop(0)
+        chunk = self._chunks.pop(0)
+        if _size >= 0 and len(chunk) > _size:
+            self._chunks.insert(0, chunk[_size:])
+            return chunk[:_size]
+        return chunk
 
 
 class _Opener:
@@ -59,8 +63,9 @@ class DefaultTransportShortReadTest(unittest.TestCase):
         self.assertEqual(headers["content-type"], ("application/json",))
 
     def test_oversize_body_is_rejected_even_when_stream_short_reads(self):
+        chunk = b"x" * (32 * 1024)
         response = _ShortReadResponse(
-            [b"x" * (MAX_RESPONSE_BYTES // 2), b"y" * (MAX_RESPONSE_BYTES // 2), b"z"]
+            [chunk] * (MAX_RESPONSE_BYTES // len(chunk) + 1)
         )
         request = urllib.request.Request(
             "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
