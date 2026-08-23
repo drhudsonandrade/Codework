@@ -120,6 +120,9 @@ class CommandOutcome:
     timed_out: bool = False
     exception_type: str | None = None
     exception_message: str | None = None
+    # Raw stdout, kept alongside the formatted evidence so a check can read a
+    # tool's own structured verdict instead of substring-matching the blob.
+    stdout_text: str = ""
 
     @property
     def operational_status(self) -> str:
@@ -169,7 +172,12 @@ def run(cmd: list[str], *, timeout_seconds: float = COMMAND_TIMEOUT_SECONDS) -> 
             exception_type=type(exc).__name__,
             exception_message=f"timed out after {timeout_seconds}s",
         )
-    return CommandOutcome(launched=True, returncode=process.returncode, evidence=_command_evidence(stdout, stderr))
+    return CommandOutcome(
+        launched=True,
+        returncode=process.returncode,
+        evidence=_command_evidence(stdout, stderr),
+        stdout_text=_decode_tail(stdout),
+    )
 
 
 def _python_runtime_evidence() -> tuple[bool, str]:
@@ -226,6 +234,61 @@ def command_check(name: str, outcome: CommandOutcome, *, blocking: bool = True, 
         exception_type=outcome.exception_type,
         exception_message=outcome.exception_message,
     )
+
+
+def _template_store_report(outcome: CommandOutcome) -> dict | None:
+    """The tool's own structured verdict, or None when it did not emit one."""
+    payload = outcome.stdout_text.strip()
+    if not payload.startswith("{"):
+        return None
+    try:
+        report = json.loads(payload)
+    except json.JSONDecodeError:
+        return None
+    return report if isinstance(report, dict) else None
+
+
+def template_binary_source_check(outcome: CommandOutcome, *, blocking: bool) -> dict:
+    """Separate an absent template source from a corrupted one.
+
+    verify_template_store.py answers two very different questions, and a plain
+    content assertion collapses them into the same EXECUTADO/FAIL verdict:
+
+    - the sealed parts were never uploaded to this checkout, so under
+      ``--allow-sealed-only`` the tool exits 0 and reports
+      ``binary_materialization: NÃO DISPONÍVEL``;
+    - the sealed parts are present but do not reconstruct, so the tool raises
+      and exits non-zero.
+
+    Reporting absence as FAIL makes tampering indistinguishable from a checkout
+    that simply never received the one-shot binary transport — the same
+    execution-versus-result confusion this audit keeps apart everywhere else.
+    Absence is NÃO DISPONÍVEL/ERROR and carries the reason; a source that is
+    present and wrong stays EXECUTADO/FAIL, which is the louder signal.
+    """
+    if not outcome.launched or outcome.returncode != 0:
+        # Either the tool could never start, or it ran and rejected what it found.
+        # command_check already maps both onto the right axes.
+        return command_check("TEMPLATE_BINARY_SOURCE_STORE", outcome, blocking=blocking)
+
+    report = _template_store_report(outcome)
+    materialization = report.get("binary_materialization") if report else None
+    if materialization == "VERIFICADO":
+        return command_check("TEMPLATE_BINARY_SOURCE_STORE", outcome, blocking=blocking, assertion=True)
+    if materialization == UNAVAILABLE:
+        missing = report.get("missing_parts") if report else None
+        detail = f"{len(missing)} sealed part(s) absent" if isinstance(missing, list) else "sealed parts absent"
+        reason = report.get("reason", "") if report else ""
+        return _check(
+            "TEMPLATE_BINARY_SOURCE_STORE",
+            UNAVAILABLE,
+            ERROR,
+            f"BINARY SOURCE NOT PRESENT IN THIS CHECKOUT\n{detail}\n{reason}\n{outcome.evidence}",
+            blocking=blocking,
+        )
+    # Exit 0 without a verdict this audit recognises proves nothing: fail closed
+    # rather than reading silence as either success or mere unavailability.
+    return command_check("TEMPLATE_BINARY_SOURCE_STORE", outcome, blocking=blocking, assertion=False)
 
 
 def inspection_check(name: str, probe, *, blocking: bool = True) -> dict:
@@ -382,14 +445,7 @@ def audit(*, allow_template_sealed_only: bool = False) -> dict:
             assertion='"manifest_identity": "VERIFICADO"' in template.evidence,
         )
     )
-    checks.append(
-        command_check(
-            "TEMPLATE_BINARY_SOURCE_STORE",
-            template,
-            blocking=not allow_template_sealed_only,
-            assertion='"binary_materialization": "VERIFICADO"' in template.evidence,
-        )
-    )
+    checks.append(template_binary_source_check(template, blocking=not allow_template_sealed_only))
 
     checks.append(inspection_check("SCIENTIFIC_DATA_PLANE_ARRAY", _array_data_plane_probe))
     checks.append(inspection_check("EVIDENCE_ANNOTATION_PLANE", _evidence_plane_probe))

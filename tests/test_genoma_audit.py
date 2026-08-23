@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -9,6 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from scripts.genoma_audit import (
+    ERROR,
     EXECUTED,
     FAIL,
     PASS,
@@ -20,6 +22,7 @@ from scripts.genoma_audit import (
     inspection_check,
     ruleset_check,
     run,
+    template_binary_source_check,
 )
 
 
@@ -55,6 +58,100 @@ class GenomaAuditTest(unittest.TestCase):
         self.assertIn("EVIDENCE_ANNOTATION_PLANE", ids)
         self.assertIn("SUPPLY_CHAIN_LOCK", ids)
         self.assertIn("TEMPLATE_BINARY_SOURCE_STORE", ids)
+
+    def test_absent_template_source_is_unavailable_not_a_failed_conclusion(self):
+        """An unsent one-shot transport is NÃO DISPONÍVEL, never a FAIL verdict.
+
+        Under --allow-sealed-only the tool exits 0 and states that the sealed
+        parts are absent. Reporting that as FAIL claims the audit concluded
+        something is wrong with the template source, when in truth it never had
+        one to inspect.
+        """
+        outcome = CommandOutcome(
+            launched=True,
+            returncode=0,
+            evidence="STDOUT\n...\nSTDERR\n",
+            stdout_text=json.dumps(
+                {
+                    "binary_materialization": UNAVAILABLE,
+                    "manifest_identity": "VERIFICADO",
+                    "missing_parts": [f"tplpart-{i:03d}" for i in range(48)],
+                    "reason": "binary source parts are not materialized in this checkout.",
+                },
+                ensure_ascii=False,
+            ),
+        )
+        check = template_binary_source_check(outcome, blocking=False)
+        self.assertEqual(check["operational_status"], UNAVAILABLE)
+        self.assertEqual(check["result"], ERROR)
+        self.assertIn("48 sealed part(s) absent", check["evidence"])
+
+    def test_corrupted_template_source_stays_a_blocking_failure(self):
+        """Tampering must stay louder than absence, not collapse into the same verdict."""
+        outcome = CommandOutcome(
+            launched=True,
+            returncode=2,
+            evidence="STDOUT\nNÃO DISPONÍVEL: ValueError: sealed template part integrity failure: ['tplpart-007']\nSTDERR\n",
+            stdout_text="NÃO DISPONÍVEL: ValueError: sealed template part integrity failure: ['tplpart-007']",
+        )
+        check = template_binary_source_check(outcome, blocking=True)
+        self.assertEqual(check["operational_status"], EXECUTED)
+        self.assertEqual(check["result"], FAIL)
+        self.assertTrue(check["blocking"])
+
+    def test_absent_and_corrupted_template_sources_are_distinguishable(self):
+        """The regression itself: both used to produce EXECUTADO/FAIL."""
+        absent = template_binary_source_check(
+            CommandOutcome(
+                launched=True,
+                returncode=0,
+                evidence="STDOUT\n...\nSTDERR\n",
+                stdout_text=json.dumps({"binary_materialization": UNAVAILABLE}, ensure_ascii=False),
+            ),
+            blocking=False,
+        )
+        corrupted = template_binary_source_check(
+            CommandOutcome(launched=True, returncode=2, evidence="STDOUT\nintegrity failure\nSTDERR\n"),
+            blocking=True,
+        )
+        self.assertNotEqual(
+            (absent["operational_status"], absent["result"]),
+            (corrupted["operational_status"], corrupted["result"]),
+        )
+
+    def test_materialized_template_source_passes(self):
+        outcome = CommandOutcome(
+            launched=True,
+            returncode=0,
+            evidence="STDOUT\n...\nSTDERR\n",
+            stdout_text=json.dumps(
+                {"binary_materialization": "VERIFICADO", "reports": 11, "parts": 48}, ensure_ascii=False
+            ),
+        )
+        check = template_binary_source_check(outcome, blocking=True)
+        self.assertEqual(check["operational_status"], EXECUTED)
+        self.assertEqual(check["result"], PASS)
+
+    def test_exit_zero_without_a_recognised_verdict_fails_closed(self):
+        """Silence is not unavailability and is certainly not success."""
+        for stdout_text in ("", "ok", '{"binary_materialization": "TALVEZ"}', "{not json"):
+            with self.subTest(stdout=stdout_text):
+                check = template_binary_source_check(
+                    CommandOutcome(
+                        launched=True, returncode=0, evidence="STDOUT\n\nSTDERR\n", stdout_text=stdout_text
+                    ),
+                    blocking=True,
+                )
+                self.assertEqual(check["operational_status"], EXECUTED)
+                self.assertEqual(check["result"], FAIL)
+
+    def test_a_template_tool_that_never_launched_is_unavailable(self):
+        check = template_binary_source_check(
+            CommandOutcome(launched=False, returncode=None, evidence="LAUNCH FAILED", exception_type="OSError"),
+            blocking=True,
+        )
+        self.assertEqual(check["operational_status"], UNAVAILABLE)
+        self.assertEqual(check["result"], ERROR)
 
     def test_run_captures_stdout_and_stderr_separately(self):
         outcome = run(
