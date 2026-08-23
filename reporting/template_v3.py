@@ -59,6 +59,23 @@ def _validate_controlled_span_sources(payload: dict[str, Any]) -> None:
                 )
 
 
+def _validate_page_size_pt(report_id: str, meta: dict[str, Any]) -> None:
+    page_size = meta.get("page_size_pt")
+    if (
+        not isinstance(page_size, list)
+        or len(page_size) != 2
+        or any(
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or float(value) <= 0
+            for value in page_size
+        )
+    ):
+        raise TemplateV3Error(
+            f"invalid page_size_pt for v3 reference report {report_id}: {page_size!r}"
+        )
+
+
 def load_reference_manifest(path: Path = MANIFEST_PATH) -> dict[str, Any]:
     index = json.loads(path.read_text(encoding="utf-8"))
     if index.get("schema") != "genoma-editorial-v3-reference-manifest-v1":
@@ -66,6 +83,10 @@ def load_reference_manifest(path: Path = MANIFEST_PATH) -> dict[str, Any]:
     index_reports = index.get("reports")
     if not isinstance(index_reports, dict) or set(index_reports) != {f"{i:02d}" for i in range(1, 12)}:
         raise TemplateV3Error("v3 reference manifest must contain report IDs 01..11")
+    for rid, summary in index_reports.items():
+        if not isinstance(summary, dict):
+            raise TemplateV3Error(f"invalid v3 reference report metadata: {rid}")
+        _validate_page_size_pt(rid, summary)
 
     compressed = index.get("compressed_detail")
     if compressed:
@@ -81,7 +102,10 @@ def load_reference_manifest(path: Path = MANIFEST_PATH) -> dict[str, Any]:
             raise TemplateV3Error("compressed v3 reference manifest identity mismatch")
         for rid, summary in index_reports.items():
             detail = payload["reports"][rid]
-            for key in ("filename", "sha256", "page_count"):
+            if not isinstance(detail, dict):
+                raise TemplateV3Error(f"invalid compressed v3 reference report metadata: {rid}")
+            _validate_page_size_pt(rid, detail)
+            for key in ("filename", "sha256", "page_count", "page_size_pt"):
                 if detail.get(key) != summary.get(key):
                     raise TemplateV3Error(f"v3 reference index/detail mismatch: {rid}:{key}")
         _validate_controlled_span_sources(payload)
@@ -721,6 +745,7 @@ def render_docx_from_template(
     data = rendered.get("data", {}) if isinstance(rendered.get("data"), dict) else {}
     fields = data.get("template_fields") if isinstance(data.get("template_fields"), dict) else {}
     systems = _system_values(data)
+    bold_font = _register_fonts()["bold"]
     unresolved: list[str] = []
     replaced_fields = 0
     replaced_controls = 0
@@ -766,7 +791,7 @@ def render_docx_from_template(
                     value["value"],
                     max(8.0, bbox[2] - bbox[0]),
                     font_size,
-                    _register_fonts()["bold"],
+                    bold_font,
                 )
                 _add_vml_textbox(
                     paragraph,
@@ -800,7 +825,7 @@ def render_docx_from_template(
                     value["value"],
                     width,
                     font_size,
-                    _register_fonts()["bold"],
+                    bold_font,
                 )
                 _add_vml_textbox(
                     paragraph,
