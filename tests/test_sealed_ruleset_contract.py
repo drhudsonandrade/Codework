@@ -120,6 +120,50 @@ class MaterializerIdempotencyTest(unittest.TestCase):
             with self.assertRaises(SealedRulesetError):
                 materialize(self.SEALED, Path(td))
 
+    def test_a_canonical_symlink_to_a_valid_external_file_still_blocks(self):
+        """Reuse must prove the artifact is this directory's own regular file.
+
+        The link below satisfies every byte-level condition — canonical name,
+        exact payload, matching digest, read-only mode — because ``stat`` and
+        ``read_bytes`` follow it. Accepting it would let the evidence record a
+        ``materialized_path`` inside the activation directory while the bytes
+        actually live outside it.
+        """
+        from scripts.sealed_ruleset import SealedRulesetError, materialize
+
+        with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as outside:
+            genuine, _ = materialize(self.SEALED, Path(outside))
+            self.assertEqual(stat.S_IMODE(os.stat(genuine).st_mode), 0o444)
+
+            link = Path(td) / EXPECTED_NAME
+            link.symlink_to(genuine)
+            # Everything a follow-the-link check would look at agrees.
+            self.assertEqual(hashlib.sha256(link.read_bytes()).hexdigest(), EXPECTED_SHA)
+            self.assertEqual(stat.S_IMODE(os.stat(link).st_mode), 0o444)
+
+            with self.assertRaises(SealedRulesetError):
+                materialize(self.SEALED, Path(td))
+
+    def test_a_canonical_hardlink_from_outside_is_still_reused_as_a_regular_file(self):
+        """A hard link is a real directory entry for a regular file, so it stays reusable.
+
+        This pins the boundary of the symlink rejection: what is refused is the
+        indirection, not every file that also has a name elsewhere.
+        """
+        from scripts.sealed_ruleset import materialize
+
+        with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as outside:
+            genuine, _ = materialize(self.SEALED, Path(outside))
+            link = Path(td) / EXPECTED_NAME
+            try:
+                os.link(genuine, link)
+            except OSError as exc:  # pragma: no cover - filesystem dependent
+                self.skipTest(f"hard links unavailable across these directories: {exc}")
+
+            reused, evidence = materialize(self.SEALED, Path(td))
+            self.assertEqual(reused, link)
+            self.assertTrue(evidence["idempotent_reuse"])
+
     def test_idempotent_reuse_still_verifies_provenance_first(self):
         from scripts.sealed_ruleset import SealedRulesetError, materialize
 

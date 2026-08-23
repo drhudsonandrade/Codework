@@ -5,12 +5,13 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from policy_engine.genoma_policy import __version__
 from policy_engine.genoma_policy import paths as policy_paths
 from policy_engine.genoma_policy import ruleset as policy_ruleset
 from policy_engine.genoma_policy.engine import PolicyEngine
-from scripts import sealed_ruleset
+from scripts import bootstrap_attestation, sealed_ruleset
 from scripts.bootstrap_attestation import BootstrapAttestationError, verify_bootstrap_attestation
 from scripts.validate_repo import (
     FORBIDDEN_ACTIVE_PATHS,
@@ -225,8 +226,47 @@ class V34ActivationContractTests(unittest.TestCase):
             data = json.loads(path.read_text(encoding="utf-8"))
             data["checks"]["require_version_v3_4"] = False
             tampered.write_text(json.dumps(data), encoding="utf-8")
-            with self.assertRaises(BootstrapAttestationError):
+            # Editing any byte changes the file digest, so the digest binding is
+            # what rejects this — asserting only the exception type would pass
+            # even if the check semantics were never evaluated at all.
+            with self.assertRaisesRegex(BootstrapAttestationError, "digest mismatch"):
                 verify_bootstrap_attestation(tampered)
+
+    def test_bootstrap_attestation_rejects_a_failed_check_on_its_own(self) -> None:
+        """Check semantics, isolated from the digest binding that normally fires first.
+
+        Pinning the expected digest to the tampered file's own digest lets
+        verification get past the file binding, so this test proves the failed
+        check is itself rejected rather than being shadowed.
+        """
+        path = ROOT / "deploy" / "attestations" / "bootstrap-project-v3.4.json"
+        with tempfile.TemporaryDirectory() as td:
+            tampered = Path(td) / path.name
+            data = json.loads(path.read_text(encoding="utf-8"))
+            data["checks"]["require_version_v3_4"] = False
+            payload = json.dumps(data).encode("utf-8")
+            tampered.write_bytes(payload)
+            tampered_sha = hashlib.sha256(payload).hexdigest()
+
+            with mock.patch.object(bootstrap_attestation, "EXPECTED_FILE_SHA256", tampered_sha):
+                with self.assertRaisesRegex(
+                    BootstrapAttestationError, r"failed checks:.*require_version_v3_4"
+                ):
+                    verify_bootstrap_attestation(tampered)
+
+    def test_bootstrap_attestation_rejects_a_missing_check_on_its_own(self) -> None:
+        path = ROOT / "deploy" / "attestations" / "bootstrap-project-v3.4.json"
+        with tempfile.TemporaryDirectory() as td:
+            tampered = Path(td) / path.name
+            data = json.loads(path.read_text(encoding="utf-8"))
+            del data["checks"]["require_version_v3_4"]
+            payload = json.dumps(data).encode("utf-8")
+            tampered.write_bytes(payload)
+            tampered_sha = hashlib.sha256(payload).hexdigest()
+
+            with mock.patch.object(bootstrap_attestation, "EXPECTED_FILE_SHA256", tampered_sha):
+                with self.assertRaisesRegex(BootstrapAttestationError, "check set mismatch"):
+                    verify_bootstrap_attestation(tampered)
 
     def test_engine_metadata_uses_package_version(self) -> None:
         with tempfile.TemporaryDirectory() as td:

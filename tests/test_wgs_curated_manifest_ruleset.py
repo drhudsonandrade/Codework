@@ -40,6 +40,33 @@ class WgsCuratedManifestRulesetTests(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "RULESET NÃO DISPONÍVEL/CONFLITANTE"):
                 _verified_ruleset_identity()
 
+    def test_verified_ruleset_identity_rejects_wrong_version_alone(self) -> None:
+        """Version is checked, but only ever alongside a second wrong field until now.
+
+        Isolating it proves the version comparison is load-bearing rather than
+        incidentally covered by the filename or digest assertion.
+        """
+        bad = {
+            "canonical_filename": EXPECTED_NAME,
+            "raw_sha256": EXPECTED_SHA,
+            "version": "v3.5",
+            "effective_date": "17/08/2026",
+        }
+        with patch("scripts.build_wgs_curated_manifest.verify_transport", return_value=bad):
+            with self.assertRaisesRegex(SystemExit, "RULESET NÃO DISPONÍVEL/CONFLITANTE"):
+                _verified_ruleset_identity()
+
+    def test_verified_ruleset_identity_rejects_wrong_effective_date_alone(self) -> None:
+        bad = {
+            "canonical_filename": EXPECTED_NAME,
+            "raw_sha256": EXPECTED_SHA,
+            "version": "v3.4",
+            "effective_date": "18/08/2026",
+        }
+        with patch("scripts.build_wgs_curated_manifest.verify_transport", return_value=bad):
+            with self.assertRaisesRegex(SystemExit, "RULESET NÃO DISPONÍVEL/CONFLITANTE"):
+                _verified_ruleset_identity()
+
 
 if __name__ == "__main__":
     unittest.main()

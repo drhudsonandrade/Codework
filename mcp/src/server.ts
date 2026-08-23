@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { setTimeout } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -11,7 +12,10 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import {
   type AuditRecord,
+  acquireAuditClaim,
+  describeAuditClaim,
   readAuditRecord,
+  releaseAuditClaim,
   resolveDirectoryUnderRoot,
   sanitizeError,
   sanitizeToolArguments,
@@ -30,6 +34,8 @@ export type GenomeServerOptions = {
   referenceRoot: string;
   resultsRoot: string;
   auditRoot: string;
+  /** Overrides {@link CLAIM_WAIT_BUDGET_MS}; present so tests need not wait it out. */
+  claimWaitBudgetMs?: number;
 };
 
 function textResult(value: unknown) {
@@ -114,6 +120,55 @@ async function persistOutcome(
   await writeAuditRecord(options.auditRoot, record);
 }
 
+/**
+ * How long a caller that lost the claim waits for the winner's record before
+ * reporting the request as still in progress, and how often it looks.
+ *
+ * The budget is deliberately far below the longest tool timeout: a caller that
+ * collides with a full-length canary is told the truth ("in progress") instead
+ * of holding an MCP request open for the best part of an hour.
+ */
+export const CLAIM_WAIT_BUDGET_MS = 30_000;
+const CLAIM_POLL_INTERVAL_MS = 25;
+
+/**
+ * Wait, bounded, for whoever holds the claim to publish its record.
+ *
+ * The loser of a claim never executes the operation. It either returns the
+ * winner's outcome — which is what makes concurrent replay coherent — or, if
+ * the winner is still working when the budget runs out, reports that the
+ * request is in progress. It never falls through to running the work itself.
+ */
+async function awaitClaimHolderResult<T>(
+  options: GenomeServerOptions,
+  tool: string,
+  requestId: string,
+): Promise<PriorResult<T>> {
+  const deadline = Date.now() + (options.claimWaitBudgetMs ?? CLAIM_WAIT_BUDGET_MS);
+  for (;;) {
+    const existing = await loadAuditRecord(options.auditRoot, requestId);
+    if (existing) {
+      return decodePriorResult<T>(existing, tool);
+    }
+    if (Date.now() >= deadline) {
+      return { kind: "missing" };
+    }
+    await setTimeout(CLAIM_POLL_INTERVAL_MS);
+  }
+}
+
+async function claimInProgressError(options: GenomeServerOptions, requestId: string): Promise<Error> {
+  const held = await describeAuditClaim(options.auditRoot, requestId);
+  if (!held) {
+    return new Error("request id is being processed by another execution; retry once it settles");
+  }
+  const ageSeconds = Math.round(held.ageMs / 1_000);
+  return new Error(
+    `request id is already in progress (claimed ${ageSeconds}s ago) and did not settle within the wait budget; ` +
+      "if the holding execution is known to have died, clear its claim before retrying",
+  );
+}
+
 /** @internal Exported for deterministic idempotency and redaction tests. */
 export async function runAudited<T>(
   options: GenomeServerOptions,
@@ -131,34 +186,64 @@ export async function runAudited<T>(
     throw new Error(prior.error);
   }
 
-  const startedAt = new Date().toISOString();
-  const started = Date.now();
+  // Take the exclusive right to execute before running anything. Reading the
+  // record first only tells us that no result existed a moment ago; without
+  // this claim two concurrent callers both see "missing" and both execute,
+  // and the atomic record write catches the duplication far too late.
+  const claim = await acquireAuditClaim(options.auditRoot, requestId);
+  if (!claim) {
+    const settled = await awaitClaimHolderResult<T>(options, tool, requestId);
+    if (settled.kind === "pass") {
+      return settled.value;
+    }
+    if (settled.kind === "fail") {
+      throw new Error(settled.error);
+    }
+    throw await claimInProgressError(options, requestId);
+  }
+
   try {
-    const result = await operation();
-    const record: AuditRecord = {
-      requestId,
-      tool,
-      arguments: sanitizeToolArguments({ ...args, requestId }),
-      status: "PASS",
-      startedAt,
-      durationMs: Date.now() - started,
-      result,
-    };
-    await persistOutcome(options, record);
-    return result;
-  } catch (error) {
-    const sanitized = sanitizeError(error);
-    const record: AuditRecord = {
-      requestId,
-      tool,
-      arguments: sanitizeToolArguments({ ...args, requestId }),
-      status: "FAIL",
-      startedAt,
-      durationMs: Date.now() - started,
-      error: sanitized,
-    };
-    await persistOutcome(options, record);
-    throw new Error(sanitized);
+    // Re-read under the claim: a request that settled between the first read
+    // and the claim would otherwise be executed a second time.
+    const settled = decodePriorResult<T>(await loadAuditRecord(options.auditRoot, requestId), tool);
+    if (settled.kind === "pass") {
+      return settled.value;
+    }
+    if (settled.kind === "fail") {
+      throw new Error(settled.error);
+    }
+
+    const startedAt = new Date().toISOString();
+    const started = Date.now();
+    try {
+      const result = await operation();
+      const record: AuditRecord = {
+        requestId,
+        tool,
+        arguments: sanitizeToolArguments({ ...args, requestId }),
+        status: "PASS",
+        startedAt,
+        durationMs: Date.now() - started,
+        result,
+      };
+      await persistOutcome(options, record);
+      return result;
+    } catch (error) {
+      const sanitized = sanitizeError(error);
+      const record: AuditRecord = {
+        requestId,
+        tool,
+        arguments: sanitizeToolArguments({ ...args, requestId }),
+        status: "FAIL",
+        startedAt,
+        durationMs: Date.now() - started,
+        error: sanitized,
+      };
+      await persistOutcome(options, record);
+      throw new Error(sanitized);
+    }
+  } finally {
+    await releaseAuditClaim(claim);
   }
 }
 

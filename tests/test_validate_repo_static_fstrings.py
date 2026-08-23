@@ -27,7 +27,18 @@ class ValidateRepoStaticFstringTests(unittest.TestCase):
                 errors,
             )
 
+    def test_the_current_checkout_satisfies_the_whole_repository_contract(self) -> None:
+        """validate() must return nothing at all, not merely nothing from three files.
+
+        scripts/validate_repo.py is the repository's own contract guardian. A test
+        that filters its output down to a chosen subset before asserting emptiness
+        passes while any number of unrelated violations stand, which is precisely
+        the state the guardian exists to prevent.
+        """
+        self.assertEqual(validate(ROOT), [])
+
     def test_registered_test_fixtures_do_not_block_the_current_checkout(self) -> None:
+        """The narrower fixture-specific guarantee, kept for a precise failure message."""
         errors = validate(ROOT)
         allowed = {
             "tests/test_v34_activation_contract.py",

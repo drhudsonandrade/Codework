@@ -15,6 +15,7 @@ import json
 import os
 import re
 import socket
+import stat
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -214,33 +215,76 @@ def _active_vigente_files(output_dir: Path) -> list[Path]:
     for candidate in output_dir.glob("REGRAS_PROJETO_GENOMA*.txt"):
         try:
             text = candidate.read_text(encoding="utf-8")
-        except UnicodeError:
+        except (OSError, UnicodeError):
+            # An unreadable or dangling candidate is not an active ruleset; it is
+            # also not a licence to reuse, since only the canonical regular file
+            # can pass _already_materialized.
             continue
         if re.search(r"^STATUS NORMATIVO:\s*VIGENTE\s*$", text, re.MULTILINE):
             active.append(candidate)
     return active
 
 
+def _read_regular_file_nofollow(path: Path) -> tuple[bytes, int] | None:
+    """Read a path only if it is a regular file, refusing to traverse a symlink.
+
+    The bytes and the mode both come from one descriptor, so what was inspected is
+    necessarily what was read: a path checked and then re-opened could be swapped
+    in between. ``O_NOFOLLOW`` makes the open itself fail on a symlink instead of
+    silently landing on whatever it points at.
+    """
+    try:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError:
+        return None
+    try:
+        handle = os.fdopen(fd, "rb")
+    except OSError:
+        os.close(fd)
+        return None
+    with handle:
+        info = os.fstat(handle.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            return None
+        try:
+            return handle.read(), info.st_mode
+        except OSError:
+            return None
+
+
 def _already_materialized(destination: Path, active: list[Path], raw: bytes) -> Path | None:
     """The one case where re-materializing is a safe no-op.
 
     Every condition must hold: exactly one active VIGENTE file, it is the canonical
-    filename, its bytes are byte-identical to the verified sealed payload, and it is
-    already read-only. Anything else — a second VIGENTE, a different filename, drifted
+    filename, it is a regular file genuinely inside the activation directory, its
+    bytes are byte-identical to the verified sealed payload, and it is already
+    read-only. Anything else — a second VIGENTE, a different filename, drifted
     bytes, a writable file — is a conflict and must keep blocking.
+
+    A symlink is rejected even when every byte behind it matches. ``stat`` and
+    ``read_bytes`` both follow one, so a canonical-looking link to an external
+    read-only copy would satisfy name, digest and mode while the bytes live
+    outside the directory the evidence goes on to name as ``materialized_path``.
+    Reuse has to prove the artifact is that directory's own file, not merely that
+    something byte-identical is reachable from it.
     """
     if len(active) != 1:
         return None
     existing = active[0]
     if existing.name != EXPECTED_NAME or existing != destination / EXPECTED_NAME:
         return None
-    try:
-        current = existing.read_bytes()
-    except OSError:
+    if existing.is_symlink():
         return None
+    resolved = existing.resolve()
+    if resolved.name != EXPECTED_NAME or resolved.parent != destination.resolve():
+        return None
+    opened = _read_regular_file_nofollow(existing)
+    if opened is None:
+        return None
+    current, mode = opened
     if current != raw or sha256_bytes(current) != EXPECTED_SHA:
         return None
-    if existing.stat().st_mode & 0o222:
+    if mode & 0o222:
         return None
     return existing
 

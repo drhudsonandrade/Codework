@@ -146,6 +146,7 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         version_output: str = "coderabbit 0.7.5",
         tamper_archive: bool = False,
         installed_enabled: bool = True,
+        paths_with_spaces: bool = False,
     ) -> tuple[subprocess.CompletedProcess[str], bool]:
         self.assertIsNotNone(shutil.which("jq"), "jq is required by the setup contract")
         self.assertIsNotNone(shutil.which("unzip"), "unzip is required by the setup contract")
@@ -158,7 +159,12 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         sandbox = Path(td.name)
         repo = sandbox / "repo"
         fake_bin = sandbox / "bin"
-        install_bin = sandbox / "installed-bin"
+        # CODEWORK_CODERABBIT_BIN_DIR is caller-supplied, and mktemp -d follows
+        # TMPDIR: both can legitimately contain a space (macOS "Application
+        # Support", a user directory with a first and last name).
+        install_bin = sandbox / ("installed bin dir" if paths_with_spaces else "installed-bin")
+        scratch_tmp = sandbox / ("scratch tmp dir" if paths_with_spaces else "scratch-tmp")
+        scratch_tmp.mkdir()
         marker = sandbox / "plugin-installed"
         (repo / ".agents" / "plugins").mkdir(parents=True)
         fake_bin.mkdir()
@@ -294,6 +300,7 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
                 "FAKE_CODEX_STATE": str(marker),
                 "FAKE_CODERABBIT_ARCHIVE": str(archive_to_serve),
                 "CODEWORK_CODERABBIT_BIN_DIR": str(install_bin),
+                "TMPDIR": str(scratch_tmp),
             }
         )
         result = subprocess.run(
@@ -311,6 +318,20 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(marker_created, "available-only plugin must be installed before success")
         self.assertIn("configurados a partir de release checksum-locked", result.stdout)
+
+    def test_install_and_temp_directories_may_contain_spaces(self) -> None:
+        """An unquoted "$binary --version" splits a path with a space into two words.
+
+        The install directory comes from CODEWORK_CODERABBIT_BIN_DIR and the
+        extraction directory from mktemp -d under TMPDIR, so both are outside the
+        script's control. Word splitting there makes the version check invoke a
+        path prefix that does not exist, failing an otherwise valid install.
+        """
+        result, marker_created = self._run_setup_with_fakes(paths_with_spaces=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(marker_created)
+        self.assertIn("configurados a partir de release checksum-locked", result.stdout)
+        self.assertNotIn("No such file or directory", result.stderr)
 
     def test_tampered_release_archive_fails_before_plugin_installation(self) -> None:
         result, marker_created = self._run_setup_with_fakes(tamper_archive=True)

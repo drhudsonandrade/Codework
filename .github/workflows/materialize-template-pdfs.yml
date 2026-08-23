@@ -14,6 +14,14 @@ on:
 permissions:
   contents: write
 
+# This workflow commits and pushes back to the ref that triggered it. Two runs in
+# flight on the same ref race each other: the second push is rejected as a
+# non-fast-forward, or lands on a tree the first run never saw. Queue them
+# instead of cancelling, so no triggering push goes unmaterialized.
+concurrency:
+  group: materialize-template-pdfs-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   materialize:
     runs-on: ubuntu-24.04

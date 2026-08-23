@@ -29,15 +29,25 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/genoma-normative" evidence
+          manifest="$GITHUB_WORKSPACE/manifests/RULESET_V3.4.sha256"
+          # Single source of truth: the digest and the canonical filename are read
+          # from the versioned manifest once and reused everywhere below, so a
+          # future migration cannot update the manifest while leaving a stale
+          # literal behind in the validation, the endpoint assert or the witness.
+          read -r expected_sha expected_name < "$manifest"
+          [[ "$expected_sha" =~ ^[0-9a-f]{64}$ ]] || { echo "manifest digest is not a SHA-256" >&2; exit 1; }
+          [[ "$expected_name" == REGRAS_PROJETO_GENOMA_VIGENTE_*.txt ]] || { echo "manifest names a non-canonical file: $expected_name" >&2; exit 1; }
           python3 scripts/materialize_ruleset.py \
             --output-dir "$RUNNER_TEMP/genoma-normative" \
             --evidence evidence/ruleset-materialization.json
-          canonical="$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
+          canonical="$RUNNER_TEMP/genoma-normative/$expected_name"
           test "$(stat -c '%a' "$canonical")" = 444
-          printf '%s  %s\n' 'ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580' "$canonical" | sha256sum -c -
+          printf '%s  %s\n' "$expected_sha" "$canonical" | sha256sum -c -
           {
             echo "GENOMA_RULESET_PATH=$canonical"
-            echo "GENOMA_RULESET_SHA_MANIFEST=$GITHUB_WORKSPACE/manifests/RULESET_V3.4.sha256"
+            echo "GENOMA_RULESET_SHA_MANIFEST=$manifest"
+            echo "GENOMA_EXPECTED_RULESET_SHA=$expected_sha"
+            echo "GENOMA_EXPECTED_RULESET_NAME=$expected_name"
             echo 'GENOMA_EXPECT_CANONICAL_SHA=1'
           } >> "$GITHUB_ENV"
       - name: Build exact policy image
@@ -68,13 +78,16 @@ jobs:
           test "$(docker inspect "$cid" --format '{{.HostConfig.ReadonlyRootfs}}')" = true
           test "$(docker inspect "$cid" --format '{{range .Mounts}}{{if eq .Destination "/run/genoma/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"}}{{.RW}}{{end}}{{end}}')" = false
           python - <<'PY'
-          import json
+          import json, os
           from pathlib import Path
           p=json.loads(Path('evidence/live-ruleset.json').read_text())
           assert p['status']=='VIGENTE'
           assert p['version']=='v3.4'
           assert p['effective_date']=='17/08/2026'
-          assert p['sha256']=='ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580'
+          # Compared against the manifest that was parsed and validated above,
+          # never against a literal repeated at this call site.
+          assert p['sha256']==os.environ['GENOMA_EXPECTED_RULESET_SHA']
+          assert p['canonical_filename']==os.environ['GENOMA_EXPECTED_RULESET_NAME']
           assert p['section_count']==263
           PY
       - name: Execute all 15 section-260 scenarios through the live HTTP instance
@@ -107,6 +120,16 @@ jobs:
           live=json.loads(summary_path.read_text())
           if not (live.get('passed')==15 and live.get('total')==15 and live.get('critical_failures')==0 and live.get('post_deployment_status')=='PASS'):
               raise SystemExit('refusing to create PASS witness from non-PASS live result')
+          # The witness derives its identity from the evidence that was actually
+          # validated in this run, not from a parallel literal that could drift.
+          live_ruleset_path=root/'live-ruleset.json'
+          if not live_ruleset_path.exists():
+              raise SystemExit('live ruleset evidence missing')
+          live_ruleset=json.loads(live_ruleset_path.read_text())
+          expected_sha=os.environ['GENOMA_EXPECTED_RULESET_SHA']
+          expected_name=os.environ['GENOMA_EXPECTED_RULESET_NAME']
+          if live_ruleset.get('sha256')!=expected_sha or live_ruleset.get('canonical_filename')!=expected_name:
+              raise SystemExit('live ruleset identity diverged from the validated manifest')
           files=[]
           for p in sorted(x for x in root.rglob('*') if x.is_file() and x.name not in {'SHA256SUMS','witness.json'}):
               h=hashlib.sha256(p.read_bytes()).hexdigest()
@@ -115,7 +138,7 @@ jobs:
               'schema':'genoma-production-witness-v1',
               'operational_status':'VERIFICADO',
               'post_deployment_status':'PASS',
-              'ruleset':{'status':'VIGENTE','version':'v3.4','effective_date':'17/08/2026','sha256':'ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580'},
+              'ruleset':{'status':'VIGENTE','version':'v3.4','effective_date':'17/08/2026','sha256':expected_sha,'canonical_filename':expected_name},
               'section_260':{'passed':15,'total':15,'critical_failures':0},
               'git_sha':os.environ['GITHUB_SHA'],
               'workflow_run_id':os.environ['GITHUB_RUN_ID'],

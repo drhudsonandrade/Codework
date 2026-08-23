@@ -106,6 +106,44 @@ class GenomaAuditTest(unittest.TestCase):
                 time.sleep(0.05)
             self.assertFalse(_process_is_running(child_pid), f"descendant survived timeout: {child_pid}")
 
+    @unittest.skipUnless(os.name == "posix", "process groups are POSIX-only")
+    def test_run_timeout_kills_descendants_when_the_leader_already_exited(self):
+        """The leader exiting first must not spare the tree it left holding the pipes.
+
+        This is the case a leader-alive check cannot see: by the time the timeout
+        fires, ``process.poll()`` already reports 0, yet the descendant is still
+        running with the inherited stdout/stderr that keep ``communicate()``
+        blocked. Cleanup has to signal the group regardless of the leader.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            pid_file = Path(td) / "orphan.pid"
+            # The descendant inherits this process's pipes and outlives the budget.
+            child = "import time; time.sleep(30)"
+            parent = (
+                "import pathlib,subprocess,sys; "
+                f"p=subprocess.Popen([sys.executable,'-c',{child!r}]); "
+                f"pathlib.Path({str(pid_file)!r}).write_text(str(p.pid)); "
+                "sys.exit(0)"
+            )
+            started = time.monotonic()
+            outcome = run([sys.executable, "-c", parent], timeout_seconds=1.0)
+            elapsed = time.monotonic() - started
+            evidence = outcome.evidence
+
+            self.assertTrue(outcome.timed_out, evidence)
+            self.assertEqual(outcome.returncode, 124, evidence)
+            self.assertLess(elapsed, 5.0, f"cleanup overran its budget: {elapsed}s\n{evidence}")
+            self.assertTrue(pid_file.is_file(), evidence)
+
+            child_pid = int(pid_file.read_text())
+            deadline = time.monotonic() + 2.0
+            while _process_is_running(child_pid) and time.monotonic() < deadline:
+                time.sleep(0.05)
+            self.assertFalse(
+                _process_is_running(child_pid),
+                f"orphaned descendant survived the timeout: {child_pid}\n{evidence}",
+            )
+
     def test_multibyte_tail_decoding_is_robust_when_slice_starts_mid_character(self):
         raw = ("á" * 4000).encode("utf-8")
         decoded = _decode_tail(raw, limit=5999)

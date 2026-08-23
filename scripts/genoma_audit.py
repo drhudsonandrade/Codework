@@ -44,16 +44,35 @@ def _command_evidence(stdout: bytes | str | None, stderr: bytes | str | None) ->
 
 
 def _signal_process_tree(process: subprocess.Popen[bytes], sig: signal.Signals) -> None:
-    if process.poll() is not None:
+    """Signal the whole process group, whether or not its leader is still alive.
+
+    The leader exiting does not mean the tree is gone. A descendant that inherited
+    stdout/stderr keeps those pipes open, so ``communicate()`` stays blocked on a
+    process the audit can no longer see through ``process.poll()``. Skipping the
+    signal because the leader already reaped is exactly how a timed-out audit
+    leaves a live descendant behind and overruns its budget.
+
+    ``start_new_session`` makes the child its own group leader, so the group id
+    equals its pid and survives the leader. The id cannot be recycled while any
+    member lives, so signalling it after the leader exits is safe: an empty group
+    raises ``ProcessLookupError``, which is the normal "already gone" answer.
+    """
+    if os.name != "posix":
+        # No process groups to fall back on: the direct child is all we can reach,
+        # and signalling an already-exited handle is meaningless.
+        if process.poll() is not None:
+            return
+        try:
+            if sig == signal.SIGTERM:
+                process.terminate()
+            else:
+                process.kill()
+        except (ProcessLookupError, PermissionError):
+            return
         return
     try:
-        if os.name == "posix":
-            os.killpg(process.pid, sig)
-        elif sig == signal.SIGTERM:
-            process.terminate()
-        else:
-            process.kill()
-    except ProcessLookupError:
+        os.killpg(process.pid, sig)
+    except (ProcessLookupError, PermissionError):
         return
 
 
@@ -70,7 +89,14 @@ def _finish_timed_out_process(
         stdout = term_exc.stdout if term_exc.stdout is not None else stdout
         stderr = term_exc.stderr if term_exc.stderr is not None else stderr
         _signal_process_tree(process, signal.SIGKILL)
-        final_stdout, final_stderr = process.communicate()
+        try:
+            final_stdout, final_stderr = process.communicate(timeout=PROCESS_TERMINATION_GRACE_SECONDS)
+        except subprocess.TimeoutExpired as kill_exc:
+            # A pipe still held open after SIGKILL reached the group cannot be
+            # waited on indefinitely: the audit reports what it captured rather
+            # than hanging past its own budget.
+            final_stdout = kill_exc.stdout
+            final_stderr = kill_exc.stderr
     if final_stdout is not None:
         stdout = final_stdout
     if final_stderr is not None:

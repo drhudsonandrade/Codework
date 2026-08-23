@@ -35,6 +35,50 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("workflow_dispatch:", header)
         self.assertNotIn("push:", header)
 
+    def test_every_self_pushing_workflow_serialises_runs_on_its_ref(self):
+        """A workflow that pushes back to its own ref must not race itself.
+
+        Two runs in flight on one ref end with the loser rejected as a
+        non-fast-forward, or with a commit built on a tree the other run has
+        already replaced. Queueing (never cancelling) keeps each triggering push
+        materialized exactly once.
+        """
+        workflows = sorted((ROOT / ".github/workflows").glob("*.yml"))
+        self.assertTrue(workflows, "no workflows found to check")
+        for path in workflows:
+            text = path.read_text(encoding="utf-8")
+            if "git push" not in text:
+                continue
+            with self.subTest(workflow=path.name):
+                header = text.split("jobs:", 1)[0]
+                self.assertIn("concurrency:", header, f"{path.name} pushes without a concurrency group")
+                self.assertIn("${{ github.ref }}", header, f"{path.name} concurrency group is not per-ref")
+                self.assertIn(
+                    "cancel-in-progress: false",
+                    header,
+                    f"{path.name} may cancel a run that has already pushed",
+                )
+
+    def test_production_witness_derives_the_canonical_digest_from_the_manifest(self):
+        """The witness must not restate the digest it is supposed to be proving.
+
+        Parsing manifests/RULESET_V3.4.sha256 once and reusing it keeps the
+        validation, the endpoint assertion and witness.json on a single source,
+        so a migration cannot update the manifest and leave a stale literal.
+        """
+        workflow = (ROOT / ".github/workflows/genoma-production-witness.yml").read_text(encoding="utf-8")
+        manifest = (ROOT / "manifests/RULESET_V3.4.sha256").read_text(encoding="ascii").split()
+        self.assertEqual(len(manifest), 2, "manifest must be '<digest>  <canonical filename>'")
+        digest = manifest[0]
+
+        self.assertIn('read -r expected_sha expected_name < "$manifest"', workflow)
+        self.assertIn("GENOMA_EXPECTED_RULESET_SHA=$expected_sha", workflow)
+        self.assertNotIn(
+            digest,
+            workflow,
+            "the canonical digest is duplicated as a literal instead of derived from the manifest",
+        )
+
     def test_legacy_editorial_chunk_materializer_is_removed(self):
         self.assertFalse((ROOT / ".github/workflows/genoma-materialize-editorial-upload.yml").exists())
 

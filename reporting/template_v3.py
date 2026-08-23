@@ -580,12 +580,47 @@ def _add_vml_textbox(
     paragraph._p.append(run)
 
 
+# One page of a template is a bounded rendering job. Without an explicit budget a
+# wedged converter blocks render_docx_from_template forever, since subprocess.run
+# waits indefinitely by default.
+PAGE_CONVERSION_TIMEOUT_SECONDS = 120
+
+
+def _run_page_converter(argv: list[str], *, tool: str, page: int) -> None:
+    """Run one converter under an explicit budget, in this renderer's error currency.
+
+    Both failure modes reach the caller as TemplateV3Error: a non-zero exit and a
+    timeout would otherwise escape as CalledProcessError/TimeoutExpired and break
+    the renderer's single error contract.
+    """
+    try:
+        subprocess.run(
+            argv,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=PAGE_CONVERSION_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise TemplateV3Error(
+            f"{tool} exceeded {PAGE_CONVERSION_TIMEOUT_SECONDS}s converting template page {page}"
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        raise TemplateV3Error(
+            f"{tool} failed with exit status {exc.returncode} converting template page {page}"
+        ) from exc
+    except OSError as exc:
+        raise TemplateV3Error(f"{tool} could not be executed for template page {page}: {exc}") from exc
+
+
 def _convert_template_pages(
     template_pdf: Path,
     work: Path,
     page_count: int,
 ) -> tuple[list[Path], list[Path]]:
-    if shutil.which("pdftocairo") is None or shutil.which("pdftoppm") is None:
+    pdftocairo = shutil.which("pdftocairo")
+    pdftoppm = shutil.which("pdftoppm")
+    if pdftocairo is None or pdftoppm is None:
         raise TemplateV3Error(
             "DOCX template-v3 mode requires pdftocairo and pdftoppm (poppler-utils)"
         )
@@ -594,17 +629,18 @@ def _convert_template_pages(
     for page in range(1, page_count + 1):
         svg = work / f"page-{page}.svg"
         raw = work / f"page-{page}.svg.raw"
-        subprocess.run(
-            ["pdftocairo", "-f", str(page), "-l", str(page), "-svg", str(template_pdf), str(raw)],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+        # The resolved absolute paths are reused, so the executable that was
+        # checked is the executable that runs.
+        _run_page_converter(
+            [pdftocairo, "-f", str(page), "-l", str(page), "-svg", str(template_pdf), str(raw)],
+            tool="pdftocairo",
+            page=page,
         )
         raw.rename(svg)
         stem = work / f"page-{page}-fallback"
-        subprocess.run(
+        _run_page_converter(
             [
-                "pdftoppm",
+                pdftoppm,
                 "-f",
                 str(page),
                 "-l",
@@ -616,9 +652,8 @@ def _convert_template_pages(
                 str(template_pdf),
                 str(stem),
             ],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            tool="pdftoppm",
+            page=page,
         )
         svgs.append(svg)
         pngs.append(Path(str(stem) + ".png"))

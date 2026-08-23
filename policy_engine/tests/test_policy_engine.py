@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import tempfile
 import unittest
@@ -10,7 +9,14 @@ from pathlib import Path
 
 from genoma_policy.engine import CRITICAL_FINAL_AUDIT_KEYS, PolicyEngine
 from genoma_policy.paths import resolve_manifest_path, resolve_ruleset_path
-from genoma_policy.ruleset import RulesetError, enforce_unique_active_ruleset, load_ruleset, verify_external_manifest
+from genoma_policy.ruleset import (
+    EXPECTED_CANONICAL,
+    EXPECTED_SHA256,
+    RulesetError,
+    enforce_unique_active_ruleset,
+    load_ruleset,
+    verify_external_manifest,
+)
 from genoma_policy.scaffold import scaffold_manifest
 from genoma_policy.smoke import run_smoke
 
@@ -18,7 +24,6 @@ ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = ROOT.parent
 RULESET = resolve_ruleset_path(ROOT)
 HASH_MANIFEST = resolve_manifest_path(RULESET, ROOT)
-EXPECTED_SHA256 = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
 HISTORICAL_IDENTITY_FIXTURE = REPO_ROOT / "docs" / "history" / "v3.3" / "superseded-identities.json"
 
 
@@ -38,8 +43,13 @@ class RulesetTests(unittest.TestCase):
         self.assertEqual(ruleset.status, "VIGENTE")
         self.assertEqual(ruleset.version, "v3.4")
         self.assertEqual(ruleset.effective_date, "17/08/2026")
-        if os.environ.get("GENOMA_EXPECT_CANONICAL_SHA") == "1":
-            self.assertEqual(ruleset.sha256, EXPECTED_SHA256)
+        # Unconditional: this is the canonical identity test, and every consumer of
+        # that identity is held to the same oracle. Gating it on an environment
+        # variable let the suite run in a mode where the one assertion that names
+        # the digest was simply absent, while test_server asserted it regardless.
+        self.assertEqual(ruleset.sha256, EXPECTED_SHA256)
+        self.assertEqual(ruleset.canonical_filename, EXPECTED_CANONICAL)
+        self.assertEqual(ruleset.path.name, EXPECTED_CANONICAL)
         self.assertEqual([section.number for section in ruleset.sections], list(range(263)))
         verify_external_manifest(ruleset, HASH_MANIFEST)
 
@@ -133,6 +143,17 @@ class PolicyEngineTests(unittest.TestCase):
     def test_ruleset_gate_rejects_wrong_sha256(self):
         manifest = self.valid_analysis_manifest()
         manifest["ruleset"]["sha256"] = "0" * 64
+        self._assert_ruleset_gate_rejects(manifest)
+
+    def test_ruleset_gate_rejects_missing_canonical_filename(self):
+        """Every other identity field being right must not carry an unnamed ruleset."""
+        manifest = self.valid_analysis_manifest()
+        manifest["ruleset"].pop("canonical_filename")
+        self._assert_ruleset_gate_rejects(manifest)
+
+    def test_ruleset_gate_rejects_wrong_canonical_filename(self):
+        manifest = self.valid_analysis_manifest()
+        manifest["ruleset"]["canonical_filename"] = "REGRAS_PROJETO_GENOMA_VIGENTE_v9.9_2030-01-01.txt"
         self._assert_ruleset_gate_rejects(manifest)
 
     def test_post_deployment_is_nonblocking_pending_by_default(self):
