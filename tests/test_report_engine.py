@@ -53,7 +53,8 @@ class ReportEngineTest(unittest.TestCase):
         from reporting.engine import render_document
 
         self.assert_release_rejected(
-            lambda: render_document("01", {"case_id": "CASE-001"}, mode="FINAL")
+            lambda: render_document("01", {"case_id": "CASE-001"}, mode="FINAL"),
+            expected_reason="publication_gate:passed",
         )
 
     def test_final_mode_rejects_wrong_ruleset_digest(self):
