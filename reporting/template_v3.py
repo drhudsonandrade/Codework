@@ -19,6 +19,8 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
 MANIFEST_PATH = Path(__file__).with_name("reference_v3_manifest.json")
+RULESET_TEMPLATE_PREFIX = "GENOMA-HUDSON-RULESET-v"
+CURRENT_RULESET_TEMPLATE_LABEL = "GENOMA--RULESET-v3.4"
 
 SYSTEM_REPLACEMENTS = {
     "MODELO REUTILIZÁVEL v3.0": "RESULTADO GENÔMICO v3.0",
@@ -26,7 +28,6 @@ SYSTEM_REPLACEMENTS = {
     "NÃO INSERIDOS": "CONTROLADOS",
     "MODELO — NÃO É RESULTADO GENÉTICO": "PUBLICAÇÃO CONTROLADA — RESULTADO GENÔMICO",
     "MODELO — NÃO É RESULTADO": "PUBLICAÇÃO CONTROLADA",
-    "GENOMA-HUDSON-RULESET-v3." + "3": "GENOMA--RULESET-v3.4",
     "MODELO SEM DADOS PESSOAIS": "RESULTADO GENÔMICO",
     "Campos em azul são placeholders obrigatórios ou condicionais; preencher com dado rastreável ou declarar NÃO DISPONÍVEL.":
         "Dados ausentes permanecem NÃO DISPONÍVEL; consulte limitações, fontes e status operacional.",
@@ -236,6 +237,13 @@ def _system_values(data: dict[str, Any]) -> dict[str, Any]:
     return values
 
 
+def _system_value_for_source(source_text: str, systems: dict[str, Any]) -> Any | None:
+    """Map historical template chrome to the current ruleset label without encoding an old active version."""
+    if source_text.startswith(RULESET_TEMPLATE_PREFIX):
+        return CURRENT_RULESET_TEMPLATE_LABEL
+    return systems.get(source_text)
+
+
 def render_pdf_from_template(rendered: dict[str, Any], path: Path, template_dir: Path, *, strict: bool = False) -> dict[str, Any]:
     report_id = str(rendered["metadata"]["report_id"])
     manifest = load_reference_manifest()
@@ -260,7 +268,7 @@ def render_pdf_from_template(rendered: dict[str, Any], path: Path, template_dir:
         w = float(page.mediabox.width); h = float(page.mediabox.height)
         overlay = io.BytesIO(); c = canvas.Canvas(overlay, pagesize=(w, h)); changed = False
         for item in by_page_controls.get(page_no, []):
-            raw = systems.get(item["source_text"])
+            raw = _system_value_for_source(str(item["source_text"]), systems)
             if raw is None:
                 continue
             value = _normalize_value(raw, default_color=item.get("color", "#17212B"))
@@ -422,7 +430,7 @@ def render_docx_from_template(rendered: dict[str, Any], path: Path, template_dir
             p=doc.add_paragraph(); p.paragraph_format.space_before=Pt(0); p.paragraph_format.space_after=Pt(0); p.paragraph_format.line_spacing=Pt(1)
             inline=p.add_run().add_picture(str(png),width=Mm(210),height=Mm(297))._inline; _inline_to_anchor(inline)
             for item in controls_by_page.get(page_no,[]):
-                raw=systems.get(item["source_text"])
+                raw=_system_value_for_source(str(item["source_text"]), systems)
                 if raw is None: continue
                 value=_normalize_value(raw,default_color=item.get("color","#17212B")); bbox=[float(x) for x in item["bbox"]]; bg=str(item["background"]); fsize=float(value["font_size_pt"] or item.get("font_size_pt") or 7.0)
                 fsize=_fit_single_line_size(value["value"], max(8.0,bbox[2]-bbox[0]), fsize, _register_fonts()["bold"])
