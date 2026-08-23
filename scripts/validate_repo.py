@@ -334,7 +334,12 @@ def validate_superseded_identity_locations(root: Path, errors: list[str]) -> Non
 
         try:
             text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
+        except OSError as exc:
+            errors.append(
+                f"unreadable identity surface cannot be scanned: {relative}: {type(exc).__name__}: {exc}"
+            )
+            continue
+        except UnicodeDecodeError:
             continue
         # Strong tokens are scanned in the raw text and, for Python, in every folded
         # constant as well, so a split or interpolated literal cannot hide one. This scan
