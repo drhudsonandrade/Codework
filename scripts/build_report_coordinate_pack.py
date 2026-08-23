@@ -164,23 +164,50 @@ def _ruleset_control_sources(text: str) -> list[str]:
     return sources
 
 
+def _spans_are_geometrically_contiguous(
+    previous: dict[str, Any], current: dict[str, Any]
+) -> bool:
+    """Allow marker compaction only across physically adjacent text fragments."""
+    left = fitz.Rect(previous["bbox"])
+    right = fitz.Rect(current["bbox"])
+    scale = max(float(previous["size"]), float(current["size"]), 1.0)
+
+    vertical_overlap = min(left.y1, right.y1) - max(left.y0, right.y0)
+    if vertical_overlap >= -0.25 * scale:
+        horizontal_gap = right.x0 - left.x1
+        return -scale <= horizontal_gap <= max(18.0, 2.0 * scale)
+
+    line_gap = right.y0 - left.y1
+    aligned_left_edge = abs(right.x0 - left.x0) <= max(36.0, 3.0 * scale)
+    return 0 <= line_gap <= max(12.0, 1.5 * scale) and aligned_left_edge
+
+
 def _ruleset_control_occurrences(page: fitz.Page) -> list[tuple[str, fitz.Rect, dict[str, Any]]]:
     """Locate every ruleset marker from layout spans, including line-split markers.
 
     ``Page.search_for`` does not reliably match a marker whose text is split across
-    separate PDF lines. Compacting only whitespace while retaining a character-to-span
-    owner map lets the compiler validate the complete marker and recover one union bbox
-    for each physical occurrence without trusting plain-text extraction alone.
+    separate PDF lines. Whitespace is compacted only while adjacent spans remain
+    geometrically continuous; a sentinel boundary prevents unrelated page regions from
+    being concatenated into a synthetic marker or oversized controlled span.
     """
     spans = _spans(page)
     compact_chars: list[str] = []
-    owners: list[int] = []
+    owners: list[int | None] = []
+    previous_index: int | None = None
     for index, span in enumerate(spans):
-        for char in str(span["text"]):
-            if char.isspace():
-                continue
-            compact_chars.append(char)
-            owners.append(index)
+        visible_chars = [char for char in str(span["text"]) if not char.isspace()]
+        if not visible_chars:
+            continue
+        if (
+            previous_index is not None
+            and not _spans_are_geometrically_contiguous(spans[previous_index], span)
+        ):
+            compact_chars.append("\0")
+            owners.append(None)
+        compact_chars.extend(visible_chars)
+        owners.extend([index] * len(visible_chars))
+        previous_index = index
+
     compact = "".join(compact_chars)
     found: list[tuple[str, fitz.Rect, dict[str, Any]]] = []
     offset = 0
@@ -200,7 +227,13 @@ def _ruleset_control_occurrences(page: fitz.Page) -> list[tuple[str, fitz.Rect, 
             raise RuntimeError(f"malformed GENOMA ruleset control marker: {marker + after!r}")
         if marker != CANONICAL_RULESET_CONTROL:
             raise RuntimeError(f"noncanonical GENOMA ruleset control marker: {marker}")
-        indices = sorted(set(owners[start:match.end()]))
+        indices = sorted(
+            {
+                owner
+                for owner in owners[start:match.end()]
+                if owner is not None
+            }
+        )
         if not indices:
             raise RuntimeError("canonical GENOMA ruleset control marker has no layout span")
         rect = _union([spans[index]["bbox"] for index in indices])
