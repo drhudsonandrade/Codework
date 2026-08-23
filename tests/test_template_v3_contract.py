@@ -6,6 +6,12 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+RULESET = {
+    'status': 'VIGENTE',
+    'version': 'v3.4',
+    'effective_date': '17/08/2026',
+    'sha256': 'ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580',
+}
 
 
 class TemplateV3ContractTest(unittest.TestCase):
@@ -26,6 +32,18 @@ class TemplateV3ContractTest(unittest.TestCase):
             with self.assertRaises(TemplateV3Error):
                 verify_template_pack(Path(td))
 
+    def test_historical_template_ruleset_labels_are_generically_migrated_to_current_identity(self):
+        from reporting.template_v3 import CURRENT_RULESET_TEMPLATE_LABEL, _system_value_for_source
+
+        self.assertEqual(CURRENT_RULESET_TEMPLATE_LABEL, 'GENOMA--RULESET-v3.4')
+        systems = {'OTHER': 'value'}
+        self.assertEqual(
+            _system_value_for_source('GENOMA-HUDSON-RULESET-v2.8', systems),
+            CURRENT_RULESET_TEMPLATE_LABEL,
+        )
+        self.assertEqual(_system_value_for_source('OTHER', systems), 'value')
+        self.assertIsNone(_system_value_for_source('UNKNOWN', systems))
+
     @unittest.skipUnless(os.environ.get('GENOMA_REPORT_TEMPLATE_DIR'), 'external v3 template pack not mounted')
     def test_external_template_pack_verifies_and_report10_strict_docx_is_editable(self):
         from reporting.engine import render_document
@@ -40,10 +58,10 @@ class TemplateV3ContractTest(unittest.TestCase):
         data={
             'case_id':'CASE-TEMPLATE-10',
             'summary':'fixture',
-            'ruleset':{'status':'VIGENTE','version':'v3.3','effective_date':'14/08/2026'},
+            'ruleset':dict(RULESET),
             'publication_gate':{'passed':True,'consent_verified':True,'qc_verified':True,'evidence_verified':True,'placeholders_resolved':True},
             'policy_evaluation':{'ready_for_requested_operation':True,'planes':{'policy_control':{'state':'PASS'},'scientific_data':{'state':'PASS'},'evidence':{'state':'PASS'},'audit':{'state':'PASS'}},'gates':[{'gate':'FINAL_AUDIT_GATE','state':'PASS','blocking':True}]},
-            'post_deployment_status':'PASS','sections':{},'findings':[],'execution_manifest':{'status':'VERIFICADO'},'sources':['fixture'],'limitations':'fixture',
+            'post_deployment_status':'PENDENTE','sections':{},'findings':[],'execution_manifest':{'status':'VERIFICADO'},'sources':['fixture'],'limitations':'fixture',
             'editorial_mode':'template-v3','template_fields_complete':True,'template_fields':fields,
         }
         rendered=render_document('10',data,mode='FINAL')
