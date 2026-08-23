@@ -46,7 +46,11 @@ class CodeRabbitHttpsTransportTests(unittest.TestCase):
 
     def test_every_curl_invocation_pins_https(self) -> None:
         # Backslash-continued invocations are matched whole, so flags on later lines count.
-        for match in re.finditer(r"^[ \t]*curl\b(?:[^\n]*\\\n)*[^\n]*", self.script, re.MULTILINE):
+        matches = list(
+            re.finditer(r"^[ \t]*curl\b(?:[^\n]*\\\n)*[^\n]*", self.script, re.MULTILINE)
+        )
+        self.assertTrue(matches, "setup script must contain at least one curl invocation")
+        for match in matches:
             invocation = match.group(0)
             with self.subTest(invocation=invocation.strip()[:80]):
                 self.assertIn("--proto '=https'", invocation)
