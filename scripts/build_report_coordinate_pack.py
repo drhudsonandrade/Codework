@@ -15,13 +15,13 @@ import fitz
 
 COMPILER_ID = "fitz-1.26.7-genoma-v2"
 TOKEN_RE = re.compile(r"\[\[.*?\]\]", re.S)
+RULESET_CONTROL_RE = re.compile(r"GENOMA-HUDSON-RULESET-v\d+(?:\.\d+)+")
 CONTROLLED = [
     "MODELO REUTILIZÁVEL v3.0",
     "MODELO EDITÁVEL",
     "NÃO INSERIDOS",
     "MODELO — NÃO É RESULTADO GENÉTICO",
     "MODELO — NÃO É RESULTADO",
-    "GENOMA-HUDSON-RULESET-v3." + "3",
     "MODELO SEM DADOS PESSOAIS",
     "Campos em azul são placeholders obrigatórios ou condicionais; preencher com dado rastreável ou declarar NÃO DISPONÍVEL.",
 ]
@@ -140,7 +140,9 @@ def _tokens(page: fitz.Page) -> list[tuple[str, fitz.Rect, dict[str, Any]]]:
 def _controls(page: fitz.Page) -> list[tuple[str, fitz.Rect, dict[str, Any]]]:
     spans = _spans(page)
     result: list[tuple[str, fitz.Rect, dict[str, Any]]] = []
-    for source in CONTROLLED:
+    sources = list(CONTROLLED)
+    sources.extend(match.group(0) for match in RULESET_CONTROL_RE.finditer(page.get_text("text", sort=True)))
+    for source in dict.fromkeys(sources):
         for rect in page.search_for(source):
             first = next((s for s in spans if (s["bbox"] & rect).get_area() > 0), None)
             result.append((source, rect, first or {"size": 7.0, "font": "DejaVuSans", "color": 0}))
