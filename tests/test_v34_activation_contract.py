@@ -25,26 +25,32 @@ EXPECTED_SHA = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580
 EXPECTED_VERSION = "v3.4"
 EXPECTED_DATE = "17/08/2026"
 EXPECTED_ARCHIVED_BOOTSTRAP_SHA = "87af4f99bcd6b6f3f857a1ca725103e95dabf70c3c926d7f0d4e83b037e69fd8"
+EXPECTED_SUPERSEDED_FIXTURE_SHA = "5a6f888f176ed4c963c43c24f38697ea363f5772be06c63e70d6a8f5c497e503"
+HISTORY_ROOT = ROOT / "docs" / "history"
+SUPERSEDED_FIXTURE = next(HISTORY_ROOT.glob("*/superseded-identities.json"))
+SUPERSEDED = json.loads(SUPERSEDED_FIXTURE.read_text(encoding="utf-8"))
 EXPECTED_SUPERSEDED_TOKENS = frozenset(
     {
-        "REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt",
-        "RULESET_V3.3.sha256",
-        "v3.3",
-        "GENOMA-V3.3",
-        "14/08/2026",
-        "2026-08-14",
-        "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a",
+        SUPERSEDED["canonical_filename"],
+        SUPERSEDED["manifest_filename"],
+        SUPERSEDED["version"],
+        SUPERSEDED["rule_id_prefix"],
+        SUPERSEDED["effective_date"],
+        SUPERSEDED["iso_date"],
+        SUPERSEDED["raw_sha256"],
     }
 )
-EXPECTED_FORBIDDEN_ACTIVE_PATHS = frozenset(
-    {
-        "manifests/RULESET_V3.3.sha256",
-        "deploy/attestations/bootstrap-project-v3.3.json",
-    }
-)
+EXPECTED_FORBIDDEN_ACTIVE_PATHS = frozenset(SUPERSEDED["forbidden_active_paths"])
 
 
 class V34ActivationContractTests(unittest.TestCase):
+    def test_historical_superseded_identity_fixture_is_immutable(self) -> None:
+        self.assertEqual(
+            hashlib.sha256(SUPERSEDED_FIXTURE.read_bytes()).hexdigest(),
+            EXPECTED_SUPERSEDED_FIXTURE_SHA,
+        )
+        self.assertEqual(SUPERSEDED["status"], "HISTORICAL")
+
     def test_shared_ruleset_contract_targets_v34(self) -> None:
         self.assertEqual(sealed_ruleset.EXPECTED_NAME, EXPECTED_NAME)
         self.assertEqual(sealed_ruleset.EXPECTED_SHA, EXPECTED_SHA)
@@ -55,10 +61,15 @@ class V34ActivationContractTests(unittest.TestCase):
         self.assertEqual(policy_ruleset.EXPECTED_VERSION, EXPECTED_VERSION)
         self.assertEqual(policy_ruleset.EXPECTED_DATE, EXPECTED_DATE)
         self.assertEqual(policy_paths.CANONICAL_RULESET_NAME, EXPECTED_NAME)
-        self.assertEqual(policy_paths.CANONICAL_MANIFEST_RELATIVE, Path("manifests") / "RULESET_V3.4.sha256")
+        self.assertEqual(
+            policy_paths.CANONICAL_MANIFEST_RELATIVE,
+            Path("manifests") / "RULESET_V3.4.sha256",
+        )
 
     def test_sealed_transport_is_v34_and_keeps_13_chunks(self) -> None:
-        manifest = json.loads((ROOT / "normative" / "sealed" / "MANIFEST.json").read_text(encoding="utf-8"))
+        manifest = json.loads(
+            (ROOT / "normative" / "sealed" / "MANIFEST.json").read_text(encoding="utf-8")
+        )
         self.assertEqual(manifest["canonical_filename"], EXPECTED_NAME)
         self.assertEqual(manifest["version"], EXPECTED_VERSION)
         self.assertEqual(manifest["effective_date"], EXPECTED_DATE)
@@ -75,14 +86,20 @@ class V34ActivationContractTests(unittest.TestCase):
     def test_external_v34_manifest_is_the_active_contract(self) -> None:
         current = ROOT / "manifests" / "RULESET_V3.4.sha256"
         self.assertTrue(current.is_file())
-        self.assertEqual(current.read_text(encoding="ascii").strip(), f"{EXPECTED_SHA}  {EXPECTED_NAME}")
+        self.assertEqual(
+            current.read_text(encoding="ascii").strip(),
+            f"{EXPECTED_SHA}  {EXPECTED_NAME}",
+        )
 
     def test_live_smoke_targets_v34_identity(self) -> None:
         text = (ROOT / "scripts" / "run_live_post_deployment_smoke.py").read_text(encoding="utf-8")
         self.assertIn(EXPECTED_SHA, text)
-        self.assertIn("v3.4/VIGENTE/17/08/2026", text)
+        self.assertIn(f"{EXPECTED_VERSION}/VIGENTE/{EXPECTED_DATE}", text)
         self.assertIn(EXPECTED_NAME, text)
-        self.assertNotIn("v3.3/VIGENTE/14/08/2026", text)
+        superseded_identity = (
+            f"{SUPERSEDED['version']}/VIGENTE/{SUPERSEDED['effective_date']}"
+        )
+        self.assertNotIn(superseded_identity, text)
         self.assertIn("verify_bootstrap_attestation", text)
 
     def test_each_superseded_identity_token_fails_independently(self) -> None:
@@ -103,23 +120,33 @@ class V34ActivationContractTests(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("historical-looking active surface", encoding="utf-8")
                 errors = validate(root)
-                self.assertTrue(any(relative in error and "superseded active ruleset path" in error for error in errors))
+                self.assertTrue(
+                    any(
+                        relative in error and "superseded active ruleset path" in error
+                        for error in errors
+                    )
+                )
 
-        self.assertTrue((ROOT / "docs" / "history" / "v3.3" / "README.md").is_file())
-        self.assertFalse((ROOT / "manifests" / "RULESET_V3.3.sha256").exists())
-        self.assertFalse((ROOT / "deploy" / "attestations" / "bootstrap-project-v3.3.json").exists())
+        history_dir = SUPERSEDED_FIXTURE.parent
+        self.assertTrue((history_dir / "README.md").is_file())
+        for relative in EXPECTED_FORBIDDEN_ACTIVE_PATHS:
+            self.assertFalse((ROOT / relative).exists())
 
-    def test_archived_v33_bootstrap_is_byte_exact_historical_provenance(self) -> None:
-        archived = ROOT / "docs" / "history" / "v3.3" / "bootstrap-project-v3.3.HISTORICAL.json"
+    def test_archived_bootstrap_is_byte_exact_historical_provenance(self) -> None:
+        archived = next(SUPERSEDED_FIXTURE.parent.glob("bootstrap-project-*.HISTORICAL.json"))
         self.assertTrue(archived.is_file())
-        self.assertEqual(hashlib.sha256(archived.read_bytes()).hexdigest(), EXPECTED_ARCHIVED_BOOTSTRAP_SHA)
+        self.assertEqual(
+            hashlib.sha256(archived.read_bytes()).hexdigest(),
+            EXPECTED_ARCHIVED_BOOTSTRAP_SHA,
+        )
 
     def test_stray_superseded_identity_outside_history_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             stray = root / "policy_engine" / "docs" / "stray.md"
             stray.parent.mkdir(parents=True, exist_ok=True)
-            stray.write_text("compiled rule GENOMA-V3.3-S001", encoding="utf-8")
+            token = SUPERSEDED["rule_id_prefix"] + "-S001"
+            stray.write_text(f"compiled rule {token}", encoding="utf-8")
             errors = validate(root)
             self.assertTrue(
                 any(
@@ -135,13 +162,18 @@ class V34ActivationContractTests(unittest.TestCase):
             root = Path(td)
             stray = root / "reporting" / "split_identity.py"
             stray.parent.mkdir(parents=True, exist_ok=True)
-            stray.write_text('RULESET = "GENOMA-V3." + "3-S001"\n', encoding="utf-8")
+            token = SUPERSEDED["rule_id_prefix"]
+            midpoint = len(token) - 1
+            stray.write_text(
+                f"RULESET = {token[:midpoint]!r} + {token[midpoint:]!r}\n",
+                encoding="utf-8",
+            )
             errors = validate(root)
             self.assertTrue(
                 any(
                     "reporting/split_identity.py" in error
                     and "superseded identity outside explicit history" in error
-                    and "GENOMA-V3.3" in error
+                    and token in error
                     for error in errors
                 ),
                 errors,
@@ -151,7 +183,7 @@ class V34ActivationContractTests(unittest.TestCase):
         path = ROOT / "deploy" / "attestations" / "bootstrap-project-v3.4.json"
         evidence = verify_bootstrap_attestation(path)
         self.assertEqual(evidence["status"], "VERIFICADO")
-        self.assertEqual(evidence["ruleset_identity"], "v3.4/VIGENTE/17/08/2026")
+        self.assertEqual(evidence["ruleset_identity"], f"{EXPECTED_VERSION}/VIGENTE/{EXPECTED_DATE}")
         self.assertEqual(evidence["canonical_sha256"], EXPECTED_SHA)
         self.assertEqual(len(evidence["checks_verified"]), 8)
 
@@ -171,8 +203,17 @@ class V34ActivationContractTests(unittest.TestCase):
             manifest = {
                 "case_id": "VERSION",
                 "session_id": "VERSION",
-                "ruleset": {"version": EXPECTED_VERSION, "effective_date": EXPECTED_DATE, "sha256": EXPECTED_SHA},
-                "operation": {"name": "version-check", "analysis_relevant": False, "requires_real_calling": False, "output": "ANALYSIS"},
+                "ruleset": {
+                    "version": EXPECTED_VERSION,
+                    "effective_date": EXPECTED_DATE,
+                    "sha256": EXPECTED_SHA,
+                },
+                "operation": {
+                    "name": "version-check",
+                    "analysis_relevant": False,
+                    "requires_real_calling": False,
+                    "output": "ANALYSIS",
+                },
                 "claims": [],
                 "sources": [],
                 "section_attestations": [],
