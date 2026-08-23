@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -130,11 +131,7 @@ class TemplateV3ContractTest(unittest.TestCase):
                 _patch_docx_svg(malicious, [])
 
     def test_docx_svg_patch_rejects_duplicate_archive_members(self):
-        """extractall writes members in order, so a repeated name overwrites the first.
-
-        Both entries pass the path-safety check individually; only rejecting the repeat
-        stops a second member from replacing content that was already validated.
-        """
+        """extractall writes members in order, so a repeated name overwrites the first."""
         from reporting.template_v3 import TemplateV3Error, _patch_docx_svg
 
         with tempfile.TemporaryDirectory() as td:
@@ -142,6 +139,18 @@ class TemplateV3ContractTest(unittest.TestCase):
             with zipfile.ZipFile(duplicated, "w") as archive:
                 archive.writestr("word/document.xml", "<original/>")
                 archive.writestr("word/document.xml", "<replacement/>")
+            with self.assertRaisesRegex(TemplateV3Error, "duplicate DOCX archive member"):
+                _patch_docx_svg(duplicated, [])
+
+    def test_docx_svg_patch_rejects_members_with_same_normalized_target(self):
+        """Distinct ZIP names must not be allowed to overwrite one extraction target."""
+        from reporting.template_v3 import TemplateV3Error, _patch_docx_svg
+
+        with tempfile.TemporaryDirectory() as td:
+            duplicated = Path(td) / "normalized-duplicate.docx"
+            with zipfile.ZipFile(duplicated, "w") as archive:
+                archive.writestr("word/document.xml", "<original/>")
+                archive.writestr("word/./document.xml", "<replacement/>")
             with self.assertRaisesRegex(TemplateV3Error, "duplicate DOCX archive member"):
                 _patch_docx_svg(duplicated, [])
 
@@ -154,7 +163,7 @@ class TemplateV3ContractTest(unittest.TestCase):
         with self.assertRaises(TemplateV3Error) as caught:
             _run_poppler(
                 [
-                    "python3",
+                    sys.executable,
                     "-c",
                     "import sys; sys.stderr.write('Syntax Error: Couldn\\'t find trailer dictionary\\n'); sys.exit(3)",
                 ],
