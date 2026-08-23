@@ -258,6 +258,17 @@ class ReportContractTest(unittest.TestCase):
         expected = [c["id"] for c in report["checks"] if c["blocking"] and c["result"] != PASS]
         self.assertEqual(report["blocking_failures"], expected)
 
+    def test_nonblocking_unavailable_check_preserves_result_axis(self):
+        with mock.patch("scripts.genoma_audit._grch38_strategy_probe", side_effect=OSError("probe unreadable")):
+            report = audit(allow_template_sealed_only=True)
+        gate = next(c for c in report["checks"] if c["id"] == "GRCH38_NO_PERMANENT_HIGHMEM_STRATEGY")
+        self.assertEqual((gate["operational_status"], gate["result"]), (UNAVAILABLE, "ERROR"))
+        self.assertFalse(gate["blocking"])
+        self.assertIn("GRCH38_NO_PERMANENT_HIGHMEM_STRATEGY", report["unavailable_checks"])
+        self.assertEqual(report["operational_status"], UNAVAILABLE)
+        self.assertEqual(report["result"], PASS)
+        self.assertNotIn("GRCH38_NO_PERMANENT_HIGHMEM_STRATEGY", report["blocking_failures"])
+
 
 if __name__ == "__main__":
     unittest.main()
