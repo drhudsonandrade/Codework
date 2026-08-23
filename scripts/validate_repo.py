@@ -64,31 +64,6 @@ SKIP_PARTS = {".git", "node_modules", "dist", "__pycache__", ".pytest_cache"}
 TEXT_IDENTITY_SUFFIXES = {
     ".json", ".md", ".nf", ".py", ".rego", ".sh", ".toml", ".ts", ".txt", ".yaml", ".yml",
 }
-HISTORICAL_V33_ROOT = Path("docs/history/v3.3")
-HISTORICAL_SUPERSEDED_IDENTITY_PATHS = {
-    Path("docs/PRE_DEPLOYMENT_VALIDATION_2026-08-15.md"),
-    Path("docs/audits/GENOMA_V0.8_FINAL_AUDIT_2026-08-16.md"),
-    Path("docs/audits/GENOMA_V0.8_PREIMPLEMENTATION_AUDIT_2026-08-16.md"),
-    Path("docs/superpowers/plans/2026-08-14-magalu-private-mcp.md"),
-    Path("docs/superpowers/plans/2026-08-16-genoma-array-evidence-template-lock-v0.8.md"),
-}
-SUPERSEDED_IDENTITY_GUARDRAIL_PATHS = {
-    Path("scripts/validate_repo.py"),
-    Path("tests/test_v34_activation_contract.py"),
-}
-FORBIDDEN_ACTIVE_PATHS = (
-    "manifests/RULESET_V3.3.sha256",
-    "deploy/attestations/bootstrap-project-v3.3.json",
-)
-OLD_ACTIVE_TOKENS = (
-    "REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt",
-    "RULESET_V3.3.sha256",
-    "v3.3",
-    "GENOMA-V3.3",
-    "14/08/2026",
-    "2026-08-14",
-    "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a",
-)
 ACTIVE_IDENTITY_SURFACES = (
     "scripts/run_live_post_deployment_smoke.py", "scripts/verify_ruleset.sh", "scripts/genoma_audit.py",
     "scripts/run_snp_array.py", "scripts/annotate_partial_genome.py", "scripts/build_wgs_curated_manifest.py",
@@ -109,6 +84,34 @@ ACTIVE_IDENTITY_SURFACES = (
     "docs/DETERMINISTIC_ENGINE.md", "docs/PRODUCTION_CEREMONY.md", "docs/MAGALU_PRIVATE_MCP_SETUP.md",
     "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md", "docs/SNP_ARRAY_PARTIAL_GENOME.md", "docs/PR_BODY.md",
 )
+
+
+def _load_superseded_contract() -> tuple[tuple[str, ...], tuple[str, ...]]:
+    fixtures = sorted((ROOT / "docs" / "history").glob("*/superseded-identities.json"))
+    if not fixtures:
+        raise RuntimeError("superseded identity registry is missing from docs/history")
+    tokens: list[str] = []
+    forbidden_paths: list[str] = []
+    for fixture in fixtures:
+        payload = json.loads(fixture.read_text(encoding="utf-8"))
+        if payload.get("schema") != "genoma-superseded-identity-v1" or payload.get("status") != "HISTORICAL":
+            raise RuntimeError(f"invalid superseded identity registry: {fixture}")
+        required = (
+            "canonical_filename", "manifest_filename", "version", "rule_id_prefix",
+            "effective_date", "iso_date", "raw_sha256", "forbidden_active_paths",
+        )
+        missing = [key for key in required if not payload.get(key)]
+        if missing:
+            raise RuntimeError(f"incomplete superseded identity registry {fixture}: {missing}")
+        tokens.extend(str(payload[key]) for key in required[:-1])
+        forbidden = payload["forbidden_active_paths"]
+        if not isinstance(forbidden, list) or not all(isinstance(item, str) and item for item in forbidden):
+            raise RuntimeError(f"invalid forbidden_active_paths in {fixture}")
+        forbidden_paths.extend(forbidden)
+    return tuple(dict.fromkeys(tokens)), tuple(dict.fromkeys(forbidden_paths))
+
+
+OLD_ACTIVE_TOKENS, FORBIDDEN_ACTIVE_PATHS = _load_superseded_contract()
 
 
 def validate_sealed_ruleset(root: Path, errors: list[str]) -> None:
@@ -146,26 +149,33 @@ def _python_constant_strings(text: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(value for value in values if value is not None))
 
 
-def _is_historical_superseded_identity_path(relative: Path) -> bool:
-    return (
-        relative in HISTORICAL_SUPERSEDED_IDENTITY_PATHS
-        or relative == HISTORICAL_V33_ROOT
-        or HISTORICAL_V33_ROOT in relative.parents
+def _historical_roots(root: Path) -> tuple[Path, ...]:
+    history = root / "docs" / "history"
+    return tuple(
+        fixture.parent.relative_to(root)
+        for fixture in sorted(history.glob("*/superseded-identities.json"))
     )
 
 
+def _is_historical_path(relative: Path, history_roots: tuple[Path, ...]) -> bool:
+    return any(relative == historical or historical in relative.parents for historical in history_roots)
+
+
 def validate_superseded_identity_locations(root: Path, errors: list[str]) -> None:
-    """Reject superseded identities globally except immutable historical records and guardrail fixtures."""
+    """Reject superseded identities globally except explicit versioned history roots."""
+    history_roots = _historical_roots(root)
     for path in root.rglob("*"):
         if not path.is_file() or any(part in SKIP_PARTS for part in path.parts):
             continue
         relative = path.relative_to(root)
-        if relative in SUPERSEDED_IDENTITY_GUARDRAIL_PATHS:
+        if _is_historical_path(relative, history_roots):
             continue
-        if _is_historical_superseded_identity_path(relative):
-            continue
-        if "v3.3" in relative.as_posix().lower():
-            errors.append(f"superseded identity path outside explicit history: {relative}")
+
+        relative_text = relative.as_posix()
+        for token in OLD_ACTIVE_TOKENS:
+            if token in relative_text:
+                errors.append(f"superseded identity path outside explicit history: {relative}: {token}")
+
         if path.suffix.lower() not in TEXT_IDENTITY_SUFFIXES and path.name not in {"Dockerfile", "AGENTS.md"}:
             continue
         try:
