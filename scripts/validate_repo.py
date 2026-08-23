@@ -128,8 +128,14 @@ def validate_active_identity_text(text: str, relative: str, errors: list[str]) -
             errors.append(f"active ruleset surface still references superseded identity: {relative}: {token}")
 
 
+def _constant_value(node: ast.AST) -> str | int | float | bool | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, (str, int, float, bool)):
+        return node.value
+    return None
+
+
 def _constant_string(node: ast.AST) -> str | None:
-    """Fold only literal string concatenations; never execute repository code."""
+    """Fold static string expressions without executing repository code."""
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
@@ -137,6 +143,21 @@ def _constant_string(node: ast.AST) -> str | None:
         right = _constant_string(node.right)
         if left is not None and right is not None:
             return left + right
+        return None
+    if isinstance(node, ast.JoinedStr):
+        parts: list[str] = []
+        for value in node.values:
+            if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                parts.append(value.value)
+                continue
+            if isinstance(value, ast.FormattedValue):
+                constant = _constant_value(value.value)
+                if constant is None or value.format_spec is not None or value.conversion not in {-1, 115}:
+                    return None
+                parts.append(str(constant))
+                continue
+            return None
+        return "".join(parts)
     return None
 
 
