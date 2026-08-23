@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -12,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RULESET_SHA = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
 COMMAND_TIMEOUT_SECONDS = 180
+PROCESS_TERMINATION_GRACE_SECONDS = 0.5
 OUTPUT_TAIL_BYTES = 6000
 
 
@@ -26,20 +28,56 @@ def _command_evidence(stdout: bytes | str | None, stderr: bytes | str | None) ->
     return "STDOUT\n" + _decode_tail(stdout) + "\nSTDERR\n" + _decode_tail(stderr)
 
 
-def run(cmd: list[str], *, timeout_seconds: int = COMMAND_TIMEOUT_SECONDS) -> tuple[int, str]:
+def _signal_process_tree(process: subprocess.Popen[bytes], sig: signal.Signals) -> None:
+    if process.poll() is not None:
+        return
     try:
-        p = subprocess.run(
-            cmd,
-            cwd=ROOT,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=False,
-            timeout=timeout_seconds,
-        )
+        if os.name == "posix":
+            os.killpg(process.pid, sig)
+        elif sig == signal.SIGTERM:
+            process.terminate()
+        else:
+            process.kill()
+    except ProcessLookupError:
+        return
+
+
+def _finish_timed_out_process(
+    process: subprocess.Popen[bytes],
+    timeout_exc: subprocess.TimeoutExpired,
+) -> tuple[bytes | str | None, bytes | str | None]:
+    stdout = timeout_exc.stdout
+    stderr = timeout_exc.stderr
+    _signal_process_tree(process, signal.SIGTERM)
+    try:
+        final_stdout, final_stderr = process.communicate(timeout=PROCESS_TERMINATION_GRACE_SECONDS)
+    except subprocess.TimeoutExpired as term_exc:
+        stdout = term_exc.stdout if term_exc.stdout is not None else stdout
+        stderr = term_exc.stderr if term_exc.stderr is not None else stderr
+        _signal_process_tree(process, signal.SIGKILL)
+        final_stdout, final_stderr = process.communicate()
+    if final_stdout is not None:
+        stdout = final_stdout
+    if final_stderr is not None:
+        stderr = final_stderr
+    return stdout, stderr
+
+
+def run(cmd: list[str], *, timeout_seconds: float = COMMAND_TIMEOUT_SECONDS) -> tuple[int, str]:
+    process = subprocess.Popen(
+        cmd,
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=os.name == "posix",
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout_seconds)
     except subprocess.TimeoutExpired as exc:
-        evidence = _command_evidence(exc.stdout, exc.stderr)
+        stdout, stderr = _finish_timed_out_process(process, exc)
+        evidence = _command_evidence(stdout, stderr)
         return 124, f"TIMEOUT after {timeout_seconds}s\n{evidence}"
-    return p.returncode, _command_evidence(p.stdout, p.stderr)
+    return process.returncode, _command_evidence(stdout, stderr)
 
 
 def _python_runtime_evidence() -> tuple[bool, str]:
