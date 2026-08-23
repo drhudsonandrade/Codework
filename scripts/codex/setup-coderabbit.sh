@@ -109,13 +109,11 @@ fi
 [[ "$CODERABBIT_BINARY_SHA256" =~ ^[0-9a-fA-F]{64}$ ]] || fail "CODERABBIT_BINARY_SHA256 deve conter exatamente 64 dígitos hexadecimais."
 
 observed_version="$(coderabbit --version 2>&1)"
-case "$observed_version" in
-  *"${CODERABBIT_VERSION}"*) ;;
-  *)
-    echo "ERROR: CodeRabbit CLI fora da versão fixada ${CODERABBIT_VERSION}: ${observed_version}" >&2
-    exit 5
-    ;;
-esac
+observed_version_token="$(awk 'NF { token=$NF } END { print token }' <<<"$observed_version")"
+if [[ "$observed_version_token" != "$CODERABBIT_VERSION" ]]; then
+  echo "ERROR: CodeRabbit CLI fora da versão fixada ${CODERABBIT_VERSION}: ${observed_version}" >&2
+  exit 5
+fi
 
 coderabbit_path="$(command -v coderabbit)"
 observed_sha256="$(sha256sum "$coderabbit_path" | awk '{print $1}')"
