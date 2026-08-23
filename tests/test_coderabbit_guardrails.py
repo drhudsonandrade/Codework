@@ -86,6 +86,13 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
             script.index('[[ "$observed_archive_sha" == "$expected_archive_sha" ]]'),
             script.index('unzip -q "$archive"'),
         )
+        self.assertIn('release_url="${lock_template//\\{version\\}/$CODERABBIT_VERSION}"', script)
+        self.assertIn('release_url="${release_url//\\{platform\\}/$platform}"', script)
+        self.assertNotIn(
+            'release_url="https://cli.coderabbit.ai/releases/${CODERABBIT_VERSION}/coderabbit-${platform}.zip"',
+            script,
+        )
+        self.assertIn('[[ -f "$verified_binary" && ! -L "$verified_binary" ]]', script)
 
     def test_setup_script_binds_plugin_to_reviewed_source_sha(self) -> None:
         script = (ROOT / "scripts" / "codex" / "setup-coderabbit.sh").read_text(
@@ -220,15 +227,15 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
             '"marketplaceName":"codework-codex","version":"1.0.0",'
             '"source":{"source":"git-subdir","url":"openai/plugins",'
             '"path":"plugins/coderabbit","ref":"main",'
-            f'"sha":"{PLUGIN_SOURCE_SHA}"}},'
+            f'"sha":"{PLUGIN_SOURCE_SHA}"},'
             f'"marketplaceSource":{{"sourceType":"local","source":"{marketplace_source}"}},'
             '"installPolicy":"AVAILABLE","authPolicy":"ON_INSTALL"'
         )
         enabled_json = "true" if installed_enabled else "false"
-        installed = (
-            "{" + plugin_common + f',"installed":true,"enabled":{enabled_json}' + "}"
-        )
-        available = "{" + plugin_common + ',"installed":false,"enabled":false}' + "}"
+        installed = "{" + plugin_common + f',"installed":true,"enabled":{enabled_json}' + "}"
+        available = "{" + plugin_common + ',"installed":false,"enabled":false' + "}"
+        json.loads(installed)
+        json.loads(available)
         marketplace_entry = (
             '{"name":"codework-codex",'
             f'"root":"{marketplace_source}",'
