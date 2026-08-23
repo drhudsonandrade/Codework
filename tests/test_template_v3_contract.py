@@ -45,17 +45,45 @@ class TemplateV3ContractTest(unittest.TestCase):
             with self.assertRaises(TemplateV3Error):
                 verify_template_pack(Path(td))
 
-    def test_historical_template_ruleset_labels_are_generically_migrated_to_current_identity(self):
-        from reporting.template_v3 import CURRENT_RULESET_TEMPLATE_LABEL, _system_value_for_source
+    def test_noncanonical_template_ruleset_labels_fail_closed(self):
+        from reporting.template_v3 import (
+            CURRENT_RULESET_TEMPLATE_LABEL,
+            CURRENT_RULESET_TEMPLATE_SOURCE,
+            TemplateV3Error,
+            _system_value_for_source,
+        )
 
         self.assertEqual(CURRENT_RULESET_TEMPLATE_LABEL, "GENOMA-RULESET-v3.4")
         systems = {"OTHER": "value"}
         self.assertEqual(
-            _system_value_for_source("GENOMA-HUDSON-RULESET-v2.8", systems),
+            _system_value_for_source(CURRENT_RULESET_TEMPLATE_SOURCE, systems),
             CURRENT_RULESET_TEMPLATE_LABEL,
         )
+        try:
+            _system_value_for_source("GENOMA-HUDSON-RULESET-v2.8", systems)
+        except TemplateV3Error:
+            pass
+        else:
+            self.fail("noncanonical ruleset marker must fail closed")
         self.assertEqual(_system_value_for_source("OTHER", systems), "value")
         self.assertIsNone(_system_value_for_source("UNKNOWN", systems))
+
+    def test_docx_svg_patch_rejects_zip_slip_member(self):
+        from reporting.template_v3 import TemplateV3Error, _patch_docx_svg
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            malicious = root / "malicious.docx"
+            escaped = root / "escaped.txt"
+            with zipfile.ZipFile(malicious, "w") as archive:
+                archive.writestr("../escaped.txt", "no")
+            try:
+                _patch_docx_svg(malicious, [])
+            except TemplateV3Error:
+                pass
+            else:
+                self.fail("unsafe DOCX member path must fail closed")
+            self.assertFalse(escaped.exists())
 
     @unittest.skipUnless(os.environ.get("GENOMA_REPORT_TEMPLATE_DIR"), "external v3 template pack not mounted")
     def test_external_template_pack_verifies_and_report10_strict_docx_is_editable(self):
