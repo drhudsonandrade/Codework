@@ -16,6 +16,7 @@ import fitz
 COMPILER_ID = "fitz-1.26.7-genoma-v2"
 TOKEN_RE = re.compile(r"\[\[.*?\]\]", re.S)
 RULESET_CONTROL_RE = re.compile(r"GENOMA-HUDSON-RULESET-v\d+(?:\.\d+)+")
+CANONICAL_RULESET_CONTROL = "GENOMA-HUDSON-RULESET-v3.4"
 CONTROLLED = [
     "MODELO REUTILIZÁVEL v3.0",
     "MODELO EDITÁVEL",
@@ -137,11 +138,21 @@ def _tokens(page: fitz.Page) -> list[tuple[str, fitz.Rect, dict[str, Any]]]:
     return found
 
 
+def _ruleset_control_sources(text: str) -> list[str]:
+    matches = list(dict.fromkeys(match.group(0) for match in RULESET_CONTROL_RE.finditer(text)))
+    invalid = [marker for marker in matches if marker != CANONICAL_RULESET_CONTROL]
+    if invalid:
+        raise RuntimeError(
+            "reference PDF contains noncanonical ruleset marker(s): " + ", ".join(invalid)
+        )
+    return matches
+
+
 def _controls(page: fitz.Page) -> list[tuple[str, fitz.Rect, dict[str, Any]]]:
     spans = _spans(page)
     result: list[tuple[str, fitz.Rect, dict[str, Any]]] = []
     sources = list(CONTROLLED)
-    sources.extend(match.group(0) for match in RULESET_CONTROL_RE.finditer(page.get_text("text", sort=True)))
+    sources.extend(_ruleset_control_sources(page.get_text("text", sort=True)))
     for source in dict.fromkeys(sources):
         for rect in page.search_for(source):
             first = next((s for s in spans if (s["bbox"] & rect).get_area() > 0), None)
@@ -201,7 +212,10 @@ def compile_pack(template_dir: Path, reference_index: Path) -> dict[str, Any]:
                 f"placeholder inventory mismatch for {report_id}: {len(fields)} != {expected['placeholder_count']}"
             )
         reports[report_id] = {
-            **{k: expected[k] for k in ("filename", "sha256", "size_bytes", "page_count", "page_size_pt", "placeholder_count")},
+            **{
+                k: expected[k]
+                for k in ("filename", "sha256", "size_bytes", "page_count", "page_size_pt", "placeholder_count")
+            },
             "fields": fields,
             "controlled_spans": controls,
         }
