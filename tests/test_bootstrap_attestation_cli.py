@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import tempfile
@@ -183,6 +184,31 @@ class BootstrapAttestationCliTests(unittest.TestCase):
                     root=root,
                     verified_at="2026-08-23T20:26:00-03:00",
                 )
+
+    def test_build_attestation_rejects_invalid_verified_at(self) -> None:
+        with self.assertRaisesRegex(
+            bootstrap_attestation.BootstrapAttestationError,
+            "verified_at must be a parseable ISO 8601 datetime",
+        ):
+            bootstrap_attestation.build_attestation(verified_at="invalido")
+
+    def test_verify_attestation_rejects_invalid_verified_at(self) -> None:
+        source = bootstrap_attestation.ATTESTATION_PATH
+        payload = json.loads(source.read_text(encoding="utf-8"))
+        payload["verified_at"] = "invalido"
+        raw = bootstrap_attestation.serialize(payload)
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / source.name
+            target.write_text(raw, encoding="utf-8")
+            digest = hashlib.sha256(target.read_bytes()).hexdigest()
+            with (
+                patch.object(bootstrap_attestation, "EXPECTED_FILE_SHA256", digest),
+                self.assertRaisesRegex(
+                    bootstrap_attestation.BootstrapAttestationError,
+                    "verified_at must be a parseable ISO 8601 datetime",
+                ),
+            ):
+                bootstrap_attestation.verify_bootstrap_attestation(target)
 
 
 if __name__ == "__main__":
