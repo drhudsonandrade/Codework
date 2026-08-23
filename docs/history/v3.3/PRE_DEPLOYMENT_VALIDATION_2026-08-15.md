@@ -2,10 +2,16 @@
 
 ## Result
 
-`PRE-DEPLOYMENT VALIDATION PASS / POST-DEPLOYMENT PENDENTE`
+`PRE-DEPLOYMENT VALIDATION NOT FULLY VERIFIED / POST-DEPLOYMENT PENDENTE`
 
 This report combines local static/MCP evidence and GitHub-hosted container execution. It is not
 target-host, GRCh38, WGS, GIAB or clinical validation.
+
+The individual gates below were recorded as PASS on 2026-08-15, and the two GitHub-hosted workflow
+runs have durable repository URLs. However, the repository does not preserve a durable locator for
+the recovery bundle that was said to contain the expiring synthetic-canary artifact. Because that
+provenance link cannot be independently recovered from this historical record, the document no
+longer claims an overall PRE-DEPLOYMENT VALIDATION PASS. No missing locator is inferred or invented.
 
 ## GitHub and source control
 
@@ -13,8 +19,8 @@ target-host, GRCh38, WGS, GIAB or clinical validation.
 |---|---|---|
 | GitHub App access | PASS | Private `Codework` repository; authenticated integration has admin, push and pull access. |
 | Pull request | PASS | Draft PR #2 from `codex/genome-runtime-mcp` to `main`; head `959b42c2d652899d8e6685773288551de3db8d2b` before the final recovery update. |
-| Fallow workflow | PASS | Run `31857676073`. |
-| Container/runtime workflow | PASS | Run `31857676091`. |
+| Fallow workflow | PASS | Run `31857676073`: `https://github.com/drhudsonandrade/Codework/actions/runs/31857676073`. |
+| Container/runtime workflow | PASS | Run `31857676091`: `https://github.com/drhudsonandrade/Codework/actions/runs/31857676091`. |
 | Genomic payload exclusion | PASS | No personal FASTQ/BAM/CRAM/VCF, GRCh38 payload, credential or externally approved lock is committed. |
 
 ## Repository and code gates
@@ -50,8 +56,10 @@ The pinned container ran the real commands in GitHub Actions:
 
 Artifact `synthetic-canary-a4a341fdc115deb693e015687e32fc607a639cf8` had Actions digest
 `sha256:ec7fc74089ae4373540f3556f069429a35d459870a409cc07c979028b48064cc` and an original
-expiration of 2026-08-29. The artifact is evidence only. The release handoff copies it into a durable
-recovery bundle so Actions retention is not the sole copy.
+expiration of 2026-08-29. The artifact is evidence only. The historical report stated that the
+release handoff copied it into a durable recovery bundle, but no durable recovery-bundle locator is
+preserved in this repository. That copy is therefore **NÃO DISPONÍVEL para verificação por este
+registro histórico**, and the missing locator is why the overall result above is NOT FULLY VERIFIED.
 
 ## Local MCP transport evidence
 
