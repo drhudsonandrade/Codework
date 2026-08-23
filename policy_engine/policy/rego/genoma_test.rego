@@ -24,6 +24,12 @@ test_reject_missing_ruleset_status if {
   not guard.allow with input as input_doc
 }
 
+test_ruleset_status_deny_message_is_stable if {
+  input_doc := object.union(base, {"ruleset": object.union(base_ruleset, {"status": "PENDENTE"})})
+  denials := guard.deny with input as input_doc
+  "RULESET: status must be VIGENTE" in denials
+}
+
 test_reject_non_vigente_ruleset_status if {
   input_doc := object.union(base, {"ruleset": object.union(base_ruleset, {"status": "PENDENTE"})})
   not guard.allow with input as input_doc
@@ -32,6 +38,13 @@ test_reject_non_vigente_ruleset_status if {
 test_reject_vus_conduct if {
   input_doc := object.union(base, {"claims":[{"nature":"INFERÊNCIA","domain":"CLÍNICO","status":"INFERIDO","priority":"P2","variant_classification":"VUS","changes_conduct":true,"confirmation":{"status":"PROPOSTO"}}]})
   not guard.allow with input as input_doc
+}
+
+test_vus_conduct_deny_message_is_stable if {
+  input_doc := object.union(base, {"claims":[{"nature":"INFERÊNCIA","domain":"CLÍNICO","status":"INFERIDO","priority":"P2","variant_classification":"VUS","changes_conduct":true,"confirmation":{"status":"PROPOSTO"}}]})
+  denials := guard.deny with input as input_doc
+  "CLINICAL: claim[0] uses VUS to change conduct" in denials
+  "CONFIRMATION: claim[0] conduct-changing claim is unconfirmed" in denials
 }
 
 test_reject_universal_prs if {
@@ -56,5 +69,12 @@ test_reject_cross_build_before_harmonization if {
 
 test_reject_clinvar_simple_vote if {
   input_doc := object.union(base, {"claims":[{"nature":"ASSOCIAÇÃO","domain":"PESQUISA","status":"INFERIDO","priority":"P5","clinvar_conflict":true,"clinvar_simple_vote":true,"clinvar_conflict_resolution":{}}]})
+  not guard.allow with input as input_doc
+}
+
+test_inaccessible_verified_source_deny_message_is_stable if {
+  input_doc := object.union(base, {"sources":[{"status":"VERIFICADO","accessible":false}]})
+  denials := guard.deny with input as input_doc
+  "CAPABILITY: source[0] verified while inaccessible" in denials
   not guard.allow with input as input_doc
 }
