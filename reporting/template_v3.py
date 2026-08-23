@@ -23,8 +23,8 @@ MANIFEST_PATH = Path(__file__).with_name("reference_v3_manifest.json")
 RULESET_TEMPLATE_PREFIX = "GENOMA-HUDSON-RULESET-v"
 CURRENT_RULESET_TEMPLATE_SOURCE = "GENOMA-HUDSON-RULESET-v3.4"
 CURRENT_RULESET_TEMPLATE_LABEL = "GENOMA-RULESET-v3.4"
-# Leading applied to one rendered line; a line taller than its box is clipped by Word.
 SINGLE_LINE_LEADING = 1.2
+POPPLER_TIMEOUT_SECONDS = 120
 
 SYSTEM_REPLACEMENTS = {
     "MODELO REUTILIZÁVEL v3.0": "RESULTADO GENÔMICO v3.0",
@@ -238,11 +238,6 @@ def _fit_single_line_size(
     font_name: str,
     max_height: float | None = None,
 ) -> float:
-    """Shrink a single line until it fits the box on both axes.
-
-    Width alone is not enough: the DOCX renderer clips a line whose leading exceeds the
-    textbox height, so a value that fits horizontally can still be cut off vertically.
-    """
     text = " ".join(str(text).split())
     size = float(start_size)
     while size > 4.2 and (
@@ -592,18 +587,18 @@ def _add_vml_textbox(
 
 
 def _run_poppler(command: list[str], page: int) -> None:
-    """Run a Poppler converter, keeping its diagnostics instead of discarding them.
-
-    Poppler reports the actual reason a page could not be converted on stderr. Dropping
-    it leaves a bare CalledProcessError, which is the one place the failure could still
-    be diagnosed.
-    """
-    result = subprocess.run(
-        command,
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-    )
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=POPPLER_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise TemplateV3Error(
+            f"{command[0]} timed out on template page {page} after {POPPLER_TIMEOUT_SECONDS}s"
+        ) from exc
     if result.returncode != 0:
         detail = (result.stderr or b"").decode("utf-8", errors="replace").strip()
         raise TemplateV3Error(
@@ -668,11 +663,12 @@ def _patch_docx_svg(docx_path: Path, svgs: list[Path]) -> None:
                 target = (base / Path(*member_path.parts)).resolve()
                 if target != base and base not in target.parents:
                     raise TemplateV3Error(f"unsafe DOCX archive member: {member.filename}")
-                # extractall writes members in order, so a repeated name silently replaces
-                # the entry that was already validated and extracted.
-                if member.filename in seen:
-                    raise TemplateV3Error(f"duplicate DOCX archive member: {member.filename}")
-                seen.add(member.filename)
+                normalized_target = target.relative_to(base).as_posix()
+                if normalized_target in seen:
+                    raise TemplateV3Error(
+                        f"duplicate DOCX extraction target: {member.filename} -> {normalized_target}"
+                    )
+                seen.add(normalized_target)
             archive.extractall(temp_dir)
         media = temp_dir / "word" / "media"
         media.mkdir(parents=True, exist_ok=True)
@@ -833,6 +829,7 @@ def render_docx_from_template(
                     max(8.0, bbox[2] - bbox[0]),
                     font_size,
                     bold_font,
+                    max_height=max(7.0, bbox[3] - bbox[1]),
                 )
                 _add_vml_textbox(
                     paragraph,
