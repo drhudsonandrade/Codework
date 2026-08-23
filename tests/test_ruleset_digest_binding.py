@@ -23,6 +23,7 @@ class RulesetDigestBindingTests(unittest.TestCase):
             original = target.read_text(encoding="utf-8")
             tampered = original.replace("Genoma Pessoal", "Genoma pessoal", 1)
             self.assertNotEqual(tampered, original)
+            target.chmod(0o644)
             target.write_text(tampered, encoding="utf-8")
 
             with self.assertRaisesRegex(policy_ruleset.RulesetError, "sha256"):
