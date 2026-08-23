@@ -49,6 +49,34 @@ test("runAudited replays a successful request id without re-executing", async ()
   assert.equal(executions, 1);
 });
 
+test("runAudited atomically prevents concurrent duplicate execution", async () => {
+  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-race-"));
+  const options = {
+    projectRoot: "/opt/codework",
+    referenceRoot: "/refs",
+    resultsRoot: "/results",
+    auditRoot,
+  };
+  let executions = 0;
+  const operation = async () => {
+    executions += 1;
+    await sleep(100);
+    return { status: "PASS" };
+  };
+  const settled = await Promise.allSettled([
+    runAudited(options, "runtime_status", { requestId: "race-1" }, operation),
+    runAudited(options, "runtime_status", { requestId: "race-1" }, operation),
+  ]);
+  assert.equal(executions, 1, "same requestId must not execute the operation twice");
+  assert.equal(settled.filter((item) => item.status === "fulfilled").length, 1);
+  assert.equal(settled.filter((item) => item.status === "rejected").length, 1);
+  const rejected = settled.find((item) => item.status === "rejected");
+  assert.match(
+    String(rejected && rejected.status === "rejected" ? rejected.reason : ""),
+    /already in progress/,
+  );
+});
+
 test("runAudited stores and replays a sanitized failure", async () => {
   const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-fail-"));
   const options = {
@@ -95,9 +123,6 @@ test(
   "a timed-out script takes its whole process group down with it",
   { skip: process.platform === "win32" ? "POSIX process groups only" : false },
   async () => {
-    // The script backgrounds a descendant and then blocks. Signalling only the direct
-    // child leaves that descendant running, and it writes the marker a second later.
-    // Killing the process group must stop it before the marker can ever appear.
     const dir = await mkdtemp(path.join(os.tmpdir(), "codework-timeout-"));
     const script = path.join(dir, "spawner.sh");
     const marker = path.join(dir, "descendant.marker");
