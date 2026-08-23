@@ -4,37 +4,18 @@ from copy import deepcopy
 from typing import Any
 
 from .engine import PolicyEngine
-from .ruleset import (
-    EXPECTED_CANONICAL,
-    EXPECTED_DATE,
-    EXPECTED_STATUS,
-    EXPECTED_VERSION,
-    Ruleset,
-    RulesetError,
-)
+from .ruleset import Ruleset, RulesetError, validate_normative_identity
 from .scaffold import scaffold_manifest
 
 EXPECTED_SMOKE_RULESET_SHA256 = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
 
 
 def _require_canonical_smoke_ruleset(ruleset: Ruleset) -> None:
-    expected = {
-        "status": EXPECTED_STATUS,
-        "version": EXPECTED_VERSION,
-        "effective_date": EXPECTED_DATE,
-        "canonical_filename": EXPECTED_CANONICAL,
-        "sha256": EXPECTED_SMOKE_RULESET_SHA256,
-    }
-    observed = {
-        "status": ruleset.status,
-        "version": ruleset.version,
-        "effective_date": ruleset.effective_date,
-        "canonical_filename": ruleset.canonical_filename,
-        "sha256": ruleset.sha256,
-    }
-    mismatches = [f"{key}={observed[key]!r}" for key, value in expected.items() if observed[key] != value]
-    if mismatches:
-        raise RulesetError("RULESET NÃO DISPONÍVEL/CONFLITANTE: smoke requires canonical v3.4 identity: " + "; ".join(mismatches))
+    validate_normative_identity(ruleset)
+    if ruleset.sha256 != EXPECTED_SMOKE_RULESET_SHA256:
+        raise RulesetError(
+            "RULESET NÃO DISPONÍVEL/CONFLITANTE: smoke requires canonical v3.4 SHA-256"
+        )
 
 
 def _baseline(ruleset: Ruleset) -> dict[str, Any]:
