@@ -98,17 +98,27 @@ test("a sibling directory sharing the root prefix is not treated as inside the r
 
 test("resolveDirectoryUnderRoot returns a child directory without an extension", () => {
   assert.equal(resolveDirectoryUnderRoot("/srv/genome/results", "canary-1"), "/srv/genome/results/canary-1");
-  assert.throws(() => resolveDirectoryUnderRoot("/srv/genome/results", "../escape"));
+  assert.throws(
+    () => resolveDirectoryUnderRoot("/srv/genome/results", "../escape"),
+    /invalid bounded identifier/,
+  );
 });
 
-test("resolveDirectoryUnderRoot rejects the same traversal encodings", () => {
+test("resolveDirectoryUnderRoot rejects the same traversal encodings by the identifier guard", () => {
   for (const value of ["..", "../escape", "a/b", "a\\b", "/absolute", "", ".", "\0"]) {
     assert.throws(
       () => resolveDirectoryUnderRoot("/srv/genome/results", value),
-      Error,
-      `accepted: ${JSON.stringify(value)}`,
+      /invalid bounded identifier/,
+      `not rejected by validateIdentifier: ${JSON.stringify(value)}`,
     );
   }
+});
+
+test("resolveDirectoryUnderRoot containment guard is independently reachable", () => {
+  assert.throws(
+    () => resolveDirectoryUnderRoot(path.parse(process.cwd()).root, "escape"),
+    /identifier resolves outside configured root/,
+  );
 });
 
 test("sanitizeToolArguments keeps allowlisted identifiers and redacts everything else", () => {
