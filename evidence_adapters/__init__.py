@@ -13,10 +13,15 @@ HeaderValue = str | tuple[str, ...] | list[str]
 Transport = Callable[[urllib.request.Request], tuple[bytes, Mapping[str, HeaderValue]]]
 LOGGER = logging.getLogger(__name__)
 PUBLIC_RETRIEVAL_ERROR = "evidence source retrieval failed"
+MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 
 
 class EvidenceURLPolicyError(ValueError):
     """Raised when an evidence request violates the fixed outbound URL policy."""
+
+
+class EvidenceResponseTooLargeError(ValueError):
+    """Raised when an evidence response exceeds the fixed retrieval budget."""
 
 
 def _normalize_headers(headers: Mapping[str, HeaderValue]) -> dict[str, tuple[str, ...]]:
@@ -44,11 +49,16 @@ def _default_transport(request: urllib.request.Request) -> tuple[bytes, Mapping[
     opener = urllib.request.build_opener(_AllowlistedRedirectHandler(initial_host))
     with opener.open(request, timeout=30) as response:
         headers: dict[str, tuple[str, ...]] = {}
-        for name in response.headers.keys():
+        for name in response.headers:
             values = response.headers.get_all(name) or []
             if values:
                 headers[str(name).lower()] = tuple(str(value) for value in values)
-        return response.read(), headers
+        payload = response.read(MAX_RESPONSE_BYTES + 1)
+        if len(payload) > MAX_RESPONSE_BYTES:
+            raise EvidenceResponseTooLargeError(
+                f"evidence response exceeds {MAX_RESPONSE_BYTES} bytes"
+            )
+        return payload, headers
 
 
 def _qs(params: dict[str, Any]) -> str:
@@ -181,6 +191,10 @@ class EvidenceAdapter:
             expected_host = urllib.parse.urlparse(self.spec.base_url).hostname
             _validate_request(request, expected_host=expected_host)
             payload, headers = self.transport(request)
+            if len(payload) > MAX_RESPONSE_BYTES:
+                raise EvidenceResponseTooLargeError(
+                    f"evidence response exceeds {MAX_RESPONSE_BYTES} bytes"
+                )
             normalized_headers = _normalize_headers(headers)
             json.loads(payload.decode("utf-8"))
             digest = hashlib.sha256(payload).hexdigest()
