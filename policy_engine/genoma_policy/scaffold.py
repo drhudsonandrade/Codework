@@ -15,6 +15,7 @@ def scaffold_manifest(ruleset: Ruleset, *, case_id: str = "CASE-ID") -> dict[str
             "version": ruleset.version,
             "sha256": ruleset.sha256,
             "effective_date": ruleset.effective_date,
+            "canonical_filename": ruleset.canonical_filename,
         },
         "operation": {
             "name": "genomic_analysis",
