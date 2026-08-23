@@ -72,6 +72,25 @@ test("runAudited stores and replays a sanitized failure", async () => {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+test("runFixedScript rejects a script that exceeds the output budget", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-budget-"));
+  const loud = path.join(dir, "loud.sh");
+  await writeFile(
+    loud,
+    [
+      "#!/bin/sh",
+      "i=0",
+      "while [ $i -lt 6144 ]; do",
+      "  printf '%1024d' 0",
+      "  i=$((i+1))",
+      "done",
+      "",
+    ].join("\n"),
+    { mode: 0o755 },
+  );
+  await assert.rejects(runFixedScript(loud, [], process.env, 30_000), /output budget/);
+});
+
 test(
   "a timed-out script takes its whole process group down with it",
   { skip: process.platform === "win32" ? "POSIX process groups only" : false },
@@ -97,13 +116,20 @@ test(
   },
 );
 
-test("runFixedScript returns trimmed stdout and surfaces a non-zero exit", async () => {
+test("runFixedScript returns stdout and sanitizes retained stderr on failure", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "codework-exit-"));
   const ok = path.join(dir, "ok.sh");
   const bad = path.join(dir, "bad.sh");
   await writeFile(ok, ["#!/bin/sh", "echo '  hello  '", ""].join("\n"), { mode: 0o755 });
-  await writeFile(bad, ["#!/bin/sh", "echo boom >&2", "exit 7", ""].join("\n"), { mode: 0o755 });
+  await writeFile(
+    bad,
+    ["#!/bin/sh", "echo 'Bearer private-token /srv/genome/data/sample.bam' >&2", "exit 7", ""].join("\n"),
+    { mode: 0o755 },
+  );
 
   assert.equal(await runFixedScript(ok, [], process.env, 10_000), "hello");
-  await assert.rejects(runFixedScript(bad, [], process.env, 10_000), /exited with code 7/);
+  await assert.rejects(
+    runFixedScript(bad, [], process.env, 10_000),
+    /exited with code 7:.*\[REDACTED_TOKEN\].*\[REDACTED_PATH\]/,
+  );
 });
