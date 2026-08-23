@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import tempfile
@@ -14,9 +15,12 @@ from genoma_policy.scaffold import scaffold_manifest
 from genoma_policy.smoke import run_smoke
 
 ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = ROOT.parent
 RULESET = resolve_ruleset_path(ROOT)
 HASH_MANIFEST = resolve_manifest_path(RULESET, ROOT)
 EXPECTED_SHA256 = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
+HISTORICAL_IDENTITY_FIXTURE = next((REPO_ROOT / "docs" / "history").glob("*/superseded-identities.json"))
+HISTORICAL_IDENTITY = json.loads(HISTORICAL_IDENTITY_FIXTURE.read_text(encoding="utf-8"))
 
 
 class RulesetTests(unittest.TestCase):
@@ -48,9 +52,19 @@ class PolicyEngineTests(unittest.TestCase):
     def valid_analysis_manifest(self):
         manifest = scaffold_manifest(self.ruleset, case_id="TEST")
         manifest["session_id"] = "test-session"
-        manifest["inputs"] = [{"id": "input-1", "kind": "vcf", "source": "test-fixture", "sha256": "abc123"}]
-        manifest["consent"] = {"verified": True, "version": "test-v1", "authorized_domains": ["research"]}
-        manifest["qc"] = {"status": "EXECUTADO", "passed": True, "evidence_refs": ["fixture:qc"]}
+        manifest["inputs"] = [
+            {"id": "input-1", "kind": "vcf", "source": "test-fixture", "sha256": "abc123"}
+        ]
+        manifest["consent"] = {
+            "verified": True,
+            "version": "test-v1",
+            "authorized_domains": ["research"],
+        }
+        manifest["qc"] = {
+            "status": "EXECUTADO",
+            "passed": True,
+            "evidence_refs": ["fixture:qc"],
+        }
         manifest["sources"] = [
             {
                 "id": "fixture:attestation",
@@ -71,7 +85,9 @@ class PolicyEngineTests(unittest.TestCase):
                     "evidence_refs": [],
                 }
             )
-            attestation["trace"].update({"run_id": "test-session", "created_at": "2026-08-22T18:46:00-03:00"})
+            attestation["trace"].update(
+                {"run_id": "test-session", "created_at": "2026-08-22T18:46:00-03:00"}
+            )
         return manifest
 
     def test_post_deployment_is_nonblocking_pending_by_default(self):
@@ -80,6 +96,42 @@ class PolicyEngineTests(unittest.TestCase):
         self.assertEqual(gate.state.value, "PENDING")
         self.assertFalse(gate.blocking)
         self.assertTrue(report.ready)
+
+    def test_post_deployment_pass_requires_all_five_canonical_criteria(self):
+        manifest = self.valid_analysis_manifest()
+        manifest["post_deployment"] = {
+            "single_active_ruleset": True,
+            "bootstrap_installed": True,
+            "live_smoke_passed": True,
+            "live_smoke_count": 15,
+            "critical_failures": 0,
+            "identity_recovered": "v3.4/VIGENTE/17/08/2026",
+        }
+        report = self.engine.evaluate(manifest)
+        gate = next(gate for gate in report.gates if gate.gate == "POST_DEPLOYMENT_GATE")
+        self.assertEqual(gate.state.value, "PASS")
+        self.assertFalse(gate.blocking)
+
+    def test_post_deployment_remains_pending_for_superseded_or_wrong_date_identity(self):
+        base = {
+            "single_active_ruleset": True,
+            "bootstrap_installed": True,
+            "live_smoke_passed": True,
+            "live_smoke_count": 15,
+            "critical_failures": 0,
+        }
+        bad_identities = (
+            f"{HISTORICAL_IDENTITY['version']}/VIGENTE/{HISTORICAL_IDENTITY['effective_date']}",
+            "v3.4/VIGENTE/18/08/2026",
+        )
+        for identity in bad_identities:
+            with self.subTest(identity=identity):
+                manifest = self.valid_analysis_manifest()
+                manifest["post_deployment"] = {**base, "identity_recovered": identity}
+                report = self.engine.evaluate(manifest)
+                gate = next(gate for gate in report.gates if gate.gate == "POST_DEPLOYMENT_GATE")
+                self.assertEqual(gate.state.value, "PENDING")
+                self.assertFalse(gate.blocking)
 
     def test_vus_cannot_change_conduct_without_confirmation(self):
         manifest = self.valid_analysis_manifest()
@@ -110,7 +162,8 @@ class PolicyEngineTests(unittest.TestCase):
             }
         ]
         report = self.engine.evaluate(manifest)
-        self.assertEqual(next(gate for gate in report.gates if gate.gate == "CLINICAL_CONFIRMATION_GATE").state.value, "FAIL")
+        gate = next(gate for gate in report.gates if gate.gate == "CLINICAL_CONFIRMATION_GATE")
+        self.assertEqual(gate.state.value, "FAIL")
         self.assertFalse(report.ready)
 
     def test_runtime_gate_is_session_specific(self):
@@ -118,15 +171,20 @@ class PolicyEngineTests(unittest.TestCase):
         manifest["operation"]["requires_real_calling"] = True
         manifest["runtime_resource_gate"] = {"session_id": "old-session", "checks": {}}
         report = self.engine.evaluate(manifest)
-        self.assertEqual(next(gate for gate in report.gates if gate.gate == "RUNTIME_RESOURCE_GATE").state.value, "FAIL")
+        gate = next(gate for gate in report.gates if gate.gate == "RUNTIME_RESOURCE_GATE")
+        self.assertEqual(gate.state.value, "FAIL")
 
     def test_final_audit_requires_all_15_criteria(self):
         manifest = self.valid_analysis_manifest()
         manifest["operation"]["output"] = "FINAL_AUDITED_REPORT"
         manifest["final_audit"] = {key: True for key in CRITICAL_FINAL_AUDIT_KEYS[:-1]}
-        self.assertEqual(next(gate for gate in self.engine.evaluate(manifest).gates if gate.gate == "FINAL_AUDIT_GATE").state.value, "FAIL")
+        report = self.engine.evaluate(manifest)
+        gate = next(gate for gate in report.gates if gate.gate == "FINAL_AUDIT_GATE")
+        self.assertEqual(gate.state.value, "FAIL")
         manifest["final_audit"][CRITICAL_FINAL_AUDIT_KEYS[-1]] = True
-        self.assertEqual(next(gate for gate in self.engine.evaluate(manifest).gates if gate.gate == "FINAL_AUDIT_GATE").state.value, "PASS")
+        report = self.engine.evaluate(manifest)
+        gate = next(gate for gate in report.gates if gate.gate == "FINAL_AUDIT_GATE")
+        self.assertEqual(gate.state.value, "PASS")
 
     def test_report_exposes_four_plane_states(self):
         report = self.engine.evaluate(self.valid_analysis_manifest()).to_dict()
@@ -143,6 +201,11 @@ class PolicyEngineTests(unittest.TestCase):
         divergent = replace(self.ruleset, sha256="0" * 64)
         with self.assertRaises(RulesetError):
             run_smoke(PolicyEngine(divergent))
+
+    def test_smoke_rejects_metadata_matching_ruleset_without_263_sections(self):
+        incomplete = replace(self.ruleset, sections=())
+        with self.assertRaises(RulesetError):
+            run_smoke(PolicyEngine(incomplete))
 
 
 if __name__ == "__main__":
