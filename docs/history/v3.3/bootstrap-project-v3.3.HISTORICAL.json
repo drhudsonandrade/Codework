@@ -18,5 +18,5 @@
     "operational_status_contract_present": true,
     "post_deployment_requires_live_15_of_15_zero_critical": true
   },
-  "limitations": "HISTORICAL RECORD ONLY. This preserves the bootstrap that was current for v3.3. It is not an active bootstrap input and cannot satisfy the v3.4 deployment gate."
+  "limitations": "This attestation records the bootstrap present in the current ChatGPT Project Instructions. GitHub cannot introspect future ChatGPT project configuration; renew this attestation whenever Project Instructions change. The deterministic core itself does not depend on ChatGPT or this bootstrap."
 }
