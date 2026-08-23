@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 import unittest
@@ -23,6 +24,7 @@ EXPECTED_NAME = "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
 EXPECTED_SHA = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
 EXPECTED_VERSION = "v3.4"
 EXPECTED_DATE = "17/08/2026"
+EXPECTED_ARCHIVED_BOOTSTRAP_SHA = "87af4f99bcd6b6f3f857a1ca725103e95dabf70c3c926d7f0d4e83b037e69fd8"
 EXPECTED_SUPERSEDED_TOKENS = frozenset(
     {
         "REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt",
@@ -107,6 +109,11 @@ class V34ActivationContractTests(unittest.TestCase):
         self.assertFalse((ROOT / "manifests" / "RULESET_V3.3.sha256").exists())
         self.assertFalse((ROOT / "deploy" / "attestations" / "bootstrap-project-v3.3.json").exists())
 
+    def test_archived_v33_bootstrap_is_byte_exact_historical_provenance(self) -> None:
+        archived = ROOT / "docs" / "history" / "v3.3" / "bootstrap-project-v3.3.HISTORICAL.json"
+        self.assertTrue(archived.is_file())
+        self.assertEqual(hashlib.sha256(archived.read_bytes()).hexdigest(), EXPECTED_ARCHIVED_BOOTSTRAP_SHA)
+
     def test_stray_superseded_identity_outside_history_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -149,7 +156,10 @@ class V34ActivationContractTests(unittest.TestCase):
                 "session_id": "VERSION",
                 "ruleset": {"version": EXPECTED_VERSION, "effective_date": EXPECTED_DATE, "sha256": EXPECTED_SHA},
                 "operation": {"name": "version-check", "analysis_relevant": False, "requires_real_calling": False, "output": "ANALYSIS"},
-                "claims": [], "sources": [], "section_attestations": [], "post_deployment": {},
+                "claims": [],
+                "sources": [],
+                "section_attestations": [],
+                "post_deployment": {},
             }
             report = engine.evaluate(manifest)
             self.assertEqual(report.metadata["engine_version"], __version__)
