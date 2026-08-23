@@ -42,6 +42,7 @@ jobs:
               'filename':'REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt',
               'sha256':'ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580',
           }
+          expected_transport_parts=[f'parts/part-{index:03d}.b64' for index in range(13)]
           sha_manifest=Path('manifests/RULESET_V3.4.sha256')
           fields=sha_manifest.read_text(encoding='ascii').strip().split()
           if fields != [canonical['sha256'], canonical['filename']]:
@@ -58,6 +59,9 @@ jobs:
           mismatches={k:(sealed.get(k),v) for k,v in expected_sealed.items() if sealed.get(k)!=v}
           if mismatches:
               raise SystemExit(f'canonical sealed ruleset identity mismatch: {mismatches}')
+          sealed_parts=sealed.get('transport_parts')
+          if not isinstance(sealed_parts,list) or [item.get('file') if isinstance(item,dict) else None for item in sealed_parts] != expected_transport_parts:
+              raise SystemExit('sealed transport must contain exactly the 13 canonical part files in order')
 
           ruleset_tmp=Path(tempfile.mkdtemp(prefix='genoma-ruleset-'))
           try:
@@ -67,6 +71,9 @@ jobs:
                   raise SystemExit('materialized ruleset bytes do not match canonical identity')
               if ruleset_evidence.get('raw_sha256') != canonical['sha256']:
                   raise SystemExit('sealed ruleset transport evidence does not match canonical digest')
+              evidence_parts=ruleset_evidence.get('transport_parts')
+              if not isinstance(evidence_parts,list) or [item.get('file') if isinstance(item,dict) else None for item in evidence_parts] != expected_transport_parts:
+                  raise SystemExit('verified ruleset evidence does not contain the exact canonical 13-part transport')
           finally:
               shutil.rmtree(ruleset_tmp,ignore_errors=True)
 
@@ -107,7 +114,7 @@ jobs:
                   'sha_manifest':str(sha_manifest),
                   'sealed_manifest':str(sealed_manifest_path),
                   'materialized_raw_sha256':actual_ruleset_sha,
-                  'transport_parts':ruleset_evidence.get('transport_parts'),
+                  'transport_parts':evidence_parts,
               },
               'template_version':'v3.0',
               'source_transport_sha256':os.environ['ZIP_SHA'],
