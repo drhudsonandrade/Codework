@@ -227,7 +227,7 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
             '"marketplaceName":"codework-codex","version":"1.0.0",'
             '"source":{"source":"git-subdir","url":"openai/plugins",'
             '"path":"plugins/coderabbit","ref":"main",'
-            f'"sha":"{PLUGIN_SOURCE_SHA}"},'
+            f'"sha":"{PLUGIN_SOURCE_SHA}"}},'
             f'"marketplaceSource":{{"sourceType":"local","source":"{marketplace_source}"}},'
             '"installPolicy":"AVAILABLE","authPolicy":"ON_INSTALL"'
         )

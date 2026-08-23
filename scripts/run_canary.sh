@@ -53,10 +53,24 @@ payload = {
 }
 open(out, "w", encoding="utf-8").write(json.dumps(payload, indent=2) + "\n")
 PY
-pdftoppm -singlefile -r 72 -png "$WORK_DIR/editorial-canary.pdf" "$WORK_DIR/editorial-canary" >/dev/null 2>&1
-pdftocairo -svg "$WORK_DIR/editorial-canary.pdf" "$WORK_DIR/editorial-canary.svg" >/dev/null 2>&1
-test -s "$WORK_DIR/editorial-canary.png"
-test -s "$WORK_DIR/editorial-canary.svg"
+# Fail at the failing step with its reason, not later on a missing artifact: the
+# renderer's stderr is what tells an operator which part of the stack is broken.
+if ! pdftoppm -singlefile -r 72 -png "$WORK_DIR/editorial-canary.pdf" "$WORK_DIR/editorial-canary"; then
+  printf 'FAIL\teditor_runtime\treason=pdftoppm_failed\n' >&2
+  exit 7
+fi
+if ! pdftocairo -svg "$WORK_DIR/editorial-canary.pdf" "$WORK_DIR/editorial-canary.svg"; then
+  printf 'FAIL\teditor_runtime\treason=pdftocairo_failed\n' >&2
+  exit 8
+fi
+if [[ ! -s "$WORK_DIR/editorial-canary.png" ]]; then
+  printf 'FAIL\teditor_runtime\treason=empty_png_raster\n' >&2
+  exit 7
+fi
+if [[ ! -s "$WORK_DIR/editorial-canary.svg" ]]; then
+  printf 'FAIL\teditor_runtime\treason=empty_svg_vector\n' >&2
+  exit 8
+fi
 python3 - <<'PY' "$OUTPUT_DIR/editorial-runtime.json"
 import json, subprocess, sys
 p=sys.argv[1]; d=json.load(open(p, encoding="utf-8"))

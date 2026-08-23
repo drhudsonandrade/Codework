@@ -40,6 +40,21 @@ function textResult(value: unknown) {
   };
 }
 
+const MINUTE_MS = 60_000;
+
+/**
+ * Per-tool execution budgets, declared in one place so a slow gate cannot be
+ * silently given a different timeout at each call site. Each value reflects the
+ * worst-case runtime of the underlying script, not a shared default.
+ */
+export const TOOL_TIMEOUTS_MS = {
+  runtime_status: MINUTE_MS,
+  reference_status: 10 * MINUTE_MS,
+  run_synthetic_canary: 60 * MINUTE_MS,
+} as const;
+
+const SCRIPT_OUTPUT_MAX_BYTES = 5 * 1024 * 1024;
+
 async function runFixedScript(
   script: string,
   args: string[],
@@ -48,7 +63,7 @@ async function runFixedScript(
 ): Promise<string> {
   const { stdout } = await execFileAsync(script, args, {
     env,
-    maxBuffer: 5 * 1024 * 1024,
+    maxBuffer: SCRIPT_OUTPUT_MAX_BYTES,
     timeout,
     windowsHide: true,
   });
@@ -169,7 +184,7 @@ export function createGenomeMcpServer(options: GenomeServerOptions): McpServer {
           path.join(options.projectRoot, "scripts", "check_versions.sh"),
           [],
           process.env,
-          60_000,
+          TOOL_TIMEOUTS_MS.runtime_status,
         );
         return { status: "PASS", output: sanitizeError(output) };
       });
@@ -190,7 +205,7 @@ export function createGenomeMcpServer(options: GenomeServerOptions): McpServer {
           path.join(options.projectRoot, "scripts", "validate_grch38.sh"),
           [],
           { ...process.env, REF_ROOT: options.referenceRoot, REQUIRE_BWA_INDEX: "1" },
-          10 * 60_000,
+          TOOL_TIMEOUTS_MS.reference_status,
         );
         return { status: "PASS", output: sanitizeError(output) };
       });
@@ -211,7 +226,7 @@ export function createGenomeMcpServer(options: GenomeServerOptions): McpServer {
           path.join(options.projectRoot, "scripts", "run_canary.sh"),
           [canaryRoot],
           process.env,
-          60 * 60_000,
+          TOOL_TIMEOUTS_MS.run_synthetic_canary,
         );
         return JSON.parse(await readFile(path.join(canaryRoot, "report.json"), "utf8")) as Record<string, unknown>;
       });

@@ -221,15 +221,55 @@ def _active_vigente_files(output_dir: Path) -> list[Path]:
     return active
 
 
+def _already_materialized(destination: Path, active: list[Path], raw: bytes) -> Path | None:
+    """The one case where re-materializing is a safe no-op.
+
+    Every condition must hold: exactly one active VIGENTE file, it is the canonical
+    filename, its bytes are byte-identical to the verified sealed payload, and it is
+    already read-only. Anything else — a second VIGENTE, a different filename, drifted
+    bytes, a writable file — is a conflict and must keep blocking.
+    """
+    if len(active) != 1:
+        return None
+    existing = active[0]
+    if existing.name != EXPECTED_NAME or existing != destination / EXPECTED_NAME:
+        return None
+    try:
+        current = existing.read_bytes()
+    except OSError:
+        return None
+    if current != raw or sha256_bytes(current) != EXPECTED_SHA:
+        return None
+    if existing.stat().st_mode & 0o222:
+        return None
+    return existing
+
+
 def materialize(sealed_dir: str | Path, output_dir: str | Path) -> tuple[Path, dict[str, Any]]:
+    # Provenance is verified before anything on disk is trusted or written.
     raw, evidence = decode_verified_payload(sealed_dir)
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
     active = _active_vigente_files(destination)
     if active:
-        raise SealedRulesetError(
-            f"refusing to activate beside an existing VIGENTE ruleset: {[p.name for p in active]}"
+        reusable = _already_materialized(destination, active, raw)
+        if reusable is None:
+            raise SealedRulesetError(
+                f"refusing to activate beside an existing VIGENTE ruleset: {[p.name for p in active]}"
+            )
+        mode = reusable.stat().st_mode & 0o777
+        evidence = dict(evidence)
+        evidence.update(
+            {
+                "materialized_path": str(reusable),
+                "mode_octal": oct(mode),
+                "host": socket.gethostname(),
+                "materialized_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "idempotent_reuse": True,
+                "idempotent_reason": "canonical VIGENTE already materialized byte-identical to the verified sealed payload",
+            }
         )
+        return reusable, evidence
 
     target = destination / EXPECTED_NAME
     fd, tmp_name = tempfile.mkstemp(prefix=f".{EXPECTED_NAME}.", dir=destination)
@@ -255,6 +295,7 @@ def materialize(sealed_dir: str | Path, output_dir: str | Path) -> tuple[Path, d
             "mode_octal": oct(mode),
             "host": socket.gethostname(),
             "materialized_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "idempotent_reuse": False,
         }
     )
     return target, evidence

@@ -69,6 +69,7 @@ SUPERSEDED_IDENTITY_TEST_FIXTURES = frozenset(
         "policy_engine/tests/test_policy_engine.py",
         "tests/test_v34_activation_contract.py",
         "tests/test_validate_repo_static_fstrings.py",
+        "tests/test_superseded_identity_scanner.py",
     }
 )
 MISSING_PATH_HINTS = {
@@ -82,7 +83,8 @@ ACTIVE_IDENTITY_SURFACES = (
     "scripts/build_array_case_manifest.py", "scripts/generate_report.py", "scripts/generate_all_reports.py",
     "array_pipeline/qc.py", "array_pipeline/annotation.py", "workflows/wgs.nf", "workflows/array.nf",
     "main.nf", "nextflow.config", "Dockerfile", "deploy/docker-compose.yml", "mcp/src/server.ts",
-    "reporting/engine.py", "policy_engine/Dockerfile", "policy_engine/docker-compose.yml",
+    "reporting/engine.py", "reporting/editorial_v3_hifi.py", "reporting/template_v3.py",
+    "policy_engine/Dockerfile", "policy_engine/docker-compose.yml",
     "policy_engine/pyproject.toml", "policy_engine/README_GENOMA_POLICY.md", "policy_engine/tests/test_server.py",
     "policy_engine/genoma_policy/__init__.py", "policy_engine/genoma_policy/cli.py",
     "policy_engine/genoma_policy/engine.py", "policy_engine/genoma_policy/gates_core.py",
@@ -98,32 +100,55 @@ ACTIVE_IDENTITY_SURFACES = (
 )
 
 
-def _load_superseded_contract() -> tuple[tuple[str, ...], tuple[str, ...]]:
+# A superseded identity is only dangerous when something can activate it. These keys
+# name an obsolete ruleset uniquely, so any occurrence outside declared history is an
+# error wherever it appears.
+SUPERSEDED_STRONG_KEYS = ("canonical_filename", "manifest_filename", "rule_id_prefix", "raw_sha256")
+# These keys are bare version numbers and dates. They occur legitimately in prose,
+# changelogs, dated filenames, unrelated timestamps and negative regression fixtures,
+# so they are errors only inside an active normative declaration.
+SUPERSEDED_WEAK_KEYS = ("version", "effective_date", "iso_date")
+
+
+def _load_superseded_contract() -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
     fixtures = sorted((ROOT / "docs" / "history").glob("*/superseded-identities.json"))
     if not fixtures:
         raise RuntimeError("superseded identity registry is missing from docs/history")
-    tokens: list[str] = []
+    strong: list[str] = []
+    weak: list[str] = []
     forbidden_paths: list[str] = []
     for fixture in fixtures:
         payload = json.loads(fixture.read_text(encoding="utf-8"))
         if payload.get("schema") != "genoma-superseded-identity-v1" or payload.get("status") != "HISTORICAL":
             raise RuntimeError(f"invalid superseded identity registry: {fixture}")
-        required = (
-            "canonical_filename", "manifest_filename", "version", "rule_id_prefix",
-            "effective_date", "iso_date", "raw_sha256", "forbidden_active_paths",
-        )
+        required = (*SUPERSEDED_STRONG_KEYS, *SUPERSEDED_WEAK_KEYS, "forbidden_active_paths")
         missing = [key for key in required if not payload.get(key)]
         if missing:
             raise RuntimeError(f"incomplete superseded identity registry {fixture}: {missing}")
-        tokens.extend(str(payload[key]) for key in required[:-1])
+        strong.extend(str(payload[key]) for key in SUPERSEDED_STRONG_KEYS)
+        weak.extend(str(payload[key]) for key in SUPERSEDED_WEAK_KEYS)
         forbidden = payload["forbidden_active_paths"]
         if not isinstance(forbidden, list) or not all(isinstance(item, str) and item for item in forbidden):
             raise RuntimeError(f"invalid forbidden_active_paths in {fixture}")
         forbidden_paths.extend(forbidden)
-    return tuple(dict.fromkeys(tokens)), tuple(dict.fromkeys(forbidden_paths))
+    return tuple(dict.fromkeys(strong)), tuple(dict.fromkeys(weak)), tuple(dict.fromkeys(forbidden_paths))
 
 
-OLD_ACTIVE_TOKENS, FORBIDDEN_ACTIVE_PATHS = _load_superseded_contract()
+SUPERSEDED_STRONG_TOKENS, SUPERSEDED_WEAK_TOKENS, FORBIDDEN_ACTIVE_PATHS = _load_superseded_contract()
+# Declared active surfaces stay strict: any superseded token at all is an error there.
+OLD_ACTIVE_TOKENS = SUPERSEDED_STRONG_TOKENS + SUPERSEDED_WEAK_TOKENS
+
+# Names that make a Python string constant an identity definition rather than a mention.
+IDENTITY_BINDING_PATTERN = re.compile(
+    r"RULESET|CANONICAL|NORMATIV|VIGENTE|IDENTITY|IDENTIDADE|RULE_ID|EFFECTIVE|CURRENT|VERS(AO|ÃO|ION)",
+    re.IGNORECASE,
+)
+# Markers that turn a line of non-Python text into an active normative declaration.
+ACTIVE_DECLARATION_MARKERS = (
+    "STATUS NORMATIVO", "VERSÃO NORMATIVA", "VERSAO NORMATIVA", "ARQUIVO CANÔNICO", "ARQUIVO CANONICO",
+    "VIGENTE", "ruleset_version", "RULESET_VERSION", "CURRENT_RULESET", "canonical_filename",
+    "effective_date", "DATA FORMAL DE EMISSÃO", "DATA FORMAL DE EMISSAO",
+)
 
 
 def validate_sealed_ruleset(root: Path, errors: list[str]) -> None:
@@ -198,13 +223,74 @@ def _constant_string(node: ast.AST) -> str | None:
     return None
 
 
+def _binding_names(node: ast.AST) -> list[str]:
+    """Names a value is bound to: assignment targets, dict keys and keyword arguments."""
+    names: list[str] = []
+    if isinstance(node, ast.Assign):
+        for target in node.targets:
+            if isinstance(target, ast.Name):
+                names.append(target.id)
+            elif isinstance(target, ast.Attribute):
+                names.append(target.attr)
+    elif isinstance(node, ast.AnnAssign) and isinstance(node.target, (ast.Name, ast.Attribute)):
+        names.append(node.target.id if isinstance(node.target, ast.Name) else node.target.attr)
+    elif isinstance(node, ast.keyword) and node.arg:
+        names.append(node.arg)
+    return names
+
+
 def _python_constant_strings(text: str) -> tuple[str, ...]:
+    """Every statically foldable string in a module, including split literals.
+
+    Constant folding is what stops a superseded identity from being smuggled past a
+    raw-text scan as ``"GENOMA-V3." + "3"`` or ``f"GENOMA-V3.{3}"``.
+    """
     try:
         tree = ast.parse(text)
     except SyntaxError:
         return ()
     values = (_constant_string(node) for node in ast.walk(tree))
     return tuple(dict.fromkeys(value for value in values if value is not None))
+
+
+def _identity_declaration_strings(text: str) -> tuple[str, ...]:
+    """Python string constants that actually define a normative identity.
+
+    Only values bound to an identity-shaped name are returned — an assignment target,
+    a dict key or a keyword argument. Comments, docstrings, prose and unrelated
+    literals such as test timestamps are excluded by construction, so a historical
+    mention can never be mistaken for an active normative source.
+    """
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return ()
+    declarations: list[str] = []
+    for node in ast.walk(tree):
+        values: list[ast.AST] = []
+        if any(IDENTITY_BINDING_PATTERN.search(name) for name in _binding_names(node)):
+            # A bare annotation (``NAME: str``) binds no value.
+            if getattr(node, "value", None) is not None:
+                values.append(node.value)
+        elif isinstance(node, ast.Dict):
+            for key, value in zip(node.keys, node.values):
+                key_text = _constant_value(key) if key is not None else None
+                if isinstance(key_text, str) and IDENTITY_BINDING_PATTERN.search(key_text):
+                    values.append(value)
+        for value in values:
+            declarations.extend(
+                constant
+                for constant in (_constant_string(child) for child in ast.walk(value))
+                if constant is not None
+            )
+    return tuple(dict.fromkeys(declarations))
+
+
+def _active_declaration_context(path: Path, text: str) -> tuple[str, ...]:
+    """Fragments of a file that assert an active normative identity."""
+    if path.suffix.lower() == ".py":
+        return _identity_declaration_strings(text)
+    return tuple(line for line in text.splitlines() if any(marker in line for marker in ACTIVE_DECLARATION_MARKERS))
 
 
 def _historical_roots(root: Path) -> tuple[Path, ...]:
@@ -220,7 +306,21 @@ def _is_historical_path(relative: Path, history_roots: tuple[Path, ...]) -> bool
 
 
 def validate_superseded_identity_locations(root: Path, errors: list[str]) -> None:
-    """Reject superseded identities globally except history and named regression fixtures."""
+    """Reject superseded normative identities outside declared history.
+
+    Two rules, deliberately separate, so that historical evidence is never confused
+    with an active normative source:
+
+    * Strong tokens (canonical filename, manifest filename, rule-id prefix, raw
+      SHA-256) uniquely name an obsolete ruleset. They are rejected anywhere outside
+      declared history — nothing can activate v3.3 without one of them.
+    * Weak tokens (a bare version or date) are rejected only where they actually
+      declare an identity: an identity-bound Python constant, or a line carrying an
+      active-declaration marker. Prose, dated filenames, unrelated timestamps and
+      negative regression fixtures are therefore allowed to mention them.
+
+    Declared active surfaces are validated separately and remain strict about both.
+    """
     history_roots = _historical_roots(root)
     for path in root.rglob("*"):
         if not path.is_file() or any(part in SKIP_PARTS for part in path.parts):
@@ -234,7 +334,7 @@ def validate_superseded_identity_locations(root: Path, errors: list[str]) -> Non
             continue
         errors.extend(
             f"superseded identity path outside explicit history: {relative}: {token}"
-            for token in OLD_ACTIVE_TOKENS
+            for token in SUPERSEDED_STRONG_TOKENS
             if token in relative_text
         )
 
@@ -244,13 +344,23 @@ def validate_superseded_identity_locations(root: Path, errors: list[str]) -> Non
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
-        candidates = [text]
+        # Strong tokens are scanned in the raw text and, for Python, in every folded
+        # constant as well, so a split or interpolated literal cannot hide one.
+        strong_surfaces = [text]
         if path.suffix.lower() == ".py":
-            candidates.extend(_python_constant_strings(text))
+            strong_surfaces.extend(_python_constant_strings(text))
         errors.extend(
             f"superseded identity outside explicit history: {relative}: {token}"
-            for token in OLD_ACTIVE_TOKENS
-            if any(token in candidate for candidate in candidates)
+            for token in SUPERSEDED_STRONG_TOKENS
+            if any(token in surface for surface in strong_surfaces)
+        )
+        declarations = _active_declaration_context(path, text)
+        if not declarations:
+            continue
+        errors.extend(
+            f"superseded identity declared as active: {relative}: {token}"
+            for token in SUPERSEDED_WEAK_TOKENS
+            if any(token in declaration for declaration in declarations)
         )
 
 

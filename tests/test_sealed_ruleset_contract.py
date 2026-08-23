@@ -57,5 +57,91 @@ class SealedRulesetContractTest(unittest.TestCase):
             )
 
 
+class MaterializerIdempotencyTest(unittest.TestCase):
+    """Re-running the canonical materialization is safe; anything else still blocks."""
+
+    SEALED = ROOT / "normative" / "sealed"
+
+    def test_second_run_on_the_canonical_artifact_is_a_verified_no_op(self):
+        from scripts.sealed_ruleset import materialize
+
+        with tempfile.TemporaryDirectory() as td:
+            first, first_evidence = materialize(self.SEALED, Path(td))
+            self.assertFalse(first_evidence["idempotent_reuse"])
+            first_stat = os.stat(first)
+
+            second, second_evidence = materialize(self.SEALED, Path(td))
+            self.assertEqual(second, first)
+            self.assertTrue(second_evidence["idempotent_reuse"])
+            self.assertEqual(second_evidence["raw_sha256"], EXPECTED_SHA)
+            self.assertEqual(hashlib.sha256(Path(second).read_bytes()).hexdigest(), EXPECTED_SHA)
+            self.assertEqual(stat.S_IMODE(os.stat(second).st_mode), 0o444)
+            # The verified artifact is reused, never rewritten.
+            self.assertEqual(os.stat(second).st_mtime_ns, first_stat.st_mtime_ns)
+            self.assertEqual(os.stat(second).st_ino, first_stat.st_ino)
+
+    def test_a_second_different_vigente_still_blocks(self):
+        from scripts.sealed_ruleset import SealedRulesetError, materialize
+
+        with tempfile.TemporaryDirectory() as td:
+            materialize(self.SEALED, Path(td))
+            intruder = Path(td) / "REGRAS_PROJETO_GENOMA_OUTRO.txt"
+            intruder.write_text("STATUS NORMATIVO: VIGENTE\n", encoding="utf-8")
+            with self.assertRaises(SealedRulesetError):
+                materialize(self.SEALED, Path(td))
+
+    def test_a_vigente_under_a_different_filename_still_blocks(self):
+        from scripts.sealed_ruleset import SealedRulesetError, materialize
+
+        with tempfile.TemporaryDirectory() as td:
+            rogue = Path(td) / "REGRAS_PROJETO_GENOMA_VIGENTE_v9.9_2030-01-01.txt"
+            rogue.write_text("STATUS NORMATIVO: VIGENTE\n", encoding="utf-8")
+            with self.assertRaises(SealedRulesetError):
+                materialize(self.SEALED, Path(td))
+
+    def test_drifted_bytes_under_the_canonical_name_still_block(self):
+        from scripts.sealed_ruleset import SealedRulesetError, materialize
+
+        with tempfile.TemporaryDirectory() as td:
+            target, _ = materialize(self.SEALED, Path(td))
+            os.chmod(target, 0o644)
+            original = Path(target).read_text(encoding="utf-8")
+            Path(target).write_text(original + "\ntampered\n", encoding="utf-8")
+            os.chmod(target, 0o444)
+            with self.assertRaises(SealedRulesetError):
+                materialize(self.SEALED, Path(td))
+
+    def test_a_writable_canonical_file_still_blocks(self):
+        from scripts.sealed_ruleset import SealedRulesetError, materialize
+
+        with tempfile.TemporaryDirectory() as td:
+            target, _ = materialize(self.SEALED, Path(td))
+            os.chmod(target, 0o644)
+            with self.assertRaises(SealedRulesetError):
+                materialize(self.SEALED, Path(td))
+
+    def test_idempotent_reuse_still_verifies_provenance_first(self):
+        from scripts.sealed_ruleset import SealedRulesetError, materialize
+
+        with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as sealed_td:
+            materialize(self.SEALED, Path(td))
+            # An unverifiable sealed transport must fail even though the destination
+            # already holds the correct canonical artifact.
+            with self.assertRaises(SealedRulesetError):
+                materialize(Path(sealed_td), Path(td))
+
+    def test_cli_wrapper_is_idempotent_too(self):
+        import sys
+
+        from scripts.materialize_ruleset import materialize as cli_materialize
+
+        with tempfile.TemporaryDirectory() as td:
+            first, _ = cli_materialize(Path(td))
+            second, evidence = cli_materialize(Path(td))
+            self.assertEqual(first, second)
+            self.assertTrue(evidence["idempotent_reuse"])
+            self.assertTrue(sys.executable)
+
+
 if __name__ == "__main__":
     unittest.main()

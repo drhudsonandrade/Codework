@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from reporting.engine import EXPECTED_RULESET
+
 DESIGN = {
     "navy": "0B1F33",
     "teal": "0F766E",
@@ -437,7 +439,8 @@ def _docx(rendered: dict[str, Any], path: Path) -> dict[str, Any]:
 
     doc.core_properties.title = metadata["title"]
     doc.core_properties.subject = f"GENOMA v3.0 / {code} / deterministic genomic report"
-    doc.core_properties.keywords = f"GENOMA,{code},v3.3,genomics,report"
+    # Ruleset identity comes from the single canonical source; never restate it here.
+    doc.core_properties.keywords = f"GENOMA,{code},{EXPECTED_RULESET['version']},genomics,report"
     doc.save(path)
     return {"docx_font": "DejaVu Sans", "accent": accent, "a4": True}
 
