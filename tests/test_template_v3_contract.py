@@ -68,6 +68,28 @@ class TemplateV3ContractTest(unittest.TestCase):
         self.assertEqual(_system_value_for_source("OTHER", systems), "value")
         self.assertIsNone(_system_value_for_source("UNKNOWN", systems))
 
+    def test_coordinate_pack_accepts_only_complete_canonical_ruleset_marker(self):
+        from scripts.build_report_coordinate_pack import _ruleset_control_sources
+
+        canonical = "GENOMA-HUDSON-RULESET-v3.4"
+        self.assertEqual(_ruleset_control_sources(canonical), [canonical])
+        malformed = (
+            "GENOMA-HUDSON-RULESET-v3.3",
+            "GENOMA-HUDSON-RULESET-v3.4-TEST",
+            "GENOMA-HUDSON-RULESET-v3.4beta",
+            "GENOMA-HUDSON-RULESET-v3.4_alterado",
+            "GENOMA-HUDSON-RULESET-v3.4.5",
+            "XGENOMA-HUDSON-RULESET-v3.4",
+        )
+        for marker in malformed:
+            with self.subTest(marker=marker):
+                try:
+                    _ruleset_control_sources(marker)
+                except RuntimeError:
+                    pass
+                else:
+                    self.fail(f"malformed/noncanonical marker accepted: {marker}")
+
     def test_docx_svg_patch_rejects_zip_slip_member(self):
         from reporting.template_v3 import TemplateV3Error, _patch_docx_svg
 
