@@ -130,6 +130,23 @@ class V34ActivationContractTests(unittest.TestCase):
                 errors,
             )
 
+    def test_split_superseded_identity_constant_outside_history_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            stray = root / "reporting" / "split_identity.py"
+            stray.parent.mkdir(parents=True, exist_ok=True)
+            stray.write_text('RULESET = "GENOMA-V3." + "3-S001"\n', encoding="utf-8")
+            errors = validate(root)
+            self.assertTrue(
+                any(
+                    "reporting/split_identity.py" in error
+                    and "superseded identity outside explicit history" in error
+                    and "GENOMA-V3.3" in error
+                    for error in errors
+                ),
+                errors,
+            )
+
     def test_bootstrap_attestation_is_digest_bound_and_complete(self) -> None:
         path = ROOT / "deploy" / "attestations" / "bootstrap-project-v3.4.json"
         evidence = verify_bootstrap_attestation(path)
