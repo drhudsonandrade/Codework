@@ -26,6 +26,19 @@ EXPECTED_VERSION = "v3.4"
 EXPECTED_DATE = "17/08/2026"
 EXPECTED_ARCHIVED_BOOTSTRAP_SHA = "87af4f99bcd6b6f3f857a1ca725103e95dabf70c3c926d7f0d4e83b037e69fd8"
 EXPECTED_SUPERSEDED_FIXTURE_SHA = "5a6f888f176ed4c963c43c24f38697ea363f5772be06c63e70d6a8f5c497e503"
+EXPECTED_BOOTSTRAP_ATTESTATION_SHA = "dbe574cff326d3a0b429de8a2450359024be97d7bb1c64468bf6a96b8d77d5b9"
+EXPECTED_BOOTSTRAP_CHECKS = frozenset(
+    {
+        "consult_ruleset_before_relevant_genetic_analysis",
+        "require_status_vigente",
+        "require_version_v3_4",
+        "require_effective_date_2026_08_17",
+        "fail_closed_on_missing_or_conflicting_ruleset",
+        "runtime_resource_gate_before_real_calling",
+        "operational_status_contract_present",
+        "post_deployment_requires_live_15_of_15_zero_critical",
+    }
+)
 HISTORY_ROOT = ROOT / "docs" / "history"
 SUPERSEDED_FIXTURE = HISTORY_ROOT / "v3.3" / "superseded-identities.json"
 if not SUPERSEDED_FIXTURE.is_file():
@@ -202,9 +215,10 @@ class V34ActivationContractTests(unittest.TestCase):
         path = ROOT / "deploy" / "attestations" / "bootstrap-project-v3.4.json"
         evidence = verify_bootstrap_attestation(path)
         self.assertEqual(evidence["status"], "VERIFICADO")
+        self.assertEqual(evidence["file_sha256"], EXPECTED_BOOTSTRAP_ATTESTATION_SHA)
         self.assertEqual(evidence["ruleset_identity"], f"{EXPECTED_VERSION}/VIGENTE/{EXPECTED_DATE}")
         self.assertEqual(evidence["canonical_sha256"], EXPECTED_SHA)
-        self.assertEqual(len(evidence["checks_verified"]), 8)
+        self.assertEqual(frozenset(evidence["checks_verified"]), EXPECTED_BOOTSTRAP_CHECKS)
 
         with tempfile.TemporaryDirectory() as td:
             tampered = Path(td) / path.name
