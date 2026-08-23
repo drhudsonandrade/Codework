@@ -26,6 +26,7 @@ EXPECTED_STATUS = "VIGENTE"
 EXPECTED_VERSION = "v3.4"
 EXPECTED_DATE = "17/08/2026"
 EXPECTED_SECTIONS = 263
+EXPECTED_TRANSPORT_PARTS = tuple(f"parts/part-{index:03d}.b64" for index in range(13))
 MANIFEST_NAME = "MANIFEST.json"
 
 
@@ -94,8 +95,13 @@ def read_transport(sealed_dir: str | Path, manifest: dict[str, Any] | None = Non
     root = Path(sealed_dir)
     manifest = manifest or load_manifest(root)
     parts = manifest.get("transport_parts")
-    if not isinstance(parts, list) or not parts:
-        raise SealedRulesetError("sealed transport must declare one or more chunks")
+    if not isinstance(parts, list):
+        raise SealedRulesetError("sealed transport must declare transport_parts as a list")
+    declared_parts = [item.get("file") if isinstance(item, dict) else None for item in parts]
+    if declared_parts != list(EXPECTED_TRANSPORT_PARTS):
+        raise SealedRulesetError(
+            "sealed transport must declare exactly parts/part-000.b64 through parts/part-012.b64 in canonical order"
+        )
 
     assembled: list[bytes] = []
     evidence: list[dict[str, Any]] = []
