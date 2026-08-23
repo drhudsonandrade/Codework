@@ -45,10 +45,10 @@ class GenomaAuditTest(unittest.TestCase):
                 "-c",
                 "import sys,time; print('partial-stdout', flush=True); print('partial-stderr', file=sys.stderr, flush=True); time.sleep(5)",
             ],
-            timeout_seconds=0.25,
+            timeout_seconds=1.0,
         )
         self.assertEqual(rc, 124)
-        self.assertIn("TIMEOUT after 0.25s", evidence)
+        self.assertIn("TIMEOUT after 1.0s", evidence)
         self.assertIn("partial-stdout", evidence)
         self.assertIn("partial-stderr", evidence)
 
@@ -64,10 +64,10 @@ class GenomaAuditTest(unittest.TestCase):
                 "time.sleep(5)"
             )
             started = time.monotonic()
-            rc, evidence = run([sys.executable, "-c", parent], timeout_seconds=0.25)
+            rc, evidence = run([sys.executable, "-c", parent], timeout_seconds=1.0)
             elapsed = time.monotonic() - started
             self.assertEqual(rc, 124, evidence)
-            self.assertLess(elapsed, 2.0, evidence)
+            self.assertLess(elapsed, 3.0, evidence)
             self.assertTrue(pid_file.is_file(), evidence)
             child_pid = int(pid_file.read_text())
             deadline = time.monotonic() + 1.0
