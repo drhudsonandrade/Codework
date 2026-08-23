@@ -1,0 +1,1677 @@
+================================================================================
+AUDITORIA COMPLETA DO SISTEMA — GENOMA / Codework
+Data.................: 2026-08-23
+Repositorio..........: drhudsonandrade/codework
+Commit auditado......: 9fde2c4 (Merge pull request #23)
+Branch...............: claude/system-audit-complete-yt0u0g
+Escopo...............: revisao linha a linha de todo o codigo-fonte, workflows,
+                       manifestos, politicas, containers e documentacao
+================================================================================
+
+--------------------------------------------------------------------------------
+1. METODO
+--------------------------------------------------------------------------------
+
+Foram lidos e analisados integralmente:
+
+  - 10.849 linhas de codigo (Python, TypeScript, Bash, Nextflow DSL2, Rego)
+  - 12 workflows do GitHub Actions
+  - Dockerfile principal + Dockerfile do policy engine + docker-compose
+  - environment.yml, locks/actions-lock.json, locks/runtime-lock.json
+  - manifests/, normative/sealed/, reporting/catalog.json, template_store/
+  - README.md, AGENTS.md e a documentacao em docs/
+
+Validacoes efetivamente EXECUTADAS (nao inferidas):
+
+  $ python3 -m compileall scripts policy_engine array_pipeline reporting tests
+    -> OK, 0 erros de sintaxe
+
+  $ bash -n scripts/*.sh
+    -> OK, 0 erros de sintaxe
+
+  $ python3 -m unittest discover -s tests -v
+    -> 83 testes, 4 ERROS, 1 skip  (ModuleNotFoundError: pypdf)
+
+  $ python3 scripts/validate_repo.py
+    -> 12 PASS, exit 0
+
+  $ cd policy_engine && python3 -m unittest discover -s tests -v
+    -> 9 testes, 3 FAILS + 6 ERRORS (ruleset nao materializado no checkout limpo)
+
+  $ python3 scripts/run_snp_array.py --input <arquivo nao confiavel> ...
+    -> PROVA DE CONCEITO do bypass de proveniencia (achado CRIT-04)
+
+  $ python3 scripts/freshness_gate.py --input <estado vazio>
+    -> PROVA DE CONCEITO do fail-open do gate de frescor (achado CRIT-05)
+
+NAO foi possivel executar (dependencias externas ausentes no ambiente):
+  - build Docker, canary Nextflow, testes MCP (sem node_modules), OPA/Rego.
+  Os achados nesses arquivos sao de leitura estatica e estao marcados como tal.
+
+
+--------------------------------------------------------------------------------
+2. RESUMO EXECUTIVO
+--------------------------------------------------------------------------------
+
+Total de achados: 66
+
+  CRITICO ......  5   (falsa evidencia de PASS / fail-open comprovado)
+  ALTO .........  13
+  MEDIO ........  31
+  BAIXO ........  17
+
+Avaliacao geral
+---------------
+A arquitetura de quatro planos (Policy / Scientific Data / Evidence / Audit) esta
+bem desenhada e o conjunto de gates cientificos e' genuinamente sofisticado. O
+problema NAO e' ausencia de controles — e' que varios controles existem no codigo
+mas NAO estao ligados no caminho de execucao real, e alguns artefatos de evidencia
+sao literais fixos em vez de resultados computados.
+
+Os cinco achados criticos convergem para o mesmo padrao: o sistema declara
+"fail-closed" e "evidencia gerada por execucao", mas na pratica
+
+  (a) escreve "POST-DEPLOYMENT: PASS" em todo relatorio final como string fixa;
+  (b) descarta o codigo de saida do policy engine nos dois pipelines de producao;
+  (c) fabrica um objeto policy_evaluation dentro do plano de dados cientificos;
+  (d) permite que um arquivo de entrada nao confiavel autocertifique sua propria
+      proveniencia de build/strand como VERIFICADO;
+  (e) aprova o gate de frescor pre-DNA com um estado vazio ou de 2020.
+
+Isso viola diretamente as regras 7 e 8 do proprio AGENTS.md do projeto.
+
+
+--------------------------------------------------------------------------------
+3. ACHADOS CRITICOS
+--------------------------------------------------------------------------------
+
+................................................................................
+CRIT-01  "POST-DEPLOYMENT: PASS" e' uma string fixa impressa em todo relatorio
+SEVERIDADE: CRITICO
+ARQUIVOS..: scripts/build_wgs_curated_manifest.py:100
+            reporting/engine.py:113
+................................................................................
+
+PROBLEMA
+  build_wgs_curated_manifest.py monta o manifesto de curacao com:
+
+      "post_deployment_status": "PASS",          # linha 100 — literal fixo
+
+  e reporting/engine.py, ao renderizar o relatorio FINAL, imprime:
+
+      f"POST-DEPLOYMENT: {_safe(data.get('post_deployment_status'), 'PENDENTE')}"
+
+  Resultado: TODO relatorio final gerado pelo pipeline WGS declara
+  "POST-DEPLOYMENT: PASS" sem qualquer evidencia por tras.
+
+CONTRADICAO DIRETA COM O PROPRIO PROJETO
+  README.md: "Post-deployment status is evidence-driven. Never infer it from
+             README text; use the most recent genoma-post-deployment-evidence
+             artifact and the ruleset-defined gate."
+  AGENTS.md: "POST-DEPLOYMENT PASS requires the project-defined live evidence
+             contract; it cannot be inferred from README text or a successful
+             unit-test run."
+  E o proprio policy engine trata POST_DEPLOYMENT_GATE como PENDING por padrao
+  (gates_audit.py:69-80).
+
+IMPACTO
+  Falsa declaracao de conformidade em artefato entregue. Se esse relatorio
+  chegar a um leitor clinico ou a uma auditoria externa, o sistema esta
+  afirmando um estado de producao validado que nunca foi verificado.
+
+CORRECAO SUGERIDA
+  1) Em build_wgs_curated_manifest.py, remover o literal e exigir evidencia:
+
+     p.add_argument("--post-deployment-evidence",
+                    help="JSON do artefato genoma-post-deployment-evidence-<commit>")
+     ...
+     post_deployment_status = "PENDENTE"
+     if args.post_deployment_evidence:
+         ev = json.loads(Path(args.post_deployment_evidence).read_text("utf-8"))
+         if (ev.get("schema") == "genoma-post-deployment-evidence-v1"
+                 and ev.get("live_smoke_passed") is True
+                 and ev.get("live_smoke_count") == 15
+                 and ev.get("critical_failures") == 0
+                 and ev.get("commit") == os.environ.get("GENOMA_COMMIT")):
+             post_deployment_status = "PASS"
+     payload["post_deployment_status"] = post_deployment_status
+
+  2) Em reporting/engine.py, tornar o default explicito e bloquear promocao:
+
+     status = _safe(data.get("post_deployment_status"), "PENDENTE")
+     if status == "PASS" and not data.get("post_deployment_evidence_ref"):
+         raise ReportReleaseError(
+             "POST-DEPLOYMENT PASS sem referencia de evidencia executada")
+
+  3) Adicionar teste de regressao em tests/test_report_engine.py que falhe se
+     um manifesto sem evidencia produzir "POST-DEPLOYMENT: PASS".
+
+
+................................................................................
+CRIT-02  Codigo de saida do policy engine e' capturado e descartado nos dois
+         pipelines de producao
+SEVERIDADE: CRITICO
+ARQUIVOS..: workflows/wgs.nf:282-291
+            workflows/array.nf:111-119
+................................................................................
+
+PROBLEMA
+  Ambos os processos POLICY_EVALUATE fazem exatamente isto:
+
+      set +e
+      ... python3 -m genoma_policy evaluate '<manifest>' --output policy/evaluation.json
+      code=$?
+      set -e
+      test -s policy/evaluation.json
+      printf '%s\n' "$code" > policy/evaluation.exit-code
+
+  O `set +e` desativa o fail-fast, `$code` e' gravado num arquivo e NUNCA e'
+  comparado com nada. Verificacao executada:
+
+      $ grep -rn "exit-code" --include="*.nf" --include="*.py" --include="*.sh" .
+      workflows/wgs.nf:290:    printf '%s\n' "\$code" > policy/evaluation.exit-code
+      workflows/array.nf:119:  printf '%s\n' "\$code" > policy/evaluation.exit-code
+
+  Nenhum consumidor. O arquivo evaluation.exit-code e' evidencia morta.
+
+  O contraste dentro do mesmo arquivo e' gritante: todos os outros gates usam
+  `jq -e ... >/dev/null` para falhar fechado (wgs.nf linhas 46, 66, 86, 91,
+  139, 175, 262). Somente o plano de controle de politica foi excecionado.
+
+IMPACTO
+  O Policy Control Plane e' meramente consultivo no pipeline real. O engine
+  pode retornar exit 2 (NOT ready) e o pipeline segue para GENERATE_REPORTS
+  sem qualquer interrupcao. Isso anula o primeiro plano da arquitetura
+  declarada no README.
+
+CORRECAO SUGERIDA
+  Substituir o bloco em AMBOS os arquivos por avaliacao fail-closed:
+
+      mkdir -p policy/normative
+      python3 '${workflow.projectDir}/scripts/materialize_ruleset.py' \
+        --output-dir policy/normative \
+        --evidence policy/ruleset-materialization.json
+      canonical='policy/normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt'
+      GENOMA_RULESET_PATH="\$canonical" \
+      GENOMA_RULESET_SHA_MANIFEST='${workflow.projectDir}/manifests/RULESET_V3.3.sha256' \
+      PYTHONPATH='${workflow.projectDir}/policy_engine' \
+        python3 -m genoma_policy evaluate '${curation_manifest}' \
+          --output policy/evaluation.json
+      test -s policy/evaluation.json
+      jq -e '.ready_for_requested_operation == true' policy/evaluation.json >/dev/null
+
+  Se houver necessidade legitima de produzir o relatorio de bloqueio mesmo com
+  politica reprovada, isso deve ser um processo SEPARADO e explicito
+  (ex.: POLICY_BLOCKED_REPORT), nunca o caminho padrao silencioso.
+
+  Adicionar em tests/test_workflow_contracts.py:
+
+      def test_policy_evaluation_is_fail_closed_in_both_pipelines(self):
+          for nf in ("workflows/wgs.nf", "workflows/array.nf"):
+              text = Path(nf).read_text(encoding="utf-8")
+              self.assertNotIn("set +e", text, f"{nf} desativa fail-fast")
+              self.assertIn(".ready_for_requested_operation == true", text)
+
+
+................................................................................
+CRIT-03  policy_evaluation FABRICADO dentro do plano de dados cientificos
+SEVERIDADE: CRITICO
+ARQUIVO...: scripts/build_wgs_curated_manifest.py:90-99
+................................................................................
+
+PROBLEMA
+  O script que constroi o manifesto de curacao — que pertence ao Scientific
+  Data Plane — injeta um objeto policy_evaluation inteiro, escrito a mao:
+
+      "policy_evaluation": {
+          "ready_for_requested_operation": False,
+          "planes": {
+              "policy_control":  {"state": "PASS"},     # <— afirmacao inventada
+              "scientific_data": {"state": "PASS"},     # <— afirmacao inventada
+              "evidence": {"state": "PENDING"},
+              "audit":    {"state": "PENDING"},
+          },
+          "gates": [{"gate": "FINAL_AUDIT_GATE", "state": "PENDING", "blocking": True}],
+      },
+
+  Esse objeto nao vem da execucao do policy engine. Ele afirma que os planos
+  policy_control e scientific_data estao PASS por decreto.
+
+  Como o pipeline WGS nao passa --policy para generate_all_reports.py
+  (ver ALTO-03), esse objeto FABRICADO e' exatamente o que
+  reporting/engine._publication_blockers() vai avaliar.
+
+CONTRADICAO
+  AGENTS.md, secao Scientific Data Plane: "Never smuggle policy decisions into
+  the scientific data plane." E' precisamente o que este bloco faz.
+
+  AGENTS.md, Evidence and Audit Planes: "Evidence must be generated by
+  execution, not prose."
+
+IMPACTO
+  Hoje o bloqueio ainda ocorre porque ready_for_requested_operation esta False.
+  Mas a decisao de publicacao passa a depender de um literal editavel em vez do
+  resultado do engine. Basta alguem mudar False para True — em um script do
+  plano de dados, sem passar por nenhum gate — para liberar publicacao.
+
+CORRECAO SUGERIDA
+  Remover integralmente as chaves "policy_evaluation" e "post_deployment_status"
+  de build_wgs_curated_manifest.py. O manifesto de curacao deve conter APENAS
+  dados cientificos observados. A juncao com a politica ja tem lugar proprio:
+  scripts/prepare_report_release.py::assemble_release(), que recebe o JSON real
+  do engine.
+
+      payload = {
+          "schema": "genoma-wgs-curation-manifest-v1",
+          ...
+          "publication_gate": {
+              "passed": False, "consent_verified": False,
+              "qc_verified": True, "evidence_verified": False,
+              "placeholders_resolved": False,
+          },
+          "runtime_gate": runtime,
+      }
+      # policy_evaluation e post_deployment_status sao inseridos por
+      # assemble_release() a partir de execucao real. Nunca aqui.
+
+  E endurecer reporting/engine.py para recusar dado nao proveniente do engine:
+
+      policy = data.get("policy_evaluation") or {}
+      if policy.get("metadata", {}).get("engine") != "genoma-policy-engine":
+          blockers.append("policy_evaluation:nao_produzido_pelo_engine")
+
+
+................................................................................
+CRIT-04  Arquivo SNP-array nao confiavel autocertifica a propria proveniencia
+SEVERIDADE: CRITICO   (COMPROVADO EM EXECUCAO)
+ARQUIVOS..: array_pipeline/qc.py:126-144  (_metadata_attestation)
+            array_pipeline/qc.py:218-234  (auto-preenchimento)
+            scripts/run_snp_array.py:99-100, 108-115
+................................................................................
+
+PROBLEMA
+  inspect_array() faz o seguinte quando build_evidence/strand_evidence sao None:
+
+      if build_evidence is None and metadata.get("reference"):
+          build_evidence = _metadata_attestation("reference_build",
+                                                 metadata.get("reference",""), input_sha)
+      if strand_evidence is None and metadata.get("strand_evidence"):
+          strand_evidence = _metadata_attestation("strand",
+                                                  metadata.get("strand_evidence",""), input_sha)
+
+  _metadata_attestation() FABRICA um documento com
+  {"status": "VERIFICADO", "decision": "SATISFIED", ...} a partir de um simples
+  comentario do proprio arquivo de entrada, ja vinculado ao SHA-256 correto
+  (porque o proprio codigo calculou o SHA). Em seguida _verified_provenance()
+  valida essa atestacao que ele mesmo acabou de criar e libera o
+  BUILD_STRAND_GATE.
+
+  Isso contradiz textualmente a docstring do proprio modulo:
+      "Provenance evidence must be a structured VERIFICADO/SATISFIED attestation
+       bound to this exact input SHA-256; plain prose never unlocks the gate."
+  e o help da CLI: "plain text is rejected".
+
+PROVA DE CONCEITO EXECUTADA
+  Arquivo criado com 218 linhas, sem nenhuma atestacao externa:
+
+      ##reference=build37
+      ##chip=UNTRUSTED-CHIP
+      # All genotypes are on the forward (+) strand
+      RSID,CHROMOSOME,POSITION,RESULT
+      rs1799807,1,100000,AG
+      ...
+
+  Comando (SEM nenhuma flag de evidencia):
+
+      $ python3 scripts/run_snp_array.py --input untrusted.csv \
+            --case-id POC --output-dir out
+      {"status": "VERIFICADO", "ready": true, ...}
+      EXIT=0
+
+  Conteudo de out/array-qc.json:
+
+      "operational_status": "VERIFICADO"
+      "BUILD_STRAND_GATE":  {"state": "PASS", "reasons": []}
+      "LIMITED_INTERPRETATION_GATE": "PASS"
+      "build":  "GRCh37"     <- vindo do comentario do proprio arquivo
+      "strand": "forward"    <- vindo do comentario do proprio arquivo
+
+  Nota: o historico do repositorio ja contem o commit 23ca13b
+  "fix: close direct-library SNP-array provenance bypass" — esta e' uma segunda
+  instancia da mesma classe de falha, que continua aberta.
+
+IMPACTO
+  Build e strand errados sao a causa classica de troca de alelo (A/T, C/G) e de
+  coordenada em dados de array. Declarar VERIFICADO com base no que o proprio
+  arquivo diz sobre si mesmo elimina o unico controle que existe contra isso.
+
+CORRECAO SUGERIDA
+  1) Remover a auto-atestacao. Metadado do arquivo e' DICA, nunca VERIFICACAO:
+
+     # array_pipeline/qc.py
+     if build is None:
+         ref = metadata.get("reference", "")
+         if ref.lower() in {"build37","grch37","hg19"}:   build = "GRCh37"
+         elif ref.lower() in {"build38","grch38","hg38"}: build = "GRCh38"
+     if strand is None and metadata.get("strand"):
+         strand = metadata.get("strand")
+     # NAO derivar build_evidence/strand_evidence do proprio arquivo.
+     # Registrar apenas como dica nao verificada:
+     metadata_hint = {
+         "reference_declared_by_input": metadata.get("reference"),
+         "strand_declared_by_input":    metadata.get("strand_evidence"),
+         "status": "INFERIDO",
+         "note": "declaracao do proprio arquivo; nao constitui verificacao",
+     }
+
+  2) Apagar a funcao _metadata_attestation() por completo.
+
+  3) Tornar as flags obrigatorias quando o gate precisa passar:
+
+     # scripts/run_snp_array.py
+     if not args.build_evidence or not args.strand_evidence:
+         print(json.dumps({"status":"NÃO DISPONÍVEL","ready":False,
+             "reason":"BUILD_STRAND_GATE exige --build-evidence e "
+                      "--strand-evidence como atestacoes externas"}), file=sys.stderr)
+         return 2
+
+  4) Teste de regressao (falha antes da correcao, passa depois):
+
+     def test_input_declared_metadata_never_unlocks_build_strand_gate(self):
+         path = self.write_array_with_self_declared_metadata()
+         r = inspect_array(path, case_id="T")
+         self.assertEqual(r["gates"]["BUILD_STRAND_GATE"]["state"], "BLOCKED")
+         self.assertEqual(r["operational_status"], "NÃO DISPONÍVEL")
+
+
+................................................................................
+CRIT-05  Gate de frescor pre-DNA aprova estado vazio e limite autodeclarado
+SEVERIDADE: CRITICO   (COMPROVADO EM EXECUCAO)
+ARQUIVO...: scripts/freshness_gate.py:39, 45, 78, 84
+................................................................................
+
+PROBLEMA (dois defeitos combinados)
+
+  (a) Limite de validade lido do proprio artefato auditado, sem teto:
+
+          max_age_hours = float(state.get("max_age_hours", 24))     # linha 39
+          source_max_age = float(raw.get("max_age_hours", max_age_hours))  # linha 84
+
+      Quem produz o estado define quanto tempo o estado permanece valido.
+
+  (b) Fail-open por omissao:
+
+          for raw in state.get("components", []):        # linha 45
+          for raw in state.get("evidence_sources", []):  # linha 78
+
+      Se as listas estiverem ausentes ou vazias, nenhum blocker e' adicionado e
+      `ready_for_dna` e' True. Nenhuma verificacao de cardinalidade minima.
+
+PROVA DE CONCEITO EXECUTADA
+
+  Caso A — estado sem nenhum componente:
+      $ echo '{"checked_at":"<agora>"}' > empty_state.json
+      $ python3 scripts/freshness_gate.py --input empty_state.json
+      ready_for_dna = True | blockers = []
+      EXIT=0
+
+  Caso B — estado de 2020 com limite autodeclarado:
+      $ cat ancient_state.json
+      {"checked_at":"2020-01-01T00:00:00Z","max_age_hours":9999999,
+       "components":[],"evidence_sources":[]}
+      $ python3 scripts/freshness_gate.py --input ancient_state.json
+      ready_for_dna = True | blockers = []
+
+IMPACTO — CADEIA COMPLETA
+  Este gate e' consumido por workflows/wgs.nf em DOIS pontos criticos:
+
+      REFRESH_FRESHNESS_GATE      (linha 46)  jq -e '.ready_for_dna == true'
+      RERUN_SAMPLE_RUNTIME_GATE   (linha 139) jq -e '.ready_for_dna == true'
+
+  E o segundo ponto alimenta scripts/latest_runtime_resource_gate.py, cujo
+  unico pre-requisito e' justamente ready_for_dna == true (linha 22-23) — e que
+  por sua vez REMOVE a verificacao de versao das ferramentas (ver ALTO-02).
+
+  Cadeia de bypass completa:
+      estado de frescor vazio
+        -> ready_for_dna = true
+        -> latest_runtime_resource_gate aceita qualquer versao de ferramenta
+        -> RUNTIME_RESOURCE_GATE = EXECUTADO
+        -> chamada de variantes real liberada
+
+CORRECAO SUGERIDA
+
+      # scripts/freshness_gate.py
+      MAX_ALLOWED_AGE_HOURS = 24.0
+      REQUIRED_COMPONENTS = ("toolchain",)
+      REQUIRED_EVIDENCE_SOURCE_COUNT = 6
+
+      def _bounded_age(value, default=MAX_ALLOWED_AGE_HOURS):
+          try:
+              hours = float(value)
+          except (TypeError, ValueError):
+              return default
+          if hours <= 0:
+              return default
+          return min(hours, MAX_ALLOWED_AGE_HOURS)   # teto nao negociavel
+
+      def evaluate_readiness(state, *, now=None):
+          now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+          blockers = []
+          max_age_hours = _bounded_age(state.get("max_age_hours"))
+
+          components = state.get("components")
+          if not isinstance(components, list) or not components:
+              blockers.append("components:ausentes_ou_vazios")
+              components = []
+
+          sources = state.get("evidence_sources")
+          if not isinstance(sources, list) or len(sources) != REQUIRED_EVIDENCE_SOURCE_COUNT:
+              blockers.append(
+                  f"evidence_sources:esperado_{REQUIRED_EVIDENCE_SOURCE_COUNT}_"
+                  f"obtido_{len(sources) if isinstance(sources, list) else 0}")
+              sources = sources if isinstance(sources, list) else []
+
+          names = {str(c.get("name")) for c in components if isinstance(c, dict)}
+          for required in REQUIRED_COMPONENTS:
+              if not any(required in n for n in names):
+                  blockers.append(f"component:{required}:ausente")
+          ...
+
+  Testes de regressao a adicionar em tests/test_freshness_gate.py:
+
+      def test_estado_sem_componentes_bloqueia(self):
+          r = evaluate_readiness({"checked_at": _now()})
+          self.assertFalse(r["ready_for_dna"])
+          self.assertIn("components:ausentes_ou_vazios", r["blockers"])
+
+      def test_max_age_autodeclarado_nao_ultrapassa_teto(self):
+          r = evaluate_readiness({"checked_at": "2020-01-01T00:00:00Z",
+                                  "max_age_hours": 9999999,
+                                  "components": [], "evidence_sources": []})
+          self.assertFalse(r["ready_for_dna"])
+          self.assertIn("freshness_state:stale", r["blockers"])
+
+
+--------------------------------------------------------------------------------
+4. ACHADOS ALTOS
+--------------------------------------------------------------------------------
+
+................................................................................
+ALTO-01  run_canary.sh: atalho de cache transforma o canary em no-op com PASS
+ARQUIVO..: scripts/run_canary.sh:8-11, 132
+................................................................................
+  As primeiras linhas executaveis do canary sao:
+
+      if [[ -s "$OUTPUT_DIR/report.json" ]] && \
+         jq -e '.status == "PASS"' "$OUTPUT_DIR/report.json" >/dev/null; then
+        cat "$OUTPUT_DIR/report.json"
+        exit 0
+      fi
+
+  Se ja existir um report.json com status PASS no diretorio de saida, o canary
+  NAO EXECUTA NADA e sai com 0. Em CI o diretorio vem de um volume montado
+  (-v "$PWD/results:/workspace/results"). Agravante: o status no relatorio e'
+  literal fixo no jq da linha 132 (`status: "PASS"`), nunca calculado.
+
+  O relatorio e' consumido como evidencia por:
+      scripts/promote_latest_candidate.py --functional-canary results/canary/report.json
+      .github/workflows/genoma-ngs-runtime-gate.yml (jq -e '.status == "PASS"')
+
+  CORRECAO:
+    - Remover o atalho de cache; ou condiciona-lo a um digest do ambiente:
+          expected_key="$(sha256sum environment.yml Dockerfile | sha256sum | cut -d' ' -f1)"
+          if [[ -s "$OUTPUT_DIR/report.json" ]] && \
+             jq -e --arg k "$expected_key" \
+                '.status=="PASS" and .environment_key==$k' \
+                "$OUTPUT_DIR/report.json" >/dev/null; then ...
+      e gravar "environment_key" no relatorio.
+    - Derivar status de resultados reais em vez de literal:
+          --slurpfile bcftools ... --slurpfile gatk ...
+          status: (if ($bcftools[0].fp==0 and $bcftools[0].fn==0
+                       and $gatk[0].fp==0 and $gatk[0].fn==0
+                       and $bcftools[0].tp>0 and $gatk[0].tp>0)
+                   then "PASS" else "FAIL" end)
+
+................................................................................
+ALTO-02  latest_runtime_resource_gate.py elimina a verificacao de versao
+ARQUIVO..: scripts/latest_runtime_resource_gate.py:26-47 (linha 37)
+................................................................................
+  O adaptador substitui core.check_tools por:
+
+      ok = code == 0 and bool(output.strip())        # linha 37
+
+  Qualquer binario que execute e imprima algo passa. A versao esperada
+  (core.EXPECTED_TOOLS) e' desempacotada e descartada: `for tool, (_, cmd) in ...`.
+
+  A docstring justifica dizendo que o candidato e' "version-locked by its Conda
+  inventory + image digest", mas o script NAO verifica inventario nem digest —
+  seu unico pre-requisito e' freshness_gate.ready_for_dna == true, que como
+  provado em CRIT-05 aprova estado vazio.
+
+  Agravante: workflows/wgs.nf:141 usa ESTE script (nao o canonico
+  runtime_resource_gate.py) no gate imediatamente anterior a chamada real de
+  variantes.
+
+  CORRECAO:
+    - Exigir e verificar o inventario prometido:
+          p.add_argument("--conda-inventory", required=True)
+          p.add_argument("--image-digest", required=True)
+      e comparar cada versao observada contra o inventario:
+          inv = {p["name"]: p["version"] for p in json.loads(inventory)}
+          ok = code == 0 and inv.get(tool) and inv[tool] in output
+    - Registrar em evidencia o digest da imagem e o sha do inventario.
+    - Adicionar teste que falhe se uma ferramenta com versao fora do inventario
+      for aceita como EXECUTADO.
+
+................................................................................
+ALTO-03  Pipeline WGS nao passa --policy; fallback le evaluation.json do CWD
+ARQUIVOS.: workflows/wgs.nf:307-309  vs  workflows/array.nf:137-140
+           scripts/generate_all_reports.py:25
+................................................................................
+  array.nf passa `--policy '${policy_evaluation}'`. wgs.nf NAO passa.
+  E o fallback e' um caminho relativo implicito:
+
+      policy_path = Path(args.policy) if args.policy else Path("evaluation.json")
+      if policy_path.is_file():
+          data = assemble_release(data, policy)
+
+  No work dir do Nextflow o arquivo "evaluation.json" nao existe, logo
+  assemble_release() NUNCA roda no caminho WGS: a avaliacao real de politica
+  jamais e' fundida no pacote de release. Sobra apenas o policy_evaluation
+  fabricado de CRIT-03.
+
+  Alem disso, um evaluation.json qualquer deixado no diretorio de trabalho muda
+  o comportamento silenciosamente.
+
+  CORRECAO:
+    - wgs.nf: adicionar `--policy '${policy_evaluation}'` (o canal ja e' entrada
+      do processo, so nao esta sendo usado).
+    - generate_all_reports.py: tornar --policy obrigatorio e remover o fallback:
+          parser.add_argument("--policy", required=True,
+                              help="JSON da avaliacao real do policy engine")
+          policy = json.loads(Path(args.policy).read_text(encoding="utf-8"))
+          data = assemble_release(data, policy)
+    - Teste de contrato:
+          def test_ambos_pipelines_passam_policy_ao_gerador(self):
+              for nf in ("workflows/wgs.nf", "workflows/array.nf"):
+                  t = Path(nf).read_text("utf-8")
+                  self.assertIn("--policy", t)
+
+................................................................................
+ALTO-04  Snapshot de evidencia e' calculado e depois descartado
+ARQUIVO..: workflows/wgs.nf:243, 252-261
+................................................................................
+  O processo ANNOTATE_EVIDENCE produz evidence/adapter-capabilities.json.
+  BUILD_CURATED_MANIFEST recebe esse arquivo como entrada, mas so faz:
+
+      test -s '${evidence_snapshot}'
+
+  e a chamada ao script NAO inclui o arquivo:
+
+      python3 build_wgs_curated_manifest.py \
+        --case-id --sample-id --vcf --runtime-gate --output    # sem --evidence
+
+  build_wgs_curated_manifest.py ACEITA `--evidence` (linha 35) mas nunca o
+  recebe -> a lista `sources` do manifesto fica SEMPRE vazia -> o
+  EVIDENCE_RECENCY_GATE do policy engine nao tem nada para validar e qualquer
+  claim clinico futuro referenciara fonte desconhecida.
+
+  CORRECAO (wgs.nf):
+      python3 '${workflow.projectDir}/scripts/build_wgs_curated_manifest.py' \
+        --case-id '${case_id}' --sample-id '${sample_id}' \
+        --vcf '${normalized_vcf}' --runtime-gate '${pre_call_gate}' \
+        --evidence '${evidence_snapshot}' \
+        --output curation/analysis-manifest.json
+      jq -e '.sources | length > 0' curation/analysis-manifest.json >/dev/null
+
+................................................................................
+ALTO-05  Versao do bwa-mem2 no gate contradiz environment.yml e runtime-lock
+ARQUIVOS.: scripts/runtime_resource_gate.py:31
+           environment.yml  /  locks/runtime-lock.json
+................................................................................
+      runtime_resource_gate.py:  "bwa-mem2": ("2.2.1", ["bwa-mem2","version"])
+      environment.yml:           - bwa-mem2=2.3
+      locks/runtime-lock.json:   "bwa-mem2": "2.3"
+
+  Num ambiente construido corretamente a partir do environment.yml, o gate
+  reporta `bwa-mem2:version_or_execution` e o RUNTIME_RESOURCE_GATE fica
+  NAO DISPONIVEL. O gate canonico esta permanentemente quebrado.
+
+  Observacao: isso passa despercebido em CI porque
+  genoma-ngs-runtime-gate.yml sobrescreve environment.yml com o "latest
+  candidate" antes do build, e porque o caminho de producao usa o adaptador
+  latest_* que nao verifica versao (ALTO-02).
+
+  CORRECAO:
+    - Corrigir a constante para "2.3".
+    - Melhor: derivar EXPECTED_TOOLS de locks/runtime-lock.json em vez de
+      duplicar, eliminando a possibilidade de divergencia:
+
+          _LOCK = json.loads((ROOT/"locks/runtime-lock.json").read_text("utf-8"))
+          _CONDA = _LOCK["conda"]
+          EXPECTED_TOOLS = {
+              "java":      (_CONDA["openjdk"],           ["java","-version"]),
+              "samtools":  (_CONDA["samtools"],          ["samtools","--version"]),
+              "bcftools":  (_CONDA["bcftools"],          ["bcftools","--version"]),
+              "bwa-mem2":  (_CONDA["bwa-mem2"],          ["bwa-mem2","version"]),
+              "gatk":      (_CONDA["gatk4"],             ["gatk","--version"]),
+              "nextflow":  (_CONDA["nextflow"],          ["nextflow","-version"]),
+              "snakemake": (_CONDA["snakemake-minimal"], ["snakemake","--version"]),
+          }
+    - Teste: assertEqual(EXPECTED_TOOLS["bwa-mem2"][0], lock["conda"]["bwa-mem2"])
+
+................................................................................
+ALTO-06  README declara ruleset v3.4; todo o sistema executa v3.3
+ARQUIVO..: README.md:3, 11, 19
+................................................................................
+  README.md afirma:
+      "governed by the canonical GENOMA v3.4 ruleset"
+      "exactly one active runtime copy of REGRAS_..._v3.4_2026-08-17.txt"
+      "SHA-256 ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
+
+  Realidade verificada em todo o repositorio:
+      manifests/RULESET_V3.3.sha256 ....... 187f28a9...  v3.3  2026-08-14
+      normative/sealed/MANIFEST.json ...... v3.3, 14/08/2026, 187f28a9...
+      scripts/sealed_ruleset.py:23-27 ..... v3.3
+      policy_engine/.../ruleset.py:10-15 .. v3.3
+      policy_engine/.../paths.py:6-7 ...... v3.3
+      models.py:54 rule_id ................ "GENOMA-V3.3-S%03d"
+      genoma.rego ......................... v3.3
+      12 workflows do CI .................. RULESET_V3.3.sha256
+
+  A string "v3.4" nao existe em NENHUM arquivo executavel. Introduzida no
+  commit fcad86b "Update README for GENOMA v3.4 changes".
+
+  AGENTS.md diz: "A ruleset version/date/hash/file-name change is a coordinated
+  migration, not a search-and-replace" — e nem sequer a substituicao foi feita:
+  so a documentacao de entrada mudou.
+
+  CORRECAO:
+    - Reverter README.md para v3.3 / 14/08/2026 / 187f28a9... (correcao imediata,
+      1 arquivo), OU executar a migracao coordenada completa se v3.4 for real.
+    - Adicionar guarda automatica em scripts/validate_repo.py:
+
+          readme = (root/"README.md").read_text(encoding="utf-8")
+          if EXPECTED_VERSION not in readme or CANONICAL_RULESET_SHA256 not in readme:
+              errors.append("README declara identidade de ruleset divergente do "
+                            "transporte selado e dos manifestos")
+          for stale in ("v3.4", "ab7a5f0ba9709e2f"):
+              if stale in readme:
+                  errors.append(f"README contem identidade obsoleta: {stale}")
+
+................................................................................
+ALTO-07  RUNTIME_RESOURCE_GATE passa quando os dois session_id estao ausentes
+ARQUIVO..: policy_engine/genoma_policy/gates_core.py:69
+................................................................................
+      if runtime.get("session_id") != manifest.get("session_id"):
+          reasons.append("runtime/resource gate was not executed for this session")
+
+  Se AMBOS forem None (chaves ausentes), None != None e' False -> a verificacao
+  de vinculo de sessao passa silenciosamente. O gate existe justamente para
+  garantir que a evidencia de runtime pertence A ESTA sessao.
+
+  CORRECAO:
+      session_id = manifest.get("session_id")
+      runtime_session = runtime.get("session_id")
+      if not isinstance(session_id, str) or not session_id.strip():
+          reasons.append("manifest session_id ausente; vinculo de sessao impossivel")
+      elif runtime_session != session_id:
+          reasons.append("runtime/resource gate nao foi executado para esta sessao")
+
+  Teste: manifesto com requires_real_calling=True, checks completos e nenhum
+  session_id deve resultar em FAIL.
+
+................................................................................
+ALTO-08  Ledger de auditoria e' reescrevivel e sem controle de concorrencia
+ARQUIVO..: policy_engine/genoma_policy/ledger.py:24-46, 49-80
+................................................................................
+  (a) A cadeia usa SHA-256 puro, sem chave nem assinatura, e o hash da cabeca
+      nao e' ancorado em lugar nenhum. Quem tem permissao de escrita no arquivo
+      pode alterar/remover uma entrada e RECOMPUTAR toda a cadeia;
+      verify_ledger() continuara retornando valid=True. "Tamper-evident"
+      (AGENTS.md) so vale se a cabeca for publicada externamente.
+
+  (b) Sem trava de arquivo: dois processos concorrentes leem a mesma ultima
+      linha, calculam o mesmo `sequence` e ambos fazem append. Cadeia corrompida.
+
+  (c) append_event le o arquivo INTEIRO em memoria a cada append (linha 30) e
+      verify_ledger tambem (linha 57). Custo O(n) por evento, memoria ilimitada.
+
+  (d) Linha 32: json.loads(lines[-1]) sem try/except -> traceback se a ultima
+      linha estiver corrompida.
+
+  CORRECAO:
+      import fcntl, os
+      def append_event(path, event_type, payload):
+          ledger_path = Path(path); ledger_path.parent.mkdir(parents=True, exist_ok=True)
+          with ledger_path.open("a+", encoding="utf-8") as handle:
+              fcntl.flock(handle.fileno(), fcntl.LOCK_EX)      # (b)
+              try:
+                  previous_hash, sequence = _read_tail(handle)  # (c) seek do fim
+                  record = {...}
+                  record["entry_sha256"] = _entry_hash(record)
+                  handle.write(_canonical_json(record) + "\n")
+                  handle.flush(); os.fsync(handle.fileno())
+                  return record
+              finally:
+                  fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+      def _read_tail(handle):        # le so o fim do arquivo, nao tudo
+          handle.seek(0, os.SEEK_END)
+          size = handle.tell()
+          if size == 0: return GENESIS_HASH, 1
+          handle.seek(max(0, size - 8192)); tail = handle.read().splitlines()
+          for raw in reversed(tail):
+              if raw.strip():
+                  try: previous = json.loads(raw)
+                  except json.JSONDecodeError:                   # (d)
+                      raise LedgerError("ultima entrada do ledger e' invalida")
+                  return str(previous.get("entry_sha256","")), int(previous.get("sequence",0))+1
+          return GENESIS_HASH, 1
+
+    E para (a): publicar periodicamente o hash da cabeca como artefato assinado
+    do CI (ancoragem externa), ou assinar cada entrada com HMAC/minisign.
+
+................................................................................
+ALTO-09  Suite de smoke nao possui controle negativo
+ARQUIVO..: policy_engine/genoma_policy/smoke.py:48-53
+................................................................................
+      matched = [g for g in report.gates
+                 if g.gate == expected_gate and g.state.value == "FAIL"]
+      ok = bool(matched)
+
+  Os 15 casos verificam APENAS que o gate esperado FALHA. Nenhum caso verifica
+  que um manifesto valido PASSA. Consequencia: um engine defeituoso que reprove
+  TUDO obtem 15/15.
+
+  Isso importa porque gates_audit.py:74 define o criterio de post-deployment
+  como `live_smoke_passed is True and live_smoke_count == 15` — ou seja, o
+  criterio de producao e' satisfativel por um engine que rejeita tudo.
+
+  CORRECAO: adicionar casos de controle positivo e verificar ausencia de
+  falhas colaterais:
+
+      def _positive_control(ruleset):
+          m = _baseline(ruleset)
+          m["section_attestations"] = _all_na(ruleset)
+          m["operation"]["analysis_relevant"] = False
+          return m
+
+      # em run_smoke:
+      control = engine.evaluate(deepcopy(_positive_control(engine.ruleset)))
+      control_ok = not control.blocking_failures
+      results.append({"case":"SMOKE-00-CONTROL","expected":"no_blocking_failures",
+                      "pass":control_ok,
+                      "observed":[g.to_dict() for g in control.blocking_failures]})
+
+      # e por caso, garantir que so o gate esperado falhou:
+      others = [g.gate for g in report.gates
+                if g.state.value=="FAIL" and g.gate != expected_gate]
+      ok = bool(matched) and not others
+
+  Atencao: alterar a contagem de 15 exige atualizar gates_audit.py:74 e
+  docs/PRODUCTION_CEREMONY.md em conjunto (contrato acoplado).
+
+................................................................................
+ALTO-10  Mesma regra de orientacao aplicada com rigor diferente em dois lugares
+ARQUIVOS.: array_pipeline/qc.py:147-181  (_verified_provenance — rigoroso)
+           array_pipeline/annotation.py:51, 56  (frouxo)
+................................................................................
+  qc.py exige uma atestacao estruturada completa (status, decision,
+  justification, evidence_refs, trace com 6 campos, timestamp ISO, vinculo ao
+  SHA-256 da entrada).
+
+  annotation.py, para a MESMA decisao, aceita qualquer string nao vazia:
+
+      if sources == "M" and strand == "forward" \
+         and strand_evidence not in {None, "NÃO DISPONÍVEL"}:
+          return "VERIFICADO", "MyHeritage forward-strand source metadata"
+      ...
+      if strand in {"forward","plus","+"} and strand_evidence not in {None,"NÃO DISPONÍVEL"}:
+          return "VERIFICADO", str(strand_evidence)
+
+  A versao frouxa e' a que determina orientation_operational_status no JSON de
+  anotacao, que por sua vez alimenta observation_operational_status (linha 218).
+
+  CORRECAO: importar e reutilizar a funcao rigorosa, eliminando a duplicata:
+
+      from array_pipeline.qc import _verified_provenance   # tornar publica:
+      # renomear para verified_provenance e exportar em __all__
+
+      def _orientation(row, schema, qc):
+          strand = qc.get("input", {}).get("strand")
+          strand_evidence = qc.get("input", {}).get("strand_evidence")
+          input_sha = qc.get("input", {}).get("sha256", "")
+          strand_verified = verified_provenance(strand_evidence, input_sha)
+          ...
+          if sources == "M" and strand == "forward" and strand_verified: ...
+
+................................................................................
+ALTO-11  Gate de consentimento aceita autodeclaracao sem atestacao
+ARQUIVO..: scripts/wgs_consent_gate.py:18-32
+................................................................................
+  Basta o sample-manifest.json conter {"consent": {"status": "VERIFICADO", ...}}
+  para o gate liberar a primeira leitura de DNA. Nao ha:
+    - atestacao estruturada com trace/ator/metodo (ao contrario do caminho array);
+    - vinculo criptografico ao arquivo de consentimento;
+    - prazo de validade ou verificacao de revogacao;
+    - qualquer politica sobre secondary_findings (apenas ecoado na linha 41).
+
+  Quem escreve o manifesto declara o proprio consentimento como verificado.
+
+  CORRECAO: reutilizar o mesmo contrato de atestacao ja implementado em
+  scripts/run_snp_array.py::load_verified_attestation:
+
+      consent_attestation = load_verified_attestation(
+          manifest["consent"]["attestation"], assertion="consent",
+          input_path=Path(manifest["consent"]["document_path"]))
+      valid_until = _parse_iso(consent.get("valid_until"))
+      if valid_until is None or valid_until < datetime.now(timezone.utc):
+          errors.append("consent.valid_until ausente ou expirado")
+      if consent.get("revoked") is True:
+          errors.append("consent revogado")
+      if consent.get("secondary_findings") not in {"AUTHORIZED","DECLINED"}:
+          errors.append("consent.secondary_findings deve ser explicito")
+
+................................................................................
+ALTO-12  Substituicao textual promove "MODELO" a "RESULTADO" sem verificacao
+ARQUIVO..: reporting/template_v3.py:23-35
+................................................................................
+      SYSTEM_REPLACEMENTS = {
+          "MODELO REUTILIZÁVEL v3.0": "RESULTADO GENÔMICO v3.0",
+          "MODELO — NÃO É RESULTADO GENÉTICO": "PUBLICAÇÃO CONTROLADA — RESULTADO GENÔMICO",
+          "MODELO — NÃO É RESULTADO": "PUBLICAÇÃO CONTROLADA",
+          "MODELO SEM DADOS PESSOAIS": "RESULTADO GENÔMICO",
+          ...
+      }
+
+  Um documento explicitamente rotulado "NAO E' RESULTADO GENETICO" e' convertido
+  em "RESULTADO GENOMICO" por busca-e-substituicao sobre texto de PDF. Texto em
+  PDF frequentemente esta fragmentado em runs distintos por kerning/quebra de
+  linha, de modo que uma ocorrencia pode nao casar. Nao existe verificacao
+  pos-substituicao de que nenhuma marca de "MODELO" sobrou.
+
+  Resultado possivel: um PDF que se apresenta como resultado genomico real mas
+  ainda exibe "MODELO — NÃO É RESULTADO GENÉTICO" em outra pagina — ou o inverso.
+
+  Defeito cosmetico associado: a regra
+      "GENOMA-HUDSON-RULESET-v3.3" -> "GENOMA--RULESET-v3.3"
+  produz hifen duplo no artefato entregue.
+
+  CORRECAO:
+    - Apos aplicar as substituicoes, varrer o texto extraido e falhar fechado:
+
+          RESIDUAL_MODEL_MARKERS = ("MODELO", "NÃO É RESULTADO", "MODEL_EXPLANATION",
+                                    "placeholder", "[[")
+          extracted = "\n".join(page.extract_text() or "" for page in reader.pages)
+          residual = sorted({m for m in RESIDUAL_MODEL_MARKERS if m in extracted})
+          if residual:
+              raise TemplateV3Error(
+                  f"promocao MODELO->RESULTADO incompleta; marcadores remanescentes: {residual}")
+
+    - Corrigir "GENOMA--RULESET-v3.3" para "GENOMA-RULESET-v3.3".
+    - Teste de regressao com um template onde o marcador esteja fragmentado.
+
+................................................................................
+ALTO-13  Adaptadores de evidencia: leitura sem limite e HTTPS nao garantido
+ARQUIVO..: evidence_adapters/__init__.py:13-15, 105-128
+................................................................................
+  (a) `response.read()` sem limite de bytes. O teto de tamanho
+      (max_payload_bytes) so e' aplicado em annotation.py:122, DEPOIS do payload
+      inteiro ja estar em memoria. Endpoint hostil ou comprometido = exaustao
+      de memoria.
+
+  (b) urllib segue redirecionamentos por padrao, inclusive https -> http. O
+      campo de evidencia continua registrando {"method": "HTTPS"} mesmo se a
+      recuperacao final ocorreu em texto claro. Isso e' falsificacao de
+      proveniencia, ainda que involuntaria.
+
+  (c) Linha 108: `json.loads(payload.decode("utf-8"))` valida apenas que o corpo
+      e' JSON. Uma resposta HTTP 200 com corpo {"error":"rate limited"} e'
+      registrada como status VERIFICADO / accessible True. Nao ha verificacao de
+      codigo HTTP nem de esquema esperado.
+
+  (d) `version = etag or last-modified or f"snapshot-{checked_at}"`: quando o
+      provedor nao envia ETag, a "versao" registrada e' o horario da consulta —
+      nao e' propriedade do dado. Duas consultas ao mesmo conteudo produzem
+      versoes diferentes; conteudo alterado pode produzir versoes
+      indistinguiveis. Isso mina a reprodutibilidade da evidencia.
+
+  (e) Nenhum controle de taxa. NCBI eutils limita a 3 req/s sem chave; o plano
+      permite max_queries=1000 em laco apertado -> 429 / bloqueio de IP.
+
+  CORRECAO:
+      MAX_RESPONSE_BYTES = 1_500_000
+
+      class _NoRedirect(urllib.request.HTTPRedirectHandler):
+          def redirect_request(self, req, fp, code, msg, headers, newurl):
+              if not newurl.lower().startswith("https://"):
+                  raise urllib.error.HTTPError(newurl, code,
+                      "redirecionamento nao-HTTPS recusado", headers, fp)
+              return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+      _OPENER = urllib.request.build_opener(_NoRedirect())
+
+      def _default_transport(request):
+          with _OPENER.open(request, timeout=30) as response:
+              if response.status != 200:
+                  raise ValueError(f"HTTP {response.status}")
+              if not response.url.lower().startswith("https://"):
+                  raise ValueError("recuperacao final nao ocorreu sobre HTTPS")
+              data = response.read(MAX_RESPONSE_BYTES + 1)          # (a)
+              if len(data) > MAX_RESPONSE_BYTES:
+                  raise ValueError("payload do provedor excede o teto")
+              return data, {str(k).lower(): str(v) for k, v in response.headers.items()}
+
+      # (d) marcar explicitamente quando a versao nao e' derivada do conteudo:
+      if not (etag or last_modified):
+          base["version_kind"] = "retrieval-snapshot-NAO-VERSIONADO-PELO-PROVEDOR"
+      # (e) throttle simples entre chamadas ao mesmo host.
+
+
+--------------------------------------------------------------------------------
+5. ACHADOS MEDIOS
+--------------------------------------------------------------------------------
+
+MED-01  Rego e' materialmente mais fraco que o engine Python, e o job de CI que
+        o executa chama-se "OPA/Rego parity" sem testar paridade alguma.
+        ARQ: policy_engine/policy/rego/genoma.rego
+             .github/workflows/genoma-policy-engine.yml (job "rego")
+        Divergencias verificadas:
+          - PGX: Rego cobre so CYP2D6; Python cobre CYP2D6, CYP2B6, HLA-A,
+            HLA-B, UGT1A1 (gates_evidence.py:129).
+          - TRAIT: Rego cobre so "personality"; Python cobre personality,
+            intelligence, talent, ethics, gender_identity (gates_evidence.py:135).
+          - Ausentes no Rego: RUNTIME_RESOURCE_GATE, RULE_COVERAGE_GATE
+            (263 atestacoes), EVIDENCE_RECENCY_GATE (locator/retrieval de fontes
+            mutaveis), FINAL_AUDIT_GATE (15 criterios), scope_statement de
+            resultado negativo, gates reprodutivos de casal, conversao
+            associacao->fato confirmado.
+          - QC: Rego so verifica qc.passed; Python tambem exige status
+            EXECUTADO/VERIFICADO e evidence_refs.
+        RISCO: alguem tratar `allow == true` do OPA como equivalente a
+        `ready_for_requested_operation` do engine.
+        CORRECAO: gerar as regras Rego a partir do mesmo catalogo do engine, ou
+        adicionar teste de conformidade real no job "rego":
+            for fixture in fixtures:
+                py = evaluate_manifest(ruleset, fixture).ready
+                rego = opa_eval(fixture)["allow"]
+                assertEqual(py, rego, f"divergencia em {fixture}")
+        Enquanto nao houver paridade, renomear o job para "OPA/Rego subset
+        guard" para nao afirmar garantia inexistente.
+
+MED-02  `opa fmt --write policy_engine/policy/rego` MODIFICA arquivos em CI em
+        vez de verificar. Desvio de formatacao nunca e' detectado.
+        ARQ: .github/workflows/genoma-policy-engine.yml
+        CORRECAO: `opa fmt --fail --diff policy_engine/policy/rego`
+
+MED-03  CI valida em Python 3.12; runtime de producao e' Python 3.11.
+        ARQ: 4 workflows com `python-version: '3.12'` vs environment.yml
+             `python=3.11` e pyproject `requires-python = ">=3.11"`.
+        CORRECAO: alinhar CI para '3.11', ou testar em matriz [3.11, 3.12] e
+        declarar 3.11 como versao de suporte.
+
+MED-04  nextflow.config nao define container nem habilita docker/singularity.
+        ARQ: nextflow.config
+        Com `executor = 'local'` e sem `process.container`, os processos rodam
+        no host com o que estiver no PATH — anulando o pinning declarado pelo
+        Dockerfile e pelo runtime-lock.
+        CORRECAO:
+            process {
+                executor = 'local'
+                container = params.container ?: 'ghcr.io/<owner>/codework-genome@sha256:<digest>'
+                errorStrategy = 'terminate'
+                maxRetries = 0
+                shell = ['/bin/bash', '-euo', 'pipefail']
+            }
+            docker { enabled = true; runOptions = '--read-only --cap-drop ALL' }
+        E adicionar `file`/`overwrite` aos relatorios (timeline/report/trace/dag)
+        para nao quebrar em re-execucao no mesmo diretorio.
+
+MED-05  Dockerfile define o servidor MCP como processo principal do container.
+        ARQ: Dockerfile (CMD, EXPOSE 3000, HEALTHCHECK)
+        AGENTS.md regra 10: "Optional interfaces (mcp/, adapters/, ...) must not
+        become a source of truth or a mandatory dependency of the deterministic
+        core." Tornar o MCP o CMD e o alvo do HEALTHCHECK da imagem canonica
+        contradiz isso; a saude da imagem passa a depender da interface opcional.
+        CORRECAO: CMD padrao deve ser o plano deterministico (ou nenhum servico):
+            CMD ["python3", "-m", "genoma_policy", "ruleset-check"]
+        e o MCP passa a ser um alvo explicito (`docker run ... node .../server.js`)
+        ou um estagio/imagem separado.
+
+MED-06  Servidor MCP HTTP sem autenticacao e sem limite de concorrencia.
+        ARQ: mcp/src/server.ts:237-257
+        POST /mcp aceita qualquer requisicao e pode disparar
+        run_synthetic_canary (timeout 60 min) e reference_status (10 min), um
+        McpServer novo por requisicao. Exaustao trivial de recursos. Bind padrao
+        e' 127.0.0.1 (bom), mas o Dockerfile expoe 3000 e o roda como CMD.
+        CORRECAO: exigir token compartilhado (cabecalho), limitar concorrencia
+        por ferramenta e adicionar rate limit:
+            const inflight = new Map<string, number>();
+            const LIMITS = { run_synthetic_canary: 1, reference_status: 2 };
+        e verificar `req.headers.authorization` contra process.env.MCP_TOKEN
+        com comparacao em tempo constante.
+
+MED-07  EVIDENCE_RECENCY_GATE nao verifica recencia.
+        ARQ: policy_engine/genoma_policy/gates_evidence.py:30
+        `_parse_iso_date(str(source.get("checked_at","")))` apenas confirma que
+        a data e' parseavel. Um checked_at de 1999 passa. O nome do gate e a
+        docstring ("time-bounded evidence") prometem algo nao implementado.
+        CORRECAO:
+            MAX_SOURCE_AGE_DAYS = 30
+            checked = _parse_iso_date(str(source.get("checked_at","")))
+            if checked is None:
+                reasons.append(f"mutable source {source_id} sem checked_at valido")
+            elif checked > date.today():
+                reasons.append(f"mutable source {source_id} com checked_at futuro")
+            elif (date.today() - checked).days > MAX_SOURCE_AGE_DAYS:
+                reasons.append(f"mutable source {source_id} desatualizada "
+                               f"({(date.today()-checked).days}d > {MAX_SOURCE_AGE_DAYS}d)")
+
+MED-08  IDs de fonte duplicados sao descartados silenciosamente.
+        ARQ: policy_engine/genoma_policy/gates_evidence.py:17
+            sources = {s.get("id"): s for s in _get_list(manifest,"sources") ...}
+        A ultima fonte com o mesmo id vence. Uma fonte duplicada permissiva pode
+        mascarar a restritiva a que um claim pretendia se referir.
+        Inconsistente com _section_coverage_gate, que DETECTA duplicatas
+        (gates_audit.py:27).
+        CORRECAO:
+            sources, duplicates = {}, []
+            for s in _get_list(manifest, "sources"):
+                if not isinstance(s, dict) or not s.get("id"): continue
+                if s["id"] in sources: duplicates.append(s["id"])
+                sources[s["id"]] = s
+            if duplicates:
+                reasons.append(f"ids de fonte duplicados: {sorted(set(duplicates))}")
+
+MED-09  scaffold grava versao de ferramenta obsoleta em toda atestacao.
+        ARQ: policy_engine/genoma_policy/scaffold.py:35
+            "tool_versions": {"genoma-policy-engine": "0.2.0"}
+        Todo o restante do pacote declara 0.3.0 (pyproject, engine.py:36,
+        server.py:14, smoke.py fixture). Proveniencia incorreta em cada
+        atestacao derivada do scaffold.
+        CORRECAO: importar de uma unica fonte:
+            from . import __version__          # definir em __init__.py
+            "tool_versions": {"genoma-policy-engine": __version__}
+        e ler __version__ de importlib.metadata quando instalado.
+
+MED-10  Criterio de post-deployment com identidade de ruleset hardcoded.
+        ARQ: policy_engine/genoma_policy/gates_audit.py:76
+            "identity_recovered": pd.get("identity_recovered") == "v3.3/VIGENTE/14/08/2026"
+        Numa migracao de versao, este literal continuaria exigindo v3.3
+        silenciosamente.
+        CORRECAO:
+            expected_identity = (f"{self.ruleset.version}/{self.ruleset.status}/"
+                                 f"{self.ruleset.effective_date}")
+            "identity_recovered": pd.get("identity_recovered") == expected_identity
+
+MED-11  CLI do policy engine emite traceback em vez de erro estruturado, e
+        exige o ruleset ate para comandos de ledger.
+        ARQ: policy_engine/genoma_policy/cli.py:48-50, 56, 60
+        load_ruleset / enforce_unique_active_ruleset / verify_external_manifest e
+        os json.loads nao estao em try/except: uma RulesetError ou JSON invalido
+        produz stack trace e exit 1, fora do contrato de exit codes (65/2/3/4/64).
+        Alem disso, `ledger-append` e `ledger-verify` — que nao dependem do
+        ruleset — falham num checkout limpo. Foi exatamente essa a causa dos
+        3 FAILS + 6 ERRORS observados em policy_engine/tests.
+        CORRECAO:
+            LEDGER_COMMANDS = {"ledger-append", "ledger-verify"}
+            try:
+                if args.command in LEDGER_COMMANDS:
+                    engine = None
+                else:
+                    ruleset_path = ...; sha_manifest = ...
+                    ruleset = load_ruleset(ruleset_path)
+                    enforce_unique_active_ruleset(ruleset_path.parent, ruleset_path)
+                    verify_external_manifest(ruleset, sha_manifest)
+                    engine = PolicyEngine(ruleset, external_manifest=sha_manifest)
+            except AssetResolutionError as exc:
+                sys.stderr.write(str(exc) + "\n"); return 65
+            except RulesetError as exc:
+                _write_json({"status":"FAIL","error":str(exc)}, None); return 65
+            except (OSError, json.JSONDecodeError) as exc:
+                _write_json({"status":"FAIL","error":f"{type(exc).__name__}: {exc}"}, None)
+                return 66
+        Documentar os exit codes no epilog do ArgumentParser.
+
+MED-12  Servidor HTTP do policy engine: sem timeout, sem logs, GET sem protecao.
+        ARQ: policy_engine/genoma_policy/server.py:26-29, 34-44, 59-63
+        - Sem `timeout` de socket: cliente que declara Content-Length maior do
+          que envia mantem a thread bloqueada (slowloris); ThreadingHTTPServer
+          cria uma thread por conexao.
+        - do_GET nao tem try/except: excecao em compiled_catalog derruba a
+          conexao sem resposta.
+        - log_message() silenciado e except Exception -> 500 sem registro:
+          falhas do servidor sao completamente invisiveis, num sistema cujo
+          quarto plano e' auditoria.
+        - /v1/catalog reconstroi as 263 secoes com texto completo a cada
+          requisicao, sem cache: amplificacao de CPU/memoria.
+        - Sem autenticacao: /v1/catalog serve o TEXTO INTEGRAL do ruleset que o
+          projeto mantem deliberadamente selado em repouso.
+        CORRECAO:
+            class PolicyHandler(BaseHTTPRequestHandler):
+                timeout = 15
+                protocol_version = "HTTP/1.1"
+                _catalog_cache = None
+                def log_message(self, fmt, *args):
+                    logging.getLogger("genoma.policy.http").info(
+                        "%s %s", self.command, self.path)
+                def do_GET(self):
+                    try: ...
+                    except Exception as exc:
+                        logging.exception("GET falhou")
+                        self._json(500, {"error": type(exc).__name__})
+        E exigir token para /v1/catalog quando bind != 127.0.0.1.
+
+MED-13  ZIP de array: sem protecao contra zip bomb e vazamento de handle.
+        ARQ: array_pipeline/qc.py:63-71, 341
+        Verifica-se que ha exatamente 1 membro, mas nao o file_size declarado.
+        E o objeto ZipFile e' anexado ao TextIOWrapper (`text._genoma_zipfile`)
+        apenas para manter referencia; `fh.close()` na linha 341 fecha o wrapper
+        mas NAO o ZipFile.
+        Verificado empiricamente: apos t.close(), `zf.fp is not None` -> True.
+        CORRECAO:
+            MAX_MEMBER_BYTES = 512 * 1024 * 1024
+            if members[0].file_size > MAX_MEMBER_BYTES:
+                zf.close()
+                raise ValueError(f"membro do ZIP excede o limite: {members[0].file_size}")
+        e usar contextlib.ExitStack (ou um wrapper com __exit__ proprio) para
+        fechar zf junto com o stream de texto.
+
+MED-14  errors="replace" silencia corrupcao de dados genomicos.
+        ARQ: array_pipeline/qc.py:60, 69, 72 ; scripts/build_wgs_curated_manifest.py:22
+        Bytes invalidos viram U+FFFD em vez de falhar. Um RSID ou genotipo
+        corrompido e' sanitizado silenciosamente e segue no pipeline. Note a
+        inconsistencia: runtime_resource_gate.fastq_check usa errors="strict".
+        CORRECAO: usar errors="strict" e tratar UnicodeDecodeError como
+        NAO DISPONIVEL explicito, preservando o motivo na evidencia.
+
+MED-15  CSV de array sem validacao de largura de linha.
+        ARQ: array_pipeline/qc.py:236
+        csv.DictReader com fieldnames fixo: linha com colunas a MAIS joga o
+        excedente na chave None; linha com colunas a MENOS produz valores None,
+        contabilizados como "nao chamado". Um arquivo truncado reduz a call rate
+        sem jamais ser sinalizado como erro estrutural.
+        CORRECAO:
+            reader = csv.reader(fh)
+            for raw_row in reader:
+                if len(raw_row) != len(header):
+                    ragged += 1
+                    continue
+                row = dict(zip(header, raw_row))
+            ...
+            if ragged:
+                structure_reasons.append(f"linhas com numero de colunas invalido={ragged}")
+
+MED-16  Metricas de QC calculadas e nunca aplicadas a nenhum gate.
+        ARQ: array_pipeline/qc.py:347, 430
+        - autosomal_heterozygosity_rate: calculado, reportado, sem limiar.
+          Heterozigosidade e' o indicador padrao de contaminacao/mistura de
+          amostras em array.
+        - duplicate_coordinate_rows: calculado e nunca usado.
+        - Nao ha verificacao de consistencia de cromossomos sexuais (chrX/chrY),
+          apesar de ALLOWED_CHROMS aceita-los.
+        CORRECAO: adicionar um SAMPLE_INTEGRITY_GATE:
+            if het_rate is not None and not (0.15 <= het_rate <= 0.45):
+                sample_reasons.append(f"heterozigosidade autossomica fora da faixa "
+                                      f"esperada: {het_rate:.4f}")
+            if duplicate_coordinate_rows:
+                sample_reasons.append(f"coordenadas duplicadas={duplicate_coordinate_rows}")
+
+MED-17  score_variants: genotipo incorreto para sitios multialelicos.
+        ARQ: scripts/score_variants.py:43-44
+            for alternate in alt.split(","):
+                variants[(chrom, int(position), ref, alternate)] = genotype
+        Um GT "1/2" com ALT "A,T" gera DUAS chaves, ambas com genotipo "1/2".
+        A concordancia de genotipo fica cientificamente errada para entrada nao
+        normalizada. No pipeline ha `bcftools norm -m -any` antes, mas o script
+        e' uma CLI de uso geral.
+        CORRECAO: recusar entrada multialelica em vez de aceitar em silencio:
+            alts = alt.split(",")
+            if len(alts) > 1:
+                raise ValueError(f"{path}: registro multialelico em {chrom}:{position}; "
+                                 "normalize com 'bcftools norm -m -any' antes de pontuar")
+
+MED-18  score_variants: FORMAT/amostra desalinhados sao truncados em silencio.
+        ARQ: scripts/score_variants.py:41
+            dict(zip(format_keys, sample_values, strict=False))
+        CORRECAO: usar strict=True e tratar o ValueError como VCF malformado.
+        Alem disso: encoding="ascii" (linhas 18-19) rejeita cabecalhos UTF-8
+        legitimos -> usar "utf-8"; e normalize_genotype (linha 26) levanta
+        ValueError nao tratado com alelos nao numericos.
+
+MED-19  wgs_input_gate: travessia de caminho via manifesto.
+        ARQ: scripts/wgs_input_gate.py:19-23
+            return path if path.is_absolute() else root / path
+        Um manifesto com "r1": "../../../etc/..." resolve fora do diretorio da
+        amostra; caminhos absolutos sao aceitos sem restricao.
+        CORRECAO:
+            def resolve(root, value):
+                if not value: return None
+                candidate = (root / value).resolve()
+                if not candidate.is_relative_to(root.resolve()):
+                    raise ValueError(f"caminho fora do diretorio da amostra: {value}")
+                return candidate
+
+MED-20  wgs_input_gate: profundidade inconsistente e pareamento nao verificado.
+        ARQ: scripts/wgs_input_gate.py:33, 39, 42
+        - Le apenas 128 registros (linha 33) mas calcula sha256 do arquivo
+          INTEIRO (linha 42) — custo de leitura completa com verificacao parcial,
+          e o resultado ainda e' rotulado "VERIFICADO".
+        - Nomes de leitura sao coletados (linha 39) e NUNCA usados: o pareamento
+          R1/R2 nao e' verificado em lugar nenhum.
+        - Nao ha verificacao de que r1 != r2 (o mesmo arquivo nos dois passa).
+        CORRECAO:
+            if r1.resolve() == r2.resolve():
+                errors.append("r1 e r2 apontam para o mesmo arquivo")
+            base1 = [n.rsplit("/",1)[0] for n in names1]
+            base2 = [n.rsplit("/",1)[0] for n in names2]
+            if base1 != base2:
+                errors.append("nomes de leitura de R1 e R2 nao correspondem na sondagem")
+        E renomear o status para "SONDADO"/"PARCIAL" quando so 128 registros
+        foram inspecionados.
+
+MED-21  verify_runtime_gate_manifest: sem vinculo de sessao nem limite de idade.
+        ARQ: scripts/verify_runtime_gate_manifest.py:22-41
+        Em workflows/wgs.nf:323, VERIFY_RUNTIME_GATE consome
+        `runtime_gate_manifest`, um JSON arbitrario fornecido como parametro do
+        workflow. O verificador confere estrutura e status, mas nao verifica:
+          - se o session_id corresponde a execucao atual;
+          - ha quanto tempo o gate foi produzido (started_at).
+        Um manifesto de runtime antigo satisfaz o gate de ambiente.
+        CORRECAO:
+            p.add_argument("--session-id", required=True)
+            p.add_argument("--max-age-hours", type=float, default=24.0)
+            if payload.get("session_id") != args.session_id:
+                errors.append("runtime gate nao pertence a esta sessao")
+            started = _parse_iso(payload.get("started_at"))
+            if started is None or (now - started).total_seconds() > args.max_age_hours*3600:
+                errors.append("runtime gate expirado para esta execucao")
+
+MED-22  Workflow morto com permissao de escrita e git push automatico.
+        ARQ: .github/workflows/materialize-template-pdfs.yml
+        - Vinculado ao branch `feature/materialize-physical-pdfs-v3-1`, que nao
+          existe mais (branches atuais: main + branch de trabalho).
+        - Depende de template_store/v3.0/inbox/...zip, ausente do repositorio
+          (so existe inbox/README.md). Nunca podera disparar.
+        - Mantem `permissions: contents: write` em nivel de topo e executa
+          `git push origin HEAD:${GITHUB_REF_NAME}`.
+        Existe teste para o caso analogo do highmem probe
+        (test_highmem_probe_is_manual_and_not_bound_to_retired_feature_branch)
+        mas nao para este.
+        CORRECAO: remover o workflow; se precisar ser preservado, converter para
+        workflow_dispatch, mover `permissions` para o nivel do job e restringir a
+        `contents: write` apenas no passo de commit. Estender o teste de contrato:
+            def test_nenhum_workflow_vinculado_a_branch_de_feature_retirado(self):
+                for wf in Path(".github/workflows").glob("*.y*ml"):
+                    text = wf.read_text("utf-8")
+                    self.assertNotIn("feature/", text, f"{wf} referencia branch de feature")
+
+MED-23  publish-ghcr reconstroi a imagem em vez de promover a que foi testada.
+        ARQ: .github/workflows/scaffold-validation.yml (jobs container-canary e publish-ghcr)
+        container-canary faz `docker build --tag codework-genome:${{ github.sha }}`
+        e roda o canary. publish-ghcr faz OUTRO build via build-push-action com
+        `context: .`. A imagem publicada nao e' byte-identica a testada.
+        CORRECAO: construir uma vez, exportar o digest, e publicar o mesmo
+        artefato (buildx com --output type=registry no primeiro build, ou salvar
+        o tar da imagem como artefato e fazer `docker load` + `docker push`),
+        registrando o digest em evidencia.
+
+MED-24  Verificador de pin exato usa substring.
+        ARQ: scripts/verify_supply_chain_lock.py:56
+            if f"- {package}={version}" not in env:
+        "- python=3.11" e' substring de "- python=3.111". Um pin divergente pode
+        passar.
+        CORRECAO: comparar linha a linha, ancorado:
+            import re
+            pattern = re.compile(rf"^\s*-\s*{re.escape(package)}={re.escape(version)}\s*$",
+                                 re.MULTILINE)
+            if not pattern.search(env):
+                fail(f"environment.yml nao fixa exatamente {package}={version}")
+
+MED-25  Verificador de acoes ignora arquivos .yaml.
+        ARQ: scripts/verify_supply_chain_lock.py:25
+            for wf in sorted((ROOT / ".github/workflows").glob("*.yml")):
+        Um workflow criado como .yaml escapa integralmente da verificacao de SHA
+        de acoes.
+        CORRECAO:
+            files = sorted({*(ROOT/".github/workflows").glob("*.yml"),
+                            *(ROOT/".github/workflows").glob("*.yaml")})
+        Aplicar a mesma correcao em scripts/validate_repo.py e em
+        tests/test_workflow_contracts.py.
+
+MED-26  Lock declara python_requirements e npm_lock mas so verifica existencia.
+        ARQ: scripts/verify_supply_chain_lock.py:59-61
+            for required in (runtime["python_requirements"], runtime["npm_lock"], ...):
+                if not (ROOT / required).is_file(): fail(...)
+        Nenhuma verificacao de conteudo/hash. reporting/requirements.txt pode ser
+        alterado livremente sem violar o "immutable supply-chain lock".
+        CORRECAO: gravar sha256 de cada artefato no runtime-lock.json e conferir:
+            for key in ("python_requirements","npm_lock","template_manifest","actions_lock"):
+                spec = runtime[key]
+                path = ROOT / spec["path"]
+                if _sha256(path) != spec["sha256"]:
+                    fail(f"artefato travado alterado: {spec['path']}")
+
+MED-27  pip sem hashes; solve do conda nao determinístico.
+        ARQ: Dockerfile ; reporting/requirements.txt ; environment.yml
+        - `pip install -r requirements.txt` com `==` mas sem `--require-hashes`:
+          nao protege contra substituicao de artefato no indice.
+        - `micromamba install --file environment.yml` resolve dependencias
+          transitivas no momento do build; duas construcoes em datas diferentes
+          podem produzir ambientes diferentes, contradizendo "reproducible" do
+          README.
+        CORRECAO:
+            # requirements: gerar com pip-compile --generate-hashes
+            RUN python -m pip install --no-cache-dir --require-hashes \
+                -r /tmp/reporting-requirements.txt
+            # conda: gerar e commitar um lock explicito
+            #   micromamba env export --explicit > locks/conda-linux-64.lock
+            RUN micromamba install --yes --name base --file /tmp/conda-linux-64.lock
+
+MED-28  Placeholder falso-positivo bloqueia relatorio legitimo.
+        ARQ: reporting/engine.py:176 e 67-72
+            if "[[" in markdown or "]]" in markdown:
+                raise ReportReleaseError("FINAL report contains unresolved placeholder syntax")
+        _safe() serializa dict/list como JSON. Um campo curado que seja lista de
+        listas — ex.: data["sources"] = [["ClinVar","2026-08"]] — produz
+        '[["ClinVar", "2026-08"]]', que contem "[[" -> relatorio valido e'
+        rejeitado como placeholder nao resolvido.
+        CORRECAO: usar um sentinela improvavel em vez de colchetes duplos:
+            PLACEHOLDER = "DADO_RASTREAVEL_OU_NAO_DISPONIVEL"
+        ou detectar apenas o token exato:
+            if "[[DADO_RASTREAVEL_OU_NAO_DISPONIVEL]]" in markdown: raise ...
+
+MED-29  Conversor markdown->HTML perde conteudo silenciosamente.
+        ARQ: reporting/engine.py:181-208
+        - Somente ```json abre bloco de codigo; uma cerca ``` simples e' emitida
+          como paragrafo literal.
+        - Se o markdown terminar dentro de um bloco (in_code == True), as linhas
+          bufferizadas em `code` sao DESCARTADAS do HTML enquanto permanecem no
+          markdown -> os dois artefatos entregues divergem, e o
+          artifact_sha256 de cada um e' calculado sobre conteudos diferentes.
+        - Linhas "- " viram <p>• ...</p> em vez de lista.
+        CORRECAO:
+            for raw in markdown.splitlines():
+                if raw.strip().startswith("```"):
+                    if in_code:
+                        body.append("<pre><code>"+html.escape("\n".join(code))+"</code></pre>")
+                        in_code = False
+                    else:
+                        in_code = True; code = []
+                    continue
+                ...
+            if in_code:                      # cerca nao fechada = erro, nao perda
+                raise ReportReleaseError("bloco de codigo nao fechado no markdown final")
+
+MED-30  Fonte ausente cai para Helvetica em silencio.
+        ARQ: reporting/editorial_v3_hifi.py:55-67
+            except Exception:
+                pass
+            return "Helvetica", "Helvetica-Bold", "Helvetica-Bold"
+        A tipografia do relatorio final muda sem nenhum registro. O projeto tem
+        um pipeline de QA de pixel (docs/EDITORIAL_V3_PIXEL_QA.md,
+        genoma-visual-qa-candidates.yml) que depende justamente disso.
+        CORRECAO: registrar a decisao na evidencia do bundle e falhar fechado em
+        modo FINAL:
+            except OSError as exc:
+                fallback_reason = f"{type(exc).__name__}: {exc}"
+            if mode == "FINAL" and fallback_reason:
+                raise TemplateV3Error(
+                    f"fontes canonicas indisponiveis em modo FINAL: {fallback_reason}")
+
+MED-31  .gitignore nao cobre exports de array genericos nem TXT do ruleset.
+        ARQ: .gitignore
+        Cobre padroes especificos (*Dados*DNA*.csv, *DNA_harmonizado*.csv,
+        *MyHeritage_raw*, *Genera_raw*) mas nao um export salvo com outro nome
+        (raw_data.csv, genome_full_20260101.txt). AGENTS.md regra 9 proibe dado
+        genomico real no repositorio.
+        Tambem nao ignora REGRAS_PROJETO_GENOMA*.txt: um ruleset materializado
+        por engano na raiz nao seria bloqueado pelo .gitignore (apenas
+        validate_repo.py pega, e so em CI).
+        CORRECAO: adicionar
+            # Ruleset canonico ativo nunca no Git (materializado em runtime)
+            REGRAS_PROJETO_GENOMA*.txt
+            !normative/sealed/**
+            # Exports de array de consumidor (rede ampla)
+            *_raw_data*.txt
+            *_raw_data*.csv
+            genome_*.txt
+            /*.csv
+        e adicionar um hook/CI que rejeite qualquer arquivo com cabecalho
+        "rsid,chromosome,position" ou "##fileformat=VCF".
+
+
+--------------------------------------------------------------------------------
+6. ACHADOS BAIXOS
+--------------------------------------------------------------------------------
+
+BX-01  Suite de testes nao e' hermetica: 4 erros num checkout limpo.
+       `python3 -m unittest discover -s tests -v` — comando prescrito pelo
+       proprio AGENTS.md como "Baseline validation" — falha com
+       ModuleNotFoundError: pypdf em test_editorial_renderers (2) e
+       test_template_v3_contract (2). Em CI passa porque
+       scaffold-validation.yml instala reporting/requirements.txt antes.
+       CORRECAO: (a) acrescentar o passo de instalacao a secao "Baseline
+       validation" do AGENTS.md; e (b) tornar os testes explicitos:
+           pypdf = importlib.util.find_spec("pypdf")
+           @unittest.skipIf(pypdf is None,
+                            "requer reporting/requirements.txt instalado")
+
+BX-02  Identidade do ruleset duplicada em 9 lugares independentes.
+       sealed_ruleset.py:23-28, policy_engine/ruleset.py:10-15,
+       policy_engine/paths.py:6-7, gates_audit.py:76, reporting/engine.py:20 e
+       83 e 112, array_pipeline/qc.py:16-21, array_pipeline/annotation.py:21-26,
+       build_wgs_curated_manifest.py:64, genoma.rego, smoke.py:53.
+       Foi exatamente esse acoplamento por copia que produziu ALTO-06.
+       CORRECAO: criar genoma_identity.py com uma unica definicao e importar em
+       todos os pontos; validate_repo.py verifica que nenhum outro arquivo
+       contem a string de versao literal.
+
+BX-03  Artefato JSON do relatorio nao e' reproduzivel (metadata.generated_at).
+       reporting/engine.py:227. O modulo se declara "deterministic renderer".
+       markdown/html permanecem estaveis (generated_at nao entra neles), mas o
+       bundle JSON muda a cada execucao. CORRECAO: aceitar
+       SOURCE_DATE_EPOCH/--generated-at para builds reproduziveis.
+
+BX-04  artifact_sha256 nao cobre PDF/DOCX. reporting/engine.py:263-266 hasheia
+       apenas markdown e html; os artefatos de write_editorial_bundle ficam sem
+       hash de integridade no bundle.
+
+BX-05  run_canary.sh usa `|| true` em passos de evidencia (linhas 22, 24):
+       falha de bwa-mem2/nextflow produz campo de versao vazio em vez de erro.
+       AGENTS.md: "Do not use continue-on-error for critical validation".
+       CORRECAO: remover `|| true` e deixar `set -e` interromper.
+
+BX-06  Deteccao de versao por substring. runtime_resource_gate.py:85
+       (`expected in output`): "1.24" casa com "11.24" ou "1.240", e "17."
+       casa em qualquer parte da saida. CORRECAO: extrair a versao com regex
+       ancorada e comparar exatamente.
+
+BX-07  run() mistura stdout com stderr. runtime_resource_gate.py:65
+       (`p.stdout + p.stderr`). Isso e' usado para PARSEAR saida em tres pontos:
+       versao (84), cabecalho @RG de samtools view -H (220-227) e sequencia de
+       samtools faidx (154-157). Um aviso em stderr corrompe o parse.
+       CORRECAO: retornar stdout e stderr separados; parsear stdout, guardar
+       stderr apenas como evidencia.
+
+BX-08  fastq_check faz duas passagens completas no arquivo.
+       runtime_resource_gate.py:169-185: le todos os registros e depois
+       sha256_file(path). Para FASTQ de WGS (dezenas/centenas de GB) e' proibitivo.
+       CORRECAO: calcular o hash na mesma passagem (atualizar o hash com os
+       bytes lidos), ou usar amostragem declarada explicitamente na evidencia.
+
+BX-09  fastq_check nao reconhece gzip por conteudo, so por sufixo .gz (linha 172);
+       o mesmo em wgs_input_gate.py:29, score_variants.py:17,
+       build_wgs_curated_manifest.py:20. Arquivos .bgz/.fq.bgzf falham.
+       CORRECAO: detectar pelo magic number b"\x1f\x8b".
+
+BX-10  Analise manual de sys.argv em latest_runtime_resource_gate.py:51-58 nao
+       aceita a forma `--freshness-gate=CAMINHO` e monkey-patcha
+       core.check_tools (linha 60). CORRECAO: usar argparse com
+       parse_known_args e injetar a funcao por parametro em vez de patch global.
+
+BX-11  Import de nivel superior fragil: `import runtime_resource_gate as core`
+       (latest_runtime_resource_gate.py:17) sem o preambulo de sys.path que os
+       demais scripts usam; quebra sob `python3 -m scripts....`.
+
+BX-12  targets.py:42 usa rsid[2:].isdigit(), que aceita digitos Unicode
+       ("rs²" passa). CORRECAO: re.fullmatch(r"rs\d+", rsid) com ASCII.
+
+BX-13  Construcao de URL dos adaptadores concatena `path` sem validacao
+       (evidence_adapters/__init__.py:54, 59, 70, 84). Um path com ".."
+       normaliza para fora do prefixo da API. CORRECAO: validar contra
+       allowlist de endpoints por provedor.
+
+BX-14  `adapter._request(...)` chamado de fora do modulo (array_pipeline/
+       annotation.py:109, 184) — metodo privado por convencao. CORRECAO:
+       expor build_request() publico.
+
+BX-15  except Exception amplo em 8 arquivos (template_v3.py:66,
+       editorial_v3_hifi.py:66, verify_prebuilt_bwa_mem2_bundle.py:47,
+       verify_template_store.py:130, qc.py:267, annotation.py:143,
+       evidence_adapters:125, server.py:59). AGENTS.md lista "broad exception
+       handling that converts failure into success" entre os padroes a evitar.
+       Prioridade: qc.py:267 (`except Exception` em torno de int(pos)) e
+       editorial_v3_hifi.py:66 (`except Exception: pass`).
+
+BX-16  chmod 0777 em diretorios de CI (genoma-ngs-runtime-gate.yml,
+       scaffold-validation.yml). CORRECAO: 0775 com o grupo correto, ou
+       `--user "$(id -u):$(id -g)"` no docker run.
+
+BX-17  Achados menores de higiene:
+       - policy_engine/models.py:3 importa `asdict` sem uso.
+       - policy_engine/engine.py:9 importa CRITICAL_FINAL_AUDIT_KEYS sem uso.
+       - mcp/src/core.ts:19 o teste `identifier === "." || identifier === ".."`
+         e' inalcancavel (a regex ja exige inicio alfanumerico).
+       - ruleset.py:47 "section_range": [0, ...] fixa 0 mesmo com sections vazio.
+       - ruleset.py:135 e validate_repo.py leem manifests com encoding="ascii"
+         sem tratar UnicodeDecodeError.
+       - ruleset.py:143 nao tolera o marcador binario "*" do formato sha256sum.
+       - qc.py:305 reconstroi `{str(i) for i in range(1,23)}` a cada linha do
+         CSV (700k iteracoes); usar a constante ja existente no modulo.
+       - qc.py:331 "position" e' int ou str conforme pos.isdigit() — tipo
+         inconsistente no JSON de saida.
+       - genoma-audit.yml roda apenas 7 dos 22 modulos de teste (a cobertura
+         total so ocorre em scaffold-validation.yml e genoma-policy-engine.yml).
+       - MCP: runtime_status/reference_status geram um arquivo de auditoria por
+         chamada anonima (requestId ?? randomUUID) sem retencao/limpeza;
+         a idempotencia tem TOCTOU (duas chamadas simultaneas com o mesmo
+         requestId executam a operacao duas vezes antes do `flag: "wx"` colidir);
+         sanitizeError destroi conteudo legitimo com barras e nao cobre chaves
+         AWS/JWT; process.env inteiro e' repassado aos subprocessos.
+
+
+--------------------------------------------------------------------------------
+7. PLANO DE CORRECAO SUGERIDO (ordem de execucao)
+--------------------------------------------------------------------------------
+
+FASE 1 — Parar a emissao de evidencia falsa   (1 dia)
+  1. CRIT-01  remover "post_deployment_status": "PASS" hardcoded
+  2. CRIT-03  remover policy_evaluation fabricado do plano de dados
+  3. ALTO-06  reverter README para v3.3 + guarda em validate_repo.py
+  Justificativa: sao os itens que produzem afirmacao falsa em artefato entregue.
+  Custo baixo, risco de regressao minimo.
+
+FASE 2 — Religar os gates ao caminho de execucao   (2-3 dias)
+  4. CRIT-02  fail-closed no POLICY_EVALUATE dos dois pipelines
+  5. ALTO-03  passar --policy no wgs.nf e tornar o parametro obrigatorio
+  6. ALTO-04  passar --evidence ao build_wgs_curated_manifest
+  7. CRIT-05  teto de idade + cardinalidade minima no freshness_gate
+  8. ALTO-07  vinculo de sessao no RUNTIME_RESOURCE_GATE
+  Cada item acompanhado do teste de regressao indicado na respectiva secao.
+
+FASE 3 — Fechar bypasses de proveniencia   (2-3 dias)
+  9.  CRIT-04  eliminar _metadata_attestation; exigir atestacao externa
+  10. ALTO-10  unificar a verificacao de orientacao (qc.py e annotation.py)
+  11. ALTO-11  atestacao estruturada + validade no gate de consentimento
+  12. ALTO-02  restaurar verificacao de versao em latest_runtime_resource_gate
+  13. ALTO-05  derivar EXPECTED_TOOLS de locks/runtime-lock.json
+
+FASE 4 — Integridade de evidencia e cadeia de suprimentos   (3-5 dias)
+  14. ALTO-01  remover atalho de cache do canary; derivar status dos resultados
+  15. ALTO-08  trava de arquivo + leitura de cauda + ancoragem do ledger
+  16. ALTO-09  controle negativo na suite de smoke
+  17. ALTO-13  teto de resposta e HTTPS obrigatorio nos adaptadores
+  18. MED-23/24/25/26/27  imagem promovida, pins ancorados, .yaml, hashes
+
+FASE 5 — Consistencia e higiene   (contínuo)
+  19. MED-01  paridade real Rego/Python ou renomear o job
+  20. ALTO-12 verificacao pos-substituicao MODELO->RESULTADO
+  21. BX-02   fonte unica para a identidade do ruleset
+  22. Demais achados MEDIO/BAIXO
+
+
+--------------------------------------------------------------------------------
+8. RECONHECIMENTO DO QUE ESTA BEM FEITO
+--------------------------------------------------------------------------------
+
+Para calibrar as criticas acima, os seguintes pontos foram verificados e estao
+solidos:
+
+  - Transporte selado do ruleset (scripts/sealed_ruleset.py): verificacao em
+    tres camadas (parte->transporte->gzip->raw), escrita atomica via mkstemp +
+    os.replace, chmod 0444, verificacao pos-escrita do SHA, recusa em ativar ao
+    lado de outro VIGENTE, e protecao contra escape do diretorio parts/.
+    Implementacao cuidadosa e genuinamente fail-closed.
+
+  - Atestacao de secao (policy_engine/attestation.py): 263 secoes, cada uma com
+    rule_id + rule_sha256 conferidos contra o texto canonico compilado, mais
+    trace obrigatorio com ator/metodo/timestamp e exigencia de SHA-256 de
+    entrada/saida quando SATISFIED. Impede copiar-colar uma atestacao entre
+    secoes.
+
+  - Modelagem cientifica dos gates: a separacao entre triagem e diagnostico,
+    haplogrupo e etnia, associacao e causalidade, VUS e mudanca de conduta,
+    resultado negativo e exclusao de doenca, PRS e calibracao ancestral,
+    e a recusa de diplotipagem de CYP2D6 a partir de VCF generico — sao
+    controles corretos e raramente vistos implementados em codigo.
+
+  - unsupported_variant_classes explicito no manifesto de curacao e verificado
+    no workflow (wgs.nf:262): o sistema declara ativamente seus pontos cegos em
+    vez de silenciar sobre eles.
+
+  - Fixacao de acoes do GitHub por SHA de 40 caracteres, com lock dedicado e
+    verificador automatizado; imagem base e scanner de segredos por digest.
+
+  - Canary sintetico com --require-perfect em dois callers independentes
+    (bcftools e GATK), com limitacoes declaradas honestamente no proprio
+    relatorio ("three synthetic SNPs only", "does not replace GIAB").
+
+  - permissions: contents: read como padrao em todos os workflows, com
+    packages: write escopado apenas aos jobs de publicacao.
+
+  - Hardening real do container no job de smoke HTTP: --read-only, --cap-drop
+    ALL, --security-opt no-new-privileges, tmpfs noexec/nosuid/nodev e bind
+    restrito a 127.0.0.1.
+
+
+--------------------------------------------------------------------------------
+9. LIMITACOES DESTA AUDITORIA
+--------------------------------------------------------------------------------
+
+Declaradas explicitamente, conforme a disciplina do proprio projeto:
+
+  - Nao foi executado build Docker, canary Nextflow, testes do MCP (sem
+    node_modules) nem `opa test`. Os achados nesses arquivos derivam de leitura
+    estatica; estao assinalados como tal e nao sao reivindicados como
+    reproduzidos.
+
+  - Os testes do policy_engine nao puderam rodar em estado verde porque exigem
+    o ruleset materializado; a propria impossibilidade esta reportada em MED-11.
+
+  - Nao foi possivel inspecionar o conteudo do ruleset canonico v3.3 (263
+    secoes) para verificar se os gates implementados cobrem fielmente as regras
+    normativas. A auditoria cobre a consistencia INTERNA do codigo, nao a
+    fidelidade ao texto normativo.
+
+  - Os achados CRIT-04 e CRIT-05 foram comprovados por execucao. Os demais
+    derivam de leitura do codigo com rastreamento do caminho de execucao; o
+    trecho exato esta citado em cada item para verificacao independente.
+
+  - Nenhuma correcao foi aplicada. Este documento e' somente diagnostico.
+
+================================================================================
+FIM DO RELATORIO — 66 achados (5 CRITICO / 13 ALTO / 31 MEDIO / 17 BAIXO)
+================================================================================
