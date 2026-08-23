@@ -64,6 +64,12 @@ SKIP_PARTS = {".git", "node_modules", "dist", "__pycache__", ".pytest_cache"}
 TEXT_IDENTITY_SUFFIXES = {
     ".json", ".md", ".nf", ".py", ".rego", ".sh", ".toml", ".ts", ".txt", ".yaml", ".yml",
 }
+SUPERSEDED_IDENTITY_TEST_FIXTURES = frozenset(
+    {
+        "tests/test_v34_activation_contract.py",
+        "tests/test_validate_repo_static_fstrings.py",
+    }
+)
 MISSING_PATH_HINTS = {
     "manifests/GRCh38.sources.tsv": "restore the tracked GRCh38 source manifest before running the Runtime/Resource Gate",
     "manifests/RULESET_V3.4.sha256": "restore the tracked canonical SHA manifest; do not add an active plaintext ruleset to the repository",
@@ -213,7 +219,7 @@ def _is_historical_path(relative: Path, history_roots: tuple[Path, ...]) -> bool
 
 
 def validate_superseded_identity_locations(root: Path, errors: list[str]) -> None:
-    """Reject superseded identities globally except explicit versioned history roots."""
+    """Reject superseded identities globally except history and named regression fixtures."""
     history_roots = _historical_roots(root)
     for path in root.rglob("*"):
         if not path.is_file() or any(part in SKIP_PARTS for part in path.parts):
@@ -223,9 +229,13 @@ def validate_superseded_identity_locations(root: Path, errors: list[str]) -> Non
             continue
 
         relative_text = relative.as_posix()
-        for token in OLD_ACTIVE_TOKENS:
-            if token in relative_text:
-                errors.append(f"superseded identity path outside explicit history: {relative}: {token}")
+        if relative_text in SUPERSEDED_IDENTITY_TEST_FIXTURES:
+            continue
+        errors.extend(
+            f"superseded identity path outside explicit history: {relative}: {token}"
+            for token in OLD_ACTIVE_TOKENS
+            if token in relative_text
+        )
 
         if path.suffix.lower() not in TEXT_IDENTITY_SUFFIXES and path.name not in {"Dockerfile", "AGENTS.md"}:
             continue
@@ -236,9 +246,11 @@ def validate_superseded_identity_locations(root: Path, errors: list[str]) -> Non
         candidates = [text]
         if path.suffix.lower() == ".py":
             candidates.extend(_python_constant_strings(text))
-        for token in OLD_ACTIVE_TOKENS:
-            if any(token in candidate for candidate in candidates):
-                errors.append(f"superseded identity outside explicit history: {relative}: {token}")
+        errors.extend(
+            f"superseded identity outside explicit history: {relative}: {token}"
+            for token in OLD_ACTIVE_TOKENS
+            if any(token in candidate for candidate in candidates)
+        )
 
 
 def _missing_path_error(relative: str) -> str:
