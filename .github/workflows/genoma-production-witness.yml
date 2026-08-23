@@ -1,19 +1,8 @@
 name: GENOMA Production Witness
 
 on:
-  pull_request:
-    paths:
-      - 'normative/**'
-      - 'manifests/RULESET_V3.4.sha256'
-      - 'policy_engine/**'
-      - 'scripts/materialize_ruleset.py'
-      - 'scripts/bootstrap_attestation.py'
-      - 'scripts/run_live_post_deployment_smoke.py'
-      - 'deploy/attestations/bootstrap-project-v3.4.json'
-      - '.github/workflows/genoma-production-witness.yml'
   push:
     branches: [main]
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -148,7 +137,6 @@ jobs:
 
   publish-witness:
     name: Publish PASS witness to audit-evidence
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: witness
     runs-on: ubuntu-latest
     permissions:
