@@ -51,7 +51,7 @@ jobs:
           old=dict(m.get('storage',{}))
           m['storage']={'mode':'git-binary-materialized','materialized_dir':'template_store/v3.0/materialized','report_count':11,'source_transport_sha256':os.environ['ZIP_SHA'],'legacy_transport':old}
           m.pop('parts',None); mp.write_text(json.dumps(m,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
-          att={'schema':'genoma-template-materialization-attestation-v1','ruleset':{'status':'VIGENTE','version':'v3.3','formal_date':'14/08/2026'},'template_version':'v3.0','source_transport_sha256':os.environ['ZIP_SHA'],'report_count':11,'reports':verified,'materialization_status':'VERIFICADO','traceability':{'workflow':'.github/workflows/materialize-template-pdfs.yml','run_id':os.environ.get('GITHUB_RUN_ID',''),'source_commit':os.environ.get('GITHUB_SHA','')}}
+          att={'schema':'genoma-template-materialization-attestation-v1','ruleset':{'status':'VIGENTE','version':'v3.4','formal_date':'17/08/2026','sha256':'ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580'},'template_version':'v3.0','source_transport_sha256':os.environ['ZIP_SHA'],'report_count':11,'reports':verified,'materialization_status':'VERIFICADO','traceability':{'workflow':'.github/workflows/materialize-template-pdfs.yml','run_id':os.environ.get('GITHUB_RUN_ID',''),'source_commit':os.environ.get('GITHUB_SHA','')}}
           (root/'MATERIALIZATION_ATTESTATION.json').write_text(json.dumps(att,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
           PY
       - name: Commit physical PDFs and delete one-time transport
