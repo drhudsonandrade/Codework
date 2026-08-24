@@ -139,7 +139,9 @@ Um locus de uma estrela **nunca** vira achado acionável nem estado de portador:
 interpretação o rebaixa a `ACHADO PRELIMINAR`, com o texto dizendo que uma asserção de
 submetente único é a opinião de um laboratório e não consenso curado. Sem esse rebaixamento,
 baixar o corte reportaria dezenas de milhares de opiniões únicas como achados — que é
-exatamente o motivo de o corte padrão continuar sendo 2★.
+exatamente o motivo de o nível viajar com cada alvo. O painel de aplicação padrão é a união
+de 1★ declarada no início deste documento; o gerador conserva 2★ como default fail-closed e
+exige `--min-review-stars 1` para materializar explicitamente a alternativa ampliada.
 
 ## Por que o release em massa, e não a API
 
@@ -150,17 +152,14 @@ está. O mesmo vale para o GenCC e para o GWAS Catalog.
 
 ## Filtros do ClinVar, e por que cada um é recusa e não conveniência
 
-```
-9.044.810 linhas
-→ 4.488.630  Assembly = GRCh38        (misturar builds põe a variante na coordenada errada)
-→ 4.161.194  single nucleotide        (sonda de array lê substituição de base; indel não é interrogável)
-→   190.191  P/LP exato               ("Conflicting classifications of pathogenicity" contém a
-                                       palavra e assere o oposto — comparação é por string inteira)
-→    62.367  2★ ou mais               (127.824 P/LP têm um submetente só; opinião única não é
-                                       asserção curada)
-→    62.367  com rsid e bialélico ACGT
-→    54.845  alvos únicos             (13 descartados por rsid em duas coordenadas)
-```
+> **Medição histórica não verificada:** a cadeia de contagens publicada anteriormente não
+> fechava aritmeticamente entre 62.367 linhas e 54.845 alvos e não citava um artefato de
+> saída com SHA-256. Os números intermediários foram removidos. O filtro reproduzível é:
+> GRCh38, SNV, classificação P/LP exata, limiar explícito de estrelas, rsid presente e
+> alelos A/C/G/T; as contagens devem ser lidas de `scan_statistics`,
+> `target_statistics` e `totals` nos artefatos gerados pela execução.
+
+
 
 Dos 54.845, **50.515** têm alelo avaliado único e **4.330** não: o ClinVar assere mais de uma
 base alternativa na mesma coordenada, e escolher uma seria arbitrar. Esses loci só chegam a
@@ -275,14 +274,16 @@ python3 scripts/expand_clinvar_targets.py \
     --panelapp docs/evidence/PANELAPP_CURATION.json.gz \
     --clingen-dosage ClinGen_gene_curation_list_GRCh38.tsv \
     --gnomad-constraint gnomad.v4.1.constraint_metrics.tsv \
-    --min-review-stars 2                      # 1 inclui o nível de submetente único
+    --min-review-stars 1 \
+    --targets-out config/targets_clinvar_plp_1star.json.gz \
+    --evidence-out docs/evidence/GENE_DISEASE_VALIDITY_BULK_1STAR.json.gz
 python3 scripts/build_trait_targets.py \
     --associations gwas-catalog-associations_ontology-annotated-full.zip \
     --ancestries gwas-catalog-download-ancestries-v1.0.3.1.txt
 python3 scripts/merge_target_manifests.py \
     config/partial_genome_annotation_targets.json \
     config/pgx_panel_targets.json \
-    config/targets_clinvar_plp.json.gz \
+    config/targets_clinvar_plp_1star.json.gz \
     config/targets_gwas_traits.json \
-    --output config/targets_merged_panel.json.gz
+    --output config/targets_merged_panel_1star.json.gz
 ```
