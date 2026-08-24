@@ -63,19 +63,33 @@ def build_panel(registry: dict[str, Any]) -> dict[str, Any]:
                 alleles_at[rsid].add(allele)
                 if base:
                     bases_at[rsid].add(base)
-                record = by_rsid.setdefault(
-                    rsid,
-                    {
+                candidate_identity = {
+                    "position": item.get("position"),
+                    "chromosome": item.get("chromosome"),
+                    "reference_accession": item.get("reference_accession"),
+                    "cpic_location": item.get("cpic_location"),
+                    "chromosome_location": item.get("chromosome_location"),
+                }
+                record = by_rsid.get(rsid)
+                if record is None:
+                    record = {
                         "rsid": rsid,
                         "gene": gene,
                         "genes": set(),
-                        "position": item.get("position"),
-                        "chromosome": item.get("chromosome"),
-                        "reference_accession": item.get("reference_accession"),
-                        "cpic_location": item.get("cpic_location"),
-                        "chromosome_location": item.get("chromosome_location"),
-                    },
-                )
+                        **candidate_identity,
+                    }
+                    by_rsid[rsid] = record
+                else:
+                    conflicts = sorted(
+                        field
+                        for field, value in candidate_identity.items()
+                        if record.get(field) != value
+                    )
+                    if conflicts:
+                        raise ValueError(
+                            f"{rsid} has conflicting CPIC coordinate identity fields: "
+                            f"{', '.join(conflicts)}"
+                        )
                 record["genes"].add(gene)
 
     targets: list[dict[str, Any]] = []
@@ -125,7 +139,17 @@ def build_panel(registry: dict[str, Any]) -> dict[str, Any]:
     payload = {
         "schema": SCHEMA,
         "id": "GENOMA-PGX-CPIC-PANEL",
-        "version": retrieved[:10].replace("-", "") + ".1",
+        "version": (
+            retrieved[:10].replace("-", "")
+            + "."
+            + sha256_json(
+                {
+                    "registry_sha256": sha256_json(registry),
+                    "schema": SCHEMA,
+                    "generator": "scripts/build_pgx_panel.py",
+                }
+            )[:12]
+        ),
         "description": (
             "Toda posição definidora publicada pelo CPIC para os genes do registro "
             "farmacogenômico, derivada de config/pgx_allele_definitions.json. Presença aqui "
