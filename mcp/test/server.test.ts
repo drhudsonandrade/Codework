@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
-import { mkdir, mkdtemp, rm, stat, unlink, writeFile, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
 import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -15,7 +15,13 @@ import {
 
 const CLAIM_ID_A = "00000000-0000-4000-8000-000000000001";
 const CLAIM_ID_B = "00000000-0000-4000-8000-000000000002";
-const DEAD_OWNER_PID = 2_147_483_647;
+const pastIso = (ms = 60_000) => new Date(Date.now() - ms).toISOString();
+const futureIso = (ms = 60_000) => new Date(Date.now() + ms).toISOString();
+const observe = <T>(promise: Promise<T>) =>
+  promise.then(
+    (value) => ({ kind: "fulfilled" as const, value }),
+    (error: unknown) => ({ kind: "rejected" as const, error }),
+  );
 
 test("MCP initialization lists only approved tools with annotations", async () => {
   const server = createGenomeMcpServer({
@@ -97,7 +103,7 @@ test("runAudited atomically prevents concurrent duplicate execution", async () =
   assert.equal(executions, 1, "same requestId must not execute the operation twice");
 });
 
-test("runAudited recovers a stale request claim only after its owner is gone", async () => {
+test("runAudited recovers an expired request lease without PID liveness", async () => {
   const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-stale-"));
   const options = {
     projectRoot: "/opt/codework",
@@ -111,9 +117,9 @@ test("runAudited recovers a stale request claim only after its owner is gone", a
     `${JSON.stringify({
       requestId: "stale-1",
       tool: "runtime_status",
-      claimedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      claimedAt: pastIso(2 * 60 * 60 * 1000),
+      leaseExpiresAt: pastIso(),
       claimId: CLAIM_ID_A,
-      ownerPid: DEAD_OWNER_PID,
     })}\n`,
     { mode: 0o600 },
   );
@@ -129,37 +135,37 @@ test("runAudited recovers a stale request claim only after its owner is gone", a
   await assert.rejects(stat(claimPath), /ENOENT/);
 });
 
-test("elapsed time alone never recovers a claim whose owner is still alive", async () => {
-  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-live-stale-"));
+test("an unexpired request lease blocks recovery even when claimedAt is old", async () => {
+  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-live-lease-"));
   const options = {
     projectRoot: "/opt/codework",
     referenceRoot: "/refs",
     resultsRoot: "/results",
     auditRoot,
   };
-  const claimPath = path.join(auditRoot, "live-stale.json.claim");
+  const claimPath = path.join(auditRoot, "live-lease.json.claim");
   await writeFile(
     claimPath,
     `${JSON.stringify({
-      requestId: "live-stale",
+      requestId: "live-lease",
       tool: "runtime_status",
-      claimedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      claimedAt: pastIso(2 * 60 * 60 * 1000),
+      leaseExpiresAt: futureIso(10 * 60 * 1000),
       claimId: CLAIM_ID_A,
-      ownerPid: process.pid,
     })}\n`,
     { mode: 0o600 },
   );
   let executions = 0;
 
   await assert.rejects(
-    runAudited(options, "runtime_status", { requestId: "live-stale" }, async () => {
+    runAudited(options, "runtime_status", { requestId: "live-lease" }, async () => {
       executions += 1;
       return { status: "PASS" };
     }),
     /already in progress/,
   );
 
-  assert.equal(executions, 0, "an active owner must not be fenced out by elapsed time");
+  assert.equal(executions, 0, "a live lease must preserve the active owner");
   assert.equal((await stat(claimPath)).isFile(), true);
 });
 
@@ -177,9 +183,9 @@ test("two concurrent stale-claim recoverers allow only one operation to proceed"
     `${JSON.stringify({
       requestId: "stale-race",
       tool: "runtime_status",
-      claimedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      claimedAt: pastIso(2 * 60 * 60 * 1000),
+      leaseExpiresAt: pastIso(),
       claimId: CLAIM_ID_A,
-      ownerPid: DEAD_OWNER_PID,
     })}\n`,
     { mode: 0o600 },
   );
@@ -199,14 +205,7 @@ test("two concurrent stale-claim recoverers allow only one operation to proceed"
     await blocked;
     return { status: "PASS" };
   };
-  const observe = <T>(promise: Promise<T>) =>
-    promise.then(
-      (value) => ({ kind: "fulfilled" as const, value }),
-      (error: unknown) => ({ kind: "rejected" as const, error }),
-    );
 
-  // Attach rejection handlers at creation time so a legitimate loser cannot be
-  // reported by node:test as an unhandled rejection before the winner starts.
   const first = observe(runAudited(options, "runtime_status", { requestId: "stale-race" }, operation));
   const second = observe(runAudited(options, "runtime_status", { requestId: "stale-race" }, operation));
   await started;
@@ -225,7 +224,56 @@ test("two concurrent stale-claim recoverers allow only one operation to proceed"
   assert.equal(executions, 1, "stale-claim recovery must not execute twice");
 });
 
-test("runAudited recovers an orphaned interprocess mutation lock", async () => {
+test("stale recovery fences an older owner before audit persistence", async () => {
+  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-fence-"));
+  const options = {
+    projectRoot: "/opt/codework",
+    referenceRoot: "/refs",
+    resultsRoot: "/results",
+    auditRoot,
+  };
+  const requestId = "fence-1";
+  const claimPath = path.join(auditRoot, `${requestId}.json.claim`);
+  let markFirstStarted!: () => void;
+  const firstStarted = new Promise<void>((resolve) => {
+    markFirstStarted = resolve;
+  });
+  let releaseFirst!: () => void;
+  const firstBlocked = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+
+  const first = observe(
+    runAudited(options, "runtime_status", { requestId }, async () => {
+      markFirstStarted();
+      await firstBlocked;
+      return { owner: "first" };
+    }),
+  );
+  await firstStarted;
+
+  const stale = JSON.parse(await readFile(claimPath, "utf8")) as Record<string, unknown>;
+  stale.leaseExpiresAt = pastIso();
+  await writeFile(claimPath, `${JSON.stringify(stale)}\n`, { mode: 0o600 });
+
+  const second = await runAudited(options, "runtime_status", { requestId }, async () => ({ owner: "second" }));
+  assert.deepEqual(second, { owner: "second" });
+
+  releaseFirst();
+  const firstOutcome = await first;
+  assert.equal(firstOutcome.kind, "rejected");
+  if (firstOutcome.kind === "rejected") {
+    assert.ok(firstOutcome.error instanceof Error);
+    assert.match(firstOutcome.error.message, /ownership was lost|lease expired/);
+  }
+
+  const audit = JSON.parse(await readFile(path.join(auditRoot, `${requestId}.json`), "utf8")) as {
+    result: unknown;
+  };
+  assert.deepEqual(audit.result, { owner: "second" });
+});
+
+test("runAudited recovers an expired interprocess mutation-lock lease", async () => {
   const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-lock-orphan-"));
   const options = {
     projectRoot: "/opt/codework",
@@ -240,9 +288,8 @@ test("runAudited recovers an orphaned interprocess mutation lock", async () => {
     path.join(lockPath, "owner.json"),
     `${JSON.stringify({
       lockId: CLAIM_ID_A,
-      ownerPid: DEAD_OWNER_PID,
-      lockedAt: new Date(Date.now() - 60_000).toISOString(),
-      state: "HELD",
+      lockedAt: pastIso(10 * 60 * 1000),
+      leaseExpiresAt: pastIso(),
     })}\n`,
     { mode: 0o600 },
   );
@@ -258,27 +305,113 @@ test("runAudited recovers an orphaned interprocess mutation lock", async () => {
   await assert.rejects(stat(lockPath), /ENOENT/);
 });
 
-test("mutation-lock cleanup failure cannot replace the operation result and remains recoverable", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-cleanup-"));
+test("an unexpired mutation-lock lease is never recovered", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-live-"));
   const claimPath = path.join(dir, "claim");
   const lockPath = `${claimPath}.lock`;
-  const unexpected = path.join(lockPath, "unexpected");
+  await mkdir(lockPath, { mode: 0o700 });
+  await writeFile(
+    path.join(lockPath, "owner.json"),
+    `${JSON.stringify({
+      lockId: CLAIM_ID_A,
+      lockedAt: new Date().toISOString(),
+      leaseExpiresAt: futureIso(),
+    })}\n`,
+    { mode: 0o600 },
+  );
+  let executions = 0;
+
+  await assert.rejects(
+    withClaimMutationLock(claimPath, async () => {
+      executions += 1;
+      return "unexpected";
+    }),
+    /already in progress/,
+  );
+  assert.equal(executions, 0);
+  assert.equal((await stat(lockPath)).isDirectory(), true);
+});
+
+test("invalid owner.json blocks mutation-lock recovery fail-closed", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-invalid-owner-"));
+  const claimPath = path.join(dir, "claim");
+  const lockPath = `${claimPath}.lock`;
+  await mkdir(lockPath, { mode: 0o700 });
+  await writeFile(path.join(lockPath, "owner.json"), "null\n", { mode: 0o600 });
+  let executions = 0;
+
+  await assert.rejects(
+    withClaimMutationLock(claimPath, async () => {
+      executions += 1;
+      return "unexpected";
+    }),
+    /coordination lock is invalid/,
+  );
+  assert.equal(executions, 0);
+});
+
+test("empty mutation-lock directory blocks recovery fail-closed", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-empty-"));
+  const claimPath = path.join(dir, "claim");
+  const lockPath = `${claimPath}.lock`;
+  await mkdir(lockPath, { mode: 0o700 });
+  let executions = 0;
+
+  await assert.rejects(
+    withClaimMutationLock(claimPath, async () => {
+      executions += 1;
+      return "unexpected";
+    }),
+    /coordination lock is invalid/,
+  );
+  assert.equal(executions, 0);
+});
+
+test("mutation-lock release never removes a replacement lockId", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-replacement-"));
+  const claimPath = path.join(dir, "claim");
+  const lockPath = `${claimPath}.lock`;
+  const ownerPath = path.join(lockPath, "owner.json");
   const warnings: unknown[][] = [];
   const originalWarn = console.warn;
   console.warn = (...args: unknown[]) => {
     warnings.push(args);
   };
   try {
-    const first = await withClaimMutationLock(claimPath, async () => {
-      await writeFile(unexpected, "blocks rmdir\n", "utf8");
-      return "FIRST";
+    const result = await withClaimMutationLock(claimPath, async () => {
+      const current = JSON.parse(await readFile(ownerPath, "utf8")) as Record<string, unknown>;
+      current.lockId = CLAIM_ID_B;
+      await writeFile(ownerPath, `${JSON.stringify(current)}\n`, { mode: 0o600 });
+      return "PASS";
     });
-    assert.equal(first, "FIRST");
-    assert.equal(warnings.length, 1, "cleanup failure must be logged without replacing the result");
+    assert.equal(result, "PASS");
+    assert.equal((await stat(lockPath)).isDirectory(), true);
+    assert.equal(warnings.length, 1);
+  } finally {
+    console.warn = originalWarn;
+    await rm(lockPath, { recursive: true, force: true });
+  }
+});
 
-    await unlink(unexpected);
-    const second = await withClaimMutationLock(claimPath, async () => "SECOND");
-    assert.equal(second, "SECOND", "ownerless lock must be recoverable on the next acquisition");
+test("mutation-lock cleanup failure cannot replace the primary operation error", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-cleanup-"));
+  const claimPath = path.join(dir, "claim");
+  const lockPath = `${claimPath}.lock`;
+  const ownerPath = path.join(lockPath, "owner.json");
+  const warnings: unknown[][] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args);
+  };
+  try {
+    await assert.rejects(
+      withClaimMutationLock(claimPath, async () => {
+        await writeFile(ownerPath, "null\n", "utf8");
+        throw new Error("PRIMARY_OPERATION_FAILURE");
+      }),
+      /PRIMARY_OPERATION_FAILURE/,
+    );
+    assert.equal(warnings.length, 1, "cleanup failure must be logged without replacing the operation error");
   } finally {
     console.warn = originalWarn;
     await rm(lockPath, { recursive: true, force: true });
@@ -339,8 +472,8 @@ test("releaseRequestClaim still unlinks when handle close fails", async () => {
       requestId: "release-close",
       tool: "runtime_status",
       claimedAt: new Date().toISOString(),
+      leaseExpiresAt: futureIso(),
       claimId: CLAIM_ID_A,
-      ownerPid: process.pid,
     })}\n`,
   );
   const warnings: unknown[][] = [];
@@ -374,8 +507,8 @@ test("releaseRequestClaim never removes a replacement claim", async () => {
       requestId: "release-owner",
       tool: "runtime_status",
       claimedAt: new Date().toISOString(),
+      leaseExpiresAt: futureIso(),
       claimId: CLAIM_ID_B,
-      ownerPid: process.pid,
     })}\n`,
   );
   const warnings: unknown[][] = [];
