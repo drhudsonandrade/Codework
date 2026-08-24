@@ -26,6 +26,19 @@ class ReportingProvenanceRegressionTest(unittest.TestCase):
         with self.assertRaisesRegex(ProvenanceError, "report_id"):
             compiler.compile(extra={"report_id": "02"})
 
+    def test_post_compile_publication_gate_edit_is_detected(self):
+        payload = fixture_payload(
+            case_id="CASE-1",
+            report_id="01",
+            summary="fixture",
+            basis="fixture de regressão",
+        )
+        payload["publication_gate"]["passed"] = False
+        self.assertIn(
+            "provenance:mismatch:publication_gate",
+            provenance_blockers(payload),
+        )
+
     def test_removed_section_is_detected_from_its_remaining_anchor(self):
         payload = fixture_payload(
             case_id="CASE-1",
