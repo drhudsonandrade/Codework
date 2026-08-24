@@ -219,7 +219,8 @@ class DecisionRuleTest(unittest.TestCase):
             "Conflicting classifications of pathogenicity",
             "Pathogenic; Benign",
         ):
-            with self.subTest(classification=classification), (
+            with (
+                self.subTest(classification=classification),
                 patch.object(curation, "fetch_refsnp", return_value={}),
                 patch.object(curation, "placements", return_value=placement),
                 patch.object(curation, "clinvar_records", return_value=[record(classification)]),
