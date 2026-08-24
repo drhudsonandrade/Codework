@@ -136,6 +136,17 @@ def _disclose_programmatic_render(
     return disclosed
 
 
+def prepare_editorial_render(
+    rendered: dict[str, Any], *, programmatic_final_authorization: str | None = None
+) -> dict[str, Any]:
+    """Return the single payload all output writers must serialize."""
+    if _template_v3.template_mode_requested(rendered):
+        return rendered
+    return _disclose_programmatic_render(
+        rendered, final_authorization=programmatic_final_authorization
+    )
+
+
 def write_editorial_bundle(
     rendered: dict[str, Any],
     output_dir: Path,
@@ -151,8 +162,9 @@ def write_editorial_bundle(
     """
     if not _template_v3.template_mode_requested(rendered):
         return _programmatic_write_editorial_bundle(
-            _disclose_programmatic_render(
-                rendered, final_authorization=programmatic_final_authorization
+            prepare_editorial_render(
+                rendered,
+                programmatic_final_authorization=programmatic_final_authorization,
             ),
             output_dir,
             stem=stem,
@@ -197,4 +209,4 @@ def write_editorial_bundle(
     return {"pdf": pdf, "docx": docx}
 
 
-__all__ = ["DESIGN", "write_editorial_bundle"]
+__all__ = ["DESIGN", "prepare_editorial_render", "write_editorial_bundle"]
