@@ -94,15 +94,19 @@ def _require_verified_at(value: Any) -> str:
     candidate = value.strip()
     if "T" not in candidate and " " not in candidate:
         raise BootstrapAttestationError(
-            "bootstrap attestation verified_at must be a parseable ISO 8601 datetime"
+            "bootstrap attestation verified_at must be a parseable ISO 8601 datetime with an explicit timezone offset"
         )
     normalized = candidate[:-1] + "+00:00" if candidate.endswith("Z") else candidate
     try:
-        datetime.fromisoformat(normalized)
+        parsed = datetime.fromisoformat(normalized)
     except ValueError as exc:
         raise BootstrapAttestationError(
-            "bootstrap attestation verified_at must be a parseable ISO 8601 datetime"
+            "bootstrap attestation verified_at must be a parseable ISO 8601 datetime with an explicit timezone offset"
         ) from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise BootstrapAttestationError(
+            "bootstrap attestation verified_at must be a parseable ISO 8601 datetime with an explicit timezone offset"
+        )
     return candidate
 
 
