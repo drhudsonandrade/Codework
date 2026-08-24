@@ -4,7 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import normative
 from reporting.case_dossier import load_dossier
@@ -15,6 +15,7 @@ from reporting.section_attestations import (
     curation_for_schema,
     validate_curation,
 )
+from array_pipeline.qc import _text_stream
 from reporting.wgs_qc_record import UNAVAILABLE, audit_summary
 from tests.attestations import wgs_qc_record
 
@@ -45,6 +46,33 @@ class WgsQcSummaryValidationTest(unittest.TestCase):
         self.assertEqual(summary["status"], UNAVAILABLE)
         self.assertNotIn("mean_depth", summary["measured"])
         self.assertTrue(summary["problems"])
+
+
+    def test_non_finite_metrics_are_rejected(self):
+        for value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(value=value):
+                record = wgs_qc_record(case_id="CASE")
+                record["metrics"]["mean_depth"] = value
+                summary = audit_summary(record)
+                self.assertEqual(summary["status"], UNAVAILABLE)
+                self.assertTrue(
+                    any("número finito" in problem for problem in summary["problems"])
+                )
+
+
+class StreamConstructionCleanupTest(unittest.TestCase):
+    def test_gzip_raw_handle_is_closed_when_wrapper_construction_fails(self):
+        raw = MagicMock()
+        with (
+            patch("array_pipeline.qc.gzip.open", return_value=raw),
+            patch(
+                "array_pipeline.qc.io.BufferedReader",
+                side_effect=RuntimeError("fixture failure"),
+            ),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "fixture failure"):
+                _text_stream(Path("fixture.csv.gz"))
+        raw.close.assert_called_once_with()
 
 
 class ConsentInputSetTest(unittest.TestCase):
