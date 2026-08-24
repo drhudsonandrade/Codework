@@ -11,6 +11,7 @@ GOVERNANCE = ROOT / ".github" / "governance"
 INTEGRITY_RULESET = GOVERNANCE / "audit-evidence-integrity-ruleset.json"
 PUBLISHER_RULESET = GOVERNANCE / "audit-evidence-publisher-ruleset.json"
 DEPLOY_KEY_BYPASS = [{"actor_id": None, "actor_type": "DeployKey", "bypass_mode": "always"}]
+HISTORY_RULE_TYPES = {"deletion", "non_fast_forward"}
 
 
 def _load(path: Path) -> dict:
@@ -32,6 +33,24 @@ def _assert_strict_publisher_ruleset(ruleset: dict) -> None:
         raise AssertionError("publisher update restriction must remain fail-closed")
 
 
+def _assert_deploy_key_never_bypasses_history_protections(ruleset: dict) -> None:
+    bypass_actors = ruleset.get("bypass_actors", [])
+    if not isinstance(bypass_actors, list):
+        raise AssertionError("bypass_actors must be a list")
+    has_deploy_key = any(
+        isinstance(actor, dict) and actor.get("actor_type") == "DeployKey"
+        for actor in bypass_actors
+    )
+    if not has_deploy_key:
+        return
+    rules = ruleset.get("rules", [])
+    if not isinstance(rules, list):
+        raise AssertionError("rules must be a list")
+    types = {rule.get("type") for rule in rules if isinstance(rule, dict)}
+    if not types.isdisjoint(HISTORY_RULE_TYPES):
+        raise AssertionError("DeployKey bypass must not apply to history-mutation protections")
+
+
 class AuditEvidenceRulesetLayeringTests(unittest.TestCase):
     def test_integrity_ruleset_has_no_bypass_for_history_protections(self) -> None:
         ruleset = _load(INTEGRITY_RULESET)
@@ -39,7 +58,7 @@ class AuditEvidenceRulesetLayeringTests(unittest.TestCase):
         self.assertEqual(ruleset["bypass_actors"], [])
         self.assertEqual(
             {rule["type"] for rule in ruleset["rules"]},
-            {"deletion", "non_fast_forward"},
+            HISTORY_RULE_TYPES,
         )
         self.assertEqual(
             ruleset["conditions"]["ref_name"]["include"],
@@ -63,10 +82,17 @@ class AuditEvidenceRulesetLayeringTests(unittest.TestCase):
 
     def test_deploy_key_bypass_never_shares_a_ruleset_with_history_mutation_rules(self) -> None:
         for path in sorted(GOVERNANCE.glob("audit-evidence-*-ruleset.json")):
-            ruleset = _load(path)
-            if ruleset.get("bypass_actors") == DEPLOY_KEY_BYPASS:
-                types = {rule["type"] for rule in ruleset["rules"]}
-                self.assertTrue(types.isdisjoint({"deletion", "non_fast_forward"}), path.name)
+            _assert_deploy_key_never_bypasses_history_protections(_load(path))
+
+        mixed_actor_mutation = {
+            "bypass_actors": [
+                {"actor_id": 1, "actor_type": "Team", "bypass_mode": "always"},
+                *DEPLOY_KEY_BYPASS,
+            ],
+            "rules": [{"type": "deletion"}],
+        }
+        with self.assertRaises(AssertionError):
+            _assert_deploy_key_never_bypasses_history_protections(mixed_actor_mutation)
 
 
 if __name__ == "__main__":
