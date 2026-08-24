@@ -756,13 +756,10 @@ def inspect_array(
 
     structure_reasons: list[str] = []
     structure_notes: list[str] = []
-    # A subset of `structure_reasons`: the ones that mean this is not a usable array at all,
-    # as opposed to a usable array with a defect the per-locus classification absorbs.
-    # Duplicate RSID rows are the clear case of the latter — a real harmonized export was
-    # found emitting them 261 times, and the completeness matrix resolves them locus by
-    # locus rather than arbitrating a winner. Consumers that must refuse read this list, so
-    # the severity is a property of the gate instead of something each caller re-derives by
-    # matching on reason text.
+    # A subset of `structure_reasons` that controls the structural refusal. Duplicate RSID
+    # rows remain blocking: downstream consumers may classify a duplicated locus, but QC must
+    # not call the array structurally valid while the same identifier names multiple rows.
+    # Consumers read this list so severity is explicit rather than inferred from reason text.
     structure_blocking: list[str] = []
 
     def _structural(reason: str, *, blocking: bool) -> None:
@@ -774,7 +771,7 @@ def inspect_array(
         _structural("no rows", blocking=True)
     if duplicate_rsids:
         if schema.startswith("harmonized"):
-            _structural(f"duplicate RSID rows={duplicate_rsids}", blocking=False)
+            _structural(f"duplicate RSID rows={duplicate_rsids}", blocking=True)
         else:
             structure_notes.append(
                 f"raw source contains duplicate RSID rows={duplicate_rsids}; retained as vendor provenance and must be disambiguated during harmonization"
