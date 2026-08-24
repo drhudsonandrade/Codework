@@ -421,6 +421,21 @@ class ShippedRegistryTest(unittest.TestCase):
                 ]
                 self.assertEqual(unsourced[:5], [], f"{path.name}: assessed allele with no source")
 
+                contradictory = [
+                    t["rsid"]
+                    for t in manifest["targets"]
+                    if t.get("assessed_allele")
+                    and (
+                        t.get("assessed_allele_status") == "NÃO DISPONÍVEL"
+                        or t.get("assessed_allele_reason")
+                    )
+                ]
+                self.assertEqual(
+                    contradictory[:5],
+                    [],
+                    f"{path.name}: assessed allele retains a refusal state",
+                )
+
 
 class ReviewStarTierTest(unittest.TestCase):
     """Admitting one-star variants only helps if every one of them stays labelled as such."""
