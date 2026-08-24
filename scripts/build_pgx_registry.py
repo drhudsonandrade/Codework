@@ -107,7 +107,7 @@ def _get(path: str, *, attempts: int = 4, **params: str) -> list[dict[str, Any]]
                 raise CpicError(f"CPIC returned a non-list payload for {url}")
             return payload
         except urllib.error.HTTPError as exc:
-            if exc.code != 429 && not 500 <= exc.code < 600:
+            if exc.code != 429 and not 500 <= exc.code < 600:
                 raise CpicError(
                     f"CPIC fetch failed for {url} with non-retriable HTTP status {exc.code}"
                 ) from exc
