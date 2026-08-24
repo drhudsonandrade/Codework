@@ -65,8 +65,12 @@ ASSESSED_ALLELE_FIELDS = frozenset(
         "assessed_allele_status",
         "assessed_allele_reason",
         "assessed_allele_conflict",
+        "assessed_allele_evidence",
+        "assessed_allele_references",
     }
 )
+
+IDENTITY_FIELDS = ("coordinates", "grch38", "reference_allele")
 
 
 def merge(paths: list[Path]) -> dict[str, Any]:
@@ -75,6 +79,8 @@ def merge(paths: list[Path]) -> dict[str, Any]:
     merged: dict[str, dict[str, Any]] = {}
     origin: dict[str, list[str]] = {}
     conflicts: list[dict[str, Any]] = []
+    identity_conflicts: list[dict[str, Any]] = []
+    conflicted_identity: dict[str, set[str]] = {}
 
     for path, manifest in manifests:
         registry = str(manifest.get("id") or path.name)
@@ -100,9 +106,9 @@ def merge(paths: list[Path]) -> dict[str, Any]:
                         "assessed_alleles": sorted({old, new}),
                     }
                 )
-                existing.pop("assessed_allele", None)
-                existing.pop("assessed_allele_source", None)
-                existing.pop("assessed_allele_status", None)
+                for key in list(existing):
+                    if key == "assessed_allele" or key.startswith("assessed_allele_"):
+                        existing.pop(key, None)
                 existing["assessed_allele_conflict"] = sorted({old, new})
                 existing["assessed_allele_reason"] = (
                     f"registros divergem sobre o alelo avaliado deste locus ({old} vs {new}, "
@@ -121,6 +127,33 @@ def merge(paths: list[Path]) -> dict[str, Any]:
                     if incoming.get(key) is not None:
                         existing[key] = incoming[key]
 
+            for field in IDENTITY_FIELDS:
+                old_value = existing.get(field)
+                new_value = incoming.get(field)
+                field_conflicts = conflicted_identity.setdefault(rsid, set())
+                if field in field_conflicts:
+                    continue
+                if old_value not in (None, "", [], {}) and new_value not in (None, "", [], {}):
+                    if old_value != new_value:
+                        identity_conflicts.append(
+                            {
+                                "rsid": rsid,
+                                "field": field,
+                                "registries": list(origin[rsid]),
+                                "values": [old_value, new_value],
+                            }
+                        )
+                        field_conflicts.add(field)
+                        existing.pop(field, None)
+                        if field == "reference_allele":
+                            for key in list(existing):
+                                if key.startswith("assessed_allele_evidence") or key.startswith(
+                                    "assessed_allele_reference"
+                                ):
+                                    existing.pop(key, None)
+                elif old_value in (None, "", [], {}) and new_value not in (None, "", [], {}):
+                    existing[field] = new_value
+
             # `.index` on an unlisted scope raised a bare ValueError naming a tuple, and the
             # `.get` default only covered a *missing* key — a scope present but null, or a
             # value this ranking has never seen, still reached it. Refused with the gene and
@@ -137,7 +170,11 @@ def merge(paths: list[Path]) -> dict[str, Any]:
             # undid the refusal three lines above and shipped an arbitrated allele at
             # rs3918290. Those fields are settled by the explicit logic or not at all.
             for key, value in incoming.items():
-                if key in ASSESSED_ALLELE_FIELDS:
+                if (
+                    key in ASSESSED_ALLELE_FIELDS
+                    or key.startswith("assessed_allele_")
+                    or key in IDENTITY_FIELDS
+                ):
                     continue
                 if key not in existing and value not in (None, "", [], {}):
                     existing[key] = value
@@ -146,10 +183,21 @@ def merge(paths: list[Path]) -> dict[str, Any]:
         merged[rsid]["source_registries"] = sorted(set(registries))
 
     generated = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    merge_basis = [
+        {
+            "path": str(path),
+            "id": manifest.get("id"),
+            "version": manifest.get("version"),
+            "sha256": manifest.get("sha256") or sha256_json(manifest),
+        }
+        for path, manifest in manifests
+    ]
     payload = {
         "schema": "genoma-partial-genome-targets-v1",
         "id": "GENOMA-MERGED-PANEL",
-        "version": generated[:10].replace("-", "") + ".1",
+        "version": (
+            generated[:10].replace("-", "") + "." + sha256_json(merge_basis)[:12]
+        ),
         "description": (
             "União dos registros de alvos interrogados numa execução de caso. Colisão de rsid "
             "com alelos avaliados divergentes não é arbitrada: o alelo é removido e a "
@@ -167,10 +215,12 @@ def merge(paths: list[Path]) -> dict[str, Any]:
             for path, manifest in manifests
         ],
         "assessed_allele_conflicts": conflicts,
+        "identity_conflicts": identity_conflicts,
         "totals": {
             "targets": len(merged),
             "with_assessed_allele": sum(1 for t in merged.values() if t.get("assessed_allele")),
             "assessed_allele_conflicts": len(conflicts),
+            "identity_conflicts": len(identity_conflicts),
             "in_more_than_one_registry": sum(1 for v in origin.values() if len(set(v)) > 1),
             "by_scope": {
                 scope: sum(1 for t in merged.values() if t.get("scope") == scope)
