@@ -56,6 +56,34 @@ class ClinicalFindingsRegressionTest(unittest.TestCase):
         })
         self.assertEqual(validity["recessive_diseases"], ["Fixture disease"])
 
+    def test_gencc_disease_lists_normalise_each_mode_of_inheritance(self):
+        validity = _validity_for("GENE", {
+            "gene_validity": {
+                "GENE": {
+                    "gencc": {
+                        "established_groups": [
+                            {
+                                "established": True,
+                                "disease": "GenCC recessive disease",
+                                "mode_of_inheritance": "Autosomal recessive",
+                            },
+                            {
+                                "established": True,
+                                "disease": "GenCC dominant disease",
+                                "mode_of_inheritance": "Autosomal dominant",
+                            },
+                        ]
+                    }
+                }
+            }
+        })
+        self.assertEqual(
+            validity["recessive_diseases"], ["GenCC recessive disease"]
+        )
+        self.assertEqual(
+            validity["dominant_diseases"], ["GenCC dominant disease"]
+        )
+
     def test_unknown_female_zygosity_is_not_described_as_homozygous(self):
         result = _pathogenic_x_linked("DI", SEX_FEMALE)
         self.assertEqual(result["kind"], GENOTIPO_DE_RISCO)
