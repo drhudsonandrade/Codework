@@ -11,8 +11,8 @@ passed all five gates and only fell over later, in one analysis, while the clini
 the completeness matrix consumed the same coordinates without comment. Two copies of a fact
 also drift; this module is the single copy both read.
 
-Lengths are the GRCh37 (hg19) and GRCh38 primary-assembly totals. MT is the rCRS at 16,569
-bases in both.
+Lengths are the GRCh37 (hg19) and GRCh38 primary-assembly totals. M and MT are accepted
+aliases for the rCRS at 16,569 bases in both.
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ GRCH37: dict[str, int] = {
     "13": 115_169_878, "14": 107_349_540, "15": 102_531_392, "16": 90_354_753,
     "17": 81_195_210, "18": 78_077_248, "19": 59_128_983, "20": 63_025_520,
     "21": 48_129_895, "22": 51_304_566,
-    "X": 155_270_560, "Y": 59_373_566, "MT": 16_569,
+    "X": 155_270_560, "Y": 59_373_566, "MT": 16_569, "M": 16_569,
 }
 
 GRCH38: dict[str, int] = {
@@ -33,7 +33,7 @@ GRCH38: dict[str, int] = {
     "13": 114_364_328, "14": 107_043_718, "15": 101_991_189, "16": 90_338_345,
     "17": 83_257_441, "18": 80_373_285, "19": 58_617_616, "20": 64_444_167,
     "21": 46_709_983, "22": 50_818_468,
-    "X": 156_040_895, "Y": 57_227_415, "MT": 16_569,
+    "X": 156_040_895, "Y": 57_227_415, "MT": 16_569, "M": 16_569,
 }
 
 CHROMOSOME_LENGTHS: dict[str, dict[str, int]] = {"GRCh37": GRCH37, "GRCh38": GRCH38}
@@ -116,6 +116,8 @@ def bounded_gunzip(raw: bytes, *, name: str) -> bytes:
             chunk = decompressor.decompress(decompressor.unconsumed_tail, step * 64)
     chunks.append(decompressor.flush())
     produced += len(chunks[-1])
+    if not decompressor.eof:
+        raise ValueError(f"{name}: gzip payload is truncated or incomplete")
     if raw and produced / len(raw) > MAX_REGISTRY_COMPRESSION_RATIO:
         raise ValueError(
             f"{name}: gzip payload expands {produced / len(raw):.0f}x, above the "
