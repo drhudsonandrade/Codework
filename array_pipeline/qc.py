@@ -282,12 +282,16 @@ def _text_stream(path: Path) -> tuple[TextIO, SourceInfo]:
     lower = path.name.lower()
     if lower.endswith(".gz"):
         raw = gzip.open(path, "rb")
-        bounded = io.BufferedReader(
-            _BoundedRaw(raw, limit=MAX_UNCOMPRESSED_BYTES, name=str(path))
-        )
-        fh = io.TextIOWrapper(
-            bounded, encoding="utf-8-sig", errors="strict", newline=""
-        )
+        try:
+            bounded = io.BufferedReader(
+                _BoundedRaw(raw, limit=MAX_UNCOMPRESSED_BYTES, name=str(path))
+            )
+            fh = io.TextIOWrapper(
+                bounded, encoding="utf-8-sig", errors="strict", newline=""
+            )
+        except Exception:
+            raw.close()
+            raise
         return fh, SourceInfo("gzip", None, {})
     if lower.endswith(".zip"):
         zf = zipfile.ZipFile(path)
