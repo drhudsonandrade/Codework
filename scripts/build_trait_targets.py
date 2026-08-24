@@ -48,6 +48,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from array_pipeline.targets import load_target_manifest, sha256_json
+from scripts.merge_target_manifests import SCOPE_RANK
 
 DEFAULT_SCOPES = ROOT / "config/trait_scopes.json"
 DEFAULT_TARGETS_OUT = ROOT / "config/targets_gwas_traits.json"
@@ -241,7 +242,7 @@ def build(
         # CURIOSIDADE wins a tie only if the locus has no PREDISPOSICAO association; a locus
         # that is both is clinical-adjacent and belongs in the stronger scope.
         scopes = {r["scope"] for r in records}
-        scope = "PREDISPOSICAO" if "PREDISPOSICAO" in scopes else sorted(scopes)[0]
+        scope = min(scopes, key=SCOPE_RANK.index)
         alleles = {r["risk_allele"] for r in records if r["risk_allele"]}
         genes = sorted(
             {
@@ -265,6 +266,10 @@ def build(
             ),
             "queries": {"clinvar": {"term": rsid, "retmax": 5}},
             "grch38": {"chromosome": chromosome, "position": position},
+            "coordinates": {
+                "status": "VERIFICADO",
+                "GRCh38": {"chromosome": chromosome, "position": position},
+            },
             "gwas_terms": [{"id": i, "label": label} for i, label in terms],
             "gwas_best_pvalue": best["pvalue"],
             "gwas_studies": sorted({r["study"] for r in records})[:8],
