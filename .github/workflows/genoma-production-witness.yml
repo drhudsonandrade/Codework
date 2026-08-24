@@ -40,6 +40,22 @@ jobs:
             echo "GENOMA_RULESET_SHA_MANIFEST=$GITHUB_WORKSPACE/manifests/RULESET_V3.4.sha256"
             echo 'GENOMA_EXPECT_CANONICAL_SHA=1'
           } >> "$GITHUB_ENV"
+      - name: Generate and pin fresh ruleset bootstrap attestation for exact merged main SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          verified_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          locator='evidence/bootstrap-project-v3.4.json#/checks'
+          python3 -m scripts.bootstrap_attestation --write \
+            --verified-at "$verified_at" \
+            --result-locator "$locator" \
+            --output evidence/bootstrap-project-v3.4.json
+          bootstrap_sha=$(sha256sum evidence/bootstrap-project-v3.4.json | awk '{print $1}')
+          printf '%s  %s\n' "$bootstrap_sha" 'evidence/bootstrap-project-v3.4.json' > evidence/bootstrap-project-v3.4.sha256
+          {
+            echo "GENOMA_BOOTSTRAP_ATTESTATION_SHA256=$bootstrap_sha"
+            echo "GENOMA_BOOTSTRAP_RESULT_LOCATOR=$locator"
+          } >> "$GITHUB_ENV"
       - name: Build exact policy image
         run: |
           docker build -f policy_engine/Dockerfile -t genoma-policy-witness:${GITHUB_SHA} .
@@ -91,11 +107,15 @@ jobs:
           mkdir -p evidence/live-section-260
           python3 scripts/run_live_post_deployment_smoke.py \
             --base-url http://127.0.0.1:8787 \
-            --bootstrap-attestation deploy/attestations/bootstrap-project-v3.4.json \
+            --bootstrap-attestation evidence/bootstrap-project-v3.4.json \
+            --bootstrap-attestation-sha256 "$GENOMA_BOOTSTRAP_ATTESTATION_SHA256" \
+            --bootstrap-result-locator "$GENOMA_BOOTSTRAP_RESULT_LOCATOR" \
+            --expected-source-commit "$GITHUB_SHA" \
+            --project-instructions-source deploy/attestations/project-instructions-v3.4.txt \
+            --project-instructions-attestation deploy/attestations/project-instructions-v3.4.json \
             --deployment-id "witness-${GITHUB_RUN_ID}-${GITHUB_SHA}" \
             --output evidence/live-section-260/summary.json
-          jq -e '.passed == 15 and .total == 15 and .critical_failures == 0 and .post_deployment_status == "PASS"' evidence/live-section-260/summary.json >/dev/null
-      - name: Capture logs and construct content-addressed witness
+      - name: Capture logs and construct content-addressed evidence
         if: always()
         shell: bash
         run: |
@@ -121,16 +141,22 @@ jobs:
           if not summary_path.exists():
               raise SystemExit('live section-260 summary missing')
           live=json.loads(summary_path.read_text())
-          if not (live.get('passed')==15 and live.get('total')==15 and live.get('critical_failures')==0 and live.get('post_deployment_status')=='PASS'):
-              raise SystemExit('refusing to create PASS witness from non-PASS live result')
           files=[]
-          for p in sorted(x for x in root.rglob('*') if x.is_file() and x.name not in {'SHA256SUMS','witness.json'}):
+          for p in sorted(x for x in root.rglob('*') if x.is_file() and x.name not in {'SHA256SUMS','witness.json','failure.json'}):
               h=hashlib.sha256(p.read_bytes()).hexdigest()
               files.append({'path':str(p.relative_to(root)),'sha256':h,'size_bytes':p.stat().st_size})
-          witness={
+          passed = (
+              live.get('passed')==15
+              and live.get('total')==15
+              and live.get('critical_failures')==0
+              and live.get('project_bootstrap_installed') is True
+              and live.get('post_deployment_status')=='PASS'
+          )
+          record={
               'schema':'genoma-production-witness-v1',
               'operational_status':'VERIFICADO',
-              'post_deployment_status':'PASS',
+              'post_deployment_status':'PASS' if passed else 'FAIL',
+              'project_bootstrap_installed':live.get('project_bootstrap_installed') is True,
               'ruleset':{
                   'status':EXPECTED_STATUS,
                   'version':EXPECTED_VERSION,
@@ -138,18 +164,24 @@ jobs:
                   'canonical_filename':EXPECTED_NAME,
                   'sha256':EXPECTED_SHA,
               },
-              'section_260':{'passed':15,'total':15,'critical_failures':0},
+              'section_260':{
+                  'passed':live.get('passed'),
+                  'total':live.get('total'),
+                  'critical_failures':live.get('critical_failures'),
+              },
               'git_sha':os.environ['GITHUB_SHA'],
               'workflow_run_id':os.environ['GITHUB_RUN_ID'],
               'workflow_run_attempt':os.environ['GITHUB_RUN_ATTEMPT'],
               'created_at':datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),
               'evidence_files':files,
-              'limitations':['This witness validates the deterministic policy deployment and live section-260 safety scenarios. It does not substitute for the per-session NGS Runtime/Resource Gate or per-sample FASTQ/BAM/CRAM integrity.']
+              'limitations':['The owner-exported Project Instructions snapshot is verified, but it is not an authenticated read of the persistent ChatGPT Project configuration. POST-DEPLOYMENT remains FAIL until authoritative installation evidence is available.']
           }
-          root.joinpath('witness.json').write_text(json.dumps(witness,ensure_ascii=False,indent=2)+'\n')
+          target='witness.json' if passed else 'failure.json'
+          root.joinpath(target).write_text(json.dumps(record,ensure_ascii=False,indent=2)+'\n')
           PY
           (cd evidence && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
       - name: Upload immutable run evidence
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: genoma-production-witness-${{ github.sha }}
@@ -163,22 +195,35 @@ jobs:
     needs: witness
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
+    env:
+      GENOMA_AUDIT_DEPLOY_KEY: ${{ secrets.GENOMA_AUDIT_DEPLOY_KEY }}
     steps:
+      - name: Require restricted audit deploy key
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${GENOMA_AUDIT_DEPLOY_KEY:-}" || {
+            echo 'GENOMA_AUDIT_DEPLOY_KEY is required for the restricted audit-evidence publisher' >&2
+            exit 1
+          }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          ssh-key: ${{ secrets.GENOMA_AUDIT_DEPLOY_KEY }}
+          persist-credentials: true
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: genoma-production-witness-${{ github.sha }}
           path: downloaded-evidence
-      - name: Publish immutable witness with an idempotent exact-SHA guard
+      - name: Publish immutable witness with append-only and exact-SHA guards
         shell: bash
         run: |
           set -euo pipefail
           witness=$(find downloaded-evidence -type f -name witness.json -print -quit)
           sums=$(find downloaded-evidence -type f -name SHA256SUMS -print -quit)
           test -n "$witness" && test -n "$sums"
+          jq -e --arg sha "$GITHUB_SHA" '.post_deployment_status == "PASS" and .project_bootstrap_installed == true and .git_sha == $sha' "$witness" >/dev/null
           git config user.name 'genoma-audit-bot'
           git config user.email 'genoma-audit-bot@users.noreply.github.com'
           tmp=$(mktemp -d)
@@ -191,16 +236,30 @@ jobs:
             git checkout --orphan audit-evidence
             git rm -rf . >/dev/null 2>&1 || true
           fi
-          if [ -f "witnesses/${GITHUB_SHA}/witness.json" ]; then
-            cmp "$tmp/witness.json" "witnesses/${GITHUB_SHA}/witness.json"
-            cmp "$tmp/SHA256SUMS" "witnesses/${GITHUB_SHA}/SHA256SUMS"
-            echo "Witness for ${GITHUB_SHA} is already published identically."
+          test -z "$(git status --porcelain)"
+          target="witnesses/${GITHUB_SHA}"
+          if [ -e "$target/witness.json" ] || [ -e "$target/SHA256SUMS" ]; then
+            test -f "$target/witness.json" && test -f "$target/SHA256SUMS"
+            cmp "$tmp/witness.json" "$target/witness.json"
+            cmp "$tmp/SHA256SUMS" "$target/SHA256SUMS"
+            test -f latest.json
+            cmp "$tmp/witness.json" latest.json
+            echo "Witness for ${GITHUB_SHA} is already published identically and latest.json is consistent."
             exit 0
           fi
-          mkdir -p "witnesses/${GITHUB_SHA}"
-          cp "$tmp/witness.json" "witnesses/${GITHUB_SHA}/witness.json"
-          cp "$tmp/SHA256SUMS" "witnesses/${GITHUB_SHA}/SHA256SUMS"
+          mkdir -p "$target"
+          cp "$tmp/witness.json" "$target/witness.json"
+          cp "$tmp/SHA256SUMS" "$target/SHA256SUMS"
           cp "$tmp/witness.json" latest.json
-          git add "witnesses/${GITHUB_SHA}" latest.json
+          cmp "$target/witness.json" latest.json
+          jq -e --arg sha "$GITHUB_SHA" '.git_sha == $sha and .post_deployment_status == "PASS"' latest.json >/dev/null
+          git add "$target" latest.json
+          printf '%s\n' "$target/SHA256SUMS" "$target/witness.json" 'latest.json' | sort > "$tmp/expected-paths"
+          git diff --cached --name-only | sort > "$tmp/actual-paths"
+          cmp "$tmp/expected-paths" "$tmp/actual-paths"
+          if git diff --cached --name-only | grep '^witnesses/' | grep -v -E "^witnesses/${GITHUB_SHA}/(SHA256SUMS|witness\.json)$"; then
+            echo 'refusing to modify an existing witness path' >&2
+            exit 1
+          fi
           git commit -m "audit: production witness ${GITHUB_SHA} [skip ci]"
           git push origin HEAD:audit-evidence

@@ -8,14 +8,23 @@ permissions:
 
 jobs:
   live-section-260:
+    if: github.ref == 'refs/heads/main'
     name: Real instance + canonical live 15/15
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
+      - name: Require protected main ref
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main'
       - name: Validate repository and canonical transport
         run: python3 scripts/validate_repo.py
       - name: Materialize byte-exact normative source
@@ -27,6 +36,22 @@ jobs:
           canonical="$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
           test "$(stat -c '%a' "$canonical")" = 444
           echo 'ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580  '"$canonical" | sha256sum -c -
+      - name: Generate and pin fresh ruleset bootstrap attestation for exact main SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          verified_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          locator='production-evidence/bootstrap-project-v3.4.json#/checks'
+          python3 -m scripts.bootstrap_attestation --write \
+            --verified-at "$verified_at" \
+            --result-locator "$locator" \
+            --output production-evidence/bootstrap-project-v3.4.json
+          bootstrap_sha=$(sha256sum production-evidence/bootstrap-project-v3.4.json | awk '{print $1}')
+          printf '%s  %s\n' "$bootstrap_sha" 'production-evidence/bootstrap-project-v3.4.json' > production-evidence/bootstrap-project-v3.4.sha256
+          {
+            echo "GENOMA_BOOTSTRAP_ATTESTATION_SHA256=$bootstrap_sha"
+            echo "GENOMA_BOOTSTRAP_RESULT_LOCATOR=$locator"
+          } >> "$GITHUB_ENV"
       - name: Build exact policy image for this commit
         run: |
           docker build --file policy_engine/Dockerfile --tag genoma-policy-live:${{ github.sha }} .
@@ -69,18 +94,29 @@ jobs:
         run: |
           python3 scripts/run_live_post_deployment_smoke.py \
             --base-url http://127.0.0.1:8787 \
-            --bootstrap-attestation deploy/attestations/bootstrap-project-v3.4.json \
+            --bootstrap-attestation production-evidence/bootstrap-project-v3.4.json \
+            --bootstrap-attestation-sha256 "$GENOMA_BOOTSTRAP_ATTESTATION_SHA256" \
+            --bootstrap-result-locator "$GENOMA_BOOTSTRAP_RESULT_LOCATOR" \
+            --expected-source-commit "$GITHUB_SHA" \
+            --project-instructions-source deploy/attestations/project-instructions-v3.4.txt \
+            --project-instructions-attestation deploy/attestations/project-instructions-v3.4.json \
             --deployment-id "github-${GITHUB_RUN_ID}-${GITHUB_SHA}" \
             --output production-evidence/live-section-260.json
-      - name: Hash complete evidence bundle and verify result
+      - name: Hash complete evidence bundle and report fail-closed result
+        if: always()
         run: |
-          jq -e '.passed == 15 and .total == 15 and .critical_failures == 0 and .post_deployment_status == "PASS"' production-evidence/live-section-260.json >/dev/null
-          (cd production-evidence && sha256sum * | sort) > production-evidence.sha256
+          set -euo pipefail
+          (cd production-evidence && find . -maxdepth 1 -type f -printf '%f\0' | sort -z | xargs -0 sha256sum) > production-evidence.sha256
           python3 - <<'PY'
           import json
           from pathlib import Path
-          p=json.loads(Path('production-evidence/live-section-260.json').read_text())
-          print(f"POST-DEPLOYMENT {p['post_deployment_status']}: {p['passed']}/{p['total']}, critical_failures={p['critical_failures']}")
+          p=Path('production-evidence/live-section-260.json')
+          if not p.exists():
+              raise SystemExit('live section-260 evidence missing')
+          data=json.loads(p.read_text())
+          print(f"POST-DEPLOYMENT {data['post_deployment_status']}: {data['passed']}/{data['total']}, critical_failures={data['critical_failures']}, project_bootstrap_installed={data['project_bootstrap_installed']}")
+          if not (data['passed']==15 and data['total']==15 and data['critical_failures']==0 and data['project_bootstrap_installed'] is True and data['post_deployment_status']=='PASS'):
+              raise SystemExit('POST-DEPLOYMENT remains fail-closed; authoritative persistent Project Instructions evidence is required')
           PY
       - name: Stop live instance after evidence capture
         if: always()
