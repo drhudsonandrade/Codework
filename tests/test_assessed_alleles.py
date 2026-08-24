@@ -210,6 +210,7 @@ class DecisionRuleTest(unittest.TestCase):
         placement = {
             "GRCh38": {
                 "seq_id": "NC_000001.11",
+                "chromosome": "1",
                 "position": 101,
                 "reference_allele": "A",
             }
