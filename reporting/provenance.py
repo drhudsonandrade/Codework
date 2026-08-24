@@ -935,6 +935,22 @@ class PayloadCompiler:
             basis="identificador do relatório com que este payload foi compilado",
             status="VERIFICADO",
         )
+        authority_kind = "fixture" if self._fixture_verdict else "case_control"
+        authority_status = UNAVAILABLE if self._fixture_verdict else "VERIFICADO"
+        self.state(
+            "policy_evaluation",
+            policy_evaluation,
+            kind=authority_kind,
+            basis="veredito de política usado para compilar este payload",
+            status=authority_status,
+        )
+        self.state(
+            "publication_gate",
+            publication_gate,
+            kind=authority_kind,
+            basis="gate de publicação derivado dos artefatos de controle",
+            status=authority_status,
+        )
         if self._fixture_witness:
             # Layout QA has to be able to render the PASS variant of the header. It may print
             # the string; what it may not do is anchor it as anything but a fixture, which is
@@ -1106,6 +1122,7 @@ SCALAR_FIELDS = ("summary", "sources", "limitations")
 #: itself printed, so it is anchored like any other value"; the same sentence applies here
 #: and was not applied.
 IDENTITY_FIELDS = ("case_id", "report_id", "post_deployment_status")
+AUTHORITY_FIELDS = ("publication_gate", "policy_evaluation")
 #: Per-finding keys printed verbatim by `reporting.engine._final_markdown`.
 FINDING_FIELDS = (
     "domain", "nature", "priority", "observed_data", "qc",
@@ -1269,7 +1286,7 @@ def provenance_blockers(data: dict[str, Any]) -> list[str]:
             # edited after compilation, or the anchor was copied from another field.
             blockers.append(f"provenance:mismatch:{name}")
 
-    for name in SCALAR_FIELDS + IDENTITY_FIELDS:
+    for name in SCALAR_FIELDS + IDENTITY_FIELDS + AUTHORITY_FIELDS:
         check(name, data.get(name))
 
     sections = data.get("sections") if isinstance(data.get("sections"), dict) else {}
