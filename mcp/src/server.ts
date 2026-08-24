@@ -241,22 +241,18 @@ type RequestClaimMetadata = {
   claimedAt: string;
 };
 
+const requestClaimMetadataSchema = z
+  .object({
+    requestId: z.string(),
+    tool: z.string(),
+    claimedAt: z.string(),
+  })
+  .strict();
+
 type ClaimInspection =
   | { kind: "missing" }
   | { kind: "invalid" }
   | { kind: "metadata"; value: RequestClaimMetadata };
-
-function isRequestClaimMetadata(value: unknown): value is RequestClaimMetadata {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.requestId === "string" &&
-    typeof record.tool === "string" &&
-    typeof record.claimedAt === "string"
-  );
-}
 
 async function inspectRequestClaim(claimPath: string): Promise<ClaimInspection> {
   let raw: string;
@@ -269,10 +265,7 @@ async function inspectRequestClaim(claimPath: string): Promise<ClaimInspection> 
     return { kind: "invalid" };
   }
   try {
-    const parsed: unknown = JSON.parse(raw);
-    return isRequestClaimMetadata(parsed)
-      ? { kind: "metadata", value: parsed }
-      : { kind: "invalid" };
+    return { kind: "metadata", value: requestClaimMetadataSchema.parse(JSON.parse(raw)) };
   } catch {
     return { kind: "invalid" };
   }
