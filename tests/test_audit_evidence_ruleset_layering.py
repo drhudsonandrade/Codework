@@ -18,7 +18,13 @@ def _load(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _assert_branch_target(ruleset: dict, label: str) -> None:
+    if ruleset.get("target") != "branch":
+        raise AssertionError(f"{label} ruleset must target branches")
+
+
 def _assert_strict_publisher_ruleset(ruleset: dict) -> None:
+    _assert_branch_target(ruleset, "publisher")
     if ruleset.get("enforcement") != "active":
         raise AssertionError("publisher ruleset must remain active")
     if ruleset.get("bypass_actors") != DEPLOY_KEY_BYPASS:
@@ -54,6 +60,7 @@ def _assert_deploy_key_never_bypasses_history_protections(ruleset: dict) -> None
 class AuditEvidenceRulesetLayeringTests(unittest.TestCase):
     def test_integrity_ruleset_has_no_bypass_for_history_protections(self) -> None:
         ruleset = _load(INTEGRITY_RULESET)
+        _assert_branch_target(ruleset, "integrity")
         self.assertEqual(ruleset["enforcement"], "active")
         self.assertEqual(ruleset["bypass_actors"], [])
         self.assertEqual(
@@ -64,6 +71,11 @@ class AuditEvidenceRulesetLayeringTests(unittest.TestCase):
             ruleset["conditions"]["ref_name"]["include"],
             ["refs/heads/audit-evidence"],
         )
+
+        wrong_target = copy.deepcopy(ruleset)
+        wrong_target["target"] = "tag"
+        with self.assertRaises(AssertionError):
+            _assert_branch_target(wrong_target, "integrity")
 
     def test_publisher_bypass_applies_only_to_one_strict_update_restriction(self) -> None:
         ruleset = _load(PUBLISHER_RULESET)
@@ -79,6 +91,11 @@ class AuditEvidenceRulesetLayeringTests(unittest.TestCase):
         )
         with self.assertRaises(AssertionError):
             _assert_strict_publisher_ruleset(permissive)
+
+        wrong_target = copy.deepcopy(ruleset)
+        wrong_target["target"] = "tag"
+        with self.assertRaises(AssertionError):
+            _assert_strict_publisher_ruleset(wrong_target)
 
     def test_deploy_key_bypass_never_shares_a_ruleset_with_history_mutation_rules(self) -> None:
         for path in sorted(GOVERNANCE.glob("audit-evidence-*-ruleset.json")):
