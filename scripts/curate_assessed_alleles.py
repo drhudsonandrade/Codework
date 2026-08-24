@@ -537,7 +537,14 @@ def _apply_target_assessment(
         target["assessed_allele_evidence"] = evidence_name
         target["references"] = record.get("references", {})
     else:
-        target.pop("assessed_allele", None)
+        for key in (
+            "assessed_allele",
+            "assessed_allele_source",
+            "assessed_allele_evidence",
+            "assessed_allele_references",
+            "references",
+        ):
+            target.pop(key, None)
         target["assessed_allele_status"] = record["status"] if record else "NÃO DISPONÍVEL"
         target["assessed_allele_reason"] = record["reason"] if record else "not curated"
 
