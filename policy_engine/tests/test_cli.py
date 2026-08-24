@@ -113,9 +113,14 @@ def _schema_contract_errors(
             errors.append(f"{path}:pattern")
         if schema.get("format") == "date-time":
             normalized = instance[:-1] + "+00:00" if instance.endswith("Z") else instance
+            valid_datetime = "T" in instance
             try:
-                datetime.fromisoformat(normalized)
+                parsed = datetime.fromisoformat(normalized)
             except ValueError:
+                valid_datetime = False
+            else:
+                valid_datetime = valid_datetime and parsed.tzinfo is not None and parsed.utcoffset() is not None
+            if not valid_datetime:
                 errors.append(f"{path}:format:date-time")
 
     if isinstance(instance, (int, float)) and not isinstance(instance, bool):
@@ -136,6 +141,18 @@ class CliTests(unittest.TestCase):
             capture_output=True,
             text=True,
         )
+
+    def test_schema_date_time_requires_rfc3339_time_and_offset(self):
+        schema = {"type": "string", "format": "date-time"}
+        for invalid in ("2026-08-17", "2026-08-17T12:00:00"):
+            with self.subTest(invalid=invalid):
+                self.assertEqual(
+                    _schema_contract_errors(schema, invalid, schema),
+                    ["$:format:date-time"],
+                )
+        for valid in ("2026-08-17T12:00:00Z", "2026-08-17T12:00:00-03:00"):
+            with self.subTest(valid=valid):
+                self.assertEqual(_schema_contract_errors(schema, valid, schema), [])
 
     def test_ruleset_check(self):
         result = self.run_cli("ruleset-check")
