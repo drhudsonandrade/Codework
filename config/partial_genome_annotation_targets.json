@@ -77,7 +77,8 @@
         "cpic_pubmed": []
       },
       "rsid": "rs1799807",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "T",
@@ -132,7 +133,8 @@
         "cpic_pubmed": []
       },
       "rsid": "rs1803274",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "A",
@@ -183,7 +185,8 @@
         "cpic_pubmed": []
       },
       "rsid": "rs17580",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "T",
@@ -233,7 +236,8 @@
         "cpic_pubmed": []
       },
       "rsid": "rs28929474",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "G",
@@ -279,7 +283,8 @@
         "cpic_pubmed": []
       },
       "rsid": "rs738409",
-      "scope": "PREDISPOSICAO"
+      "scope": "PREDISPOSICAO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "T",
@@ -346,7 +351,8 @@
         ]
       },
       "rsid": "rs1799853",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "C",
@@ -413,7 +419,8 @@
         ]
       },
       "rsid": "rs1057910",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "T",
@@ -468,7 +475,8 @@
         "cpic_pubmed": []
       },
       "rsid": "rs9923231",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "C",
@@ -531,7 +539,8 @@
         ]
       },
       "rsid": "rs4149056",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "C",
@@ -585,7 +594,8 @@
         ]
       },
       "rsid": "rs776746",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "A",
@@ -643,7 +653,8 @@
         ]
       },
       "rsid": "rs1799930",
-      "scope": "PESQUISA"
+      "scope": "PESQUISA",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "C",
@@ -695,7 +706,8 @@
         "cpic_pubmed": []
       },
       "rsid": "rs429358",
-      "scope": "PREDISPOSICAO"
+      "scope": "PREDISPOSICAO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "T",
@@ -745,7 +757,8 @@
         "cpic_pubmed": []
       },
       "rsid": "rs7412",
-      "scope": "PREDISPOSICAO"
+      "scope": "PREDISPOSICAO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele_reason": "published studies disagree on the risk allele — the GWAS Catalogue reports C (2 record(s)), T (1 record(s)) for this variant. This is a documented contradiction in the literature, not a gap in the data, and choosing a side would manufacture agreement",
@@ -811,7 +824,8 @@
         "cpic_pubmed": []
       },
       "rsid": "rs6025",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "A",
@@ -859,7 +873,8 @@
         "cpic_pubmed": []
       },
       "rsid": "rs1799963",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "A",
@@ -907,7 +922,8 @@
         "cpic_pubmed": []
       },
       "rsid": "rs1800562",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "G",
@@ -955,7 +971,8 @@
         "cpic_pubmed": []
       },
       "rsid": "rs1799945",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "T",
@@ -1013,7 +1030,8 @@
         ]
       },
       "rsid": "rs3918290",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "C",
@@ -1070,7 +1088,8 @@
         ]
       },
       "rsid": "rs55886062",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "A",
@@ -1127,7 +1146,8 @@
         ]
       },
       "rsid": "rs67376798",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "T",
@@ -1184,7 +1204,8 @@
         ]
       },
       "rsid": "rs56038477",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "G",
@@ -1247,7 +1268,8 @@
         ]
       },
       "rsid": "rs1800462",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "T",
@@ -1308,7 +1330,8 @@
         ]
       },
       "rsid": "rs1800460",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "C",
@@ -1375,7 +1398,8 @@
         ]
       },
       "rsid": "rs1142345",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "T",
@@ -1441,7 +1465,8 @@
         ]
       },
       "rsid": "rs116855232",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "A",
@@ -1518,7 +1543,8 @@
         ]
       },
       "rsid": "rs4244285",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "T",
@@ -1580,7 +1606,8 @@
         ]
       },
       "rsid": "rs12248560",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     },
     {
       "assessed_allele": "A",
@@ -1639,7 +1666,8 @@
         ]
       },
       "rsid": "rs4986893",
-      "scope": "CLINICO"
+      "scope": "CLINICO",
+      "assessed_allele_status": "VERIFICADO"
     }
   ],
   "version": "2026-08-19.1"
