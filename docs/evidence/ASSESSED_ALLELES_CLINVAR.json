@@ -1,7 +1,7 @@
 {
   "assessed_alleles_established": 28,
   "curated_at": "2026-08-19T13:35:30.461122Z",
-  "method": "dbSNP supplies the plus-strand reference base from the SPDI deleted_sequence; ClinVar supplies the alternate from canonical_spdi. The two are joined by coordinate, never by text, because an rsid text search in ClinVar also returns unrelated variants. A target with no asserted alternate, or with more than one, is left without an assessed allele and the reason is recorded.",
+  "method": "dbSNP supplies the plus-strand reference base from the SPDI deleted_sequence; ClinVar or CPIC supplies clinically asserted alternates. Records are joined by coordinate, never by rsid text alone. When more than one asserted alternate is present, one is selected only if dbSNP population frequency supports exactly one candidate and every competing candidate has zero recorded population frequency; otherwise the target remains without an assessed allele and the reason is recorded.",
   "results": [
     {
       "assessed_allele": "C",
