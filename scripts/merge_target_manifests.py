@@ -166,10 +166,14 @@ def merge(paths: list[Path]) -> dict[str, Any]:
                         existing.pop(field, None)
                         if field == "reference_allele":
                             for key in list(existing):
-                                if key.startswith("assessed_allele_evidence") or key.startswith(
-                                    "assessed_allele_reference"
+                                if key == "assessed_allele" or key.startswith(
+                                    "assessed_allele_"
                                 ):
                                     existing.pop(key, None)
+                            existing["assessed_allele_reason"] = (
+                                "alelo avaliado removido porque os registros divergem sobre "
+                                "o alelo de referência"
+                            )
                 elif old_value in (None, "", [], {}) and new_value not in (None, "", [], {}):
                     existing[field] = new_value
 
