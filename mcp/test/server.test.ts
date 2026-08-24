@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
-import { mkdir, mkdtemp, rm, stat, writeFile, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, unlink, writeFile, readFile } from "node:fs/promises";
 import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -10,10 +10,12 @@ import {
   releaseRequestClaim,
   runAudited,
   runFixedScript,
+  withClaimMutationLock,
 } from "../src/server.js";
 
 const CLAIM_ID_A = "00000000-0000-4000-8000-000000000001";
 const CLAIM_ID_B = "00000000-0000-4000-8000-000000000002";
+const DEAD_OWNER_PID = 2_147_483_647;
 
 test("MCP initialization lists only approved tools with annotations", async () => {
   const server = createGenomeMcpServer({
@@ -95,7 +97,7 @@ test("runAudited atomically prevents concurrent duplicate execution", async () =
   assert.equal(executions, 1, "same requestId must not execute the operation twice");
 });
 
-test("runAudited recovers a stale request claim before executing", async () => {
+test("runAudited recovers a stale request claim only after its owner is gone", async () => {
   const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-stale-"));
   const options = {
     projectRoot: "/opt/codework",
@@ -111,6 +113,7 @@ test("runAudited recovers a stale request claim before executing", async () => {
       tool: "runtime_status",
       claimedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
       claimId: CLAIM_ID_A,
+      ownerPid: DEAD_OWNER_PID,
     })}\n`,
     { mode: 0o600 },
   );
@@ -124,6 +127,40 @@ test("runAudited recovers a stale request claim before executing", async () => {
 
   assert.deepEqual(result, { status: "PASS" });
   await assert.rejects(stat(claimPath), /ENOENT/);
+});
+
+test("elapsed time alone never recovers a claim whose owner is still alive", async () => {
+  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-live-stale-"));
+  const options = {
+    projectRoot: "/opt/codework",
+    referenceRoot: "/refs",
+    resultsRoot: "/results",
+    auditRoot,
+  };
+  const claimPath = path.join(auditRoot, "live-stale.json.claim");
+  await writeFile(
+    claimPath,
+    `${JSON.stringify({
+      requestId: "live-stale",
+      tool: "runtime_status",
+      claimedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      claimId: CLAIM_ID_A,
+      ownerPid: process.pid,
+    })}\n`,
+    { mode: 0o600 },
+  );
+  let executions = 0;
+
+  await assert.rejects(
+    runAudited(options, "runtime_status", { requestId: "live-stale" }, async () => {
+      executions += 1;
+      return { status: "PASS" };
+    }),
+    /already in progress/,
+  );
+
+  assert.equal(executions, 0, "an active owner must not be fenced out by elapsed time");
+  assert.equal((await stat(claimPath)).isFile(), true);
 });
 
 test("two concurrent stale-claim recoverers allow only one operation to proceed", async () => {
@@ -142,6 +179,7 @@ test("two concurrent stale-claim recoverers allow only one operation to proceed"
       tool: "runtime_status",
       claimedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
       claimId: CLAIM_ID_A,
+      ownerPid: DEAD_OWNER_PID,
     })}\n`,
     { mode: 0o600 },
   );
@@ -185,6 +223,66 @@ test("two concurrent stale-claim recoverers allow only one operation to proceed"
   assert.equal(outcomes.filter((item) => item.kind === "fulfilled").length, 1);
   assert.equal(outcomes.filter((item) => item.kind === "rejected").length, 1);
   assert.equal(executions, 1, "stale-claim recovery must not execute twice");
+});
+
+test("runAudited recovers an orphaned interprocess mutation lock", async () => {
+  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-lock-orphan-"));
+  const options = {
+    projectRoot: "/opt/codework",
+    referenceRoot: "/refs",
+    resultsRoot: "/results",
+    auditRoot,
+  };
+  const claimPath = path.join(auditRoot, "lock-orphan.json.claim");
+  const lockPath = `${claimPath}.lock`;
+  await mkdir(lockPath, { mode: 0o700 });
+  await writeFile(
+    path.join(lockPath, `owner-${CLAIM_ID_A}.json`),
+    `${JSON.stringify({
+      lockId: CLAIM_ID_A,
+      ownerPid: DEAD_OWNER_PID,
+      lockedAt: new Date(Date.now() - 60_000).toISOString(),
+      state: "HELD",
+    })}\n`,
+    { mode: 0o600 },
+  );
+
+  const result = await runAudited(
+    options,
+    "runtime_status",
+    { requestId: "lock-orphan" },
+    async () => ({ status: "PASS" }),
+  );
+
+  assert.deepEqual(result, { status: "PASS" });
+  await assert.rejects(stat(lockPath), /ENOENT/);
+});
+
+test("mutation-lock cleanup failure cannot replace the operation result and remains recoverable", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-cleanup-"));
+  const claimPath = path.join(dir, "claim");
+  const lockPath = `${claimPath}.lock`;
+  const unexpected = path.join(lockPath, "unexpected");
+  const warnings: unknown[][] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args);
+  };
+  try {
+    const first = await withClaimMutationLock(claimPath, async () => {
+      await writeFile(unexpected, "blocks rmdir\n", "utf8");
+      return "FIRST";
+    });
+    assert.equal(first, "FIRST");
+    assert.equal(warnings.length, 1, "cleanup failure must be logged without replacing the result");
+
+    await unlink(unexpected);
+    const second = await withClaimMutationLock(claimPath, async () => "SECOND");
+    assert.equal(second, "SECOND", "release-pending lock must be recoverable on the next acquisition");
+  } finally {
+    console.warn = originalWarn;
+    await rm(lockPath, { recursive: true, force: true });
+  }
 });
 
 test("runAudited rejects malformed request claim metadata without executing", async () => {
@@ -242,6 +340,7 @@ test("releaseRequestClaim still unlinks when handle close fails", async () => {
       tool: "runtime_status",
       claimedAt: new Date().toISOString(),
       claimId: CLAIM_ID_A,
+      ownerPid: process.pid,
     })}\n`,
   );
   const warnings: unknown[][] = [];
@@ -276,6 +375,7 @@ test("releaseRequestClaim never removes a replacement claim", async () => {
       tool: "runtime_status",
       claimedAt: new Date().toISOString(),
       claimId: CLAIM_ID_B,
+      ownerPid: process.pid,
     })}\n`,
   );
   const warnings: unknown[][] = [];
