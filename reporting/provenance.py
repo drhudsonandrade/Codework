@@ -712,8 +712,39 @@ class PayloadCompiler:
         artifact = self._artifacts.get(CONSENT_ARTIFACT)
         record = artifact.payload if artifact is not None else None
         if artifact is not None:
+            if self._fixture_consent:
+                input_sha256 = "fixture"
+            else:
+                control_artifacts = {
+                    CONSENT_ARTIFACT,
+                    POLICY_EVALUATION_ARTIFACT,
+                    POST_DEPLOYMENT_WITNESS_ARTIFACT,
+                }
+                input_hashes = {
+                    str(candidate.payload.get("input_sha256") or "").strip()
+                    for name, candidate in self._artifacts.items()
+                    if name not in control_artifacts
+                    and isinstance(candidate.payload, dict)
+                    and str(candidate.payload.get("input_sha256") or "").strip()
+                }
+                if len(input_hashes) != 1:
+                    return {
+                        "covers": False,
+                        "report_domain": REPORT_DOMAINS.get(str(self.report_id)),
+                        "record_sha256": artifact.sha256,
+                        "origin": "operator-record",
+                        "basis": (
+                            "o registro de consentimento não pode ser vinculado aos bytes "
+                            "analisados: a execução não declara um input_sha256 único"
+                        ),
+                    }
+                input_sha256 = next(iter(input_hashes))
             try:
-                validate_consent(record, case_id=self.case_id)
+                validate_consent(
+                    record,
+                    case_id=self.case_id,
+                    input_sha256=input_sha256,
+                )
             except ConsentError as exc:
                 return {
                     "covers": False,
