@@ -56,6 +56,24 @@ def _write_project_attestation(root: Path) -> tuple[Path, Path]:
     return source, output
 
 
+def _assert_manual_ceremony_attestation_step_is_main_gated(text: str) -> None:
+    job_marker = "  live-section-260:\n"
+    if job_marker not in text:
+        raise AssertionError("live-section-260 job is missing")
+    job = text.split(job_marker, 1)[1]
+    step_marker = "      - name: Generate and pin fresh ruleset bootstrap attestation for exact main SHA\n"
+    if step_marker not in job:
+        raise AssertionError("bootstrap attestation step is missing from live-section-260")
+    before_step, after_step = job.split(step_marker, 1)
+    if "    if: github.ref == 'refs/heads/main'\n" not in before_step:
+        raise AssertionError("bootstrap attestation step is not protected by the live-section-260 main gate")
+    step_body = after_step.split("\n      - name:", 1)[0]
+    if "python3 -m scripts.bootstrap_attestation --write" not in step_body:
+        raise AssertionError("bootstrap attestation command is not in the protected step")
+    if '--result-locator "$locator"' not in step_body:
+        raise AssertionError("bootstrap attestation result locator is not published by the protected step")
+
+
 class PostMergeBootstrapGovernanceTests(unittest.TestCase):
     def test_project_instructions_attestation_verifier_exists(self) -> None:
         self.assertIsNotNone(
@@ -213,14 +231,15 @@ class PostMergeBootstrapGovernanceTests(unittest.TestCase):
                 path,
                 expected_file_sha256=None,  # type: ignore[arg-type]
             )
-        with self.assertRaisesRegex(
-            bootstrap_attestation.BootstrapAttestationError,
-            "digest mismatch",
-        ):
+        try:
             bootstrap_attestation.verify_bootstrap_attestation(
                 path,
                 expected_file_sha256="0" * 64,
             )
+        except bootstrap_attestation.BootstrapAttestationError as exc:
+            self.assertIn("digest mismatch", str(exc))
+        else:
+            self.fail("a syntactically valid but incorrect bootstrap digest must fail closed")
 
     def test_bootstrap_result_locator_mismatch_fails_closed(self) -> None:
         path = ROOT / "deploy" / "attestations" / "bootstrap-project-v3.4.json"
@@ -255,14 +274,19 @@ class PostMergeBootstrapGovernanceTests(unittest.TestCase):
         text = (ROOT / ".github" / "workflows" / "genoma-production-ceremony.yml").read_text(
             encoding="utf-8"
         )
-        self.assertIn("if: github.ref == 'refs/heads/main'", text)
-        self.assertIn("test \"$GITHUB_REF\" = 'refs/heads/main'", text)
-        self.assertIn("python3 -m scripts.bootstrap_attestation --write", text)
-        self.assertIn("--result-locator \"$locator\"", text)
-        self.assertIn("GENOMA_BOOTSTRAP_ATTESTATION_SHA256", text)
+        _assert_manual_ceremony_attestation_step_is_main_gated(text)
         self.assertIn("--bootstrap-attestation-sha256", text)
         self.assertIn("--bootstrap-result-locator", text)
         self.assertIn("--expected-source-commit \"$GITHUB_SHA\"", text)
+
+        mutated = text.replace("    if: github.ref == 'refs/heads/main'\n", "", 1)
+        self.assertNotEqual(mutated, text, "mutation must remove the main gate")
+        try:
+            _assert_manual_ceremony_attestation_step_is_main_gated(mutated)
+        except AssertionError as exc:
+            self.assertIn("not protected", str(exc))
+        else:
+            self.fail("mutation removing the main gate must invalidate the protected attestation-step contract")
 
     def test_main_ruleset_is_fail_closed(self) -> None:
         ruleset = json.loads((ROOT / ".github/governance/main-ruleset.json").read_text(encoding="utf-8"))
