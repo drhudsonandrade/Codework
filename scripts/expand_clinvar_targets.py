@@ -505,10 +505,17 @@ def gene_validity(
             modes_by_disease[str(curation["disease"]).lower()].add(
                 normalised_moi(curation["mode_of_inheritance"])
             )
+    gencc_modes_by_disease: dict[str, set[str]] = defaultdict(set)
     for group in established_gencc:
         if group.get("disease") and group.get("mode_of_inheritance"):
-            modes_by_disease[str(group["disease"]).lower()].add(group["mode_of_inheritance"])
+            disease = str(group["disease"]).lower()
+            mode = normalised_moi(group["mode_of_inheritance"])
+            modes_by_disease[disease].add(mode)
+            gencc_modes_by_disease[disease].add(mode)
     conflicting = sorted(d for d, modes in modes_by_disease.items() if len(modes) > 1)
+    gencc_conflicts = sorted(
+        disease for disease, modes in gencc_modes_by_disease.items() if len(modes) > 1
+    )
 
     panel = _panelapp_block(gene, panelapp or {})
     dose = _dosage_block(gene, dosage or {})
@@ -552,7 +559,7 @@ def gene_validity(
             "modes_of_inheritance": sorted({g["mode_of_inheritance"] for g in established_gencc}),
             "diseases": sorted({g["disease"] for g in established_gencc}),
             "established": bool(established_gencc),
-            "mode_of_inheritance_conflicts": [],
+            "mode_of_inheritance_conflicts": gencc_conflicts,
         },
         "status": "VERIFICADO" if established_by else UNAVAILABLE,
         "established": bool(established_by),
