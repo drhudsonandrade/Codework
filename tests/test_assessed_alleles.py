@@ -228,6 +228,11 @@ class DecisionRuleTest(unittest.TestCase):
                 patch.object(curation, "frequency_alleles", return_value={}),
                 patch.object(curation, "clinvar_citations", return_value=[]),
                 patch.object(curation, "cpic_variant_alleles", return_value={}),
+                patch.object(
+                    curation,
+                    "gwas_risk_alleles",
+                    return_value={"available": False, "risk_alleles": {}, "studies": 0},
+                ),
                 patch.object(curation.time, "sleep"),
             ):
                 result = curation.curate_target("rs1")
