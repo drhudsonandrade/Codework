@@ -103,7 +103,9 @@ def check_coordinate(
         }
 
     observed_chromosome = str(observation.get("chromosome") or "").strip().upper().removeprefix("CHR")
-    expected_chromosome = str(expected.get("chromosome") or "").strip().upper()
+    expected_chromosome = (
+        str(expected.get("chromosome") or "").strip().upper().removeprefix("CHR")
+    )
     try:
         observed_position = int(str(observation.get("position") or "").strip())
     except ValueError:
@@ -223,6 +225,7 @@ def _observation_status(rows: list[dict[str, Any]]) -> str:
         "REGISTRY_COORDINATES_UNAVAILABLE",
         "BUILD_COORDINATE_MISSING",
         "EXPECTED_POSITION_INVALID",
+        "AMBIGUOUS_COORDINATE",
     }:
         return "INFERIDO"
     return "NÃO DISPONÍVEL"
