@@ -25,6 +25,7 @@ not happen.
 from __future__ import annotations
 
 import json
+from functools import lru_cache
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -132,6 +133,18 @@ def load_curation(path: Path | str | None = None) -> dict[str, Any]:
     return curation
 
 
+@lru_cache(maxsize=1)
+def _canonical_section_hashes() -> dict[int, str]:
+    from policy_engine.genoma_policy.ruleset import _compile_sections
+    from scripts.sealed_ruleset import decode_verified_payload
+
+    raw, _evidence = decode_verified_payload(ROOT / "normative" / "sealed")
+    return {
+        section.number: section.sha256
+        for section in _compile_sections(raw.decode("utf-8"))
+    }
+
+
 def validate_curation(curation: dict[str, Any]) -> list[str]:
     """Every problem with the curation itself, before any run consumes it.
 
@@ -156,8 +169,16 @@ def validate_curation(curation: dict[str, Any]) -> list[str]:
             problems.append(f"{prefix}: status {status!r} invalid")
         if not str(entry.get("justification") or "").strip():
             problems.append(f"{prefix}: justification is required")
-        if not isinstance(entry.get("rule_sha256"), str) or len(entry["rule_sha256"]) != 64:
-            problems.append(f"{prefix}: rule_sha256 must be the section's SHA-256")
+        declared_hash = entry.get("rule_sha256")
+        expected_hash = _canonical_section_hashes().get(int(key))
+        if (
+            not isinstance(declared_hash, str)
+            or len(declared_hash) != 64
+            or declared_hash != expected_hash
+        ):
+            problems.append(
+                f"{prefix}: rule_sha256 must match the canonical section SHA-256"
+            )
         refs = entry.get("evidence_refs")
         if not isinstance(refs, list) or any(not isinstance(r, str) or not r for r in refs):
             problems.append(f"{prefix}: evidence_refs must be a list of ids")
