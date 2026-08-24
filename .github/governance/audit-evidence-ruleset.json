@@ -2,7 +2,13 @@
   "name": "GENOMA append-only audit evidence",
   "target": "branch",
   "enforcement": "active",
-  "bypass_actors": [],
+  "bypass_actors": [
+    {
+      "actor_id": null,
+      "actor_type": "DeployKey",
+      "bypass_mode": "always"
+    }
+  ],
   "conditions": {
     "ref_name": {
       "include": [
@@ -17,6 +23,12 @@
     },
     {
       "type": "non_fast_forward"
+    },
+    {
+      "type": "update",
+      "parameters": {
+        "update_allows_fetch_and_merge": false
+      }
     }
   ]
 }
