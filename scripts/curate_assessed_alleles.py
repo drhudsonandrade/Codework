@@ -102,14 +102,45 @@ def _get(url: str, *, attempts: int = 4) -> dict[str, Any]:
 def clinvar_records(rsid: str) -> list[dict[str, Any]]:
     """Every ClinVar summary the rsid text search returns, unfiltered."""
     term = urllib.parse.quote(rsid)
-    found = _get(f"{EUTILS}/esearch.fcgi?db=clinvar&term={term}&retmax=50&retmode=json")
-    ids = found.get("esearchresult", {}).get("idlist", [])
-    if not ids:
-        return []
-    time.sleep(REQUEST_INTERVAL_SECONDS)
-    summary = _get(f"{EUTILS}/esummary.fcgi?db=clinvar&id={','.join(ids[:50])}&retmode=json")
-    result = summary.get("result", {})
-    return [result[uid] for uid in result.get("uids", []) if uid in result]
+    ids: list[str] = []
+    retstart = 0
+    count: int | None = None
+    while count is None or retstart < count:
+        found = _get(
+            f"{EUTILS}/esearch.fcgi?db=clinvar&term={term}"
+            f"&retstart={retstart}&retmax=50&retmode=json"
+        )
+        search = found.get("esearchresult", {})
+        if count is None:
+            try:
+                count = int(search.get("count") or 0)
+            except (TypeError, ValueError) as exc:
+                raise CurationError(f"{rsid}: ClinVar esearch returned an invalid count") from exc
+        page = [str(uid) for uid in search.get("idlist", []) if str(uid)]
+        ids.extend(page)
+        retstart += len(page)
+        if not page:
+            break
+        if retstart < count:
+            time.sleep(REQUEST_INTERVAL_SECONDS)
+    if count is not None and len(ids) < count:
+        raise CurationError(
+            f"{rsid}: ClinVar returned {len(ids)} of {count} record ids; refusing partial curation"
+        )
+    records: list[dict[str, Any]] = []
+    for start in range(0, len(ids), 50):
+        time.sleep(REQUEST_INTERVAL_SECONDS)
+        chunk = ids[start : start + 50]
+        summary = _get(
+            f"{EUTILS}/esummary.fcgi?db=clinvar&id={','.join(chunk)}&retmode=json"
+        )
+        result = summary.get("result", {})
+        records.extend(result[uid] for uid in result.get("uids", []) if uid in result)
+    if len(records) != len(ids):
+        raise CurationError(
+            f"{rsid}: ClinVar returned {len(records)} of {len(ids)} summaries; refusing partial curation"
+        )
+    return records
 
 
 def clinvar_citations(uids: list[str]) -> list[str]:
@@ -245,6 +276,7 @@ def curate_target(rsid: str, pgx_registry: dict[str, Any] | None = None) -> dict
 
     # SPDI positions are 0-based; the placement is 1-based.
     expected_position = int(grch38["position"]) - 1
+    expected_sequence = str(grch38.get("seq_id") or "")
     reference = grch38["reference_allele"]
 
     matched: list[dict[str, Any]] = []
@@ -255,9 +287,15 @@ def curate_target(rsid: str, pgx_registry: dict[str, Any] | None = None) -> dict
         spdi = _spdi(record)
         if spdi is None:
             continue
-        _sequence, position, deleted, inserted = spdi
-        # Coordinate join: a text search for an rsid also returns unrelated variants.
-        if position != expected_position or deleted != reference:
+        sequence, position, deleted, inserted = spdi
+        # Coordinate join: sequence, position and reference must all describe the same
+        # GRCh38 placement. A numeric position alone is not globally unique.
+        if (
+            not expected_sequence
+            or sequence != expected_sequence
+            or position != expected_position
+            or deleted != reference
+        ):
             continue
         if inserted == reference or inserted not in BASES:
             continue  # the reference-identity record, or an indel
