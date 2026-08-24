@@ -37,6 +37,7 @@ this project's clinical opinion.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -172,8 +173,12 @@ def validate_record(
             continue
         if _is_unavailable(value):
             continue
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            problems.append(f"metrics.{key} ({label}): {value!r} não é um número")
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+        ):
+            problems.append(f"metrics.{key} ({label}): {value!r} não é um número finito")
             continue
         if low is not None and value < low:
             problems.append(f"metrics.{key} ({label}): {value} abaixo de {low}")
