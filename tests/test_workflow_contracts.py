@@ -10,6 +10,8 @@ class WorkflowContractTest(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/genoma-production-witness.yml").read_text(encoding="utf-8")
         self.assertIn("--output evidence/live-section-260/summary.json", workflow)
         self.assertIn("--deployment-id", workflow)
+        self.assertIn("--bootstrap-attestation-sha256", workflow)
+        self.assertIn("--bootstrap-result-locator", workflow)
         self.assertNotIn("--output-dir evidence/live-section-260", workflow)
 
     def test_production_witness_covers_every_main_commit(self):
@@ -19,15 +21,17 @@ class WorkflowContractTest(unittest.TestCase):
         push_block = header.split("push:\n", 1)[1].split("workflow_dispatch:", 1)[0]
         self.assertNotIn("paths:", push_block)
 
-    def test_production_witness_write_permission_is_isolated_to_main_publish_job(self):
+    def test_production_witness_publisher_uses_restricted_deploy_key_without_token_write(self):
         workflow = (ROOT / ".github/workflows/genoma-production-witness.yml").read_text(encoding="utf-8")
         self.assertIn("permissions:\n  contents: read", workflow)
         self.assertIn("publish-witness:", workflow)
         publish = workflow.split("publish-witness:", 1)[1]
         self.assertIn("if: github.event_name == 'push' && github.ref == 'refs/heads/main'", publish)
-        self.assertIn("permissions:\n      contents: write", publish)
-        witness = workflow.split("jobs:", 1)[1].split("publish-witness:", 1)[0]
-        self.assertNotIn("contents: write", witness)
+        self.assertIn("permissions:\n      contents: read", publish)
+        self.assertIn("GENOMA_AUDIT_DEPLOY_KEY", publish)
+        self.assertIn("ssh-key: ${{ secrets.GENOMA_AUDIT_DEPLOY_KEY }}", publish)
+        self.assertNotIn("contents: write", workflow)
+        self.assertNotIn("GENOMA_AUDIT_PUBLISH_TOKEN", workflow)
 
     def test_manual_production_ceremony_does_not_duplicate_every_main_push(self):
         workflow = (ROOT / ".github/workflows/genoma-production-ceremony.yml").read_text(encoding="utf-8")
