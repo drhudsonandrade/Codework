@@ -122,6 +122,30 @@ test("runAudited recovers a stale request claim before executing", async () => {
   await assert.rejects(stat(claimPath), /ENOENT/);
 });
 
+test("runAudited rejects malformed request claim metadata without executing", async () => {
+  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-invalid-claim-"));
+  const options = {
+    projectRoot: "/opt/codework",
+    referenceRoot: "/refs",
+    resultsRoot: "/results",
+    auditRoot,
+  };
+  const claimPath = path.join(auditRoot, "invalid-claim.json.claim");
+  await writeFile(claimPath, "null\n", { mode: 0o600 });
+  let executions = 0;
+
+  await assert.rejects(
+    runAudited(options, "runtime_status", { requestId: "invalid-claim" }, async () => {
+      executions += 1;
+      return { status: "PASS" };
+    }),
+    /already in progress/,
+  );
+
+  assert.equal(executions, 0, "invalid claims must block acquisition fail-closed");
+  assert.equal((await stat(claimPath)).isFile(), true, "invalid claim evidence must not be deleted");
+});
+
 test("runAudited stores and replays a sanitized failure", async () => {
   const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-fail-"));
   const options = {
