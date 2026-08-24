@@ -65,6 +65,50 @@ class ClinvarCoordinateIdentityTests(unittest.TestCase):
         self.assertEqual(second["status"], "VERIFICADO")
         self.assertEqual(second["records"][0]["accession"], "VCV2")
 
+    def test_clinvar_pagination_collects_every_uid(self):
+        placement = {
+            "GRCh38": {
+                "seq_id": "NC_000001.11",
+                "position": 101,
+                "reference_allele": "A",
+            }
+        }
+        ids = [str(index) for index in range(1, 22)]
+        pages = [
+            {"esearchresult": {"count": "21", "idlist": ids[:20]}},
+            {"esearchresult": {"count": "21", "idlist": ids[20:]}},
+        ]
+        summary = {"result": {"uids": ids}}
+        for uid in ids:
+            summary["result"][uid] = _summary(
+                "NC_000001.11", 100, "A"
+            )["result"]["1"]
+        with (
+            patch.object(CURATE, "fetch_refsnp", return_value={}),
+            patch.object(CURATE, "placements", return_value=placement),
+            patch.object(CURATE, "_json", side_effect=[*pages, summary]) as fetched,
+            patch.object(CURATE.time, "sleep"),
+        ):
+            result = CURATE.fetch_clinvar_conditions("rs123")
+        self.assertEqual(result["status"], "VERIFICADO")
+        self.assertEqual(len(result["records"]), 21)
+        self.assertEqual(fetched.call_count, 3)
+
+    def test_clinvar_fetch_failure_is_local_to_one_locus(self):
+        with patch.object(
+            CURATE,
+            "fetch_clinvar_conditions",
+            side_effect=[
+                CURATE.CurationError("temporary ClinVar failure"),
+                {"status": "VERIFICADO", "records": [{"accession": "VCV2"}]},
+            ],
+        ):
+            first = CURATE._clinvar_for_locus("rs1")
+            second = CURATE._clinvar_for_locus("rs2")
+        self.assertEqual(first["status"], CURATE.UNAVAILABLE)
+        self.assertIn("temporary ClinVar failure", first["reason"])
+        self.assertEqual(second["status"], "VERIFICADO")
+
     def test_matching_grch38_spdi_is_verified(self):
         result = self._run(_summary("NC_000001.11", 100, "A"))
         self.assertEqual(result["status"], "VERIFICADO")
