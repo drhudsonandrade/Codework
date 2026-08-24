@@ -30,12 +30,13 @@ class AuditEvidenceRulesetLayeringTests(unittest.TestCase):
             ["refs/heads/audit-evidence"],
         )
 
-    def test_publisher_bypass_applies_only_to_update_restriction(self) -> None:
+    def test_publisher_bypass_applies_only_to_one_strict_update_restriction(self) -> None:
         ruleset = _load(PUBLISHER_RULESET)
         self.assertEqual(ruleset["enforcement"], "active")
         self.assertEqual(ruleset["bypass_actors"], DEPLOY_KEY_BYPASS)
-        self.assertEqual({rule["type"] for rule in ruleset["rules"]}, {"update"})
+        self.assertEqual(len(ruleset["rules"]), 1)
         update = ruleset["rules"][0]
+        self.assertEqual(update["type"], "update")
         self.assertFalse(update["parameters"]["update_allows_fetch_and_merge"])
         self.assertEqual(
             ruleset["conditions"]["ref_name"]["include"],
