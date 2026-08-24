@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
-import { chmod, mkdir, open, readFile, unlink } from "node:fs/promises";
+import { chmod, mkdir, open, readFile, rmdir, unlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -59,6 +59,8 @@ const GROUP_TERMINATION_GRACE_MS = 5_000;
 /** A claim may be recovered only after every supported tool budget has expired. */
 const REQUEST_CLAIM_STALE_MS =
   Math.max(...Object.values(TOOL_TIMEOUTS_MS)) + GROUP_TERMINATION_GRACE_MS + MINUTE_MS;
+const CLAIM_LOCK_RETRY_MS = 10;
+const CLAIM_LOCK_WAIT_MS = 2_000;
 /** POSIX only: a negative pid signals the whole process group instead of one process. */
 const USE_PROCESS_GROUP = process.platform !== "win32";
 
@@ -232,6 +234,7 @@ async function persistOutcome(
 
 type RequestClaim = {
   claimPath: string;
+  claimId: string;
   handle: Awaited<ReturnType<typeof open>>;
 };
 
@@ -239,6 +242,7 @@ type RequestClaimMetadata = {
   requestId: string;
   tool: string;
   claimedAt: string;
+  claimId: string;
 };
 
 const requestClaimMetadataSchema = z
@@ -246,6 +250,7 @@ const requestClaimMetadataSchema = z
     requestId: z.string(),
     tool: z.string(),
     claimedAt: z.string(),
+    claimId: z.string().uuid(),
   })
   .strict();
 
@@ -272,11 +277,7 @@ async function inspectRequestClaim(claimPath: string): Promise<ClaimInspection> 
 }
 
 function claimMetadataMatches(metadata: RequestClaimMetadata, requestId: string, tool: string): boolean {
-  return (
-    metadata.requestId === requestId &&
-    metadata.tool === tool &&
-    typeof metadata.claimedAt === "string"
-  );
+  return metadata.requestId === requestId && metadata.tool === tool;
 }
 
 function claimTimestampIsStale(claimedAt: string): boolean {
@@ -284,33 +285,79 @@ function claimTimestampIsStale(claimedAt: string): boolean {
   return Number.isFinite(parsed) && Date.now() - parsed > REQUEST_CLAIM_STALE_MS;
 }
 
-async function isRecoverableStaleClaim(
-  claimPath: string,
+function isRecoverableStaleClaim(
+  inspection: ClaimInspection,
   requestId: string,
   tool: string,
-): Promise<boolean> {
-  const inspection = await inspectRequestClaim(claimPath);
-  if (inspection.kind === "missing") {
-    return true;
+): boolean {
+  return (
+    inspection.kind === "metadata" &&
+    claimMetadataMatches(inspection.value, requestId, tool) &&
+    claimTimestampIsStale(inspection.value.claimedAt)
+  );
+}
+
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function acquireClaimMutationLock(lockPath: string): Promise<void> {
+  const deadline = Date.now() + CLAIM_LOCK_WAIT_MS;
+  while (true) {
+    try {
+      await mkdir(lockPath, { mode: 0o700 });
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+        throw error;
+      }
+      if (Date.now() >= deadline) {
+        throw new Error("request claim coordination lock is busy");
+      }
+      await delay(CLAIM_LOCK_RETRY_MS);
+    }
   }
-  if (inspection.kind !== "metadata") {
-    return false;
+}
+
+async function withClaimMutationLock<T>(
+  claimPath: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const lockPath = `${claimPath}.lock`;
+  await acquireClaimMutationLock(lockPath);
+  try {
+    return await operation();
+  } finally {
+    try {
+      await rmdir(lockPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw new Error("request claim coordination lock could not be released");
+      }
+    }
   }
-  return claimMetadataMatches(inspection.value, requestId, tool) && claimTimestampIsStale(inspection.value.claimedAt);
 }
 
 async function createRequestClaim(claimPath: string, requestId: string, tool: string): Promise<RequestClaim> {
+  const claimId = randomUUID();
   const handle = await open(claimPath, "wx", 0o600);
   try {
     await handle.writeFile(
-      `${JSON.stringify({ requestId, tool, claimedAt: new Date().toISOString() })}\n`,
+      `${JSON.stringify({ requestId, tool, claimedAt: new Date().toISOString(), claimId })}\n`,
       "utf8",
     );
   } catch (error) {
-    await releaseRequestClaim({ claimPath, handle });
+    try {
+      await handle.close();
+    } catch {
+      // The original write failure remains the primary error.
+    }
+    try {
+      await unlink(claimPath);
+    } catch {
+      // The coordination lock still prevents another claimant from racing this cleanup.
+    }
     throw error;
   }
-  return { claimPath, handle };
+  return { claimPath, claimId, handle };
 }
 
 async function assertNoCompletedAudit(options: GenomeServerOptions, requestId: string, tool: string): Promise<void> {
@@ -326,8 +373,16 @@ async function assertNoCompletedAudit(options: GenomeServerOptions, requestId: s
   throw new Error("request id completed while another caller held its claim");
 }
 
-async function removeRecoverableStaleClaim(claimPath: string, requestId: string, tool: string): Promise<void> {
-  if (!(await isRecoverableStaleClaim(claimPath, requestId, tool))) {
+async function removeRecoverableStaleClaim(
+  claimPath: string,
+  inspection: ClaimInspection,
+  requestId: string,
+  tool: string,
+): Promise<void> {
+  if (inspection.kind === "missing") {
+    return;
+  }
+  if (!isRecoverableStaleClaim(inspection, requestId, tool)) {
     throw new Error("request id is already in progress");
   }
   try {
@@ -337,16 +392,6 @@ async function removeRecoverableStaleClaim(claimPath: string, requestId: string,
       throw new Error("stale request claim could not be recovered");
     }
   }
-}
-
-async function recoverClaimCollision(
-  options: GenomeServerOptions,
-  claimPath: string,
-  requestId: string,
-  tool: string,
-): Promise<void> {
-  await assertNoCompletedAudit(options, requestId, tool);
-  await removeRecoverableStaleClaim(claimPath, requestId, tool);
 }
 
 async function acquireRequestClaim(
@@ -359,26 +404,24 @@ async function acquireRequestClaim(
   await chmod(root, 0o700);
   const claimPath = `${resolveUnderRoot(root, requestId)}.claim`;
 
-  while (true) {
-    try {
-      return await createRequestClaim(claimPath, requestId, tool);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-        throw error;
-      }
-      await recoverClaimCollision(options, claimPath, requestId, tool);
-      // Retry O_EXCL acquisition after removing a demonstrably stale claim. If another
-      // caller wins the race, this loop observes its new claim and fails closed as active.
-    }
-  }
+  return withClaimMutationLock(claimPath, async () => {
+    await assertNoCompletedAudit(options, requestId, tool);
+    const inspection = await inspectRequestClaim(claimPath);
+    await removeRecoverableStaleClaim(claimPath, inspection, requestId, tool);
+    return createRequestClaim(claimPath, requestId, tool);
+  });
 }
 
-function logClaimReleaseFailure(stage: "close" | "unlink", error: unknown): void {
+function logClaimReleaseFailure(stage: "close" | "unlink" | "lock", error: unknown): void {
   const code = (error as NodeJS.ErrnoException).code;
   if (code === "ENOENT") {
     return;
   }
   console.warn("request claim release cleanup failed", { stage, code: code ?? "UNKNOWN" });
+}
+
+function logClaimOwnershipChange(): void {
+  console.warn("request claim release skipped because ownership changed or metadata is invalid");
 }
 
 /** @internal Exported for deterministic cleanup tests. */
@@ -388,10 +431,25 @@ export async function releaseRequestClaim(claim: RequestClaim): Promise<void> {
   } catch (error) {
     logClaimReleaseFailure("close", error);
   }
+
   try {
-    await unlink(claim.claimPath);
+    await withClaimMutationLock(claim.claimPath, async () => {
+      const inspection = await inspectRequestClaim(claim.claimPath);
+      if (inspection.kind === "missing") {
+        return;
+      }
+      if (inspection.kind !== "metadata" || inspection.value.claimId !== claim.claimId) {
+        logClaimOwnershipChange();
+        return;
+      }
+      try {
+        await unlink(claim.claimPath);
+      } catch (error) {
+        logClaimReleaseFailure("unlink", error);
+      }
+    });
   } catch (error) {
-    logClaimReleaseFailure("unlink", error);
+    logClaimReleaseFailure("lock", error);
   }
 }
 
@@ -448,8 +506,8 @@ export async function runAudited<T>(
     return prior.value;
   }
 
-  // O_EXCL establishes ownership before the operation begins. Concurrent callers with
-  // the same requestId cannot both cross this point, including across server processes.
+  // A short-lived interprocess lock serializes claim-path mutation. The claim's UUID
+  // then binds release to the exact ownership generation that acquired it.
   const claim = await acquireRequestClaim(options, requestId, tool);
   const startedAt = new Date().toISOString();
   const started = Date.now();
