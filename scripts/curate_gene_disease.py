@@ -111,7 +111,10 @@ def _fetch(url: str, *, attempts: int = 4, accept: str = "application/json") -> 
 
 
 def _json(url: str) -> Any:
-    return json.loads(_fetch(url).decode("utf-8"))
+    try:
+        return json.loads(_fetch(url).decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise CurationError(f"response from {url} is not valid UTF-8 JSON: {exc}") from exc
 
 
 def fetch_clingen_validity() -> dict[str, Any]:
