@@ -8,6 +8,7 @@ from pathlib import Path
 from array_pipeline.clinical_findings import (
     GENOTIPO_DE_RISCO,
     _interpretation,
+    _registry_totals,
     _validity_for,
     build_clinical_findings,
 )
@@ -83,6 +84,32 @@ class ClinicalFindingsRegressionTest(unittest.TestCase):
         self.assertEqual(
             validity["dominant_diseases"], ["GenCC dominant disease"]
         )
+
+    def test_registry_totals_recompute_stored_validity_summaries(self):
+        totals = _registry_totals({
+            "gene_validity": {
+                "STALE": {
+                    "established": True,
+                    "modes_of_inheritance": ["AD"],
+                    "clingen": {"curations": []},
+                    "gencc": {"established_groups": []},
+                },
+                "CURRENT": {
+                    "established": False,
+                    "modes_of_inheritance": [],
+                    "gencc": {
+                        "established_groups": [{
+                            "established": True,
+                            "disease": "Current disease",
+                            "mode_of_inheritance": "Autosomal recessive",
+                        }]
+                    },
+                },
+            }
+        })
+        self.assertEqual(totals["genes_with_established_validity"], 1)
+        self.assertEqual(totals["recessive_genes_established"], 1)
+        self.assertEqual(totals["dominant_genes_established"], 0)
 
     def test_unknown_female_zygosity_is_not_described_as_homozygous(self):
         result = _pathogenic_x_linked("DI", SEX_FEMALE)
