@@ -248,6 +248,29 @@ class DecisionRuleTest(unittest.TestCase):
         self.assertEqual(asserted["assessed_allele"], "T")
 
 
+    def test_apply_writes_verified_status_with_the_allele(self):
+        from scripts.curate_assessed_alleles import _apply_target_assessment
+
+        target = {
+            "rsid": "rs1",
+            "assessed_allele_status": "NÃO DISPONÍVEL",
+            "assessed_allele_reason": "old refusal",
+        }
+        _apply_target_assessment(
+            target,
+            {
+                "assessed_allele": "T",
+                "status": "VERIFICADO",
+                "source": "ClinVar",
+                "references": {},
+            },
+            "evidence.json",
+        )
+        self.assertEqual(target["assessed_allele"], "T")
+        self.assertEqual(target["assessed_allele_status"], "VERIFICADO")
+        self.assertNotIn("assessed_allele_reason", target)
+
+
 class BcheFallbackTest(unittest.TestCase):
     """CPIC publishes no BCHE table; ClinVar supplies the variants, with citation."""
 
