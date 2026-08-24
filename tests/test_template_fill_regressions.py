@@ -26,6 +26,37 @@ class TemplateFillAssayTest(unittest.TestCase):
         self.assertEqual(_resolve("01", "RELATORIO_QC", payload), "a" * 64)
         self.assertIn("array", _resolve("01", "METODO", payload))
 
+    def test_array_manifest_list_exposes_array_qc_evidence_id(self):
+        payload = {
+            "case_id": "CASE",
+            "input": {"schema": "raw_snp_array_v1"},
+            "execution_manifest": [
+                {
+                    "step": "SNP-array ingest/QC",
+                    "status": "EXECUTADO",
+                    "evidence_refs": ["array-qc"],
+                }
+            ],
+        }
+        self.assertEqual(_resolve("01", "RELATORIO_QC", payload), "array-qc")
+
+    def test_pgx_manifest_exposes_both_bound_artifacts(self):
+        payload = {
+            "case_id": "CASE",
+            "input": {"schema": "raw_snp_array_v1"},
+            "execution_manifest": {
+                "PGX_PASSPORT_SHA256": "p" * 64,
+                "COMPLETENESS_MATRIX_SHA256": "m" * 64,
+            },
+        }
+        self.assertEqual(
+            _resolve("06", "RELATORIO_QC", payload),
+            {
+                "PGX_PASSPORT_SHA256": "p" * 64,
+                "COMPLETENESS_MATRIX_SHA256": "m" * 64,
+            },
+        )
+
     def test_clinical_counts_use_their_declared_fields(self):
         payload = {
             "findings": [
