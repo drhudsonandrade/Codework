@@ -11,7 +11,6 @@
   },
   "comparison_contract": "Original v3.0 PDF is the immutable base; replacement overlays are confined to compiled dynamic placeholder/control rectangles. Compare raster output outside all dynamic/control masks. PASS requires exactly zero changed pixels outside masks on every page.",
   "coordinate_compiler": {
-    "compressed_detail_sha256": "36075872c6b5f625fa45c54b01277a07e5b2ae579e59112279ef0e6be7e0b6df",
     "field_counts": {
       "01": 130,
       "02": 117,
