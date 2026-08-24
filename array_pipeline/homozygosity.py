@@ -237,10 +237,12 @@ def analyse(
     # Coordinates are checked against the assembly before anything is measured from them. A
     # position past the end of its chromosome is not a marker to skip, it is proof the file is
     # on a different assembly or is corrupt, and every length derived from it would be wrong.
+    chromosome_lengths = assembly.CHROMOSOME_LENGTHS[str(build).strip()]
     out_of_bounds = [
         (chromosome, position)
         for chromosome, position, _genotype in called
-        if chromosome in chromosome_kb and position > chromosome_kb[chromosome] * 1000
+        if chromosome in chromosome_lengths
+        and (position < 1 or position > chromosome_lengths[chromosome])
     ]
     unknown_chromosomes = sorted(
         {chromosome for chromosome, _p, _g in called if chromosome not in chromosome_kb}
@@ -248,9 +250,9 @@ def analyse(
     if out_of_bounds:
         first = out_of_bounds[0]
         refusals.append(
-            f"{len(out_of_bounds):,} marcadores estão além do fim do próprio cromossomo "
-            f"(por exemplo chr{first[0]}:{first[1]:,}, que excede "
-            f"{chromosome_kb[first[0]]:,} kb). O arquivo não está na montagem assumida aqui, "
+            f"{len(out_of_bounds):,} marcadores têm posição inválida ou estão além do fim do próprio cromossomo "
+            f"(por exemplo chr{first[0]}:{first[1]:,}; intervalo válido "
+            f"1..{chromosome_lengths[first[0]]:,} bp). O arquivo não está na montagem assumida aqui, "
             "ou está corrompido; comprimentos de trato calculados sobre essas coordenadas "
             "não descrevem nada."
         )
