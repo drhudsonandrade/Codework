@@ -122,7 +122,9 @@ texto corrido, de modo que o rótulo não possa ser citado separado da suposiç�
 transforma em instrução: seleção gulosa sobre as posições não cobertas, ordenada pela massa de
 frequência que cada uma recupera, com coordenada GRCh38 e o residual após cada passo.
 
-Exemplo real do CPIC (execução sintética, 116 das 342 posições cobertas):
+Exemplo **ilustrativo, não verificado** (não há artefato de saída, SHA-256 da entrada nem
+comando pinado em `docs/evidence/` que sustente estes números; eles não são evidência de
+release):
 
 | gene | posições faltantes | 1ª posição | massa recuperada |
 |---|---|---|---|
@@ -130,9 +132,10 @@ Exemplo real do CPIC (execução sintética, 116 das 342 posições cobertas):
 | SLCO1B1 | 26 | rs2306283 (chr12:21176804) | 0,150 |
 | CYP3A5 | 5 | rs10264272 (chr7:99665212) | 0,193 |
 
-A linha do CYP3A5 é o argumento inteiro em miniatura: `rs10264272` é o `*6`, comum em
+No exemplo, a linha do CYP3A5 ilustra o argumento: `rs10264272` é o `*6`, comum em
 populações africanas, e é a razão pela qual um CYP3A5 chamado só a partir de `rs776746` é
-inseguro para esse grupo. O sistema achou isso sozinho, a partir da tabela do CPIC.
+inseguro para esse grupo. O algoritmo foi desenhado para derivar essa priorização da tabela do CPIC; a tabela acima
+permanece apenas ilustrativa até que uma execução materialize e pine os artefatos.
 
 ## O que continua verdadeiro
 
