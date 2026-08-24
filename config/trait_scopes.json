@@ -36,7 +36,7 @@
     },
     "CURIOSIDADE": {
       "reports": ["08"],
-      "rationale": "Traços não clínicos. Entram no atlas de curiosidades, nunca em conduta: são poligênicos, fortemente influenciados por ambiente, e o relatório 08 os apresenta com o tamanho de efeito e a coorte de descoberta à vista.",
+      "rationale": "Traços comuns de curiosidade, incluindo fenótipos dermatológicos e oftalmológicos de baixa penetrância. Entram somente no atlas de curiosidades, nunca em diagnóstico ou conduta: são poligênicos, fortemente influenciados por ambiente, e o relatório 08 os apresenta com o tamanho de efeito e a coorte de descoberta à vista.",
       "terms": [
         {"id": "EFO_0008328", "label": "chronotype measurement"},
         {"id": "EFO_0003924", "label": "hair color"},
