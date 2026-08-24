@@ -1,3 +1,4 @@
+import json
 import unittest
 from pathlib import Path
 
@@ -37,6 +38,21 @@ def _named_step_block(workflow: str, job_name: str, step_name: str) -> str:
 
 def _shell_test_lines(step: str) -> list[str]:
     return [line.strip() for line in step.splitlines() if line.strip().startswith("test ")]
+
+
+def _assert_attestation_step_is_in_main_gated_ceremony_job(workflow: str) -> None:
+    expected_if = "github.ref == 'refs/heads/main'"
+    if _job_if_condition(workflow, "live-section-260") != expected_if:
+        raise AssertionError("live-section-260 must remain restricted to main")
+    step = _named_step_block(
+        workflow,
+        "live-section-260",
+        "Generate and pin fresh ruleset bootstrap attestation for exact main SHA",
+    )
+    if "python3 -m scripts.bootstrap_attestation --write" not in step:
+        raise AssertionError("bootstrap attestation command must remain in the main-gated job")
+    if '--result-locator "$locator"' not in step:
+        raise AssertionError("bootstrap attestation result locator must remain in the main-gated job")
 
 
 class WorkflowContractTest(unittest.TestCase):
@@ -111,6 +127,42 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertNotEqual(permissive_shell, workflow, "mutation must alter the shell guard")
         mutated_step = _named_step_block(permissive_shell, "live-section-260", "Require protected main ref")
         self.assertNotEqual(_shell_test_lines(mutated_step), ['test "$GITHUB_REF" = \'refs/heads/main\''])
+
+    def test_attestation_step_cannot_move_to_an_unprotected_job(self):
+        workflow = (ROOT / ".github/workflows/genoma-production-ceremony.yml").read_text(encoding="utf-8")
+        _assert_attestation_step_is_in_main_gated_ceremony_job(workflow)
+
+        step_name = "Generate and pin fresh ruleset bootstrap attestation for exact main SHA"
+        mutated = workflow.replace(f"      - name: {step_name}\n", "      - name: displaced attestation step\n", 1)
+        mutated += (
+            "\n  unprotected-attestation:\n"
+            "    runs-on: ubuntu-latest\n"
+            "    steps:\n"
+            f"      - name: {step_name}\n"
+            "        run: |\n"
+            "          locator='production-evidence/bootstrap-project-v3.4.json#/checks'\n"
+            "          python3 -m scripts.bootstrap_attestation --write --result-locator \"$locator\"\n"
+        )
+        with self.assertRaises(AssertionError):
+            _assert_attestation_step_is_in_main_gated_ceremony_job(mutated)
+
+    def test_main_required_policy_checks_have_unconditional_pr_provider(self):
+        policy = (ROOT / ".github/workflows/genoma-policy-engine.yml").read_text(encoding="utf-8")
+        header = policy.split("permissions:", 1)[0]
+        pull_request_block = header.split("  pull_request:\n", 1)[1].split("  push:\n", 1)[0]
+        self.assertNotIn("paths:", pull_request_block)
+
+        ruleset = json.loads((ROOT / ".github/governance/main-ruleset.json").read_text(encoding="utf-8"))
+        status_rule = next(rule for rule in ruleset["rules"] if rule["type"] == "required_status_checks")
+        contexts = {item["context"] for item in status_rule["parameters"]["required_status_checks"]}
+        for context in (
+            "Canonical policy + 263-rule contract",
+            "OPA/Rego parity",
+            "Gitleaks secret scan",
+            "Real Docker + canonical read-only mount",
+        ):
+            self.assertIn(context, contexts)
+            self.assertIn(f"name: {context}", policy)
 
     def test_legacy_editorial_chunk_materializer_is_removed(self):
         self.assertFalse((ROOT / ".github/workflows/genoma-materialize-editorial-upload.yml").exists())
