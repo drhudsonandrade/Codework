@@ -16,6 +16,10 @@ if str(ROOT) not in sys.path:
 
 from genoma_policy.version import __version__
 
+RFC3339_DATE_TIME = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$"
+)
+
 
 def _schema_contract_errors(
     schema: dict[str, Any],
@@ -112,14 +116,15 @@ def _schema_contract_errors(
         if isinstance(pattern, str) and re.search(pattern, instance) is None:
             errors.append(f"{path}:pattern")
         if schema.get("format") == "date-time":
+            valid_datetime = RFC3339_DATE_TIME.fullmatch(instance) is not None
             normalized = instance[:-1] + "+00:00" if instance.endswith("Z") else instance
-            valid_datetime = "T" in instance
-            try:
-                parsed = datetime.fromisoformat(normalized)
-            except ValueError:
-                valid_datetime = False
-            else:
-                valid_datetime = valid_datetime and parsed.tzinfo is not None and parsed.utcoffset() is not None
+            if valid_datetime:
+                try:
+                    parsed = datetime.fromisoformat(normalized)
+                except ValueError:
+                    valid_datetime = False
+                else:
+                    valid_datetime = parsed.tzinfo is not None and parsed.utcoffset() is not None
             if not valid_datetime:
                 errors.append(f"{path}:format:date-time")
 
@@ -144,13 +149,23 @@ class CliTests(unittest.TestCase):
 
     def test_schema_date_time_requires_rfc3339_time_and_offset(self):
         schema = {"type": "string", "format": "date-time"}
-        for invalid in ("2026-08-17", "2026-08-17T12:00:00"):
+        for invalid in (
+            "2026-08-17",
+            "2026-08-17T12:00:00",
+            "2026-08-17T12:00:00+0000",
+            "2026-08-17T12:00:00+00",
+            "2026-08-17T12:00:00+00:00:30",
+        ):
             with self.subTest(invalid=invalid):
                 self.assertEqual(
                     _schema_contract_errors(schema, invalid, schema),
                     ["$:format:date-time"],
                 )
-        for valid in ("2026-08-17T12:00:00Z", "2026-08-17T12:00:00-03:00"):
+        for valid in (
+            "2026-08-17T12:00:00Z",
+            "2026-08-17T12:00:00+00:00",
+            "2026-08-17T12:00:00-03:00",
+        ):
             with self.subTest(valid=valid):
                 self.assertEqual(_schema_contract_errors(schema, valid, schema), [])
 
