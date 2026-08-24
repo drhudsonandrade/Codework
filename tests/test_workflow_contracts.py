@@ -39,6 +39,13 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("workflow_dispatch:", header)
         self.assertNotIn("push:", header)
 
+    def test_manual_production_ceremony_is_main_only(self):
+        workflow = (ROOT / ".github/workflows/genoma-production-ceremony.yml").read_text(encoding="utf-8")
+        self.assertIn("live-section-260:\n    if: github.ref == 'refs/heads/main'", workflow)
+        self.assertIn("test \"$GITHUB_REF\" = 'refs/heads/main'", workflow)
+        checkout = workflow.split("uses: actions/checkout@", 1)[1].split("- uses:", 1)[0]
+        self.assertIn("persist-credentials: false", checkout)
+
     def test_legacy_editorial_chunk_materializer_is_removed(self):
         self.assertFalse((ROOT / ".github/workflows/genoma-materialize-editorial-upload.yml").exists())
 
