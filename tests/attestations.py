@@ -144,7 +144,15 @@ def consent_for(root: Path, artifact_path: Path, **kwargs: Any) -> Path:
     case_id = payload.get("case_id")
     if not str(case_id or "").strip():
         raise ValueError(f"artifact {artifact_path} does not declare a non-empty case_id")
-    return consent_file(root, case_id=str(case_id), **kwargs)
+    input_sha256 = payload.get("input_sha256")
+    if not str(input_sha256 or "").strip():
+        raise ValueError(f"artifact {artifact_path} does not declare a non-empty input_sha256")
+    return consent_file(
+        root,
+        case_id=str(case_id),
+        input_sha256=str(input_sha256),
+        **kwargs,
+    )
 
 
 def wgs_qc_record(*, case_id: str, vcf_sha256: str = "b" * 64, **overrides: Any) -> dict[str, Any]:
