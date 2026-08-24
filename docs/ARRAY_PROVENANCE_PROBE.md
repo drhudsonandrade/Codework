@@ -68,24 +68,26 @@ Three independent checks now close that, and each fails on its own:
 
 ## Result on the real file
 
-```
+```text
 BUILD : VERIFICADO -> GRCh37   (GRCh37=11  GRCh38=0,  threshold 3)
 FITA  : VERIFICADO -> forward  (plus=9     minus=0,   threshold 3)
 ```
 
 with `rs738409` (C/G) and `rs17580` (A/T) correctly recorded as non-informative.
+These counts are a historical measured example; no input/output artifact for that run is
+committed, so they are **not independently reproducible evidence** and must not be used as a
+release gate.
 
-## The marker table is curated and needs verification
+## The marker table is verified against dbSNP
 
-`config/array_provenance_markers.json` carries `verification_status: "PROPOSTO"` and a
-`source` field that says so plainly. The table was curated by hand; **an error in it would
-produce an incorrect provenance attestation**, which is the one place in this design where a
-mistake propagates silently into every downstream report.
+`config/array_provenance_markers.json` carries `verification_status: "VERIFICADO"`.
+The entry-by-entry evidence is
+`docs/evidence/ARRAY_PROVENANCE_MARKERS_DBSNP.json`; reproduce it with
+`python3 scripts/verify_provenance_markers.py --markers config/array_provenance_markers.json --output docs/evidence/ARRAY_PROVENANCE_MARKERS_DBSNP.json`.
+The offline gate `tests/test_provenance_markers.py` binds the shipped table to that evidence.
 
-The attestation the probe emits records that status in its own trace
-(`marker_table_verification_status`), so a reader can see the derivation rests on an
-unverified table. Verifying the eleven entries against dbSNP is a small, bounded task and
-should be done before any clinical use.
+The derivation attestation retains `marker_table_verification_status`, so a consumer can
+verify which table status governed the run.
 
 ## What the probe deliberately does not do
 
