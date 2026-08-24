@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
-import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile, readFile } from "node:fs/promises";
 import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -11,6 +11,9 @@ import {
   runAudited,
   runFixedScript,
 } from "../src/server.js";
+
+const CLAIM_ID_A = "00000000-0000-4000-8000-000000000001";
+const CLAIM_ID_B = "00000000-0000-4000-8000-000000000002";
 
 test("MCP initialization lists only approved tools with annotations", async () => {
   const server = createGenomeMcpServer({
@@ -107,6 +110,7 @@ test("runAudited recovers a stale request claim before executing", async () => {
       requestId: "stale-1",
       tool: "runtime_status",
       claimedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      claimId: CLAIM_ID_A,
     })}\n`,
     { mode: 0o600 },
   );
@@ -120,6 +124,65 @@ test("runAudited recovers a stale request claim before executing", async () => {
 
   assert.deepEqual(result, { status: "PASS" });
   await assert.rejects(stat(claimPath), /ENOENT/);
+});
+
+test("two concurrent stale-claim recoverers allow only one operation to proceed", async () => {
+  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-stale-race-"));
+  const options = {
+    projectRoot: "/opt/codework",
+    referenceRoot: "/refs",
+    resultsRoot: "/results",
+    auditRoot,
+  };
+  const claimPath = path.join(auditRoot, "stale-race.json.claim");
+  await writeFile(
+    claimPath,
+    `${JSON.stringify({
+      requestId: "stale-race",
+      tool: "runtime_status",
+      claimedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      claimId: CLAIM_ID_A,
+    })}\n`,
+    { mode: 0o600 },
+  );
+
+  let executions = 0;
+  let markStarted!: () => void;
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  let releaseOperation!: () => void;
+  const blocked = new Promise<void>((resolve) => {
+    releaseOperation = resolve;
+  });
+  const operation = async () => {
+    executions += 1;
+    markStarted();
+    await blocked;
+    return { status: "PASS" };
+  };
+  const observe = <T>(promise: Promise<T>) =>
+    promise.then(
+      (value) => ({ kind: "fulfilled" as const, value }),
+      (error: unknown) => ({ kind: "rejected" as const, error }),
+    );
+
+  const first = runAudited(options, "runtime_status", { requestId: "stale-race" }, operation);
+  const second = runAudited(options, "runtime_status", { requestId: "stale-race" }, operation);
+  await started;
+
+  const loser = await Promise.race([observe(first), observe(second)]);
+  assert.equal(loser.kind, "rejected");
+  if (loser.kind === "rejected") {
+    assert.ok(loser.error instanceof Error);
+    assert.match(loser.error.message, /already in progress/);
+  }
+
+  releaseOperation();
+  const settled = await Promise.allSettled([first, second]);
+  assert.equal(settled.filter((item) => item.status === "fulfilled").length, 1);
+  assert.equal(settled.filter((item) => item.status === "rejected").length, 1);
+  assert.equal(executions, 1, "stale-claim recovery must not execute twice");
 });
 
 test("runAudited rejects malformed request claim metadata without executing", async () => {
@@ -170,7 +233,15 @@ test("runAudited stores and replays a sanitized failure", async () => {
 test("releaseRequestClaim still unlinks when handle close fails", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "codework-release-close-"));
   const claimPath = path.join(dir, "claim");
-  await writeFile(claimPath, "claim\n");
+  await writeFile(
+    claimPath,
+    `${JSON.stringify({
+      requestId: "release-close",
+      tool: "runtime_status",
+      claimedAt: new Date().toISOString(),
+      claimId: CLAIM_ID_A,
+    })}\n`,
+  );
   const warnings: unknown[][] = [];
   const originalWarn = console.warn;
   console.warn = (...args: unknown[]) => {
@@ -179,6 +250,7 @@ test("releaseRequestClaim still unlinks when handle close fails", async () => {
   try {
     await releaseRequestClaim({
       claimPath,
+      claimId: CLAIM_ID_A,
       handle: {
         close: async () => {
           throw Object.assign(new Error("close failed"), { code: "EIO" });
@@ -192,10 +264,18 @@ test("releaseRequestClaim still unlinks when handle close fails", async () => {
   assert.equal(warnings.length, 1);
 });
 
-test("releaseRequestClaim does not replace the operation outcome when unlink fails", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-release-unlink-"));
-  const claimPath = path.join(dir, "claim-directory");
-  await mkdir(claimPath);
+test("releaseRequestClaim never removes a replacement claim", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-release-owner-"));
+  const claimPath = path.join(dir, "claim");
+  await writeFile(
+    claimPath,
+    `${JSON.stringify({
+      requestId: "release-owner",
+      tool: "runtime_status",
+      claimedAt: new Date().toISOString(),
+      claimId: CLAIM_ID_B,
+    })}\n`,
+  );
   const warnings: unknown[][] = [];
   const originalWarn = console.warn;
   console.warn = (...args: unknown[]) => {
@@ -204,12 +284,14 @@ test("releaseRequestClaim does not replace the operation outcome when unlink fai
   try {
     await releaseRequestClaim({
       claimPath,
+      claimId: CLAIM_ID_A,
       handle: { close: async () => undefined } as never,
     });
   } finally {
     console.warn = originalWarn;
-    await rm(claimPath, { recursive: true, force: true });
   }
+  const persisted = JSON.parse(await readFile(claimPath, "utf8")) as { claimId: string };
+  assert.equal(persisted.claimId, CLAIM_ID_B);
   assert.equal(warnings.length, 1);
 });
 
