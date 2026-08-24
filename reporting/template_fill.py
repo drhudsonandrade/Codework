@@ -43,7 +43,15 @@ def _section(payload: dict[str, Any], title: str) -> Any:
 
 def _manifest(payload: dict[str, Any], key: str) -> Any:
     manifest = payload.get("execution_manifest")
-    return manifest.get(key) if isinstance(manifest, dict) else None
+    if isinstance(manifest, dict):
+        return manifest.get(key)
+    if isinstance(manifest, list):
+        evidence_id = key.lower().removesuffix("_sha256").replace("_", "-")
+        for step in manifest:
+            refs = step.get("evidence_refs") if isinstance(step, dict) else None
+            if isinstance(refs, list) and evidence_id in refs:
+                return evidence_id
+    return None
 
 
 def _count_findings(payload: dict[str, Any], predicate: Callable[[dict], bool]) -> Any:
@@ -60,7 +68,19 @@ def _assay(payload: dict[str, Any]):
 
 def _qc_reference(payload: dict[str, Any]) -> Any:
     assay = _assay(payload)
-    return _manifest(payload, f"{assay.evidence_prefix.upper()}_QC_SHA256")
+    direct = _manifest(payload, f"{assay.evidence_prefix.upper()}_QC_SHA256")
+    if direct:
+        return direct
+    manifest = payload.get("execution_manifest")
+    if isinstance(manifest, dict):
+        pgx = {
+            key: manifest[key]
+            for key in ("PGX_PASSPORT_SHA256", "COMPLETENESS_MATRIX_SHA256")
+            if manifest.get(key)
+        }
+        if pgx:
+            return pgx
+    return None
 
 
 def _count_findings_with_field(
