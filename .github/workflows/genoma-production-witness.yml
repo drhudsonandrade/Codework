@@ -40,6 +40,14 @@ jobs:
             echo "GENOMA_RULESET_SHA_MANIFEST=$GITHUB_WORKSPACE/manifests/RULESET_V3.4.sha256"
             echo 'GENOMA_EXPECT_CANONICAL_SHA=1'
           } >> "$GITHUB_ENV"
+      - name: Generate fresh ruleset bootstrap attestation for exact merged main SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          verified_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          python3 -m scripts.bootstrap_attestation --write \
+            --verified-at "$verified_at" \
+            --output evidence/bootstrap-project-v3.4.json
       - name: Build exact policy image
         run: |
           docker build -f policy_engine/Dockerfile -t genoma-policy-witness:${GITHUB_SHA} .
@@ -91,10 +99,13 @@ jobs:
           mkdir -p evidence/live-section-260
           python3 scripts/run_live_post_deployment_smoke.py \
             --base-url http://127.0.0.1:8787 \
-            --bootstrap-attestation deploy/attestations/bootstrap-project-v3.4.json \
+            --bootstrap-attestation evidence/bootstrap-project-v3.4.json \
+            --expected-source-commit "$GITHUB_SHA" \
+            --project-instructions-source deploy/attestations/project-instructions-v3.4.txt \
+            --project-instructions-attestation deploy/attestations/project-instructions-v3.4.json \
             --deployment-id "witness-${GITHUB_RUN_ID}-${GITHUB_SHA}" \
             --output evidence/live-section-260/summary.json
-          jq -e '.passed == 15 and .total == 15 and .critical_failures == 0 and .post_deployment_status == "PASS"' evidence/live-section-260/summary.json >/dev/null
+          jq -e '.passed == 15 and .total == 15 and .critical_failures == 0 and .project_bootstrap_installed == true and .post_deployment_status == "PASS"' evidence/live-section-260/summary.json >/dev/null
       - name: Capture logs and construct content-addressed witness
         if: always()
         shell: bash
@@ -121,7 +132,13 @@ jobs:
           if not summary_path.exists():
               raise SystemExit('live section-260 summary missing')
           live=json.loads(summary_path.read_text())
-          if not (live.get('passed')==15 and live.get('total')==15 and live.get('critical_failures')==0 and live.get('post_deployment_status')=='PASS'):
+          if not (
+              live.get('passed')==15
+              and live.get('total')==15
+              and live.get('critical_failures')==0
+              and live.get('project_bootstrap_installed') is True
+              and live.get('post_deployment_status')=='PASS'
+          ):
               raise SystemExit('refusing to create PASS witness from non-PASS live result')
           files=[]
           for p in sorted(x for x in root.rglob('*') if x.is_file() and x.name not in {'SHA256SUMS','witness.json'}):
@@ -131,6 +148,7 @@ jobs:
               'schema':'genoma-production-witness-v1',
               'operational_status':'VERIFICADO',
               'post_deployment_status':'PASS',
+              'project_bootstrap_installed':True,
               'ruleset':{
                   'status':EXPECTED_STATUS,
                   'version':EXPECTED_VERSION,
@@ -144,7 +162,7 @@ jobs:
               'workflow_run_attempt':os.environ['GITHUB_RUN_ATTEMPT'],
               'created_at':datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),
               'evidence_files':files,
-              'limitations':['This witness validates the deterministic policy deployment and live section-260 safety scenarios. It does not substitute for the per-session NGS Runtime/Resource Gate or per-sample FASTQ/BAM/CRAM integrity.']
+              'limitations':['This witness validates the deterministic policy deployment, an independently attested owner-exported Project Instructions snapshot, and live section-260 safety scenarios. It does not substitute for the per-session NGS Runtime/Resource Gate or per-sample FASTQ/BAM/CRAM integrity.']
           }
           root.joinpath('witness.json').write_text(json.dumps(witness,ensure_ascii=False,indent=2)+'\n')
           PY
