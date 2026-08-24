@@ -21,11 +21,12 @@ class PartialGenomeAnnotationTest(unittest.TestCase):
             f.write("rs999999,1,100,AA,consensus,AA,AA,GM\n")
         return p
 
-    def _evidence(self, array: Path) -> str:
+    def _evidence(self, array: Path, *, asserted_value: str) -> str:
         sha = hashlib.sha256(array.read_bytes()).hexdigest()
         return json.dumps({
             "status": "VERIFICADO",
             "decision": "SATISFIED",
+            "asserted_value": asserted_value,
             "justification": "Synthetic annotation fixture explicitly controls build and strand.",
             "evidence_refs": ["synthetic-annotation-fixture"],
             "trace": {
@@ -45,14 +46,15 @@ class PartialGenomeAnnotationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             array = self._fixture(root)
-            evidence = self._evidence(array)
+            build_evidence = self._evidence(array, asserted_value="GRCh37")
+            strand_evidence = self._evidence(array, asserted_value="forward")
             qc = inspect_array(
                 array,
                 case_id="SYN",
                 build="GRCh37",
                 strand="forward",
-                build_evidence=evidence,
-                strand_evidence=evidence,
+                build_evidence=build_evidence,
+                strand_evidence=strand_evidence,
             )
             qc_path = root / "qc.json"
             qc_path.write_text(json.dumps(qc), encoding="utf-8")
