@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from array_pipeline.allele_discrimination import partition_alleles
-from scripts import build_pgx_panel, build_pgx_registry
+from scripts import build_pgx_panel, build_pgx_registry, expand_clinvar_targets, verify_provenance_markers
 
 
 class CpicRetryPolicyTest(unittest.TestCase):
@@ -34,6 +34,52 @@ class CpicRetryPolicyTest(unittest.TestCase):
                 self.assertEqual(build_pgx_registry._get("gene", attempts=2), [])
         self.assertEqual(opened.call_count, 2)
         slept.assert_called_once_with(1)
+
+
+class SharedHttpRetryPolicyTest(unittest.TestCase):
+    @staticmethod
+    def _marker_error(code: int):
+        http = urllib.error.HTTPError("https://dbsnp", code, "error", None, None)
+        try:
+            raise verify_provenance_markers.MarkerVerificationError("fetch failed") from http
+        except verify_provenance_markers.MarkerVerificationError as exc:
+            return exc
+
+    def test_dbsnp_permanent_http_error_is_not_retried(self):
+        error = self._marker_error(404)
+        with patch.object(
+            verify_provenance_markers,
+            "fetch_refsnp",
+            side_effect=error,
+        ) as fetched:
+            with patch.object(verify_provenance_markers.time, "sleep") as slept:
+                with self.assertRaises(
+                    verify_provenance_markers.MarkerVerificationError
+                ):
+                    verify_provenance_markers._fetch_with_retries("rs1", attempts=4)
+        self.assertEqual(fetched.call_count, 1)
+        slept.assert_not_called()
+
+    def test_invalid_dbsnp_identifier_fails_before_fetch(self):
+        with patch.object(verify_provenance_markers, "fetch_refsnp") as fetched:
+            with self.assertRaises(
+                verify_provenance_markers.MarkerVerificationError
+            ):
+                verify_provenance_markers._fetch_with_retries("not-an-rsid")
+        fetched.assert_not_called()
+
+    def test_bulk_download_permanent_http_error_is_not_retried(self):
+        error = urllib.error.HTTPError("https://clinvar", 403, "Forbidden", None, None)
+        with patch.object(
+            expand_clinvar_targets.urllib.request,
+            "urlopen",
+            side_effect=error,
+        ) as opened:
+            with patch.object(expand_clinvar_targets.time, "sleep") as slept:
+                with self.assertRaises(RuntimeError):
+                    expand_clinvar_targets._fetch("https://clinvar", attempts=4)
+        self.assertEqual(opened.call_count, 1)
+        slept.assert_not_called()
 
 
 class PartialDefinitionTest(unittest.TestCase):
