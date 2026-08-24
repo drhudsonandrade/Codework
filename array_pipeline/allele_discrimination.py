@@ -170,7 +170,8 @@ def partition_alleles(
         # An allele with no defining positions at all cannot be "fully covered"; treating an
         # empty requirement as satisfied is the vacuous-truth failure this project keeps
         # finding, and here it would invent discriminability out of missing data.
-        if defining and not absent:
+        definition_complete = definition.get("definition_complete", True) is True
+        if defining and not absent and definition_complete:
             discriminable.append(allele)
             record["discriminable"] = True
         else:
@@ -179,6 +180,11 @@ def partition_alleles(
             if not defining:
                 record["missing_positions"] = []
                 record["basis"] = "o registro não lista posição definidora para este alelo"
+            elif not definition_complete:
+                record["basis"] = (
+                    "o registro declara definição parcial; posições sem rsid impedem "
+                    "discriminação do alelo"
+                )
         per_allele[allele] = record
 
     return {
