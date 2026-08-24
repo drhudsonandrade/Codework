@@ -70,20 +70,21 @@ MIN_CALLED_MARKERS = 100_000
 #: Below this call rate the missing genotypes, not the person, decide where tracts fall.
 MIN_CALL_RATE = 0.95
 
-#: Per-chromosome autosomal lengths in kilobases (GRCh37/GRCh38 primary assembly; the two
-#: differ by less than a tenth of a percent, far below anything this check discriminates).
-#: Used as a bounds check, because a coordinate past the end of its chromosome means the file
-#: is not on the assembly assumed here, and every tract length computed from it is fiction.
-#:
-#: Read from `array_pipeline.assembly` rather than restated: array QC applies the same bound
-#: at the gate, and when the two carried separate copies they were free to disagree about
-#: which files are physically possible.
-CHROMOSOME_KB = dict(assembly.AUTOSOME_KB_BY_CHROMOSOME)
-
-#: Autosomal length in kilobases, chromosomes 1-22. The denominator of F_ROH; summed from the
-#: table above so the fraction and its bounds check can never be scaled against different
-#: genomes.
-AUTOSOME_KB = assembly.AUTOSOME_TOTAL_KB
+#: Per-build autosomal lengths in kilobases, read from the same assembly tables as array QC.
+CHROMOSOME_KB_BY_BUILD = {
+    build: {
+        chromosome: -(-table[chromosome] // 1000)
+        for chromosome in assembly.AUTOSOMES
+    }
+    for build, table in assembly.CHROMOSOME_LENGTHS.items()
+}
+AUTOSOME_KB_BY_BUILD = {
+    build: float(sum(lengths.values()))
+    for build, lengths in CHROMOSOME_KB_BY_BUILD.items()
+}
+# Backward-compatible GRCh37 aliases for callers that import the historic constants.
+CHROMOSOME_KB = CHROMOSOME_KB_BY_BUILD["GRCh37"]
+AUTOSOME_KB = AUTOSOME_KB_BY_BUILD["GRCh37"]
 
 #: Expected F_ROH for offspring of a few standard relationships, for placing a measurement.
 #: These are expectations under a simple model, not thresholds, and the report says so.
@@ -213,8 +214,21 @@ def analyse(
     markers: list[tuple[str, int, str]],
     *,
     total_autosomal_markers: int | None = None,
+    build: str = "GRCh37",
 ) -> dict[str, Any]:
     """F_ROH and the tract inventory, or a refusal that says which guard stopped it."""
+    chromosome_kb = CHROMOSOME_KB_BY_BUILD.get(str(build).strip())
+    autosome_kb = AUTOSOME_KB_BY_BUILD.get(str(build).strip())
+    if chromosome_kb is None or autosome_kb is None:
+        return {
+            "status": UNAVAILABLE,
+            "f_roh": None,
+            "tracts": [],
+            "called_markers": 0,
+            "call_rate": None,
+            "refusals": [f"build {build!r} não suportado para o cálculo de F_ROH"],
+            "method": _method(None),
+        }
     called = [m for m in markers if _zygosity(m[2]) is not None]
     considered = total_autosomal_markers if total_autosomal_markers is not None else len(markers)
     call_rate = (len(called) / considered) if considered else 0.0
@@ -226,17 +240,17 @@ def analyse(
     out_of_bounds = [
         (chromosome, position)
         for chromosome, position, _genotype in called
-        if chromosome in CHROMOSOME_KB and position > CHROMOSOME_KB[chromosome] * 1000
+        if chromosome in chromosome_kb and position > chromosome_kb[chromosome] * 1000
     ]
     unknown_chromosomes = sorted(
-        {chromosome for chromosome, _p, _g in called if chromosome not in CHROMOSOME_KB}
+        {chromosome for chromosome, _p, _g in called if chromosome not in chromosome_kb}
     )
     if out_of_bounds:
         first = out_of_bounds[0]
         refusals.append(
             f"{len(out_of_bounds):,} marcadores estão além do fim do próprio cromossomo "
             f"(por exemplo chr{first[0]}:{first[1]:,}, que excede "
-            f"{CHROMOSOME_KB[first[0]]:,} kb). O arquivo não está na montagem assumida aqui, "
+            f"{chromosome_kb[first[0]]:,} kb). O arquivo não está na montagem assumida aqui, "
             "ou está corrompido; comprimentos de trato calculados sobre essas coordenadas "
             "não descrevem nada."
         )
@@ -265,7 +279,7 @@ def analyse(
             "called_markers": len(called),
             "call_rate": round(call_rate, 4) if considered else None,
             "refusals": refusals,
-            "method": _METHOD,
+            "method": _method(autosome_kb),
         }
 
     # The density bound comes from the sample itself, so it adapts to the platform.
@@ -275,7 +289,7 @@ def analyse(
     )
     tracts, rejected = find_tracts(called, max_mean_spacing_kb=max_spacing_kb)
     total_kb = sum(t["length_kb"] for t in tracts)
-    f_roh = total_kb / AUTOSOME_KB
+    f_roh = total_kb / autosome_kb
     if f_roh > 1.0:
         # A fraction of the genome cannot exceed the genome. Reaching here means the tracts
         # overlap or the coordinates span more than an autosome, and the only honest output
@@ -289,17 +303,18 @@ def analyse(
             "call_rate": round(call_rate, 4) if considered else None,
             "refusals": [
                 f"os tratos somam {total_kb:,.0f} kb, mais do que os "
-                f"{AUTOSOME_KB:,.0f} kb de autossomos. Uma fração do genoma não pode exceder "
+                f"{autosome_kb:,.0f} kb de autossomos. Uma fração do genoma não pode exceder "
                 "o genoma: as coordenadas de entrada não são consistentes com a montagem, e "
                 "nenhum valor de F_ROH é emitido."
             ],
-            "method": _METHOD,
+            "method": _method(autosome_kb),
         }
     return {
         "status": "INFERIDO",
         "f_roh": round(f_roh, 5),
         "total_roh_kb": round(total_kb, 1),
-        "autosome_kb": AUTOSOME_KB,
+        "autosome_kb": autosome_kb,
+        "reference_build": str(build).strip(),
         "tract_count": len(tracts),
         "longest_tract_kb": tracts[0]["length_kb"] if tracts else 0.0,
         "tracts": tracts[:50],
@@ -323,7 +338,7 @@ def analyse(
         },
         "reference_expectations": list(REFERENCE_EXPECTATIONS),
         "interpretation": _interpretation(f_roh, len(tracts)),
-        "method": _METHOD,
+        "method": _method(autosome_kb),
     }
 
 
@@ -369,18 +384,26 @@ def _interpretation(f_roh: float, tract_count: int) -> dict[str, Any]:
     }
 
 
-_METHOD = (
-    "Tratos homozigotos por varredura de janela deslizante sobre genótipos chamados, "
-    f"exigindo comprimento >= {MIN_TRACT_KB:.0f} kb, >= {MIN_TRACT_MARKERS} marcadores "
-    f"chamados, no máximo {MAX_HETEROZYGOTES_PER_TRACT} heterozigoto tolerado, nenhum vão "
-    f"acima de {MAX_GAP_KB:.0f} kb e espaçamento médio de marcadores dentro do trato até "
-    f"{MAX_TRACT_SPACING_FACTOR:.0f}x a mediana da própria amostra — um trecho mais esparso "
-    "que isso foi atravessado, não interrogado, e é excluído do numerador. F_ROH é a soma "
-    "dos tratos dividida por "
-    f"{AUTOSOME_KB:,.0f} kb de autossomos. Estimador de McQuillan et al., Am J Hum Genet "
-    "83:359-372 (2008), preferido aos estimadores por frequência alélica porque estes exigem "
-    "uma população de referência pareada que um genoma brasileiro miscigenado não tem."
-)
+def _method(autosome_kb: float | None) -> str:
+    denominator = (
+        f"{autosome_kb:,.0f} kb de autossomos"
+        if autosome_kb is not None
+        else "um denominador não disponível"
+    )
+    return (
+        "Tratos homozigotos por varredura de janela deslizante sobre genótipos chamados, "
+        f"exigindo comprimento >= {MIN_TRACT_KB:.0f} kb, >= {MIN_TRACT_MARKERS} marcadores "
+        f"chamados, no máximo {MAX_HETEROZYGOTES_PER_TRACT} heterozigoto tolerado, nenhum vão "
+        f"acima de {MAX_GAP_KB:.0f} kb e espaçamento médio de marcadores dentro do trato até "
+        f"{MAX_TRACT_SPACING_FACTOR:.0f}x a mediana da própria amostra — um trecho mais esparso "
+        "que isso foi atravessado, não interrogado, e é excluído do numerador. F_ROH é a soma "
+        f"dos tratos dividida por {denominator}. Estimador de McQuillan et al., Am J Hum Genet "
+        "83:359-372 (2008), preferido aos estimadores por frequência alélica porque estes exigem "
+        "uma população de referência pareada que um genoma brasileiro miscigenado não tem."
+    )
+
+
+_METHOD = _method(AUTOSOME_KB)
 
 
 def read_autosomal_genotypes(input_path: Any) -> tuple[list[tuple[str, int, str]], int]:
@@ -424,9 +447,9 @@ def read_autosomal_genotypes(input_path: Any) -> tuple[list[tuple[str, int, str]
     return markers, total
 
 
-def analyse_array(input_path: Any) -> dict[str, Any]:
-    """Runs of homozygosity for one array file."""
+def analyse_array(input_path: Any, *, build: str = "GRCh37") -> dict[str, Any]:
+    """Runs of homozygosity for one array file under the verified reference build."""
     markers, total = read_autosomal_genotypes(input_path)
-    result = analyse(markers, total_autosomal_markers=total)
+    result = analyse(markers, total_autosomal_markers=total, build=build)
     result["autosomal_rows"] = total
     return result
