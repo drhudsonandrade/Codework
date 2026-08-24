@@ -49,7 +49,7 @@ An earlier revision of this module read orientation back from the QC artifact's
 other target skipped the strand check and an unoriented locus could be classified
 `OBSERVADO` — a fail-open, since the reported allele may be the complement of the true one.
 
-Orientation is now derived per row via `array_pipeline.annotation._orientation` for **all**
+Orientation is now derived per row via `array_pipeline.qc._orientation` for **all**
 targets. `VERIFICADO` and `INFERIDO` remain interpretable; anything else is
 `NÃO REPORTÁVEL`.
 
