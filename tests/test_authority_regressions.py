@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import normative
+from reporting.case_dossier import load_dossier
 from reporting.consent import ConsentError, input_set_sha256
 from reporting.section_attestations import (
     CurationError,
@@ -15,6 +16,18 @@ from reporting.section_attestations import (
     validate_curation,
 )
 from reporting.wgs_qc_record import UNAVAILABLE, audit_summary
+
+
+class CaseDossierExampleTest(unittest.TestCase):
+    def test_shipped_example_loads_with_notes_and_empty_consent(self):
+        root = Path(__file__).resolve().parents[1]
+        source = root / "config/case_dossier.example.json"
+        raw = json.loads(source.read_text(encoding="utf-8"))
+        self.assertIn("notes", raw)
+        self.assertEqual(raw.get("consent"), {})
+        dossier = load_dossier(source, expected_case_id=raw["case_id"])
+        self.assertFalse(dossier["consent_documented"])
+        self.assertEqual(dossier["consent"], {})
 
 
 class WgsQcSummaryValidationTest(unittest.TestCase):
