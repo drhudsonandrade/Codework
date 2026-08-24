@@ -31,16 +31,24 @@ This branch is an append-only publication surface for production witnesses, not 
 
 Required policy:
 
-- block force pushes;
-- block branch deletion;
-- restrict updates to the trusted deploy-key publisher through the versioned `update` rule;
-- preserve direct publication by the reviewed `GENOMA Production Witness` publisher;
+- block force pushes for every actor, including the publisher;
+- block branch deletion for every actor, including the publisher;
+- restrict ordinary updates to the trusted deploy-key publisher;
+- preserve direct append publication by the reviewed `GENOMA Production Witness` publisher;
+- do not grant the publisher a bypass over history-mutation protections;
 - do not require a normal pull-request merge path that would prevent the reviewed witness publisher from appending evidence;
 - periodically verify that every `latest.json` target also exists under `witnesses/<git_sha>/witness.json` with matching `SHA256SUMS`.
 
-The versioned definition is `.github/governance/audit-evidence-ruleset.json`. It is a desired-state artifact, not evidence that GitHub has applied the ruleset or installed the corresponding deploy key.
+The desired state is deliberately split into two layered GitHub rulesets:
 
-If the repository plan/settings cannot express the documented restriction, record the limitation explicitly and keep governance status `PENDING`; do not represent the desired-state JSON as enforced.
+- `.github/governance/audit-evidence-integrity-ruleset.json` — `deletion` + `non_fast_forward`, with **no bypass actors**;
+- `.github/governance/audit-evidence-publisher-ruleset.json` — `update` only, with the trusted deploy key as the only bypass actor.
+
+The deploy key therefore bypasses only the update restriction required to append a new witness. It does not share a ruleset with deletion or non-fast-forward protections and cannot legitimately bypass those history controls through this desired-state design.
+
+These JSON files are desired-state artifacts, not evidence that GitHub has applied the rulesets or installed the corresponding deploy key.
+
+If the repository plan/settings cannot express the documented layered restriction, record the limitation explicitly and keep governance status `PENDING`; do not represent the desired-state JSON as enforced.
 
 ## Verification record
 
@@ -51,7 +59,7 @@ After applying the GitHub settings, record all of the following in the closure r
 - observed protected/ruleset state for each branch;
 - required status checks actually configured on `main`;
 - force-push and deletion policy for both branches;
-- bypass actors, if any;
+- update-restriction bypass actors on `audit-evidence`, if any;
 - verification timestamp and GitHub settings/ruleset locator.
 
 The repository must remain **GOVERNANCE PENDING** until the live GitHub settings are read back and match this contract.
