@@ -868,7 +868,7 @@ def build_clinical_findings(
                     "detail_omitted": (
                         "registros do ClinVar e curadoria do gene não são repetidos para um "
                         "locus não interrogado; constam do arquivo de evidência citado por "
-                        "SHA-256 e do índice gene_validity deste artefato"
+                        "SHA-256"
                     ),
                     "confirmation_required": False,
                 }
