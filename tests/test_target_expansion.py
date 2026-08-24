@@ -421,20 +421,25 @@ class ShippedRegistryTest(unittest.TestCase):
                 ]
                 self.assertEqual(unsourced[:5], [], f"{path.name}: assessed allele with no source")
 
-                contradictory = [
-                    t["rsid"]
-                    for t in manifest["targets"]
-                    if t.get("assessed_allele")
-                    and (
-                        t.get("assessed_allele_status") == "NÃO DISPONÍVEL"
-                        or t.get("assessed_allele_reason")
-                    )
-                ]
-                self.assertEqual(
-                    contradictory[:5],
-                    [],
-                    f"{path.name}: assessed allele retains a refusal state",
-                )
+        # The assessed-allele curator writes the versioned partial-genome registry. Its
+        # success branch must clear any older refusal metadata and explicitly attest the
+        # allele it just wrote; unrelated legacy registries have separate producers.
+        path = ROOT / "config/partial_genome_annotation_targets.json"
+        manifest = load_target_manifest(path)
+        contradictory = [
+            t["rsid"]
+            for t in manifest["targets"]
+            if t.get("assessed_allele")
+            and (
+                t.get("assessed_allele_status") != "VERIFICADO"
+                or t.get("assessed_allele_reason")
+            )
+        ]
+        self.assertEqual(
+            contradictory[:5],
+            [],
+            f"{path.name}: assessed allele lacks a clean VERIFICADO attestation",
+        )
 
 
 class ReviewStarTierTest(unittest.TestCase):
