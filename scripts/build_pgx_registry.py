@@ -106,6 +106,14 @@ def _get(path: str, *, attempts: int = 4, **params: str) -> list[dict[str, Any]]
             if not isinstance(payload, list):
                 raise CpicError(f"CPIC returned a non-list payload for {url}")
             return payload
+        except urllib.error.HTTPError as exc:
+            if exc.code != 429 && not 500 <= exc.code < 600:
+                raise CpicError(
+                    f"CPIC fetch failed for {url} with non-retriable HTTP status {exc.code}"
+                ) from exc
+            last = exc
+            if attempt < attempts - 1:
+                time.sleep(2**attempt)
         except (urllib.error.URLError, TimeoutError, ConnectionError, json.JSONDecodeError) as exc:
             last = exc
             if attempt < attempts - 1:
@@ -327,6 +335,7 @@ def fetch_gene(symbol: str) -> dict[str, Any]:
             skipped_no_rsid.append(f"{_allele_label(symbol, name)} (parcial)")
 
         built[_allele_label(symbol, name)] = {
+            "definition_complete": not missing_rsid,
             "defining": sorted(defining, key=lambda d: d["rsid"]),
             "cpic_clinical_function": allele.get("clinicalfunctionalstatus"),
             "cpic_activity_value": allele.get("activityvalue"),
@@ -363,7 +372,9 @@ def fetch_gene(symbol: str) -> dict[str, Any]:
 
     record: dict[str, Any] = {
         # Complete with respect to CPIC's catalogue, which is what the citation covers.
-        "complete_panel": bool(built),
+        "complete_panel": bool(built) and all(
+            definition.get("definition_complete", True) for definition in built.values()
+        ),
         "complete_panel_scope": "CPIC",
         "chromosome": gene_row.get("chr"),
         "reference_accession": gene_row.get("chromosequenceid"),
