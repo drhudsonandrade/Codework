@@ -237,7 +237,7 @@ test("runAudited recovers an orphaned interprocess mutation lock", async () => {
   const lockPath = `${claimPath}.lock`;
   await mkdir(lockPath, { mode: 0o700 });
   await writeFile(
-    path.join(lockPath, `owner-${CLAIM_ID_A}.json`),
+    path.join(lockPath, "owner.json"),
     `${JSON.stringify({
       lockId: CLAIM_ID_A,
       ownerPid: DEAD_OWNER_PID,
@@ -278,7 +278,7 @@ test("mutation-lock cleanup failure cannot replace the operation result and rema
 
     await unlink(unexpected);
     const second = await withClaimMutationLock(claimPath, async () => "SECOND");
-    assert.equal(second, "SECOND", "release-pending lock must be recoverable on the next acquisition");
+    assert.equal(second, "SECOND", "ownerless lock must be recoverable on the next acquisition");
   } finally {
     console.warn = originalWarn;
     await rm(lockPath, { recursive: true, force: true });
