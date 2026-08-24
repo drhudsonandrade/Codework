@@ -13,7 +13,10 @@ import json
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
+
+import normative
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -617,10 +620,17 @@ class ReportIntegrationTest(unittest.TestCase):
 
         matrix_path, passport, _ = _artifacts(root, rows, registry=registry)
         passport_path = write_passport(passport, root / "passport.json")
-        return build_payload(
+        payload = build_payload(
             passport_path, matrix_path, policy_evaluation_file(root),
             consent=consent_for(root, matrix_path),
-        ), passport
+        )
+        # This integration fixture exercises FINAL rendering. The compiler deliberately
+        # emits a curated payload whose ruleset digest and placeholder result must be
+        # supplied by the release assembly, so model those separately verified release
+        # prerequisites without changing the compiler's fail-closed defaults.
+        payload["ruleset"] = normative.ruleset_block()
+        payload["publication_gate"]["placeholders_resolved"] = True
+        return payload, passport
 
     def test_the_compiled_payload_passes_the_provenance_gate(self):
         from reporting.provenance import provenance_blockers
@@ -687,6 +697,39 @@ class ReportIntegrationTest(unittest.TestCase):
         from scripts.build_pharmacogenomic_report import SECTIONS
 
         self.assertEqual(tuple(load_catalog()["06"]["sections"]), SECTIONS)
+        self.assertIn("Diplótipo condicional e risco residual", SECTIONS)
+        self.assertIn("Requisição de sequenciamento", SECTIONS)
+
+    def test_cli_forwards_all_control_artifacts_to_the_payload_compiler(self):
+        from scripts.build_pharmacogenomic_report import main
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            matrix_path, _passport, _ = _artifacts(root, CLEAN_ROWS)
+            witness = root / "witness.json"
+            witness.write_text("{}", encoding="utf-8")
+            payload_out = root / "payload-cli.json"
+            argv = [
+                "build_pharmacogenomic_report.py",
+                "--input", str(root / "array.csv.gz"),
+                "--qc", str(root / "qc.json"),
+                "--targets", str(root / "targets.json"),
+                "--matrix-out", str(root / "matrix-cli.json"),
+                "--passport-out", str(root / "passport-cli.json"),
+                "--payload-out", str(payload_out),
+                "--policy-evaluation", str(policy_evaluation_file(root)),
+                "--post-deployment-witness", str(witness),
+                "--consent", str(consent_for(root, matrix_path)),
+            ]
+            with patch.object(sys, "argv", argv):
+                self.assertEqual(main(), 0)
+
+            payload = json.loads(payload_out.read_text(encoding="utf-8"))
+        self.assertEqual(
+            payload["policy_evaluation"]["source"]["origin"], "policy-engine-output"
+        )
+        self.assertEqual(payload["consent"]["origin"], "operator-record")
+        self.assertIn("witness_sha256", payload["post_deployment"])
 
 
 class CpicRegistryTest(unittest.TestCase):

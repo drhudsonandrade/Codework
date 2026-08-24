@@ -29,6 +29,8 @@ SECTIONS = (
     "Resumo farmacogenômico",
     "Medicações e fenoconversão",
     "Camada técnica por gene",
+    "Diplótipo condicional e risco residual",
+    "Requisição de sequenciamento",
     "Cartão genômico de anestesia",
     "Plano de atualização",
     "Limitações e fontes",
@@ -439,6 +441,9 @@ def main() -> int:
     parser.add_argument("--panel-matrix-out", help="where to write the panel coverage matrix")
     parser.add_argument("--passport-out", required=True)
     parser.add_argument("--payload-out", required=True)
+    parser.add_argument("--policy-evaluation", help="policy-engine evaluation JSON")
+    parser.add_argument("--post-deployment-witness", help="live post-deployment witness JSON")
+    parser.add_argument("--consent", help="consent record JSON")
     args = parser.parse_args()
 
     if args.pgx_panel and not args.panel_matrix_out:
@@ -463,7 +468,19 @@ def main() -> int:
     )
     passport_path = write_passport(passport, Path(args.passport_out))
 
-    payload = build_payload(passport_path, matrix_path)
+    payload = build_payload(
+        passport_path,
+        matrix_path,
+        policy_evaluation=(
+            Path(args.policy_evaluation) if args.policy_evaluation else None
+        ),
+        post_deployment_witness=(
+            Path(args.post_deployment_witness)
+            if args.post_deployment_witness
+            else None
+        ),
+        consent=Path(args.consent) if args.consent else None,
+    )
     out = Path(args.payload_out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")

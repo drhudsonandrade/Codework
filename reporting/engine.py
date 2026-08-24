@@ -15,6 +15,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from reporting.provenance import provenance_blockers
+
 ROOT = Path(__file__).resolve().parent
 CATALOG_PATH = ROOT / "catalog.json"
 EXPECTED_RULESET = {
@@ -73,6 +75,7 @@ def _publication_blockers(data: dict[str, Any]) -> list[str]:
     )
     if not isinstance(final_audit, dict) or final_audit.get("state") != "PASS":
         blockers.append("policy_evaluation:FINAL_AUDIT_GATE")
+    blockers.extend(provenance_blockers(data))
     return blockers
 
 
