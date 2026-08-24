@@ -17,6 +17,11 @@ class AssemblyRegressionTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "truncated|incomplete"):
             bounded_gunzip(raw[: len(raw) // 2], name="fixture.gz")
 
+    def test_bounded_gunzip_rejects_a_second_member(self):
+        raw = gzip.compress(b"first member") + gzip.compress(b"second member")
+        with self.assertRaisesRegex(ValueError, "trailing|multiple"):
+            bounded_gunzip(raw, name="fixture.gz")
+
 
 if __name__ == "__main__":
     unittest.main()

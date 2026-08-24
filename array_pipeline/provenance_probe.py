@@ -66,7 +66,12 @@ def load_markers(path: Path) -> dict[str, Any]:
     if not isinstance(markers, list) or not markers:
         raise ProvenanceProbeError("marker table must contain markers")
     for marker in markers:
-        rsid = str(marker.get("rsid") or "").strip()
+        if not isinstance(marker, dict):
+            raise ProvenanceProbeError("marker table entries must be objects")
+        raw_rsid = marker.get("rsid")
+        if not isinstance(raw_rsid, str) or not raw_rsid.strip():
+            raise ProvenanceProbeError("marker rsid must be a non-empty string")
+        rsid = raw_rsid.strip()
         for build in ("grch37", "grch38"):
             spec = marker.get(build)
             if not isinstance(spec, dict) or "chromosome" not in spec or "position" not in spec:

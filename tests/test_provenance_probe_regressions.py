@@ -13,6 +13,31 @@ from array_pipeline.provenance_probe import (
 
 
 class ProvenanceProbeRegressionTest(unittest.TestCase):
+    def _write_markers(self, root: Path, marker: object) -> Path:
+        path = root / "markers.json"
+        path.write_text(json.dumps({
+            "schema": "genoma-array-provenance-markers-v1",
+            "source": "fixture",
+            "markers": [marker],
+        }), encoding="utf-8")
+        return path
+
+    def test_marker_entries_must_be_objects(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            for marker in (None, 7, "rs1"):
+                with self.subTest(marker=marker):
+                    with self.assertRaisesRegex(ProvenanceProbeError, "marker.*object"):
+                        load_markers(self._write_markers(root, marker))
+
+    def test_rsid_must_be_a_non_empty_string(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            for marker in ({}, {"rsid": None}, {"rsid": ""}, {"rsid": "   "}, {"rsid": 7}):
+                with self.subTest(marker=marker):
+                    with self.assertRaisesRegex(ProvenanceProbeError, "rsid.*non-empty string"):
+                        load_markers(self._write_markers(root, marker))
+
     def test_invalid_plus_allele_is_domain_error_not_keyerror(self):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "markers.json"

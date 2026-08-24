@@ -118,6 +118,8 @@ def bounded_gunzip(raw: bytes, *, name: str) -> bytes:
     produced += len(chunks[-1])
     if not decompressor.eof:
         raise ValueError(f"{name}: gzip payload is truncated or incomplete")
+    if decompressor.unused_data:
+        raise ValueError(f"{name}: gzip payload contains trailing data or multiple members")
     if raw and produced / len(raw) > MAX_REGISTRY_COMPRESSION_RATIO:
         raise ValueError(
             f"{name}: gzip payload expands {produced / len(raw):.0f}x, above the "
