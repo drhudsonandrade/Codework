@@ -1,0 +1,56 @@
+{
+  "attestation_type": "GENOMA_PROJECT_INSTRUCTIONS_SNAPSHOT",
+  "status": "VERIFICADO",
+  "evidence_classification": "VERIFIED_OWNER_SNAPSHOT_ONLY",
+  "project_bootstrap_installed": false,
+  "installation_status": "NÃO DISPONÍVEL",
+  "ruleset_identity": "v3.4/VIGENTE/17/08/2026",
+  "canonical_filename": "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt",
+  "canonical_sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
+  "verified_at": "2026-08-24T02:40:30-03:00",
+  "actor_type": "OWNER_EXPORT",
+  "source": {
+    "kind": "OWNER_EXPORTED_PROJECT_INSTRUCTIONS",
+    "locator": "chatgpt-project://GENOMA/instructions",
+    "sha256": "c1cf295a7aede4efd2fb6270505d2aa3229e19e8e4fb20acb18dd87340ce4164",
+    "size_bytes": 1437
+  },
+  "checks_evidence": {
+    "canonical_ruleset_filename": {
+      "satisfied": true,
+      "clause_sha256": "8674b2915dc66431c5da99de00529aa67e10c795e0930295acec4d0bfd33216e",
+      "line": 1
+    },
+    "status_vigente": {
+      "satisfied": true,
+      "clause_sha256": "3ef3312734275e81893b69d542478f68f876d7aba4aec7d7f9a6929b20a45d44",
+      "line": 1
+    },
+    "version_v3_4": {
+      "satisfied": true,
+      "clause_sha256": "982180b529ed6efeb344e5089578913519ee560a96313b37683b696f7c5358ba",
+      "line": 1
+    },
+    "effective_date": {
+      "satisfied": true,
+      "clause_sha256": "7a7995973e2eb57f61542c2179ab878d3b7a25aae2f172a8bf0f3ef3a92d369f",
+      "line": 1
+    },
+    "fail_closed_conflict": {
+      "satisfied": true,
+      "clause_sha256": "b62d77482f2c50d49b03efe63e06037ebd5e54006e2b1a32c4f34a2c5f421534",
+      "line": 1
+    },
+    "operational_status_contract": {
+      "satisfied": true,
+      "clause_sha256": "d703384371837e7c6340ebe67e0beafa08c61c092f46f005164f704a2e3716cf",
+      "line": 1
+    },
+    "runtime_resource_gate": {
+      "satisfied": true,
+      "clause_sha256": "28357a3556710b51050247749750da49040dc1422b3962ab542e3bb46b6305be",
+      "line": 1
+    }
+  },
+  "limitations": "VERIFICADO applies only to the bytes of this owner-exported snapshot. No authenticated machine-readable read of the authoritative persistent ChatGPT Project Instructions was available, so this artifact MUST NOT set PROJECT_BOOTSTRAP_INSTALLED=true. Refresh the snapshot whenever Project Instructions change and obtain authoritative persistent-source evidence before a POST-DEPLOYMENT PASS."
+}

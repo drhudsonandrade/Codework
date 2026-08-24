@@ -3,9 +3,11 @@
 
 This is deliberately distinct from the unit/fixture smoke. It exercises a running
 container through HTTP, verifies exact ruleset identity, submits all 15 canonical
-unsafe scenarios, records response hashes, validates the bootstrap attestation through
-a fail-closed independent verifier, and then asks the live engine to evaluate the
-external POST_DEPLOYMENT criteria. No LLM is involved.
+unsafe scenarios, records response hashes, verifies the normative bootstrap against
+the exact deployment commit plus its captured SHA-256/locator, verifies the supplied
+Project Instructions snapshot, and then asks the live engine to evaluate the external
+POST_DEPLOYMENT criteria. A verified local snapshot is never promoted to
+PROJECT_BOOTSTRAP_INSTALLED. No LLM is involved.
 """
 from __future__ import annotations
 
@@ -20,6 +22,10 @@ from pathlib import Path
 from typing import Any
 
 from bootstrap_attestation import BootstrapAttestationError, verify_bootstrap_attestation
+from project_instructions_attestation import (
+    ProjectInstructionsAttestationError,
+    verify_project_instructions_attestation,
+)
 
 EXPECTED_SHA = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
 EXPECTED_IDENTITY = "v3.4/VIGENTE/17/08/2026"
@@ -104,7 +110,7 @@ def valid_na_attestations(catalog: dict[str, Any], run_id: str) -> list[dict[str
             "applicability": "NOT_APPLICABLE", "status": "VERIFICADO", "decision": "NOT_APPLICABLE",
             "justification": "section-260 live safety scenario does not require this section to be satisfied",
             "evidence_refs": [],
-            "trace": {"attestation_id": f"{run_id}:{rule['rule_id']}", "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"), "actor_type": "SOFTWARE", "actor_id": "genoma-live-smoke", "method": "canonical section-260 scenario harness", "run_id": run_id, "input_sha256": [], "output_sha256": [], "tool_versions": {"genoma-live-smoke": "0.4.0"}},
+            "trace": {"attestation_id": f"{run_id}:{rule['rule_id']}", "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"), "actor_type": "SOFTWARE", "actor_id": "genoma-live-smoke", "method": "canonical section-260 scenario harness", "run_id": run_id, "input_sha256": [], "output_sha256": [], "tool_versions": {"genoma-live-smoke": "0.6.0"}},
         })
     return out
 
@@ -147,6 +153,11 @@ def main() -> int:
     p.add_argument("--base-url", required=True)
     p.add_argument("--output", required=True)
     p.add_argument("--bootstrap-attestation", required=True)
+    p.add_argument("--bootstrap-attestation-sha256", required=True)
+    p.add_argument("--bootstrap-result-locator", required=True)
+    p.add_argument("--expected-source-commit", required=True)
+    p.add_argument("--project-instructions-attestation", required=True)
+    p.add_argument("--project-instructions-source", required=True)
     p.add_argument("--deployment-id", required=True)
     args = p.parse_args()
     started = time.time()
@@ -161,10 +172,28 @@ def main() -> int:
 
     bootstrap_path = Path(args.bootstrap_attestation)
     try:
-        bootstrap_evidence = verify_bootstrap_attestation(bootstrap_path)
+        bootstrap_evidence = verify_bootstrap_attestation(
+            bootstrap_path,
+            expected_source_revision=args.expected_source_commit,
+            expected_file_sha256=args.bootstrap_attestation_sha256,
+            expected_result_locator=args.bootstrap_result_locator,
+        )
     except BootstrapAttestationError as exc:
-        raise RuntimeError(f"bootstrap attestation verification failed: {exc}") from exc
+        raise RuntimeError(f"ruleset bootstrap attestation verification failed: {exc}") from exc
     bootstrap_ok = bootstrap_evidence.get("status") == "VERIFICADO"
+
+    try:
+        project_snapshot_evidence = verify_project_instructions_attestation(
+            args.project_instructions_attestation,
+            source_path=args.project_instructions_source,
+        )
+    except ProjectInstructionsAttestationError as exc:
+        raise RuntimeError(f"Project Instructions snapshot verification failed: {exc}") from exc
+
+    # A repository-local owner export proves only the snapshot bytes. It cannot prove that
+    # the persistent ChatGPT Project setting is still installed. Fail closed until an
+    # authenticated authoritative-source read is available.
+    project_bootstrap_ok = False
 
     results: list[dict[str, Any]] = []
     passed = 0
@@ -184,11 +213,18 @@ def main() -> int:
     live_ok = passed == 15 and critical_failures == 0
     post_manifest = baseline()
     post_manifest["session_id"] = args.deployment_id
-    post_manifest["post_deployment"] = {"single_active_ruleset": True, "bootstrap_installed": bootstrap_ok, "live_smoke_passed": live_ok, "live_smoke_count": passed, "critical_failures": critical_failures, "identity_recovered": EXPECTED_IDENTITY}
+    post_manifest["post_deployment"] = {
+        "single_active_ruleset": True,
+        "bootstrap_installed": project_bootstrap_ok,
+        "live_smoke_passed": live_ok,
+        "live_smoke_count": passed,
+        "critical_failures": critical_failures,
+        "identity_recovered": EXPECTED_IDENTITY,
+    }
     _, post_report, post_raw = http_json(args.base_url, "POST", "/v1/evaluate", post_manifest)
     pd_gate = next((g for g in post_report.get("gates", []) if g.get("gate") == "POST_DEPLOYMENT_GATE"), None)
     post_gate_pass = bool(pd_gate and pd_gate.get("state") == "PASS")
-    overall = live_ok and bootstrap_ok and post_gate_pass
+    overall = live_ok and bootstrap_ok and project_bootstrap_ok and post_gate_pass
 
     evidence = {
         "suite": "GENOMA v3.4 section-260 LIVE post-deployment smoke",
@@ -196,9 +232,17 @@ def main() -> int:
         "deployment_id": args.deployment_id,
         "ruleset": metadata,
         "ruleset_response_sha256": sha256_bytes(metadata_raw),
+        "ruleset_bootstrap_clause_present": bootstrap_ok,
         "bootstrap_attestation_sha256": bootstrap_evidence["file_sha256"],
+        "bootstrap_result_locator": bootstrap_evidence["result_locator"],
         "bootstrap_verification": bootstrap_evidence,
-        "bootstrap_verified": bootstrap_ok,
+        "project_instructions_snapshot_verified": project_snapshot_evidence.get("status") == "VERIFICADO",
+        "project_bootstrap_installed": False,
+        "project_bootstrap_installation_status": "NÃO DISPONÍVEL",
+        "project_instructions_attestation_sha256": project_snapshot_evidence["file_sha256"],
+        "project_instructions_source_sha256": project_snapshot_evidence["source_sha256"],
+        "project_instructions_source_locator": project_snapshot_evidence["source_locator"],
+        "project_instructions_verification": project_snapshot_evidence,
         "passed": passed,
         "total": 15,
         "critical_failures": critical_failures,
