@@ -281,6 +281,8 @@ class TemplateV3ContractTest(unittest.TestCase):
             },
         )
         data["ruleset"] = dict(RULESET)
+        # Patient-free fixture only: release assembly supplies this prerequisite in
+        # production, whose compiler defaults remain fail-closed.
         data["publication_gate"]["placeholders_resolved"] = True
         rendered = render_document("10", data, mode="FINAL")
         with tempfile.TemporaryDirectory() as td:
