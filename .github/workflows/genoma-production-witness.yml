@@ -70,12 +70,21 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
+          from scripts.sealed_ruleset import (
+              EXPECTED_DATE,
+              EXPECTED_NAME,
+              EXPECTED_SECTIONS,
+              EXPECTED_SHA,
+              EXPECTED_STATUS,
+              EXPECTED_VERSION,
+          )
           p=json.loads(Path('evidence/live-ruleset.json').read_text())
-          assert p['status']=='VIGENTE'
-          assert p['version']=='v3.4'
-          assert p['effective_date']=='17/08/2026'
-          assert p['sha256']=='ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580'
-          assert p['section_count']==263
+          assert p['status']==EXPECTED_STATUS
+          assert p['version']==EXPECTED_VERSION
+          assert p['effective_date']==EXPECTED_DATE
+          assert p['canonical_filename']==EXPECTED_NAME
+          assert p['sha256']==EXPECTED_SHA
+          assert p['section_count']==EXPECTED_SECTIONS
           PY
       - name: Execute all 15 section-260 scenarios through the live HTTP instance
         run: |
@@ -100,6 +109,13 @@ jobs:
           import hashlib, json, os
           from datetime import datetime, timezone
           from pathlib import Path
+          from scripts.sealed_ruleset import (
+              EXPECTED_DATE,
+              EXPECTED_NAME,
+              EXPECTED_SHA,
+              EXPECTED_STATUS,
+              EXPECTED_VERSION,
+          )
           root=Path('evidence')
           summary_path=root/'live-section-260'/'summary.json'
           if not summary_path.exists():
@@ -115,7 +131,13 @@ jobs:
               'schema':'genoma-production-witness-v1',
               'operational_status':'VERIFICADO',
               'post_deployment_status':'PASS',
-              'ruleset':{'status':'VIGENTE','version':'v3.4','effective_date':'17/08/2026','sha256':'ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580'},
+              'ruleset':{
+                  'status':EXPECTED_STATUS,
+                  'version':EXPECTED_VERSION,
+                  'effective_date':EXPECTED_DATE,
+                  'canonical_filename':EXPECTED_NAME,
+                  'sha256':EXPECTED_SHA,
+              },
               'section_260':{'passed':15,'total':15,'critical_failures':0},
               'git_sha':os.environ['GITHUB_SHA'],
               'workflow_run_id':os.environ['GITHUB_RUN_ID'],
