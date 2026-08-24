@@ -47,6 +47,24 @@ class ClinvarCoordinateIdentityTests(unittest.TestCase):
         ):
             return CURATE.fetch_clinvar_conditions("rs123")
 
+    def test_dbsnp_failure_is_local_to_one_locus(self):
+        from scripts.verify_provenance_markers import MarkerVerificationError
+
+        with patch.object(
+            CURATE,
+            "fetch_clinvar_conditions",
+            side_effect=[
+                MarkerVerificationError("temporary dbSNP failure"),
+                {"status": "VERIFICADO", "records": [{"accession": "VCV2"}]},
+            ],
+        ):
+            first = CURATE._clinvar_for_locus("rs1")
+            second = CURATE._clinvar_for_locus("rs2")
+        self.assertEqual(first["status"], CURATE.UNAVAILABLE)
+        self.assertIn("temporary dbSNP failure", first["reason"])
+        self.assertEqual(second["status"], "VERIFICADO")
+        self.assertEqual(second["records"][0]["accession"], "VCV2")
+
     def test_matching_grch38_spdi_is_verified(self):
         result = self._run(_summary("NC_000001.11", 100, "A"))
         self.assertEqual(result["status"], "VERIFICADO")
