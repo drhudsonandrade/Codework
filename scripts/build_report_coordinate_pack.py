@@ -173,7 +173,7 @@ def _spans_are_geometrically_contiguous(
     scale = max(float(previous["size"]), float(current["size"]), 1.0)
 
     vertical_overlap = min(left.y1, right.y1) - max(left.y0, right.y0)
-    if vertical_overlap >= -0.25 * scale:
+    if vertical_overlap >= 0:
         horizontal_gap = right.x0 - left.x1
         return -scale <= horizontal_gap <= max(18.0, 2.0 * scale)
 
