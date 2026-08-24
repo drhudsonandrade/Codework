@@ -194,6 +194,11 @@ def build(
         raise TraitScopeError(f"unsupported trait scope schema: {config.get('schema')!r}")
     threshold = float(config.get("significance_threshold", 5e-8))
     per_term = int(config.get("max_loci_per_term", 40))
+    invalid_scopes = sorted(set(config.get("scopes") or {}) - set(SCOPE_RANK))
+    if invalid_scopes:
+        raise TraitScopeError(
+            "unknown trait scope(s): " + ", ".join(invalid_scopes)
+        )
 
     wanted: dict[str, tuple[str, str]] = {}
     for scope, block in config["scopes"].items():
