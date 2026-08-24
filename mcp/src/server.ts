@@ -138,6 +138,10 @@ export async function runFixedScript(
     stdio: ["ignore", "pipe", "pipe"],
   });
   const terminate = (signal: NodeJS.Signals): void => terminateProcessGroup(child, signal);
+  let exited = false;
+  child.once("exit", () => {
+    exited = true;
+  });
 
   let stdout = "";
   let stdoutBytes = 0;
@@ -177,7 +181,11 @@ export async function runFixedScript(
     return stdout.trim();
   } finally {
     clearScriptTimers(timeoutTimer, killTimer);
-    terminate("SIGKILL");
+    // Only a child that is still running may be signalled. Once it has exited it has been
+    // reaped, and the OS is free to hand its pid to an unrelated process group.
+    if (!exited) {
+      terminate("SIGKILL");
+    }
   }
 }
 
@@ -326,7 +334,6 @@ type ClaimMutationLock = {
 
 type ClaimMutationLockInspection =
   | { kind: "missing" }
-  | { kind: "ownerless" }
   | { kind: "invalid" }
   | { kind: "owner"; ownerPath: string; metadata: ClaimMutationLockMetadata };
 
@@ -339,12 +346,15 @@ const claimMutationLockMetadataSchema = z
   .strict();
 
 const CLAIM_MUTATION_LOCK_OWNER = "owner.json";
-/** Removal codes that prove the directory was not the ownerless leftover it looked like. */
-const INVALID_OWNERLESS_LOCK_ERRORS = new Set(["ENOTEMPTY", "EEXIST"]);
 
+/**
+ * Codes meaning the lock path is already occupied by something this acquisition may not
+ * replace. ENOTDIR covers a non-directory sitting at the lock path: not contention, but
+ * it belongs in the same inspection so acquisition fails closed with one message.
+ */
 function lockContention(error: unknown): boolean {
   const code = (error as NodeJS.ErrnoException).code;
-  return code === "EEXIST" || code === "ENOTEMPTY";
+  return code === "EEXIST" || code === "ENOTEMPTY" || code === "ENOTDIR";
 }
 
 async function listClaimMutationLockEntries(lockPath: string): Promise<string[] | undefined> {
@@ -373,24 +383,8 @@ async function parseClaimMutationLockOwner(ownerPath: string): Promise<ClaimMuta
 
 type ClaimMutationLockDirectoryInspection =
   | { kind: "missing" }
-  | { kind: "ownerless" }
   | { kind: "invalid" }
   | { kind: "owner-path"; ownerPath: string };
-
-function classifyClaimMutationLockEntries(
-  lockPath: string,
-  entries: string[],
-): ClaimMutationLockDirectoryInspection {
-  // An empty directory is the crash window of createClaimMutationLock: the lock
-  // directory exists but no owner ever claimed it. Nothing can release it, so it has
-  // to stay recoverable or the request id is wedged for good.
-  if (entries.length === 0) {
-    return { kind: "ownerless" };
-  }
-  return canonicalClaimMutationLockOwner(entries)
-    ? { kind: "owner-path", ownerPath: path.join(lockPath, CLAIM_MUTATION_LOCK_OWNER) }
-    : { kind: "invalid" };
-}
 
 async function inspectClaimMutationLockDirectory(
   lockPath: string,
@@ -404,7 +398,9 @@ async function inspectClaimMutationLockDirectory(
   if (entries === undefined) {
     return { kind: "missing" };
   }
-  return classifyClaimMutationLockEntries(lockPath, entries);
+  return canonicalClaimMutationLockOwner(entries)
+    ? { kind: "owner-path", ownerPath: path.join(lockPath, CLAIM_MUTATION_LOCK_OWNER) }
+    : { kind: "invalid" };
 }
 
 async function inspectClaimMutationLock(lockPath: string): Promise<ClaimMutationLockInspection> {
@@ -418,20 +414,27 @@ async function inspectClaimMutationLock(lockPath: string): Promise<ClaimMutation
     : { kind: "owner", ownerPath: directory.ownerPath, metadata };
 }
 
-async function cleanupFailedClaimMutationLock(lockPath: string, ownerPath: string): Promise<void> {
+async function cleanupStagedClaimMutationLock(stagingPath: string, ownerPath: string): Promise<void> {
   try {
     await unlink(ownerPath);
   } catch {
-    // Preserve the acquisition error while removing a partially created lock.
+    // Preserve the acquisition error; this staging path never became the shared lock.
   }
   try {
-    await rmdir(lockPath);
+    await rmdir(stagingPath);
   } catch {
-    // Preserve the acquisition error; the ownerless directory left behind is recovered
-    // by the next acquisition instead of wedging the request id.
+    // Preserve the acquisition error; a unique staging directory cannot block another owner.
   }
 }
 
+/**
+ * Publishes the lock in a single step. The owner file is written inside a uniquely named
+ * staging directory, so the shared lock path only ever appears with its owner already in
+ * it and a crash before the rename leaves nothing there to recover. POSIX rename replaces
+ * an empty target directory — which absorbs the leftover of a release that died between
+ * removing the owner file and removing the directory — and refuses a target that still
+ * holds an owner (ENOTEMPTY), so a live holder keeps its lock.
+ */
 async function createClaimMutationLock(lockPath: string): Promise<ClaimMutationLock> {
   const lockId = randomUUID();
   const metadata: ClaimMutationLockMetadata = {
@@ -439,19 +442,21 @@ async function createClaimMutationLock(lockPath: string): Promise<ClaimMutationL
     lockedAt: new Date().toISOString(),
     leaseExpiresAt: leaseExpiresAt(CLAIM_MUTATION_LOCK_LEASE_MS),
   };
-  const ownerPath = path.join(lockPath, CLAIM_MUTATION_LOCK_OWNER);
-  await mkdir(lockPath, { mode: 0o700 });
+  const stagingPath = `${lockPath}.owner-${lockId}`;
+  const stagingOwnerPath = path.join(stagingPath, CLAIM_MUTATION_LOCK_OWNER);
+  await mkdir(stagingPath, { mode: 0o700 });
   try {
-    await writeFile(ownerPath, `${JSON.stringify(metadata)}\n`, {
+    await writeFile(stagingOwnerPath, `${JSON.stringify(metadata)}\n`, {
       encoding: "utf8",
       flag: "wx",
       mode: 0o600,
     });
+    await rename(stagingPath, lockPath);
   } catch (error) {
-    await cleanupFailedClaimMutationLock(lockPath, ownerPath);
+    await cleanupStagedClaimMutationLock(stagingPath, stagingOwnerPath);
     throw error;
   }
-  return { lockPath, ownerPath, metadata };
+  return { lockPath, ownerPath: path.join(lockPath, CLAIM_MUTATION_LOCK_OWNER), metadata };
 }
 
 function assertRecoverableClaimMutationLock(
@@ -488,71 +493,23 @@ async function cleanupRecoveredClaimMutationLock(recoveredPath: string): Promise
   }
 }
 
-type OwnerlessLockRemovalError = "gone" | "invalid" | "failed";
-
-function classifyOwnerlessLockRemovalError(error: unknown): OwnerlessLockRemovalError {
-  const code = (error as NodeJS.ErrnoException).code;
-  if (code === "ENOENT") {
-    return "gone";
-  }
-  return INVALID_OWNERLESS_LOCK_ERRORS.has(code ?? "") ? "invalid" : "failed";
-}
-
-/**
- * Removes only a verified ownerless lock directory. `rmdir` refuses a directory with
- * any entry, so an owner file written between the inspection and this call surfaces as
- * ENOTEMPTY and keeps the lock fail-closed instead of unlocking a live holder.
- */
-async function removeOwnerlessClaimMutationLock(lockPath: string): Promise<boolean> {
-  try {
-    await rmdir(lockPath);
+async function recoverClaimMutationLock(lockPath: string): Promise<boolean> {
+  const inspection = await inspectClaimMutationLock(lockPath);
+  if (inspection.kind === "missing") {
     return true;
-  } catch (error) {
-    const outcome = classifyOwnerlessLockRemovalError(error);
-    if (outcome === "gone") {
-      return true;
-    }
-    if (outcome === "invalid") {
-      throw new Error("request claim coordination lock is invalid");
-    }
-    throw new Error("request claim coordination lock could not be recovered");
   }
-}
-
-/** Returns false when another acquirer recovered the expired lock first. */
-async function stageRecoveredClaimMutationLock(lockPath: string, recoveredPath: string): Promise<boolean> {
+  const owner = assertRecoverableClaimMutationLock(inspection);
+  const recoveredPath = `${lockPath}.recovered-${owner.metadata.lockId}-${randomUUID()}`;
   try {
     await rename(lockPath, recoveredPath);
-    return true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return false;
     }
     throw new Error("request claim coordination lock could not be recovered");
   }
-}
-
-async function recoverExpiredClaimMutationLock(
-  lockPath: string,
-  owner: Extract<ClaimMutationLockInspection, { kind: "owner" }>,
-): Promise<boolean> {
-  const recoveredPath = `${lockPath}.recovered-${owner.metadata.lockId}-${randomUUID()}`;
-  if (!(await stageRecoveredClaimMutationLock(lockPath, recoveredPath))) {
-    return false;
-  }
   await cleanupRecoveredClaimMutationLock(recoveredPath);
   return true;
-}
-
-async function recoverClaimMutationLock(lockPath: string): Promise<boolean> {
-  const inspection = await inspectClaimMutationLock(lockPath);
-  if (inspection.kind === "missing") {
-    return true;
-  }
-  if (inspection.kind === "ownerless") {
-    return removeOwnerlessClaimMutationLock(lockPath);
-  }
-  return recoverExpiredClaimMutationLock(lockPath, assertRecoverableClaimMutationLock(inspection));
 }
 
 async function tryCreateClaimMutationLock(lockPath: string): Promise<ClaimMutationLock | undefined> {

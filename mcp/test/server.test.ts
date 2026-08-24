@@ -451,7 +451,7 @@ test("invalid owner.json blocks mutation-lock recovery fail-closed", async () =>
   assert.equal(executions, 0);
 });
 
-test("an ownerless mutation-lock directory is recovered instead of wedging the request id", async () => {
+test("an empty lock directory left by a half-finished release is absorbed", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-empty-"));
   const claimPath = path.join(dir, "claim");
   const lockPath = `${claimPath}.lock`;
@@ -464,11 +464,26 @@ test("an ownerless mutation-lock directory is recovered instead of wedging the r
   });
 
   assert.equal(result, "PASS");
-  assert.equal(executions, 1, "an owner that never claimed the lock cannot block acquisition");
+  assert.equal(executions, 1, "a directory no owner ever claimed cannot block acquisition");
   await assert.rejects(stat(lockPath), /ENOENT/);
 });
 
-test("an ownerless mutation-lock directory with unexpected entries stays fail-closed", async () => {
+test("acquisition publishes the lock atomically and leaves no staging directory", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-atomic-"));
+  const claimPath = path.join(dir, "claim");
+  const lockPath = `${claimPath}.lock`;
+
+  const held = await withClaimMutationLock(claimPath, async () => {
+    // The shared lock path must never be observable without its owner inside it.
+    assert.deepEqual(await readdir(lockPath), ["owner.json"]);
+    return readdir(dir);
+  });
+
+  assert.deepEqual(held, ["claim.lock"], "the staging directory must not outlive the publish");
+  assert.deepEqual(await readdir(dir), [], "release must leave the claim directory clean");
+});
+
+test("a lock directory with unexpected entries stays fail-closed", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-unexpected-"));
   const claimPath = path.join(dir, "claim");
   const lockPath = `${claimPath}.lock`;
@@ -692,6 +707,27 @@ test(
     await assert.rejects(stat(marker), /ENOENT/, "a descendant outlived the terminated process group");
   },
 );
+
+test("a script that has already exited is never signalled again", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-reaped-"));
+  const ok = path.join(dir, "ok.sh");
+  await writeFile(ok, ["#!/bin/sh", "echo done", ""].join("\n"), { mode: 0o755 });
+
+  const originalKill = process.kill.bind(process);
+  const signalled: number[] = [];
+  process.kill = ((pid: number, signal?: string | number) => {
+    signalled.push(pid);
+    return originalKill(pid, signal as NodeJS.Signals);
+  }) as typeof process.kill;
+
+  try {
+    assert.equal(await runFixedScript(ok, [], process.env, 10_000), "done");
+  } finally {
+    process.kill = originalKill;
+  }
+
+  assert.deepEqual(signalled, [], "a reaped pid may already belong to an unrelated process group");
+});
 
 test("runFixedScript returns stdout and sanitizes retained stderr on failure", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "codework-exit-"));
