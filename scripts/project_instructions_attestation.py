@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Fail-closed attestation for the actually deployed Project Instructions snapshot.
+"""Fail-closed verifier for an owner-exported GENOMA Project Instructions snapshot.
 
-This control is deliberately separate from ``bootstrap_attestation.py``. The normative
-bootstrap attestation proves that the sealed ruleset contains the BOOTSTRAP CURTO
-requirement. This module proves that an owner-exported snapshot of the persistent Project
-Instructions contains the required v3.4 bootstrap clauses. Only this attestation may feed
-``post_deployment.bootstrap_installed``.
+This module deliberately does **not** prove that the persistent ChatGPT Project
+configuration is currently installed. A repository-local copy can prove only the bytes
+that were supplied/exported by the owner. Therefore a verified snapshot always keeps
+``project_bootstrap_installed`` false. A POST-DEPLOYMENT PASS requires a separate,
+authenticated read from the authoritative persistent Project Instructions surface; that
+capability is not fabricated here.
 """
 from __future__ import annotations
 
@@ -19,17 +20,16 @@ from typing import Any
 
 from scripts.sealed_ruleset import EXPECTED_DATE, EXPECTED_NAME, EXPECTED_SHA, EXPECTED_VERSION
 
-ATTESTATION_TYPE = "GENOMA_PROJECT_INSTRUCTIONS"
+ATTESTATION_TYPE = "GENOMA_PROJECT_INSTRUCTIONS_SNAPSHOT"
 SOURCE_KIND = "OWNER_EXPORTED_PROJECT_INSTRUCTIONS"
+EVIDENCE_CLASSIFICATION = "VERIFIED_OWNER_SNAPSHOT_ONLY"
 VERIFIED_STATUS = "VERIFICADO"
+INSTALLATION_STATUS = "NÃO DISPONÍVEL"
 EXPECTED_RULESET_IDENTITY = f"{EXPECTED_VERSION}/VIGENTE/{EXPECTED_DATE}"
 RFC3339_DATETIME_RE = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$"
 )
 
-# These are literal, high-signal fragments from the canonical v3.4 BOOTSTRAP CURTO.
-# Requiring the exact fragments prevents a generic or superseded instruction from being
-# promoted to PROJECT_BOOTSTRAP_INSTALLED.
 REQUIRED_CLAUSES: dict[str, str] = {
     "canonical_ruleset_filename": EXPECTED_NAME,
     "status_vigente": "STATUS NORMATIVO: VIGENTE",
@@ -73,7 +73,7 @@ def _require_verified_at(value: Any) -> str:
 def _require_locator(value: Any) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ProjectInstructionsAttestationError(
-            "project instructions source locator is required and must identify the deployed Project Instructions"
+            "project instructions source locator is required and must identify the claimed Project Instructions surface"
         )
     return value.strip()
 
@@ -112,6 +112,7 @@ def build_attestation(
     source_locator: str,
     verified_at: str,
 ) -> dict[str, Any]:
+    """Build snapshot evidence without promoting it to installation evidence."""
     verified_at = _require_verified_at(verified_at)
     source_locator = _require_locator(source_locator)
     raw, text = _read_source(source_path)
@@ -119,13 +120,15 @@ def build_attestation(
     missing = sorted(name for name, result in checks.items() if not result["satisfied"])
     if missing:
         raise ProjectInstructionsAttestationError(
-            "PROJECT_BOOTSTRAP_INSTALLED cannot be attested; missing canonical Project Instructions clauses: "
+            "Project Instructions snapshot is missing canonical v3.4 bootstrap clauses: "
             + ", ".join(missing)
         )
     return {
         "attestation_type": ATTESTATION_TYPE,
         "status": VERIFIED_STATUS,
-        "project_bootstrap_installed": True,
+        "evidence_classification": EVIDENCE_CLASSIFICATION,
+        "project_bootstrap_installed": False,
+        "installation_status": INSTALLATION_STATUS,
         "ruleset_identity": EXPECTED_RULESET_IDENTITY,
         "canonical_filename": EXPECTED_NAME,
         "canonical_sha256": EXPECTED_SHA,
@@ -139,9 +142,11 @@ def build_attestation(
         },
         "checks_evidence": checks,
         "limitations": (
-            "This attestation is re-derived from an owner-exported snapshot of the persistent Project Instructions. "
-            "It proves the snapshot content and its recorded locator; it is not evidence that can be generated from "
-            "the sealed ruleset itself and must be refreshed whenever Project Instructions change."
+            "VERIFICADO applies only to the bytes of this owner-exported snapshot. "
+            "No authenticated machine-readable read of the authoritative persistent ChatGPT Project Instructions "
+            "was available, so this artifact MUST NOT set PROJECT_BOOTSTRAP_INSTALLED=true. "
+            "Refresh the snapshot whenever Project Instructions change and obtain authoritative persistent-source "
+            "evidence before a POST-DEPLOYMENT PASS."
         ),
     }
 
@@ -155,23 +160,26 @@ def verify_project_instructions_attestation(
     *,
     source_path: str | Path,
 ) -> dict[str, Any]:
+    """Verify a snapshot attestation and return ``project_bootstrap_installed=False``."""
     attestation_path = Path(path)
     if not attestation_path.is_file():
-        raise ProjectInstructionsAttestationError("project instructions attestation is missing")
+        raise ProjectInstructionsAttestationError("project instructions snapshot attestation is missing")
     try:
         raw_attestation = attestation_path.read_bytes()
         payload = json.loads(raw_attestation.decode("utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ProjectInstructionsAttestationError(
-            f"project instructions attestation is invalid: {type(exc).__name__}: {exc}"
+            f"project instructions snapshot attestation is invalid: {type(exc).__name__}: {exc}"
         ) from exc
     if not isinstance(payload, dict):
-        raise ProjectInstructionsAttestationError("project instructions attestation must be a JSON object")
+        raise ProjectInstructionsAttestationError("project instructions snapshot attestation must be a JSON object")
 
     expected_identity = {
         "attestation_type": ATTESTATION_TYPE,
         "status": VERIFIED_STATUS,
-        "project_bootstrap_installed": True,
+        "evidence_classification": EVIDENCE_CLASSIFICATION,
+        "project_bootstrap_installed": False,
+        "installation_status": INSTALLATION_STATUS,
         "ruleset_identity": EXPECTED_RULESET_IDENTITY,
         "canonical_filename": EXPECTED_NAME,
         "canonical_sha256": EXPECTED_SHA,
@@ -184,13 +192,13 @@ def verify_project_instructions_attestation(
     }
     if mismatches:
         raise ProjectInstructionsAttestationError(
-            f"project instructions attestation identity mismatch: {mismatches}"
+            f"project instructions snapshot attestation identity mismatch: {mismatches}"
         )
     _require_verified_at(payload.get("verified_at"))
 
     source_meta = payload.get("source")
     if not isinstance(source_meta, dict) or source_meta.get("kind") != SOURCE_KIND:
-        raise ProjectInstructionsAttestationError("project instructions source metadata is invalid")
+        raise ProjectInstructionsAttestationError("project instructions snapshot source metadata is invalid")
     locator = _require_locator(source_meta.get("locator"))
     raw_source, source_text = _read_source(source_path)
     source_sha = _sha256(raw_source)
@@ -203,18 +211,19 @@ def verify_project_instructions_attestation(
     missing = sorted(name for name, result in checks.items() if not result["satisfied"])
     if missing:
         raise ProjectInstructionsAttestationError(
-            "PROJECT_BOOTSTRAP_INSTALLED verification failed; canonical clauses are missing: "
+            "project instructions snapshot verification failed; canonical clauses are missing: "
             + ", ".join(missing)
         )
-    recorded_checks = payload.get("checks_evidence")
-    if recorded_checks != checks or set(checks) != EXPECTED_CHECKS:
+    if payload.get("checks_evidence") != checks or set(checks) != EXPECTED_CHECKS:
         raise ProjectInstructionsAttestationError(
             "project instructions check evidence is not reproducible from the supplied source snapshot"
         )
 
     return {
         "status": VERIFIED_STATUS,
-        "project_bootstrap_installed": True,
+        "evidence_classification": EVIDENCE_CLASSIFICATION,
+        "project_bootstrap_installed": False,
+        "installation_status": INSTALLATION_STATUS,
         "file_sha256": _sha256(raw_attestation),
         "source_sha256": source_sha,
         "source_locator": locator,
@@ -227,7 +236,7 @@ def verify_project_instructions_attestation(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", required=True, help="owner-exported Project Instructions UTF-8 snapshot")
-    parser.add_argument("--output", required=True, help="attestation JSON path")
+    parser.add_argument("--output", required=True, help="snapshot attestation JSON path")
     parser.add_argument("--source-locator")
     parser.add_argument("--verified-at")
     parser.add_argument("--write", action="store_true")
