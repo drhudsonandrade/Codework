@@ -27,6 +27,7 @@ as such.
 from __future__ import annotations
 
 import json
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -89,27 +90,29 @@ def read_case_genotypes(input_path: Path, rsids: set[str]) -> tuple[dict[str, st
 
     collected: dict[str, set[str]] = {}
     stats: dict[str, int] = {"rows": 0, "matched": 0, "unresolved": 0, "no_call": 0, "conflicting": 0}
-    for schema, row in _row_reader(Path(input_path)):
-        stats["rows"] += 1
-        rsid = (row.get("RSID") or "").strip().lower()
-        if rsid not in rsids:
-            continue
-        stats["matched"] += 1
-        if schema and schema.startswith("harmonized"):
-            raw = row.get("CONSENSUS_RESULT")
-            status = (row.get("STATUS") or "").strip().lower()
-        else:
-            raw = row.get("RESULT")
-            status = ""
-        if status in UNRESOLVED_OVERLAP_STATUSES:
-            stats["unresolved"] += 1
-            continue
-        if not _is_valid_consensus(raw):
-            stats["no_call"] += 1
-            continue
-        genotype = _canonical_gt(raw)
-        if genotype:
-            collected.setdefault(rsid, set()).add(genotype)
+    iterator = _row_reader(Path(input_path))
+    with closing(iterator):
+        for schema, row in iterator:
+            stats["rows"] += 1
+            rsid = (row.get("RSID") or "").strip().lower()
+            if rsid not in rsids:
+                continue
+            stats["matched"] += 1
+            if schema and schema.startswith("harmonized"):
+                raw = row.get("CONSENSUS_RESULT")
+                status = (row.get("STATUS") or "").strip().lower()
+            else:
+                raw = row.get("RESULT")
+                status = ""
+            if status in UNRESOLVED_OVERLAP_STATUSES:
+                stats["unresolved"] += 1
+                continue
+            if not _is_valid_consensus(raw):
+                stats["no_call"] += 1
+                continue
+            genotype = _canonical_gt(raw)
+            if genotype:
+                collected.setdefault(rsid, set()).add(genotype)
 
     genotypes: dict[str, str] = {}
     for rsid, values in collected.items():
@@ -129,8 +132,23 @@ def load_panel(path: Path) -> dict[str, Any]:
         raise AncestryPanelError(f"unsupported ancestry panel schema: {panel.get('schema')!r}")
     if not panel.get("sources"):
         raise AncestryPanelError("ancestry panel must cite its sources")
-    if not panel.get("markers"):
+    markers = panel.get("markers")
+    if not isinstance(markers, list) or not markers:
         raise AncestryPanelError("ancestry panel carries no markers")
+    loading_lengths: set[int] = set()
+    for marker in markers:
+        loadings = marker.get("loadings") if isinstance(marker, dict) else None
+        if not isinstance(loadings, list) or not loadings:
+            raise AncestryPanelError(
+                f"ancestry panel marker {getattr(marker, 'get', lambda _k: None)('rsid')!r} "
+                "must carry a non-empty loadings list"
+            )
+        loading_lengths.add(len(loadings))
+    if len(loading_lengths) != 1:
+        raise AncestryPanelError(
+            "ancestry panel marker loadings must all have the same length; "
+            f"found dimensions {sorted(loading_lengths)}"
+        )
     return panel
 
 
@@ -343,23 +361,7 @@ def project_case(
             "o ajuste mais próximo, não uma decomposição."
         )
 
-    # The minor-component caveat is unconditional, and that is a correction rather than
-    # caution. It used to fire only above a 15% residual, on the observation that a Yoruba
-    # reference individual picked up a spurious 17.5% Native American component at a 28%
-    # residual. Rebuilding the panel on 60,000 markers moved that individual to a 7% residual
-    # — quality "boa" — while he still receives a 20% spurious component. The residual and
-    # the artefact turned out not to travel together, so a guard keyed to the residual misses
-    # exactly the case it was written for.
-    #
-    # The size quoted is measured, not asserted: it comes from the panel's own validation
-    # artefact, where individuals of known origin are projected and their spurious components
-    # recorded. Without that artefact the floor is unknown and the text says so.
     measured = (panel.get("validation_summary") or {}).get("largest_spurious_component")
-    # Published as a number beside the prose. A consumer that has to parse a sentence to
-    # learn the floor will not apply it, and `build_ancestry_report` did not: it printed
-    # every component above a hardcoded 0.5% while this artefact said 20% — so five of seven
-    # components on the first real case were below the panel's own measured noise and were
-    # printed anyway, with tight bootstrap intervals that read as precision.
     result["minor_component_floor"] = (
         round(float(measured), 4) if isinstance(measured, (int, float)) and measured > 0 else None
     )
