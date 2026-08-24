@@ -2,18 +2,6 @@ name: GENOMA deterministic policy engine
 
 on:
   pull_request:
-    paths:
-      - 'manifests/RULESET_V3.4.sha256'
-      - 'normative/**'
-      - 'policy_engine/**'
-      - 'locks/**'
-      - 'template_store/**'
-      - 'scripts/validate_repo.py'
-      - 'scripts/verify_supply_chain_lock.py'
-      - 'scripts/materialize_ruleset.py'
-      - 'scripts/run_live_post_deployment_smoke.py'
-      - 'adapters/**'
-      - '.github/workflows/genoma-policy-engine.yml'
   push:
     branches: [main]
     paths:
