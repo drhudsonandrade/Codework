@@ -140,6 +140,24 @@ plugin_available() {
   ] | length == 1' >/dev/null
 }
 
+plugin_present() {
+  jq -e --arg expected_sha "$CODERABBIT_PLUGIN_SOURCE_SHA" --arg expected_marketplace_source "$expected_marketplace_source" '[
+    .installed[]?
+    | select(
+        .pluginId == "coderabbit@codework-codex"
+        and .name == "coderabbit"
+        and .marketplaceName == "codework-codex"
+        and .installed == true
+        and .marketplaceSource.sourceType == "local"
+        and .marketplaceSource.source == $expected_marketplace_source
+        and .source.source == "git-subdir"
+        and .source.url == "openai/plugins"
+        and .source.path == "plugins/coderabbit"
+        and .source.sha == $expected_sha
+      )
+  ] | length == 1' >/dev/null
+}
+
 plugin_installed() {
   jq -e --arg expected_sha "$CODERABBIT_PLUGIN_SOURCE_SHA" --arg expected_marketplace_source "$expected_marketplace_source" '[
     .installed[]?
@@ -166,10 +184,12 @@ fi
 marketplaces_json="$(codex plugin marketplace list --json)"
 marketplace_present <<<"$marketplaces_json" || fail "marketplace codework-codex não foi confirmado no root local revisado após registro."
 
-# Availability is discovery only. Success requires an installed+enabled plugin whose
-# marketplace provenance and resolved plugin source both match reviewed identities.
+# Availability is discovery only. An already-installed plugin is never re-added;
+# success still requires that exact installed plugin to be enabled and provenance-bound.
 plugins_json="$(codex plugin list --marketplace codework-codex --json --available)"
-if ! plugin_installed <<<"$plugins_json"; then
+if plugin_present <<<"$plugins_json"; then
+  plugin_installed <<<"$plugins_json" || fail "plugin coderabbit não foi confirmado como instalado, habilitado e preso ao marketplace/root e source SHA revisados."
+elif ! plugin_installed <<<"$plugins_json"; then
   plugin_available <<<"$plugins_json" || fail "plugin coderabbit não está disponível a partir do marketplace/root e source SHA revisados."
   codex plugin add coderabbit@codework-codex --json >/dev/null
 fi
