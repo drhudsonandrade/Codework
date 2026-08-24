@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gzip
 import unittest
+from unittest.mock import patch
 
 from array_pipeline.assembly import bounded_gunzip, is_beyond_end, lengths_for
 
@@ -16,6 +17,25 @@ class AssemblyRegressionTest(unittest.TestCase):
         raw = gzip.compress(b"RSID,CHROMOSOME\n" * 1000)
         with self.assertRaisesRegex(ValueError, "truncated|incomplete"):
             bounded_gunzip(raw[: len(raw) // 2], name="fixture.gz")
+
+    def test_bounded_gunzip_counts_pending_flush_output(self):
+        class PendingOutput:
+            eof = True
+            unused_data = b""
+            unconsumed_tail = b""
+
+            def decompress(self, _data, _limit):
+                return b""
+
+            def flush(self, _limit):
+                return b"x" * 17
+
+        with (
+            patch("zlib.decompressobj", return_value=PendingOutput()),
+            patch("array_pipeline.assembly.MAX_REGISTRY_UNCOMPRESSED_BYTES", 16),
+        ):
+            with self.assertRaisesRegex(ValueError, "expands past"):
+                bounded_gunzip(b"compressed", name="fixture.gz")
 
     def test_bounded_gunzip_rejects_a_second_member(self):
         raw = gzip.compress(b"first member") + gzip.compress(b"second member")
