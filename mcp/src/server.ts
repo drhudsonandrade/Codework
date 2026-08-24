@@ -363,7 +363,14 @@ async function parseClaimMutationLockOwner(ownerPath: string): Promise<ClaimMuta
   }
 }
 
-async function inspectClaimMutationLock(lockPath: string): Promise<ClaimMutationLockInspection> {
+type ClaimMutationLockDirectoryInspection =
+  | { kind: "missing" }
+  | { kind: "invalid" }
+  | { kind: "owner-path"; ownerPath: string };
+
+async function inspectClaimMutationLockDirectory(
+  lockPath: string,
+): Promise<ClaimMutationLockDirectoryInspection> {
   let entries: string[] | undefined;
   try {
     entries = await listClaimMutationLockEntries(lockPath);
@@ -373,12 +380,20 @@ async function inspectClaimMutationLock(lockPath: string): Promise<ClaimMutation
   if (entries === undefined) {
     return { kind: "missing" };
   }
-  if (!canonicalClaimMutationLockOwner(entries)) {
-    return { kind: "invalid" };
+  return canonicalClaimMutationLockOwner(entries)
+    ? { kind: "owner-path", ownerPath: path.join(lockPath, CLAIM_MUTATION_LOCK_OWNER) }
+    : { kind: "invalid" };
+}
+
+async function inspectClaimMutationLock(lockPath: string): Promise<ClaimMutationLockInspection> {
+  const directory = await inspectClaimMutationLockDirectory(lockPath);
+  if (directory.kind !== "owner-path") {
+    return directory;
   }
-  const ownerPath = path.join(lockPath, CLAIM_MUTATION_LOCK_OWNER);
-  const metadata = await parseClaimMutationLockOwner(ownerPath);
-  return metadata === undefined ? { kind: "invalid" } : { kind: "owner", ownerPath, metadata };
+  const metadata = await parseClaimMutationLockOwner(directory.ownerPath);
+  return metadata === undefined
+    ? { kind: "invalid" }
+    : { kind: "owner", ownerPath: directory.ownerPath, metadata };
 }
 
 async function cleanupFailedClaimMutationLock(lockPath: string, ownerPath: string): Promise<void> {
