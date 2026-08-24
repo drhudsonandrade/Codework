@@ -112,6 +112,13 @@ class TemplateV3ContractTest(unittest.TestCase):
             self.assertEqual(recompressed["content_sha256"], verified["content_sha256"])
             self.assertFalse(recompressed["container_sha256_matches_pinned"])
 
+            oversized = gzip.compress(manifest + b"unexpected", mtime=0)
+            path.write_bytes(base64.b64encode(oversized) + b"\n")
+            with self.assertRaisesRegex(
+                TemplateV3Error, "exceeds the expected content size"
+            ):
+                verify_coordinate_detail(path, meta, manifest)
+
             multi_member = gzip.compress(manifest, mtime=0) + gzip.compress(
                 b"unexpected", mtime=0
             )
