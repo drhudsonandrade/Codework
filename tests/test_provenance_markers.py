@@ -4,14 +4,14 @@ import json
 import unittest
 from pathlib import Path
 
+from array_pipeline.provenance_probe import load_markers
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class ProvenanceMarkerEvidenceTest(unittest.TestCase):
     def test_shipped_marker_table_matches_pinned_dbsnp_evidence(self):
-        table = json.loads(
-            (ROOT / "config/array_provenance_markers.json").read_text(encoding="utf-8")
-        )
+        table = load_markers(ROOT / "config/array_provenance_markers.json")
         evidence = json.loads(
             (ROOT / "docs/evidence/ARRAY_PROVENANCE_MARKERS_DBSNP.json").read_text(
                 encoding="utf-8"
@@ -19,6 +19,8 @@ class ProvenanceMarkerEvidenceTest(unittest.TestCase):
         )
         self.assertEqual(evidence["status"], "VERIFICADO")
         self.assertEqual(evidence["discrepancies"], [])
+        self.assertTrue(table["markers"], "tabela de marcadores vazia")
+        self.assertEqual(evidence["markers_checked"], len(table["markers"]))
         self.assertEqual(
             evidence["marker_table"],
             {"id": table["id"], "version": table["version"]},
