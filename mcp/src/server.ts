@@ -59,6 +59,11 @@ const GROUP_TERMINATION_GRACE_MS = 5_000;
 /** A request lease outlives every supported operation budget and termination grace. */
 const REQUEST_CLAIM_STALE_MS =
   Math.max(...Object.values(TOOL_TIMEOUTS_MS)) + GROUP_TERMINATION_GRACE_MS + MINUTE_MS;
+/**
+ * Renewal cadence for a running claim. Renewing at a fraction of the lease keeps a live
+ * owner far from expiry even if several renewals lose the coordination lock in a row.
+ */
+const REQUEST_CLAIM_RENEWAL_INTERVAL_MS = Math.floor(REQUEST_CLAIM_STALE_MS / 4);
 /** Mutation-lock critical sections contain only local filesystem coordination. */
 const CLAIM_MUTATION_LOCK_LEASE_MS = 2 * MINUTE_MS;
 /** POSIX only: a negative pid signals the whole process group instead of one process. */
@@ -321,6 +326,7 @@ type ClaimMutationLock = {
 
 type ClaimMutationLockInspection =
   | { kind: "missing" }
+  | { kind: "ownerless" }
   | { kind: "invalid" }
   | { kind: "owner"; ownerPath: string; metadata: ClaimMutationLockMetadata };
 
@@ -333,6 +339,8 @@ const claimMutationLockMetadataSchema = z
   .strict();
 
 const CLAIM_MUTATION_LOCK_OWNER = "owner.json";
+/** Removal codes that prove the directory was not the ownerless leftover it looked like. */
+const INVALID_OWNERLESS_LOCK_ERRORS = new Set(["ENOTEMPTY", "EEXIST"]);
 
 function lockContention(error: unknown): boolean {
   const code = (error as NodeJS.ErrnoException).code;
@@ -365,8 +373,24 @@ async function parseClaimMutationLockOwner(ownerPath: string): Promise<ClaimMuta
 
 type ClaimMutationLockDirectoryInspection =
   | { kind: "missing" }
+  | { kind: "ownerless" }
   | { kind: "invalid" }
   | { kind: "owner-path"; ownerPath: string };
+
+function classifyClaimMutationLockEntries(
+  lockPath: string,
+  entries: string[],
+): ClaimMutationLockDirectoryInspection {
+  // An empty directory is the crash window of createClaimMutationLock: the lock
+  // directory exists but no owner ever claimed it. Nothing can release it, so it has
+  // to stay recoverable or the request id is wedged for good.
+  if (entries.length === 0) {
+    return { kind: "ownerless" };
+  }
+  return canonicalClaimMutationLockOwner(entries)
+    ? { kind: "owner-path", ownerPath: path.join(lockPath, CLAIM_MUTATION_LOCK_OWNER) }
+    : { kind: "invalid" };
+}
 
 async function inspectClaimMutationLockDirectory(
   lockPath: string,
@@ -380,9 +404,7 @@ async function inspectClaimMutationLockDirectory(
   if (entries === undefined) {
     return { kind: "missing" };
   }
-  return canonicalClaimMutationLockOwner(entries)
-    ? { kind: "owner-path", ownerPath: path.join(lockPath, CLAIM_MUTATION_LOCK_OWNER) }
-    : { kind: "invalid" };
+  return classifyClaimMutationLockEntries(lockPath, entries);
 }
 
 async function inspectClaimMutationLock(lockPath: string): Promise<ClaimMutationLockInspection> {
@@ -405,7 +427,8 @@ async function cleanupFailedClaimMutationLock(lockPath: string, ownerPath: strin
   try {
     await rmdir(lockPath);
   } catch {
-    // Preserve the acquisition error; if cleanup fails, later acquisition fails closed.
+    // Preserve the acquisition error; the ownerless directory left behind is recovered
+    // by the next acquisition instead of wedging the request id.
   }
 }
 
@@ -465,23 +488,71 @@ async function cleanupRecoveredClaimMutationLock(recoveredPath: string): Promise
   }
 }
 
-async function recoverClaimMutationLock(lockPath: string): Promise<boolean> {
-  const inspection = await inspectClaimMutationLock(lockPath);
-  if (inspection.kind === "missing") {
-    return true;
+type OwnerlessLockRemovalError = "gone" | "invalid" | "failed";
+
+function classifyOwnerlessLockRemovalError(error: unknown): OwnerlessLockRemovalError {
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === "ENOENT") {
+    return "gone";
   }
-  const owner = assertRecoverableClaimMutationLock(inspection);
-  const recoveredPath = `${lockPath}.recovered-${owner.metadata.lockId}-${randomUUID()}`;
+  return INVALID_OWNERLESS_LOCK_ERRORS.has(code ?? "") ? "invalid" : "failed";
+}
+
+/**
+ * Removes only a verified ownerless lock directory. `rmdir` refuses a directory with
+ * any entry, so an owner file written between the inspection and this call surfaces as
+ * ENOTEMPTY and keeps the lock fail-closed instead of unlocking a live holder.
+ */
+async function removeOwnerlessClaimMutationLock(lockPath: string): Promise<boolean> {
+  try {
+    await rmdir(lockPath);
+    return true;
+  } catch (error) {
+    const outcome = classifyOwnerlessLockRemovalError(error);
+    if (outcome === "gone") {
+      return true;
+    }
+    if (outcome === "invalid") {
+      throw new Error("request claim coordination lock is invalid");
+    }
+    throw new Error("request claim coordination lock could not be recovered");
+  }
+}
+
+/** Returns false when another acquirer recovered the expired lock first. */
+async function stageRecoveredClaimMutationLock(lockPath: string, recoveredPath: string): Promise<boolean> {
   try {
     await rename(lockPath, recoveredPath);
+    return true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return false;
     }
     throw new Error("request claim coordination lock could not be recovered");
   }
+}
+
+async function recoverExpiredClaimMutationLock(
+  lockPath: string,
+  owner: Extract<ClaimMutationLockInspection, { kind: "owner" }>,
+): Promise<boolean> {
+  const recoveredPath = `${lockPath}.recovered-${owner.metadata.lockId}-${randomUUID()}`;
+  if (!(await stageRecoveredClaimMutationLock(lockPath, recoveredPath))) {
+    return false;
+  }
   await cleanupRecoveredClaimMutationLock(recoveredPath);
   return true;
+}
+
+async function recoverClaimMutationLock(lockPath: string): Promise<boolean> {
+  const inspection = await inspectClaimMutationLock(lockPath);
+  if (inspection.kind === "missing") {
+    return true;
+  }
+  if (inspection.kind === "ownerless") {
+    return removeOwnerlessClaimMutationLock(lockPath);
+  }
+  return recoverExpiredClaimMutationLock(lockPath, assertRecoverableClaimMutationLock(inspection));
 }
 
 async function tryCreateClaimMutationLock(lockPath: string): Promise<ClaimMutationLock | undefined> {
@@ -674,7 +745,10 @@ function logClaimOwnershipChange(): void {
   console.warn("request claim release skipped because ownership changed or metadata is invalid");
 }
 
-function inspectionBelongsToClaim(inspection: ClaimInspection, claimId: string): boolean {
+function inspectionBelongsToClaim(
+  inspection: ClaimInspection,
+  claimId: string,
+): inspection is Extract<ClaimInspection, { kind: "metadata" }> {
   return inspection.kind === "metadata" && inspection.value.claimId === claimId;
 }
 
@@ -713,6 +787,116 @@ export async function releaseRequestClaim(claim: RequestClaim): Promise<void> {
   }
 }
 
+async function writeRequestClaimMetadata(claimPath: string, metadata: RequestClaimMetadata): Promise<void> {
+  const stagingPath = `${claimPath}.renew-${randomUUID()}`;
+  await writeFile(stagingPath, `${JSON.stringify(metadata)}\n`, {
+    encoding: "utf8",
+    flag: "wx",
+    mode: 0o600,
+  });
+  try {
+    // Renaming publishes the renewed lease in one step, so a crash mid-renewal can
+    // never leave a truncated claim that later inspections would read as invalid.
+    await rename(stagingPath, claimPath);
+  } catch (error) {
+    try {
+      await unlink(stagingPath);
+    } catch {
+      // The rename failure remains the primary error.
+    }
+    throw error;
+  }
+}
+
+/**
+ * @internal Exported so renewal can be asserted without waiting for the interval.
+ *
+ * Renews only a claim this owner still holds: the coordination lock plus the claimId
+ * proves no recoverer has replaced the claim file. Returns false once ownership is gone
+ * so the caller stops renewing and persistence fences the superseded owner.
+ */
+export async function renewRequestClaimLease(
+  claim: RequestClaim,
+  requestId: string,
+  tool: string,
+): Promise<boolean> {
+  return withClaimMutationLock(claim.claimPath, async () => {
+    const inspection = await inspectRequestClaim(claim.claimPath);
+    if (!inspectionBelongsToClaim(inspection, claim.claimId)) {
+      return false;
+    }
+    if (!claimMetadataMatches(inspection.value, requestId, tool)) {
+      return false;
+    }
+    await writeRequestClaimMetadata(claim.claimPath, {
+      ...inspection.value,
+      leaseExpiresAt: leaseExpiresAt(REQUEST_CLAIM_STALE_MS),
+    });
+    return true;
+  });
+}
+
+type RequestClaimLeaseRenewal = { stop: () => Promise<void> };
+
+function logClaimRenewalFailure(error: unknown): void {
+  const code = (error as NodeJS.ErrnoException).code;
+  console.warn("request claim lease renewal failed", { code: code ?? "UNKNOWN" });
+}
+
+/**
+ * Keeps a running operation's lease ahead of the wall clock. `run_synthetic_canary` may
+ * use its entire budget, which leaves only the lease margin for persistence; renewing
+ * while it runs means a live owner is never mistaken for a stale one, and its completed
+ * result is never discarded at the boundary.
+ */
+function startRequestClaimLeaseRenewal(
+  claim: RequestClaim,
+  requestId: string,
+  tool: string,
+): RequestClaimLeaseRenewal {
+  let pending: Promise<void> = Promise.resolve();
+  let stopped = false;
+  const timer = setInterval(() => {
+    pending = pending.then(async () => {
+      if (stopped) {
+        return;
+      }
+      try {
+        if (!(await renewRequestClaimLease(claim, requestId, tool))) {
+          // Ownership is already gone; persistence fences this owner explicitly.
+          stopped = true;
+        }
+      } catch (error) {
+        logClaimRenewalFailure(error);
+      }
+    });
+  }, REQUEST_CLAIM_RENEWAL_INTERVAL_MS);
+  timer.unref();
+  return {
+    stop: async () => {
+      stopped = true;
+      clearInterval(timer);
+      await pending;
+    },
+  };
+}
+
+async function runOperationWithLeaseRenewal<T>(
+  claim: RequestClaim,
+  requestId: string,
+  tool: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const renewal = startRequestClaimLeaseRenewal(claim, requestId, tool);
+  try {
+    return await operation();
+  } finally {
+    // Renewals take the same coordination lock as persistence, so they are drained
+    // here and this owner never contends with itself while writing the audit record.
+    await renewal.stop();
+  }
+}
+
 function assertClaimIdentity(
   metadata: RequestClaimMetadata,
   claimId: string,
@@ -724,12 +908,13 @@ function assertClaimIdentity(
   }
 }
 
-function assertClaimLeaseActive(metadata: RequestClaimMetadata): void {
-  if (leaseExpired(metadata.leaseExpiresAt)) {
-    throw new Error("request claim lease expired before audit persistence");
-  }
-}
-
+/**
+ * Ownership, not the wall clock, fences audit persistence. A recoverer has to hold this
+ * same coordination lock and replace the claim file, so a superseded owner always fails
+ * the identity check, while a lapsed lease on a claim this owner still holds proves only
+ * that the operation outlived its lease — discarding that result would throw away work
+ * no other caller can reproduce.
+ */
 function assertClaimCanPersist(
   inspection: ClaimInspection,
   claim: RequestClaim,
@@ -740,7 +925,6 @@ function assertClaimCanPersist(
     throw new Error("request claim ownership was lost before audit persistence");
   }
   assertClaimIdentity(inspection.value, claim.claimId, requestId, tool);
-  assertClaimLeaseActive(inspection.value);
 }
 
 async function persistOutcomeIfOwned(
@@ -755,6 +939,23 @@ async function persistOutcomeIfOwned(
   });
 }
 
+/**
+ * Records a failed operation without letting the audit write speak for it. A fenced or
+ * unwritable claim says nothing about why the operation failed, so the persistence error
+ * is logged and the sanitized original error is the one the caller sees.
+ */
+async function persistFailureOutcome(
+  options: GenomeServerOptions,
+  claim: RequestClaim,
+  record: AuditRecord,
+): Promise<void> {
+  try {
+    await persistOutcomeIfOwned(options, claim, record);
+  } catch (error) {
+    console.warn("request failure audit persistence failed", { reason: sanitizeError(error) });
+  }
+}
+
 async function executeAuditedOperation<T>(
   options: GenomeServerOptions,
   claim: RequestClaim,
@@ -767,7 +968,7 @@ async function executeAuditedOperation<T>(
 ): Promise<T> {
   let result: T;
   try {
-    result = await operation();
+    result = await runOperationWithLeaseRenewal(claim, requestId, tool, operation);
   } catch (error) {
     const sanitized = sanitizeError(error);
     const record: AuditRecord = {
@@ -779,7 +980,7 @@ async function executeAuditedOperation<T>(
       durationMs: Date.now() - started,
       error: sanitized,
     };
-    await persistOutcomeIfOwned(options, claim, record);
+    await persistFailureOutcome(options, claim, record);
     throw new Error(sanitized);
   }
 

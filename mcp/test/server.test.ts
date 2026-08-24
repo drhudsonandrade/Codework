@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
-import { mkdir, mkdtemp, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
 import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import {
   createGenomeMcpServer,
   releaseRequestClaim,
+  renewRequestClaimLease,
   runAudited,
   runFixedScript,
   withClaimMutationLock,
@@ -264,13 +265,113 @@ test("stale recovery fences an older owner before audit persistence", async () =
   assert.equal(firstOutcome.kind, "rejected");
   if (firstOutcome.kind === "rejected") {
     assert.ok(firstOutcome.error instanceof Error);
-    assert.match(firstOutcome.error.message, /ownership was lost|lease expired/);
+    assert.match(firstOutcome.error.message, /ownership was lost/);
   }
 
   const audit = JSON.parse(await readFile(path.join(auditRoot, `${requestId}.json`), "utf8")) as {
     result: unknown;
   };
   assert.deepEqual(audit.result, { owner: "second" });
+});
+
+test("a lease that lapses during a long operation still persists the owner's PASS", async () => {
+  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-lease-boundary-"));
+  const options = {
+    projectRoot: "/opt/codework",
+    referenceRoot: "/refs",
+    resultsRoot: "/results",
+    auditRoot,
+  };
+  const requestId = "lease-boundary";
+  const claimPath = path.join(auditRoot, `${requestId}.json.claim`);
+
+  const result = await runAudited(options, "run_synthetic_canary", { requestId }, async () => {
+    // A canary that uses its whole budget can reach persistence with the lease already
+    // spent; nothing else has claimed the request id, so the result must survive.
+    const claim = JSON.parse(await readFile(claimPath, "utf8")) as Record<string, unknown>;
+    claim.leaseExpiresAt = pastIso();
+    await writeFile(claimPath, `${JSON.stringify(claim)}\n`, { mode: 0o600 });
+    return { status: "PASS" };
+  });
+
+  assert.deepEqual(result, { status: "PASS" });
+  const audit = JSON.parse(await readFile(path.join(auditRoot, `${requestId}.json`), "utf8")) as {
+    status: string;
+    result: unknown;
+  };
+  assert.equal(audit.status, "PASS");
+  assert.deepEqual(audit.result, { status: "PASS" });
+});
+
+test("renewRequestClaimLease extends a held claim and refuses a superseded one", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-claim-renew-"));
+  const claimPath = path.join(dir, "claim");
+  const claimedAt = pastIso(30 * 60 * 1000);
+  await writeFile(
+    claimPath,
+    `${JSON.stringify({
+      requestId: "renew-1",
+      tool: "run_synthetic_canary",
+      claimedAt,
+      leaseExpiresAt: pastIso(),
+      claimId: CLAIM_ID_A,
+    })}\n`,
+    { mode: 0o600 },
+  );
+  const claim = { claimPath, claimId: CLAIM_ID_A, handle: {} as never };
+
+  assert.equal(await renewRequestClaimLease(claim, "renew-1", "run_synthetic_canary"), true);
+  const renewed = JSON.parse(await readFile(claimPath, "utf8")) as Record<string, string>;
+  assert.equal(renewed.claimId, CLAIM_ID_A);
+  assert.equal(renewed.claimedAt, claimedAt, "renewal must not rewrite the original claim identity");
+  assert.ok(Date.parse(renewed.leaseExpiresAt) > Date.now(), "renewal must move the lease ahead of now");
+  assert.deepEqual(await readdir(dir), ["claim"], "renewal must not leak staging files");
+
+  assert.equal(
+    await renewRequestClaimLease(claim, "renew-1", "runtime_status"),
+    false,
+    "a claim held for another tool must not be renewed",
+  );
+
+  await writeFile(claimPath, `${JSON.stringify({ ...renewed, claimId: CLAIM_ID_B })}\n`, { mode: 0o600 });
+  assert.equal(
+    await renewRequestClaimLease(claim, "renew-1", "run_synthetic_canary"),
+    false,
+    "a replaced claim belongs to its new owner",
+  );
+});
+
+test("audit persistence failure cannot replace the operation error", async () => {
+  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-persist-fail-"));
+  const options = {
+    projectRoot: "/opt/codework",
+    referenceRoot: "/refs",
+    resultsRoot: "/results",
+    auditRoot,
+  };
+  const requestId = "persist-fail";
+  const claimPath = path.join(auditRoot, `${requestId}.json.claim`);
+  const warnings: unknown[][] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args);
+  };
+
+  try {
+    await assert.rejects(
+      runAudited(options, "runtime_status", { requestId }, async () => {
+        await unlink(claimPath);
+        throw new Error("PRIMARY_OPERATION_FAILURE");
+      }),
+      /PRIMARY_OPERATION_FAILURE/,
+    );
+  } finally {
+    console.warn = originalWarn;
+  }
+
+  assert.equal(warnings.length, 1, "the fenced persistence attempt must be logged");
+  assert.match(String(warnings[0]?.[0]), /audit persistence failed/);
+  await assert.rejects(stat(path.join(auditRoot, `${requestId}.json`)), /ENOENT/);
 });
 
 test("runAudited recovers an expired interprocess mutation-lock lease", async () => {
@@ -350,11 +451,29 @@ test("invalid owner.json blocks mutation-lock recovery fail-closed", async () =>
   assert.equal(executions, 0);
 });
 
-test("empty mutation-lock directory blocks recovery fail-closed", async () => {
+test("an ownerless mutation-lock directory is recovered instead of wedging the request id", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-empty-"));
   const claimPath = path.join(dir, "claim");
   const lockPath = `${claimPath}.lock`;
   await mkdir(lockPath, { mode: 0o700 });
+  let executions = 0;
+
+  const result = await withClaimMutationLock(claimPath, async () => {
+    executions += 1;
+    return "PASS";
+  });
+
+  assert.equal(result, "PASS");
+  assert.equal(executions, 1, "an owner that never claimed the lock cannot block acquisition");
+  await assert.rejects(stat(lockPath), /ENOENT/);
+});
+
+test("an ownerless mutation-lock directory with unexpected entries stays fail-closed", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-unexpected-"));
+  const claimPath = path.join(dir, "claim");
+  const lockPath = `${claimPath}.lock`;
+  await mkdir(lockPath, { mode: 0o700 });
+  await writeFile(path.join(lockPath, "stray.json"), "{}\n", { mode: 0o600 });
   let executions = 0;
 
   await assert.rejects(
@@ -365,6 +484,7 @@ test("empty mutation-lock directory blocks recovery fail-closed", async () => {
     /coordination lock is invalid/,
   );
   assert.equal(executions, 0);
+  assert.equal((await stat(lockPath)).isDirectory(), true, "unexpected lock content must be preserved");
 });
 
 test("mutation-lock release never removes a replacement lockId", async () => {
