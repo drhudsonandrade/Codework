@@ -246,6 +246,18 @@ type ClaimInspection =
   | { kind: "invalid" }
   | { kind: "metadata"; value: RequestClaimMetadata };
 
+function isRequestClaimMetadata(value: unknown): value is RequestClaimMetadata {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.requestId === "string" &&
+    typeof record.tool === "string" &&
+    typeof record.claimedAt === "string"
+  );
+}
+
 async function inspectRequestClaim(claimPath: string): Promise<ClaimInspection> {
   let raw: string;
   try {
@@ -257,7 +269,10 @@ async function inspectRequestClaim(claimPath: string): Promise<ClaimInspection> 
     return { kind: "invalid" };
   }
   try {
-    return { kind: "metadata", value: JSON.parse(raw) as RequestClaimMetadata };
+    const parsed: unknown = JSON.parse(raw);
+    return isRequestClaimMetadata(parsed)
+      ? { kind: "metadata", value: parsed }
+      : { kind: "invalid" };
   } catch {
     return { kind: "invalid" };
   }
