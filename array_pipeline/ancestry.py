@@ -137,12 +137,40 @@ def load_panel(path: Path) -> dict[str, Any]:
         raise AncestryPanelError("ancestry panel carries no markers")
     loading_lengths: set[int] = set()
     for marker in markers:
-        is_mapping = isinstance(marker, dict)
-        loadings = marker.get("loadings") if is_mapping else None
-        if not isinstance(loadings, list) or not loadings:
+        if not isinstance(marker, dict):
+            raise AncestryPanelError("ancestry panel marker entries must be objects")
+        rsid = str(marker.get("rsid") or "").strip()
+        if not rsid:
+            raise AncestryPanelError("ancestry panel marker must carry a non-empty rsid")
+        reference = str(marker.get("reference_allele") or "").strip().upper()
+        effect = str(marker.get("effect_allele") or "").strip().upper()
+        if reference not in COMPLEMENT or effect not in COMPLEMENT or reference == effect:
             raise AncestryPanelError(
-                f"ancestry panel marker {(marker.get('rsid') if is_mapping else None)!r} "
-                "must carry a non-empty loadings list"
+                f"ancestry panel marker {rsid!r} must carry two distinct A/C/G/T alleles"
+            )
+        frequency = marker.get("effect_allele_frequency")
+        if (
+            isinstance(frequency, bool)
+            or not isinstance(frequency, (int, float))
+            or not np.isfinite(frequency)
+            or not 0.0 <= float(frequency) <= 1.0
+        ):
+            raise AncestryPanelError(
+                f"ancestry panel marker {rsid!r} has invalid effect_allele_frequency"
+            )
+        loadings = marker.get("loadings")
+        if (
+            not isinstance(loadings, list)
+            or not loadings
+            or any(
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not np.isfinite(value)
+                for value in loadings
+            )
+        ):
+            raise AncestryPanelError(
+                f"ancestry panel marker {rsid!r} must carry finite numeric loadings"
             )
         loading_lengths.add(len(loadings))
     if len(loading_lengths) != 1:
@@ -158,11 +186,20 @@ def load_panel(path: Path) -> dict[str, Any]:
         if (
             not isinstance(centroid, list)
             or len(centroid) != components
-            or any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in centroid)
+            or any(
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not np.isfinite(value)
+                for value in centroid
+            )
         ):
             raise AncestryPanelError(
-                f"ancestry panel centroid {population!r} must carry {components} components"
+                f"ancestry panel centroid {population!r} must carry {components} finite components"
             )
+    if not any(name not in ADMIXED_REFERENCES for name in centroids):
+        raise AncestryPanelError(
+            "ancestry panel must carry at least one non-admixed reference centroid"
+        )
     return panel
 
 
