@@ -52,6 +52,13 @@ RESULT_LOCATOR = "deploy/attestations/bootstrap-project-v3.4.json#/checks"
 PENDING_STATUS = "PENDENTE"
 VERIFIED_STATUS = "VERIFICADO"
 FULL_GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+RFC3339_DATETIME_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$"
+)
+VERIFIED_AT_ERROR = (
+    "bootstrap attestation verified_at must be a parseable ISO 8601 datetime in strict RFC 3339 form "
+    "with T separator and an explicit timezone offset (Z or ±HH:MM)"
+)
 
 # Every bootstrap check is a literal clause of the sealed canonical ruleset. The check is
 # satisfied only when the clause is found in the verified payload, so the answer is
@@ -92,21 +99,15 @@ def _require_verified_at(value: Any) -> str:
     if not isinstance(value, str) or not value.strip():
         raise BootstrapAttestationError("bootstrap attestation verified_at is missing")
     candidate = value.strip()
-    if "T" not in candidate and " " not in candidate:
-        raise BootstrapAttestationError(
-            "bootstrap attestation verified_at must be a parseable ISO 8601 datetime with an explicit timezone offset"
-        )
+    if RFC3339_DATETIME_RE.fullmatch(candidate) is None:
+        raise BootstrapAttestationError(VERIFIED_AT_ERROR)
     normalized = candidate[:-1] + "+00:00" if candidate.endswith("Z") else candidate
     try:
         parsed = datetime.fromisoformat(normalized)
     except ValueError as exc:
-        raise BootstrapAttestationError(
-            "bootstrap attestation verified_at must be a parseable ISO 8601 datetime with an explicit timezone offset"
-        ) from exc
+        raise BootstrapAttestationError(VERIFIED_AT_ERROR) from exc
     if parsed.tzinfo is None or parsed.utcoffset() is None:
-        raise BootstrapAttestationError(
-            "bootstrap attestation verified_at must be a parseable ISO 8601 datetime with an explicit timezone offset"
-        )
+        raise BootstrapAttestationError(VERIFIED_AT_ERROR)
     return candidate
 
 
