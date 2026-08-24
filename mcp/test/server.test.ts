@@ -167,11 +167,13 @@ test("two concurrent stale-claim recoverers allow only one operation to proceed"
       (error: unknown) => ({ kind: "rejected" as const, error }),
     );
 
-  const first = runAudited(options, "runtime_status", { requestId: "stale-race" }, operation);
-  const second = runAudited(options, "runtime_status", { requestId: "stale-race" }, operation);
+  // Attach rejection handlers at creation time so a legitimate loser cannot be
+  // reported by node:test as an unhandled rejection before the winner starts.
+  const first = observe(runAudited(options, "runtime_status", { requestId: "stale-race" }, operation));
+  const second = observe(runAudited(options, "runtime_status", { requestId: "stale-race" }, operation));
   await started;
 
-  const loser = await Promise.race([observe(first), observe(second)]);
+  const loser = await Promise.race([first, second]);
   assert.equal(loser.kind, "rejected");
   if (loser.kind === "rejected") {
     assert.ok(loser.error instanceof Error);
@@ -179,9 +181,9 @@ test("two concurrent stale-claim recoverers allow only one operation to proceed"
   }
 
   releaseOperation();
-  const settled = await Promise.allSettled([first, second]);
-  assert.equal(settled.filter((item) => item.status === "fulfilled").length, 1);
-  assert.equal(settled.filter((item) => item.status === "rejected").length, 1);
+  const outcomes = await Promise.all([first, second]);
+  assert.equal(outcomes.filter((item) => item.kind === "fulfilled").length, 1);
+  assert.equal(outcomes.filter((item) => item.kind === "rejected").length, 1);
   assert.equal(executions, 1, "stale-claim recovery must not execute twice");
 });
 
