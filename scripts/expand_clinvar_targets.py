@@ -449,6 +449,28 @@ def _dosage_block(gene: str, dosage: dict[str, dict[str, Any]]) -> dict[str, Any
     }
 
 
+def gene_validity_with_constraint(
+    gene: str,
+    clingen: dict[str, list[dict[str, Any]]],
+    gencc: dict[str, list[dict[str, Any]]],
+    panelapp: dict[str, dict[str, Any]] | None,
+    dosage: dict[str, dict[str, Any]] | None,
+    constraint: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Compose validity and population constraint without letting constraint establish disease."""
+    block = gene_validity(gene, clingen, gencc, panelapp, dosage)
+    block["gnomad_constraint"] = constraint.get(gene) or {
+        "status": UNAVAILABLE,
+        "source": "gnomAD v4.1 constraint metrics",
+        "reason": (
+            f"{gene} não tem transcrito MANE Select nem canônico na tabela de restrição"
+            if constraint
+            else "tabela de restrição do gnomAD não fornecida a esta execução"
+        ),
+    }
+    return block
+
+
 def gene_validity(
     gene: str,
     clingen: dict[str, list[dict[str, Any]]],
@@ -845,16 +867,9 @@ def build(
     genes = sorted({g for t in targets for g in t["genes"]})
     validity = {}
     for gene in genes:
-        block = gene_validity(gene, clingen, gencc, panelapp, dosage)
-        block["gnomad_constraint"] = constraint.get(gene) or {
-            "status": UNAVAILABLE,
-            "source": "gnomAD v4.1 constraint metrics",
-            "reason": (
-                f"{gene} não tem transcrito MANE Select nem canônico na tabela de restrição"
-                if constraint
-                else "tabela de restrição do gnomAD não fornecida a esta execução"
-            ),
-        }
+        block = gene_validity_with_constraint(
+            gene, clingen, gencc, panelapp, dosage, constraint
+        )
         counts = gene_counts.get(gene, {})
         # The carrier-screening denominator, from the same release the targets came from.
         block["clinvar_variant_counts"] = {
