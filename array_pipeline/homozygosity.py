@@ -107,7 +107,12 @@ def _zygosity(genotype: Any) -> str | None:
 
 
 def median_spacing_kb(markers: Iterable[tuple[str, int, str]]) -> float | None:
-    """The sample's own median distance between consecutive autosomal markers, in kb."""
+    """The sample's own median distance between consecutive autosomal markers, in kb.
+
+    F_ROH counts a tract's whole span, so how densely that span was actually interrogated
+    decides whether the count means anything. Taken from the sample rather than assumed, so
+    the density bound adapts to the platform instead of encoding one chip's spacing.
+    """
     by_chromosome: dict[str, list[int]] = {}
     for chromosome, position, genotype in markers:
         if _zygosity(genotype) is None:
@@ -129,7 +134,16 @@ def find_tracts(
     *,
     max_mean_spacing_kb: float | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Homozygous tracts from (chromosome, position, genotype), one chromosome at a time."""
+    """Homozygous tracts from (chromosome, position, genotype), one chromosome at a time.
+
+    Markers are sorted here rather than assumed sorted: an unsorted input would produce tracts
+    that span the whole chromosome and an F_ROH near one, which looks like a dramatic finding
+    instead of a bug.
+
+    Returns (tracts, rejected). A run whose markers average further apart than
+    `max_mean_spacing_kb` is rejected rather than dropped silently: it is a region the array
+    did not tile, and a reader has to be able to see that the estimate excluded it and why.
+    """
     by_chromosome: dict[str, list[tuple[int, str]]] = {}
     for chromosome, position, genotype in markers:
         state = _zygosity(genotype)
@@ -161,11 +175,15 @@ def find_tracts(
                 last_position = position
                 end = index
                 index += 1
+            # Trim a trailing heterozygote: a tract must begin and end on homozygous calls,
+            # or its measured length includes a stretch it does not describe.
             while end > start and entries[end][1] != "HOM":
                 end -= 1
             span_kb = (entries[end][0] - entries[start][0]) / 1000.0
             called = end - start + 1
             if span_kb >= MIN_TRACT_KB and called >= MIN_TRACT_MARKERS:
+                # Mean spacing across the run, which is what decides whether its length was
+                # interrogated or merely spanned.
                 spacing_kb = span_kb / max(called - 1, 1)
                 record = {
                     "chromosome": chromosome,
@@ -202,6 +220,9 @@ def analyse(
     call_rate = (len(called) / considered) if considered else 0.0
 
     refusals: list[str] = []
+    # Coordinates are checked against the assembly before anything is measured from them. A
+    # position past the end of its chromosome is not a marker to skip, it is proof the file is
+    # on a different assembly or is corrupt, and every length derived from it would be wrong.
     out_of_bounds = [
         (chromosome, position)
         for chromosome, position, _genotype in called
@@ -220,7 +241,9 @@ def analyse(
             "não descrevem nada."
         )
     if unknown_chromosomes:
-        refusals.append(f"cromossomos autossômicos não reconhecidos: {unknown_chromosomes[:5]}")
+        refusals.append(
+            f"cromossomos autossômicos não reconhecidos: {unknown_chromosomes[:5]}"
+        )
     if len(called) < MIN_CALLED_MARKERS:
         refusals.append(
             f"{len(called):,} marcadores autossômicos chamados, abaixo dos "
@@ -245,12 +268,19 @@ def analyse(
             "method": _METHOD,
         }
 
+    # The density bound comes from the sample itself, so it adapts to the platform.
     median_kb = median_spacing_kb(called)
-    max_spacing_kb = median_kb * MAX_TRACT_SPACING_FACTOR if median_kb and median_kb > 0 else None
+    max_spacing_kb = (
+        median_kb * MAX_TRACT_SPACING_FACTOR if median_kb and median_kb > 0 else None
+    )
     tracts, rejected = find_tracts(called, max_mean_spacing_kb=max_spacing_kb)
     total_kb = sum(t["length_kb"] for t in tracts)
     f_roh = total_kb / AUTOSOME_KB
     if f_roh > 1.0:
+        # A fraction of the genome cannot exceed the genome. Reaching here means the tracts
+        # overlap or the coordinates span more than an autosome, and the only honest output
+        # is a refusal: 1.9 printed as an inbreeding coefficient is confident nonsense, and
+        # clamping it to 1.0 would hide the same fault behind a plausible number.
         return {
             "status": UNAVAILABLE,
             "f_roh": None,
@@ -274,6 +304,9 @@ def analyse(
         "longest_tract_kb": tracts[0]["length_kb"] if tracts else 0.0,
         "tracts": tracts[:50],
         "tracts_omitted": max(0, len(tracts) - 50),
+        # Runs the array spanned without interrogating. Reported rather than dropped: they
+        # are the difference between this F_ROH and the one a denser platform would give,
+        # and on the first real array they were 68% of the total before this bound existed.
         "tracts_rejected_sparse": rejected[:20],
         "tracts_rejected_sparse_count": len(rejected),
         "tracts_rejected_sparse_kb": round(sum(t["length_kb"] for t in rejected), 1),
@@ -351,7 +384,12 @@ _METHOD = (
 
 
 def read_autosomal_genotypes(input_path: Any) -> tuple[list[tuple[str, int, str]], int]:
-    """Every autosomal marker in the array, as (chromosome, position, genotype)."""
+    """Every autosomal marker in the array, as (chromosome, position, genotype).
+
+    Unlike the target-driven readers elsewhere, this one takes the whole autosome: runs of
+    homozygosity are a property of the genome between the targets, and reading only the
+    registry's loci would measure the registry's spacing instead of the person's tracts.
+    """
     from pathlib import Path
 
     from array_pipeline.completeness import _row_reader
@@ -376,6 +414,8 @@ def read_autosomal_genotypes(input_path: Any) -> tuple[list[tuple[str, int, str]
             else:
                 raw = row.get("RESULT")
                 status = ""
+            # An unresolved cross-platform record is not a genotype. Letting it through would
+            # count a disagreement between platforms as evidence about this person's zygosity.
             if status in UNRESOLVED_OVERLAP_STATUSES or not _is_valid_consensus(raw):
                 continue
             genotype = _canonical_gt(raw)
