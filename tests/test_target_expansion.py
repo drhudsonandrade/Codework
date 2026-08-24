@@ -617,12 +617,17 @@ DOSAGE_HEADER = (
 )
 
 
-def _dosage_file(rows: list[tuple[str, str, str]]) -> Path:
+def _dosage_file(
+    rows: list[tuple[str, str, str]],
+    *,
+    cytoband: str = "1q1",
+    location: str = "chr1:1-2",
+) -> Path:
     """Rows of (gene, haploinsufficiency score, triplosensitivity score)."""
     path = Path(tempfile.mkdtemp()) / "dosage.tsv"
     lines = ["#ClinGen Gene Curation Results", "#19 Aug,2026", DOSAGE_HEADER]
     for gene, haplo, triplo in rows:
-        cells = [gene, "1", "1q1", "chr1:1-2", haplo, "desc"] + [""] * 6
+        cells = [gene, "1", cytoband, location, haplo, "desc"] + [""] * 6
         cells += [triplo, "desc"] + [""] * 6 + ["2026-01-01", "MONDO:0000001", ""]
         lines.append("\t".join(cells))
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -650,6 +655,28 @@ class ClinGenDosageTest(unittest.TestCase):
         block = EXPAND.gene_validity("HFE", {}, {}, {}, table)
         self.assertEqual(block["established_by"], [])
         self.assertEqual(block["modes_of_inheritance"], ["AR"])
+
+    def test_haploinsufficiency_on_x_is_x_linked_not_autosomal_dominant(self):
+        table = EXPAND.read_clingen_dosage(
+            _dosage_file(
+                [("BTK", "3", "0")],
+                cytoband="Xq22",
+                location="chrX:100-200",
+            )
+        )
+        self.assertEqual(table["BTK"]["modes_of_inheritance"], ["XL"])
+        self.assertNotIn("AD", table["BTK"]["modes_of_inheritance"])
+
+    def test_recessive_dosage_code_on_x_remains_x_linked(self):
+        table = EXPAND.read_clingen_dosage(
+            _dosage_file(
+                [("BTK", "30", "0")],
+                cytoband="Xq22",
+                location="chrX:100-200",
+            )
+        )
+        self.assertEqual(table["BTK"]["modes_of_inheritance"], ["XL"])
+        self.assertNotIn("AR", table["BTK"]["modes_of_inheritance"])
 
     def test_score_forty_neither_establishes_nor_contributes_a_mode(self):
         table = EXPAND.read_clingen_dosage(_dosage_file([("HFE", "40", "0")]))
