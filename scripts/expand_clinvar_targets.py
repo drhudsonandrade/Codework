@@ -767,6 +767,15 @@ def build_targets(by_rsid: dict[str, list[dict[str, Any]]]) -> tuple[list[dict[s
                 "position": position,
                 "reference_accession": records[0]["grch38"]["reference_accession"],
             },
+            "coordinates": {
+                "status": "VERIFICADO",
+                "GRCh38": {
+                    "chromosome": chromosome,
+                    "position": position,
+                    "reference_allele": records[0]["reference_allele"],
+                    **({"alternate_allele": alternates[0]} if len(alternates) == 1 else {}),
+                },
+            },
             "clinvar_accessions": accession,
             "clinvar_classifications": classifications,
             "clinvar_review_statuses": reviews,
