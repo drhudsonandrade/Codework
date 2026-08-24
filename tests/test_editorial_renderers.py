@@ -37,6 +37,9 @@ def final_data():
         "execution_manifest": {"status": "VERIFICADO"},
         "sources": ["fixture:test"],
         "limitations": "Fixture editorial; não representa paciente.",
+        # This fixture explicitly tests the non-approved programmatic renderer. Production
+        # FINAL output remains fail-closed unless this acknowledgement is present.
+        "allow_programmatic_final": True,
     }
 
 
