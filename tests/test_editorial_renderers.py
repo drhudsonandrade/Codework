@@ -104,6 +104,8 @@ class EditorialRendererTest(unittest.TestCase):
                 self.assertIn("Achados acionáveis, diagnósticos, predisposições e pontos cegos", document_xml)
                 self.assertIn("Finalidade", document_xml)
                 self.assertIn("Público", document_xml)
+                self.assertIn("unit-test visual QA", document_xml)
+                self.assertIn("aproximação programática", document_xml)
 
 
 if __name__ == "__main__":
