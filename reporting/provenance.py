@@ -944,13 +944,20 @@ class PayloadCompiler:
             basis="veredito de política usado para compilar este payload",
             status=authority_status,
         )
-        self.state(
-            "publication_gate",
-            publication_gate,
-            kind=authority_kind,
-            basis="gate de publicação derivado dos artefatos de controle",
-            status=authority_status,
-        )
+        for gate_key in (
+            "passed",
+            "consent_verified",
+            "consent_scope_verified",
+            "qc_verified",
+            "evidence_verified",
+        ):
+            self.state(
+                f"publication_gate.{gate_key}",
+                publication_gate.get(gate_key),
+                kind=authority_kind,
+                basis="gate de publicação derivado dos artefatos de controle",
+                status=authority_status,
+            )
         if self._fixture_witness:
             # Layout QA has to be able to render the PASS variant of the header. It may print
             # the string; what it may not do is anchor it as anything but a fixture, which is
@@ -1122,7 +1129,7 @@ SCALAR_FIELDS = ("summary", "sources", "limitations")
 #: itself printed, so it is anchored like any other value"; the same sentence applies here
 #: and was not applied.
 IDENTITY_FIELDS = ("case_id", "report_id", "post_deployment_status")
-AUTHORITY_FIELDS = ("publication_gate", "policy_evaluation")
+AUTHORITY_FIELDS = ("policy_evaluation",)
 #: Per-finding keys printed verbatim by `reporting.engine._final_markdown`.
 FINDING_FIELDS = (
     "domain", "nature", "priority", "observed_data", "qc",
@@ -1288,6 +1295,19 @@ def provenance_blockers(data: dict[str, Any]) -> list[str]:
 
     for name in SCALAR_FIELDS + IDENTITY_FIELDS + AUTHORITY_FIELDS:
         check(name, data.get(name))
+    publication = (
+        data.get("publication_gate")
+        if isinstance(data.get("publication_gate"), dict)
+        else {}
+    )
+    for gate_key in (
+        "passed",
+        "consent_verified",
+        "consent_scope_verified",
+        "qc_verified",
+        "evidence_verified",
+    ):
+        check(f"publication_gate.{gate_key}", publication.get(gate_key))
 
     sections = data.get("sections") if isinstance(data.get("sections"), dict) else {}
     for title, value in sections.items():
