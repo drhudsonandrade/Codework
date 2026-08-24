@@ -135,10 +135,17 @@ class AssessedAlleleEvidenceTest(unittest.TestCase):
 class DecisionRuleTest(unittest.TestCase):
     """The rules themselves, exercised without the network."""
 
-    def _target(self, **overrides):
-        from scripts.curate_assessed_alleles import cpic_variant_alleles
+    def test_clinvar_assertion_classification_uses_complete_terms(self):
+        from scripts.curate_assessed_alleles import _is_asserting_classification
 
-        return cpic_variant_alleles
+        self.assertTrue(_is_asserting_classification("Pathogenic/Likely pathogenic"))
+        self.assertTrue(_is_asserting_classification("Drug response"))
+        self.assertFalse(
+            _is_asserting_classification(
+                "Conflicting classifications of pathogenicity"
+            )
+        )
+        self.assertFalse(_is_asserting_classification("Benign; drug response"))
 
     def test_cpic_lookup_finds_every_allele_a_position_defines(self):
         from scripts.curate_assessed_alleles import cpic_variant_alleles
