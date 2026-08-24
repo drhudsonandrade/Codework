@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -41,6 +42,38 @@ class RepoContractTest(unittest.TestCase):
             )
             errors = validator.validate(root)
         self.assertIn("runbook must not bypass the micromamba container entrypoint", errors)
+
+    def test_non_ascii_ruleset_manifest_is_reported_not_raised(self):
+        """A non-ASCII SHA manifest must fail the check, not abort the whole run.
+
+        read_text(encoding="ascii") raises on the first non-ASCII byte, and that
+        UnicodeDecodeError used to propagate out of validate(), skipping every check
+        after it instead of reporting the manifest as invalid.
+        """
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = root / "manifests" / "RULESET_V3.4.sha256"
+            manifest.parent.mkdir(parents=True)
+            # A non-breaking space: valid UTF-8, not decodable as ASCII.
+            manifest.write_text(
+                "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580  "
+                "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt\u00a0\n",
+                encoding="utf-8",
+            )
+            # This deliberately wrong dependency is checked after the ruleset manifest,
+            # so its diagnostic proves validate() continued beyond the failed ASCII read.
+            package = root / "mcp" / "package.json"
+            package.parent.mkdir(parents=True)
+            package.write_text(
+                json.dumps({"devDependencies": {"fallow": "0.0.0"}}),
+                encoding="utf-8",
+            )
+            with self.assertRaises(UnicodeDecodeError):
+                manifest.read_text(encoding="ascii")
+            errors = validator.validate(root)
+        self.assertIn("ruleset external manifest does not match the verified v3.4 artifact", errors)
+        self.assertIn("mcp/package.json must pin fallow 3.16.0 exactly", errors)
 
 
 if __name__ == "__main__":

@@ -23,6 +23,8 @@ MANIFEST_PATH = Path(__file__).with_name("reference_v3_manifest.json")
 RULESET_TEMPLATE_PREFIX = "GENOMA-HUDSON-RULESET-v"
 CURRENT_RULESET_TEMPLATE_SOURCE = "GENOMA-HUDSON-RULESET-v3.4"
 CURRENT_RULESET_TEMPLATE_LABEL = "GENOMA-RULESET-v3.4"
+SINGLE_LINE_LEADING = 1.2
+POPPLER_TIMEOUT_SECONDS = 120
 
 SYSTEM_REPLACEMENTS = {
     "MODELO REUTILIZÁVEL v3.0": "RESULTADO GENÔMICO v3.0",
@@ -234,10 +236,14 @@ def _fit_single_line_size(
     max_width: float,
     start_size: float,
     font_name: str,
+    max_height: float | None = None,
 ) -> float:
     text = " ".join(str(text).split())
     size = float(start_size)
-    while size > 4.2 and pdfmetrics.stringWidth(text, font_name, size) > max_width:
+    while size > 4.2 and (
+        pdfmetrics.stringWidth(text, font_name, size) > max_width
+        or (max_height is not None and size * SINGLE_LINE_LEADING > max_height)
+    ):
         size -= 0.2
     return max(4.2, size)
 
@@ -580,6 +586,27 @@ def _add_vml_textbox(
     paragraph._p.append(run)
 
 
+def _run_poppler(command: list[str], page: int) -> None:
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=POPPLER_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise TemplateV3Error(
+            f"{command[0]} timed out on template page {page} after {POPPLER_TIMEOUT_SECONDS}s"
+        ) from exc
+    if result.returncode != 0:
+        detail = (result.stderr or b"").decode("utf-8", errors="replace").strip()
+        raise TemplateV3Error(
+            f"{command[0]} failed on template page {page} with exit code {result.returncode}"
+            + (f": {detail[-500:]}" if detail else "")
+        )
+
+
 def _convert_template_pages(
     template_pdf: Path,
     work: Path,
@@ -594,15 +621,13 @@ def _convert_template_pages(
     for page in range(1, page_count + 1):
         svg = work / f"page-{page}.svg"
         raw = work / f"page-{page}.svg.raw"
-        subprocess.run(
+        _run_poppler(
             ["pdftocairo", "-f", str(page), "-l", str(page), "-svg", str(template_pdf), str(raw)],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            page,
         )
         raw.rename(svg)
         stem = work / f"page-{page}-fallback"
-        subprocess.run(
+        _run_poppler(
             [
                 "pdftoppm",
                 "-f",
@@ -616,9 +641,7 @@ def _convert_template_pages(
                 str(template_pdf),
                 str(stem),
             ],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            page,
         )
         svgs.append(svg)
         pngs.append(Path(str(stem) + ".png"))
@@ -632,6 +655,7 @@ def _patch_docx_svg(docx_path: Path, svgs: list[Path]) -> None:
     try:
         with zipfile.ZipFile(docx_path) as archive:
             base = temp_dir.resolve()
+            seen: set[str] = set()
             for member in archive.infolist():
                 member_path = PurePosixPath(member.filename)
                 if member_path.is_absolute() or ".." in member_path.parts:
@@ -639,6 +663,12 @@ def _patch_docx_svg(docx_path: Path, svgs: list[Path]) -> None:
                 target = (base / Path(*member_path.parts)).resolve()
                 if target != base and base not in target.parents:
                     raise TemplateV3Error(f"unsafe DOCX archive member: {member.filename}")
+                normalized_target = target.relative_to(base).as_posix()
+                if normalized_target in seen:
+                    raise TemplateV3Error(
+                        f"duplicate DOCX extraction target: {member.filename} -> {normalized_target}"
+                    )
+                seen.add(normalized_target)
             archive.extractall(temp_dir)
         media = temp_dir / "word" / "media"
         media.mkdir(parents=True, exist_ok=True)
@@ -799,6 +829,7 @@ def render_docx_from_template(
                     max(8.0, bbox[2] - bbox[0]),
                     font_size,
                     bold_font,
+                    max_height=max(7.0, bbox[3] - bbox[1]),
                 )
                 _add_vml_textbox(
                     paragraph,
@@ -833,6 +864,7 @@ def render_docx_from_template(
                     width,
                     font_size,
                     bold_font,
+                    max_height=height,
                 )
                 _add_vml_textbox(
                     paragraph,

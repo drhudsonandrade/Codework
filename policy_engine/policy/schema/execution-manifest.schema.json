@@ -8,7 +8,7 @@
   "properties": {
     "case_id": {"type": "string", "minLength": 1},
     "session_id": {"type": "string", "minLength": 1},
-    "ruleset": {"type": "object", "required": ["status", "version", "sha256", "effective_date"], "properties": {"status": {"const": "VIGENTE"}, "version": {"const": "v3.4"}, "effective_date": {"const": "17/08/2026"}, "sha256": {"const": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"}}},
+    "ruleset": {"type": "object", "required": ["status", "version", "sha256", "effective_date", "canonical_filename"], "properties": {"status": {"const": "VIGENTE"}, "version": {"const": "v3.4"}, "effective_date": {"const": "17/08/2026"}, "canonical_filename": {"const": "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"}, "sha256": {"const": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"}}},
     "operation": {"type": "object", "required": ["name", "analysis_relevant", "requires_real_calling", "output"], "properties": {"name": {"type": "string"}, "analysis_relevant": {"type": "boolean"}, "requires_real_calling": {"type": "boolean"}, "output": {"enum": ["ANALYSIS", "FINAL_AUDITED_REPORT", "MODEL", "QC_ONLY", "RESEARCH"]}}},
     "inputs": {"type": "array", "items": {"type": "object", "required": ["id", "kind", "source", "sha256"], "properties": {"id": {"type": "string"}, "kind": {"type": "string"}, "source": {"type": "string"}, "sha256": {"type": "string", "minLength": 3}, "build": {"type": ["string", "null"]}, "transformed": {"type": "boolean"}, "parent_sha256": {"type": "string"}}}},
     "consent": {"type": "object", "properties": {"verified": {"type": "boolean"}, "version": {"type": "string"}, "authorized_domains": {"type": "array", "items": {"type": "string"}}}},

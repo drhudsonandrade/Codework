@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -96,12 +97,8 @@ class TemplateV3ContractTest(unittest.TestCase):
             _system_value_for_source(CURRENT_RULESET_TEMPLATE_SOURCE, systems),
             CURRENT_RULESET_TEMPLATE_LABEL,
         )
-        try:
+        with self.assertRaises(TemplateV3Error):
             _system_value_for_source("GENOMA-HUDSON-RULESET-v2.8", systems)
-        except TemplateV3Error:
-            pass
-        else:
-            self.fail("noncanonical ruleset marker must fail closed")
         self.assertEqual(_system_value_for_source("OTHER", systems), "value")
         self.assertIsNone(_system_value_for_source("UNKNOWN", systems))
 
@@ -120,12 +117,8 @@ class TemplateV3ContractTest(unittest.TestCase):
         )
         for marker in malformed:
             with self.subTest(marker=marker):
-                try:
+                with self.assertRaises(RuntimeError):
                     _ruleset_control_sources(marker)
-                except RuntimeError:
-                    pass
-                else:
-                    self.fail(f"malformed/noncanonical marker accepted: {marker}")
 
     def test_docx_svg_patch_rejects_zip_slip_member(self):
         from reporting.template_v3 import TemplateV3Error, _patch_docx_svg
@@ -136,6 +129,78 @@ class TemplateV3ContractTest(unittest.TestCase):
                 archive.writestr("../escaped.txt", "no")
             with self.assertRaisesRegex(TemplateV3Error, "unsafe DOCX archive member"):
                 _patch_docx_svg(malicious, [])
+
+    def test_docx_svg_patch_rejects_duplicate_archive_members(self):
+        from reporting.template_v3 import TemplateV3Error, _patch_docx_svg
+
+        with tempfile.TemporaryDirectory() as td:
+            duplicated = Path(td) / "duplicated.docx"
+            with zipfile.ZipFile(duplicated, "w") as archive:
+                archive.writestr("word/document.xml", "<original/>")
+                archive.writestr("word/document.xml", "<replacement/>")
+            with self.assertRaisesRegex(TemplateV3Error, "duplicate DOCX extraction target"):
+                _patch_docx_svg(duplicated, [])
+
+    def test_docx_svg_patch_rejects_members_with_same_normalized_target(self):
+        from reporting.template_v3 import TemplateV3Error, _patch_docx_svg
+
+        with tempfile.TemporaryDirectory() as td:
+            duplicated = Path(td) / "normalized-duplicate.docx"
+            with zipfile.ZipFile(duplicated, "w") as archive:
+                archive.writestr("word/document.xml", "<original/>")
+                archive.writestr("word/./document.xml", "<replacement/>")
+            with self.assertRaisesRegex(TemplateV3Error, "duplicate DOCX extraction target"):
+                _patch_docx_svg(duplicated, [])
+
+    def test_poppler_failure_keeps_the_converter_diagnostics(self):
+        import subprocess
+
+        from reporting.template_v3 import TemplateV3Error, _run_poppler
+
+        with self.assertRaises(TemplateV3Error) as caught:
+            _run_poppler(
+                [
+                    sys.executable,
+                    "-c",
+                    "import sys; sys.stderr.write('Syntax Error: Couldn\\'t find trailer dictionary\\n'); sys.exit(3)",
+                ],
+                7,
+            )
+        message = str(caught.exception)
+        self.assertIn("exit code 3", message)
+        self.assertIn("template page 7", message)
+        self.assertIn("Couldn't find trailer dictionary", message)
+        self.assertNotIsInstance(caught.exception, subprocess.CalledProcessError)
+
+    def test_poppler_timeout_fails_closed_with_page_context(self):
+        import subprocess
+        from unittest.mock import patch
+
+        from reporting.template_v3 import POPPLER_TIMEOUT_SECONDS, TemplateV3Error, _run_poppler
+
+        with patch(
+            "reporting.template_v3.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd=["pdftoppm"], timeout=POPPLER_TIMEOUT_SECONDS),
+        ):
+            with self.assertRaisesRegex(
+                TemplateV3Error,
+                rf"pdftoppm timed out on template page 4 after {POPPLER_TIMEOUT_SECONDS}s",
+            ):
+                _run_poppler(["pdftoppm"], 4)
+
+    def test_single_line_fit_shrinks_for_the_box_height_too(self):
+        from reporting.template_v3 import SINGLE_LINE_LEADING, _fit_single_line_size
+
+        wide_box = 10_000.0
+        unconstrained = _fit_single_line_size("VALOR", wide_box, 12.0, "Helvetica-Bold")
+        self.assertEqual(unconstrained, 12.0)
+
+        constrained = _fit_single_line_size("VALOR", wide_box, 12.0, "Helvetica-Bold", max_height=9.0)
+        self.assertLess(constrained, unconstrained)
+        self.assertLessEqual(constrained * SINGLE_LINE_LEADING, 9.0)
+
+        roomy = _fit_single_line_size("VALOR", wide_box, 12.0, "Helvetica-Bold", max_height=100.0)
+        self.assertEqual(roomy, 12.0)
 
     @unittest.skipUnless(os.environ.get("GENOMA_REPORT_TEMPLATE_DIR"), "external v3 template pack not mounted")
     def test_external_template_pack_verifies_and_report10_strict_docx_is_editable(self):

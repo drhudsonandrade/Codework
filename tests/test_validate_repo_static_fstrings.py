@@ -4,7 +4,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.validate_repo import _missing_path_error, validate
+from scripts.validate_repo import (
+    SUPERSEDED_IDENTITY_TEST_FIXTURES,
+    _missing_path_error,
+    validate,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -28,12 +32,12 @@ class ValidateRepoStaticFstringTests(unittest.TestCase):
             )
 
     def test_registered_test_fixtures_do_not_block_the_current_checkout(self) -> None:
+        # Derived from the registry itself so a newly registered fixture — for example
+        # tests/test_superseded_identity_scanner.py — is covered without editing a second
+        # copy of the list here.
+        allowed = SUPERSEDED_IDENTITY_TEST_FIXTURES
+        self.assertTrue(allowed, "the fixture registry must not be empty")
         errors = validate(ROOT)
-        allowed = {
-            "tests/test_v34_activation_contract.py",
-            "tests/test_validate_repo_static_fstrings.py",
-            "policy_engine/tests/test_policy_engine.py",
-        }
         blocked_fixture_errors = [
             error
             for error in errors

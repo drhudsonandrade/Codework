@@ -53,6 +53,20 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+class _ZipBackedTextStream(io.TextIOWrapper):
+    """A ZIP member stream that releases its archive when the caller closes it."""
+
+    def __init__(self, raw, archive: zipfile.ZipFile, **kwargs: Any) -> None:
+        super().__init__(raw, **kwargs)
+        self._genoma_zipfile = archive
+
+    def close(self) -> None:
+        try:
+            super().close()
+        finally:
+            self._genoma_zipfile.close()
+
+
 def _text_stream(path: Path) -> tuple[TextIO, SourceInfo]:
     """Open plain/gzip/zip CSV text. ZIP must contain exactly one regular data file."""
     lower = path.name.lower()
@@ -61,22 +75,25 @@ def _text_stream(path: Path) -> tuple[TextIO, SourceInfo]:
         return fh, SourceInfo("gzip", None, {})
     if lower.endswith(".zip"):
         zf = zipfile.ZipFile(path)
-        # The archive handle outlives this function only on the success path; any
-        # failure while inspecting or opening the member must close it here.
         try:
             members = [x for x in zf.infolist() if not x.is_dir()]
             if len(members) != 1:
                 raise ValueError(f"ZIP must contain exactly one data file; found {len(members)}")
             raw = zf.open(members[0], "r")
             try:
-                text = io.TextIOWrapper(raw, encoding="utf-8-sig", errors="replace", newline="")
+                text = _ZipBackedTextStream(
+                    raw,
+                    zf,
+                    encoding="utf-8-sig",
+                    errors="replace",
+                    newline="",
+                )
             except Exception:
                 raw.close()
                 raise
         except Exception:
             zf.close()
             raise
-        text._genoma_zipfile = zf  # type: ignore[attr-defined]
         return text, SourceInfo("zip", members[0].filename, {})
     return path.open("rt", encoding="utf-8-sig", errors="replace", newline=""), SourceInfo("plain", None, {})
 
@@ -202,14 +219,7 @@ def inspect_array(
     min_call_rate: float = 0.95,
     max_overlap_conflict_rate: float = 0.005,
 ) -> dict[str, Any]:
-    """QC a raw or harmonized SNP-array file without pretending it is WGS.
-
-    This gate intentionally owns only array-level structure/callability/provenance and
-    direct cross-platform concordance. It does not infer CNV/SV/phase, does not turn
-    missing assayed loci into negative clinical evidence, and does not promote a marker
-    to a clinical result. Provenance evidence must be a structured VERIFICADO/SATISFIED
-    attestation bound to this exact input SHA-256; plain prose never unlocks the gate.
-    """
+    """QC a raw or harmonized SNP-array file without pretending it is WGS."""
     path = path.resolve()
     input_sha = sha256_file(path)
     input_size = path.stat().st_size

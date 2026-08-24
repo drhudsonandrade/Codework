@@ -44,13 +44,13 @@ SHA-256 canônico: `187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68
 - **VERIFICADO** — identidades SHA-256, tamanho e page count dos 11 PDFs anexos foram selados em `template_store/v3.0/MANIFEST.json` e cruzados com `reporting/reference_v3_manifest.json`.
 - **EXECUTADO** — política de imutabilidade: um ID v3.0 não pode trocar bytes sob a mesma versão.
 - **NÃO DISPONÍVEL** — transporte binário dos 11 PDFs dentro do GitHub ainda depende da materialização dos chunks selados. O conector de escrita utilizado nesta sessão aceita texto/blobs fornecidos no payload, mas não expõe upload binário direto a partir do arquivo local; por isso os bytes não são falsamente declarados presentes.
-- **VERIFICADO** — um source pack determinístico exato foi produzido fora do repo e pode ser usado para completar essa materialização sem alterar os hashes aprovados.
+- **NÃO DISPONÍVEL / HISTÓRICO NÃO VERIFICÁVEL** — este registro histórico afirma que um source pack determinístico exato foi produzido fora do repositório, mas não preserva locator imutável nem SHA-256 do artefato. Portanto sua existência e identidade não podem ser verificadas a partir desta evidência e ele não deve ser usado como prova até que um locator recuperável e o digest correspondente sejam registrados.
 
 ## GRCh38 / high memory
 
 - **EXECUTADO** — verificador fail-closed para BWA-MEM2 prebuilt checksum-locked.
-- **EXECUTADO** — arquitetura eliminou a necessidade de máquina high-memory permanente: construção, quando necessária, pode ser one-shot/ephemeral e o bundle passa a ser distribuído por digest.
-- **VERIFICADO (fonte externa atual)** — GitHub documenta 8 GB RAM/14 GB SSD para runner Linux padrão de repositório privado, insuficiente para construir o índice BWA-MEM2 humano; GitHub também documenta que o Container Registry atualmente tem armazenamento/banda gratuitos.
+- **PROPOSTO** — a arquitetura prevê evitar uma máquina high-memory permanente por meio de construção one-shot/ephemeral e distribuição do bundle por digest; isso não equivale a uma execução high-memory nem a um bundle GRCh38 funcionalmente validado.
+- **NÃO DISPONÍVEL / HISTÓRICO NÃO VERIFICÁVEL** — este registro histórico mencionava limites de RAM/SSD de runners GitHub e condições de armazenamento/banda do GHCR, mas não preserva URL/locator primário, artefato, hash nem data de consulta. Essas alegações externas não são usadas como evidência nesta auditoria e devem ser revalidadas contra fonte primária antes de qualquer decisão operacional.
 - **PROPOSTO** — alternativa zero-build: validar uma lane classic BWA usando os índices GRCh38 prebuilt publicados pelo Broad/GATK; não promover sem benchmark porque muda o aligner.
 - **NÃO DISPONÍVEL** — ainda não existe nesta auditoria um bundle BWA-MEM2 GRCh38 aprovado e funcionalmente validado por digest, portanto `full-grch38` não pode ser declarado pronto.
 

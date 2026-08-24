@@ -53,7 +53,15 @@ def _default_transport(request: urllib.request.Request) -> tuple[bytes, Mapping[
             values = response.headers.get_all(name) or []
             if values:
                 headers[str(name).lower()] = tuple(str(value) for value in values)
-        payload = response.read(MAX_RESPONSE_BYTES + 1)
+        chunks: list[bytes] = []
+        total = 0
+        while total <= MAX_RESPONSE_BYTES:
+            chunk = response.read(min(64 * 1024, MAX_RESPONSE_BYTES + 1 - total))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+        payload = b"".join(chunks)
         if len(payload) > MAX_RESPONSE_BYTES:
             raise EvidenceResponseTooLargeError(
                 f"evidence response exceeds {MAX_RESPONSE_BYTES} bytes"
@@ -223,10 +231,15 @@ class EvidenceAdapter:
             })
             return base
         except Exception as exc:
+            # The published artifact deliberately carries only PUBLIC_RETRIEVAL_ERROR, so the
+            # operator log is the single place a root cause can still survive. Without the
+            # traceback a TLS rejection, a refused redirect and an oversized body are
+            # indistinguishable everywhere.
             LOGGER.warning(
                 "evidence retrieval failed adapter=%s error_class=%s",
                 self.key,
                 type(exc).__name__,
+                exc_info=True,
             )
             base["error_class"] = type(exc).__name__
             base["error"] = PUBLIC_RETRIEVAL_ERROR

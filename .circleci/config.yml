@@ -1,0 +1,74 @@
+version: 2.1
+
+jobs:
+  repository-contract:
+    docker:
+      - image: cimg/python:3.12@sha256:20d33113404d29dd6b8413f7b9fd88b9b4aa7b4827eb828548d66bcecd3d4a8f
+    steps:
+      - checkout
+      - run:
+          name: Install pinned report test dependencies
+          command: python -m pip install --disable-pip-version-check -r reporting/requirements.txt
+      - run:
+          name: Repository contract
+          command: python3 scripts/validate_repo.py
+      - run:
+          name: Supply-chain contract
+          command: python3 scripts/verify_supply_chain_lock.py
+      - run:
+          name: Repository Python tests
+          command: python3 -m unittest discover -s tests -v
+
+  policy-contract:
+    docker:
+      - image: cimg/python:3.12@sha256:20d33113404d29dd6b8413f7b9fd88b9b4aa7b4827eb828548d66bcecd3d4a8f
+    steps:
+      - checkout
+      - run:
+          name: Materialize canonical ruleset
+          command: |
+            mkdir -p /tmp/genoma-normative
+            python3 scripts/materialize_ruleset.py --output-dir /tmp/genoma-normative --evidence /tmp/ruleset-materialization.json
+            echo 'export GENOMA_RULESET_PATH=/tmp/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt' >> "$BASH_ENV"
+            echo 'export GENOMA_RULESET_SHA_MANIFEST=$CIRCLE_WORKING_DIRECTORY/manifests/RULESET_V3.4.sha256' >> "$BASH_ENV"
+            echo 'export GENOMA_EXPECT_CANONICAL_SHA=1' >> "$BASH_ENV"
+      - run:
+          name: Policy Python tests
+          command: cd policy_engine && python3 -m unittest discover -s tests -v
+      - run:
+          name: Ruleset identity
+          command: cd policy_engine && python3 -m genoma_policy ruleset-check
+      - run:
+          name: Deterministic smoke 15 cases
+          command: policy_engine/scripts/genoma-policy smoke --output /tmp/genoma-policy-smoke.json
+
+  mcp-contract:
+    docker:
+      - image: cimg/node:22.14@sha256:d032e271ca3d48c82a5fa392ae05d53e2df08f8540dbc1f2f8c158dea3dabd40
+    steps:
+      - checkout
+      - run:
+          name: Install locked MCP dependencies
+          command: cd mcp && npm ci
+      - run:
+          name: MCP tests
+          command: cd mcp && npm test
+
+  shell-quality:
+    docker:
+      - image: cimg/base:stable@sha256:35e5e29930ab565475a4f2aa9b4124998ed67dbc7b0e2dd5f420a4189d08d0d2
+    steps:
+      - checkout
+      - run:
+          name: Parse every tracked shell script
+          command: |
+            set -euo pipefail
+            git ls-files '*.sh' -z | xargs -0 -r -n1 bash -n
+
+workflows:
+  genoma-pr-gates:
+    jobs:
+      - repository-contract
+      - policy-contract
+      - mcp-contract
+      - shell-quality

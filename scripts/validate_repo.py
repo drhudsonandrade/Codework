@@ -245,10 +245,7 @@ def _python_constant_strings(text: str) -> tuple[str, ...]:
     Constant folding is what stops a superseded identity from being smuggled past a
     raw-text scan as ``"GENOMA-V3." + "3"`` or ``f"GENOMA-V3.{3}"``.
     """
-    try:
-        tree = ast.parse(text)
-    except SyntaxError:
-        return ()
+    tree = ast.parse(text)
     values = (_constant_string(node) for node in ast.walk(tree))
     return tuple(dict.fromkeys(value for value in values if value is not None))
 
@@ -261,10 +258,7 @@ def _identity_declaration_strings(text: str) -> tuple[str, ...]:
     literals such as test timestamps are excluded by construction, so a historical
     mention can never be mistaken for an active normative source.
     """
-    try:
-        tree = ast.parse(text)
-    except SyntaxError:
-        return ()
+    tree = ast.parse(text)
     declarations: list[str] = []
     for node in ast.walk(tree):
         values: list[ast.AST] = []
@@ -338,23 +332,41 @@ def validate_superseded_identity_locations(root: Path, errors: list[str]) -> Non
             if token in relative_text
         )
 
-        if path.suffix.lower() not in TEXT_IDENTITY_SUFFIXES and path.name not in {"Dockerfile", "AGENTS.md"}:
-            continue
         try:
             text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            errors.append(
+                f"unreadable identity surface cannot be scanned: {relative}: {type(exc).__name__}: {exc}"
+            )
+            continue
         except UnicodeDecodeError:
             continue
         # Strong tokens are scanned in the raw text and, for Python, in every folded
-        # constant as well, so a split or interpolated literal cannot hide one.
+        # constant as well, so a split or interpolated literal cannot hide one. This scan
+        # runs on every readable file: a checksum manifest, a lock or a data file carries a
+        # superseded identity just as effectively as a .py or .md, so the suffix guard
+        # below applies only to the weak, declaration-scoped tokens.
         strong_surfaces = [text]
+        python_declarations: tuple[str, ...] | None = None
         if path.suffix.lower() == ".py":
-            strong_surfaces.extend(_python_constant_strings(text))
+            try:
+                strong_surfaces.extend(_python_constant_strings(text))
+                python_declarations = _identity_declaration_strings(text)
+            except SyntaxError as exc:
+                errors.append(
+                    f"unparseable Python surface cannot be identity-scanned: {relative}: "
+                    f"{exc.msg} (line {exc.lineno})"
+                )
+                continue
         errors.extend(
             f"superseded identity outside explicit history: {relative}: {token}"
             for token in SUPERSEDED_STRONG_TOKENS
             if any(token in surface for surface in strong_surfaces)
         )
-        declarations = _active_declaration_context(path, text)
+
+        if path.suffix.lower() not in TEXT_IDENTITY_SUFFIXES and path.name not in {"Dockerfile", "AGENTS.md"}:
+            continue
+        declarations = python_declarations if python_declarations is not None else _active_declaration_context(path, text)
         if not declarations:
             continue
         errors.extend(
@@ -401,8 +413,15 @@ def validate(root: Path) -> list[str]:
     validate_sealed_ruleset(root, errors)
 
     ruleset_manifest = root / "manifests/RULESET_V3.4.sha256"
-    if ruleset_manifest.is_file() and ruleset_manifest.read_text(encoding="ascii").strip().split() != [CANONICAL_RULESET_SHA256, CANONICAL_RULESET]:
-        errors.append("ruleset external manifest does not match the verified v3.4 artifact")
+    if ruleset_manifest.is_file():
+        try:
+            manifest_text = ruleset_manifest.read_text(encoding="ascii")
+        except (OSError, UnicodeDecodeError):
+            # A manifest that is not plain ASCII cannot pin the canonical artifact; report
+            # it as a mismatch instead of aborting the whole validation run.
+            manifest_text = ""
+        if manifest_text.strip().split() != [CANONICAL_RULESET_SHA256, CANONICAL_RULESET]:
+            errors.append("ruleset external manifest does not match the verified v3.4 artifact")
 
     for relative in ACTIVE_IDENTITY_SURFACES:
         path = root / relative

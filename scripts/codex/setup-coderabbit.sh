@@ -70,6 +70,8 @@ release_url="${release_url//\{platform\}/$platform}"
   || fail "URL de release derivada do lock não é a origem oficial esperada."
 curl --fail --location --silent --show-error \
   --proto '=https' --proto-redir '=https' --tlsv1.2 \
+  --connect-timeout 15 --max-time 300 \
+  --retry 3 --retry-connrefused --retry-delay 2 \
   --output "$archive" "$release_url"
 observed_archive_sha="$(sha256_file "$archive")"
 [[ "$observed_archive_sha" == "$expected_archive_sha" ]] || fail "SHA-256 do archive CodeRabbit diverge do lock versionado."
@@ -79,7 +81,7 @@ verified_binary="$extract_dir/coderabbit"
   || fail "archive CodeRabbit verificado não contém o binário regular esperado."
 chmod 0755 "$verified_binary"
 
-verified_version_output="$($verified_binary --version 2>&1)"
+verified_version_output="$("$verified_binary" --version 2>&1)"
 verified_version_token="$(awk 'NF { token=$NF } END { print token }' <<<"$verified_version_output")"
 [[ "$verified_version_token" == "$CODERABBIT_VERSION" ]] || {
   echo "ERROR: release CodeRabbit verificado reporta versão inesperada: ${verified_version_output}" >&2
@@ -92,7 +94,7 @@ installed_path="$INSTALL_BIN_DIR/coderabbit"
 install -m 0755 "$verified_binary" "$installed_path"
 installed_sha="$(sha256_file "$installed_path")"
 [[ "$installed_sha" == "$verified_binary_sha" ]] || fail "binário CodeRabbit instalado diverge do binário extraído do archive verificado."
-installed_version_output="$($installed_path --version 2>&1)"
+installed_version_output="$("$installed_path" --version 2>&1)"
 installed_version_token="$(awk 'NF { token=$NF } END { print token }' <<<"$installed_version_output")"
 [[ "$installed_version_token" == "$CODERABBIT_VERSION" ]] || fail "binário CodeRabbit instalado não preservou a versão fixada."
 
@@ -138,6 +140,24 @@ plugin_available() {
   ] | length == 1' >/dev/null
 }
 
+plugin_present() {
+  jq -e --arg expected_sha "$CODERABBIT_PLUGIN_SOURCE_SHA" --arg expected_marketplace_source "$expected_marketplace_source" '[
+    .installed[]?
+    | select(
+        .pluginId == "coderabbit@codework-codex"
+        and .name == "coderabbit"
+        and .marketplaceName == "codework-codex"
+        and .installed == true
+        and .marketplaceSource.sourceType == "local"
+        and .marketplaceSource.source == $expected_marketplace_source
+        and .source.source == "git-subdir"
+        and .source.url == "openai/plugins"
+        and .source.path == "plugins/coderabbit"
+        and .source.sha == $expected_sha
+      )
+  ] | length == 1' >/dev/null
+}
+
 plugin_installed() {
   jq -e --arg expected_sha "$CODERABBIT_PLUGIN_SOURCE_SHA" --arg expected_marketplace_source "$expected_marketplace_source" '[
     .installed[]?
@@ -164,10 +184,12 @@ fi
 marketplaces_json="$(codex plugin marketplace list --json)"
 marketplace_present <<<"$marketplaces_json" || fail "marketplace codework-codex não foi confirmado no root local revisado após registro."
 
-# Availability is discovery only. Success requires an installed+enabled plugin whose
-# marketplace provenance and resolved plugin source both match reviewed identities.
+# Availability is discovery only. An already-installed plugin is never re-added;
+# success still requires that exact installed plugin to be enabled and provenance-bound.
 plugins_json="$(codex plugin list --marketplace codework-codex --json --available)"
-if ! plugin_installed <<<"$plugins_json"; then
+if plugin_present <<<"$plugins_json"; then
+  plugin_installed <<<"$plugins_json" || fail "plugin coderabbit não foi confirmado como instalado, habilitado e preso ao marketplace/root e source SHA revisados."
+elif ! plugin_installed <<<"$plugins_json"; then
   plugin_available <<<"$plugins_json" || fail "plugin coderabbit não está disponível a partir do marketplace/root e source SHA revisados."
   codex plugin add coderabbit@codework-codex --json >/dev/null
 fi

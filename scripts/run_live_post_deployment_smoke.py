@@ -88,6 +88,7 @@ def baseline() -> dict[str, Any]:
             "status": "VIGENTE",
             "version": "v3.4",
             "effective_date": "17/08/2026",
+            "canonical_filename": EXPECTED_NAME,
             "sha256": EXPECTED_SHA,
         },
         "operation": {"name": "section-260-live-smoke", "analysis_relevant": False, "requires_real_calling": False, "output": "ANALYSIS"},

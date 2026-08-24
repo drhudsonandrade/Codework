@@ -9,10 +9,16 @@ allowed_nature := {"FATO CONFIRMADO", "INFERÊNCIA", "ASSOCIAÇÃO", "HIPÓTESE"
 allowed_domain := {"CLÍNICO", "PREDISPOSIÇÃO", "PESQUISA", "CURIOSIDADE"}
 allowed_priority := {"P1", "P2", "P3", "P4", "P5"}
 
+# Without this the checks below are all undefined when `ruleset` is absent, so no deny
+# fires and a manifest carrying no ruleset at all is allowed. object.get supplies a
+# defined default, since a built-in applied to a missing key is undefined rather than false.
+deny contains "RULESET: ruleset block is required" if not is_object(object.get(input, "ruleset", null))
+
 deny contains "RULESET: status must be VIGENTE" if object.get(input.ruleset, "status", "") != "VIGENTE"
-deny contains "RULESET: version must be v3.4" if input.ruleset.version != "v3.4"
-deny contains "RULESET: effective date must be 17/08/2026" if input.ruleset.effective_date != "17/08/2026"
-deny contains "RULESET: canonical SHA-256 mismatch" if input.ruleset.sha256 != "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
+deny contains "RULESET: version must be v3.4" if object.get(input.ruleset, "version", "") != "v3.4"
+deny contains "RULESET: effective date must be 17/08/2026" if object.get(input.ruleset, "effective_date", "") != "17/08/2026"
+deny contains "RULESET: canonical filename mismatch" if object.get(input.ruleset, "canonical_filename", "") != "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
+deny contains "RULESET: canonical SHA-256 mismatch" if object.get(input.ruleset, "sha256", "") != "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
 
 deny contains "DATA-FIRST: analysis-relevant operation requires input artifacts" if {
   input.operation.analysis_relevant == true

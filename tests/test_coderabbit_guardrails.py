@@ -92,6 +92,10 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
             'release_url="https://cli.coderabbit.ai/releases/${CODERABBIT_VERSION}/coderabbit-${platform}.zip"',
             script,
         )
+        self.assertIn("--connect-timeout 15", script)
+        self.assertIn("--max-time 300", script)
+        self.assertIn("--retry 3", script)
+        self.assertIn("--retry-connrefused", script)
         self.assertIn('[[ -f "$verified_binary" && ! -L "$verified_binary" ]]', script)
 
     def test_setup_script_binds_plugin_to_reviewed_source_sha(self) -> None:
@@ -146,7 +150,8 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         version_output: str = "coderabbit 0.7.5",
         tamper_archive: bool = False,
         installed_enabled: bool = True,
-    ) -> tuple[subprocess.CompletedProcess[str], bool]:
+        already_installed: bool = False,
+    ) -> tuple[subprocess.CompletedProcess[str], bool, str]:
         self.assertIsNotNone(shutil.which("jq"), "jq is required by the setup contract")
         self.assertIsNotNone(shutil.which("unzip"), "unzip is required by the setup contract")
         setup_script = ROOT / "scripts" / "codex" / "setup-coderabbit.sh"
@@ -160,9 +165,12 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         fake_bin = sandbox / "bin"
         install_bin = sandbox / "installed-bin"
         marker = sandbox / "plugin-installed"
+        codex_log = sandbox / "codex-calls.log"
         (repo / ".agents" / "plugins").mkdir(parents=True)
         fake_bin.mkdir()
         shutil.copy2(marketplace_manifest, repo / ".agents" / "plugins" / "marketplace.json")
+        if already_installed:
+            marker.touch()
 
         release = sandbox / "release.zip"
         good_archive_sha = self._make_release_archive(release, version_output)
@@ -181,6 +189,9 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
             str(sandbox / "unreviewed-marketplace")
             if adulterated_marketplace
             else str(repo)
+        )
+        expected_release_url = (
+            f"https://cli.coderabbit.ai/releases/{CLI_VERSION}/coderabbit-linux-x64.zip"
         )
 
         fake_git = fake_bin / "git"
@@ -211,13 +222,38 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
             "#!/usr/bin/env bash\n"
             "set -euo pipefail\n"
             "out=''\n"
+            "url=''\n"
+            "proto=''\n"
+            "proto_redir=''\n"
+            "connect_timeout=''\n"
+            "max_time=''\n"
+            "retry=''\n"
+            "retry_delay=''\n"
+            "retry_connrefused=0\n"
             "while (($#)); do\n"
             "  case \"$1\" in\n"
             "    --output) out=\"$2\"; shift 2 ;;\n"
-            "    *) shift ;;\n"
+            "    --proto) proto=\"$2\"; shift 2 ;;\n"
+            "    --proto-redir) proto_redir=\"$2\"; shift 2 ;;\n"
+            "    --connect-timeout) connect_timeout=\"$2\"; shift 2 ;;\n"
+            "    --max-time) max_time=\"$2\"; shift 2 ;;\n"
+            "    --retry) retry=\"$2\"; shift 2 ;;\n"
+            "    --retry-delay) retry_delay=\"$2\"; shift 2 ;;\n"
+            "    --retry-connrefused) retry_connrefused=1; shift ;;\n"
+            "    --fail|--location|--silent|--show-error|--tlsv1.2) shift ;;\n"
+            "    https://*) url=\"$1\"; shift ;;\n"
+            "    *) echo \"unexpected curl argument: $1\" >&2; exit 12 ;;\n"
             "  esac\n"
             "done\n"
             "test -n \"$out\"\n"
+            "test \"$proto\" = '=https'\n"
+            "test \"$proto_redir\" = '=https'\n"
+            "test \"$connect_timeout\" = '15'\n"
+            "test \"$max_time\" = '300'\n"
+            "test \"$retry\" = '3'\n"
+            "test \"$retry_delay\" = '2'\n"
+            "test \"$retry_connrefused\" = '1'\n"
+            "test \"$url\" = \"$FAKE_CODERABBIT_URL\"\n"
             "cp \"$FAKE_CODERABBIT_ARCHIVE\" \"$out\"\n",
             encoding="utf-8",
         )
@@ -248,6 +284,7 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
                 f"""\
                 #!/usr/bin/env bash
                 set -euo pipefail
+                printf '%s\\n' "$*" >> "$FAKE_CODEX_LOG"
                 case "$*" in
                   "plugin marketplace list --json")
                     printf '%s\\n' '{{"marketplaces":[{marketplace_entry}]}}'
@@ -292,7 +329,9 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
                 "PATH": f"{fake_bin}:{env['PATH']}",
                 "FAKE_REPO_ROOT": str(repo),
                 "FAKE_CODEX_STATE": str(marker),
+                "FAKE_CODEX_LOG": str(codex_log),
                 "FAKE_CODERABBIT_ARCHIVE": str(archive_to_serve),
+                "FAKE_CODERABBIT_URL": expected_release_url,
                 "CODEWORK_CODERABBIT_BIN_DIR": str(install_bin),
             }
         )
@@ -304,36 +343,57 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
             capture_output=True,
             check=False,
         )
-        return result, marker.is_file()
+        calls = codex_log.read_text(encoding="utf-8") if codex_log.is_file() else ""
+        return result, marker.is_file(), calls
 
     def test_available_plugin_is_installed_before_success(self) -> None:
-        result, marker_created = self._run_setup_with_fakes()
+        result, marker_created, calls = self._run_setup_with_fakes()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(marker_created, "available-only plugin must be installed before success")
+        self.assertIn("plugin add coderabbit@codework-codex --json", calls)
+        self.assertIn("configurados a partir de release checksum-locked", result.stdout)
+
+    def test_already_installed_plugin_is_not_added_again(self) -> None:
+        result, _marker_created, calls = self._run_setup_with_fakes(already_installed=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("plugin marketplace list --json", calls)
+        self.assertIn("plugin list --marketplace codework-codex --json --available", calls)
+        self.assertIn("plugin list --marketplace codework-codex --json", calls)
+        self.assertNotIn("plugin add coderabbit@codework-codex --json", calls)
         self.assertIn("configurados a partir de release checksum-locked", result.stdout)
 
     def test_tampered_release_archive_fails_before_plugin_installation(self) -> None:
-        result, marker_created = self._run_setup_with_fakes(tamper_archive=True)
+        result, marker_created, calls = self._run_setup_with_fakes(tamper_archive=True)
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertFalse(marker_created)
+        self.assertNotIn("plugin add coderabbit@codework-codex --json", calls)
         self.assertIn("archive CodeRabbit diverge do lock", result.stderr)
         self.assertNotIn("configurados a partir de release checksum-locked", result.stdout)
 
     def test_adulterated_marketplace_source_is_rejected(self) -> None:
-        result, marker_created = self._run_setup_with_fakes(adulterated_marketplace=True)
+        result, marker_created, calls = self._run_setup_with_fakes(adulterated_marketplace=True)
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertFalse(marker_created)
+        self.assertNotIn("plugin add coderabbit@codework-codex --json", calls)
+        self.assertIn(
+            "marketplace codework-codex não foi confirmado no root local revisado",
+            result.stderr,
+            result.stdout + result.stderr,
+        )
         self.assertNotIn("configurados a partir de release checksum-locked", result.stdout)
 
     def test_disabled_installed_plugin_is_rejected(self) -> None:
-        result, marker_created = self._run_setup_with_fakes(installed_enabled=False)
+        result, _marker_created, calls = self._run_setup_with_fakes(
+            already_installed=True,
+            installed_enabled=False,
+        )
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertTrue(marker_created)
+        self.assertNotIn("plugin add coderabbit@codework-codex --json", calls)
         self.assertIn("não foi confirmado como instalado, habilitado", result.stderr)
         self.assertNotIn("configurados a partir de release checksum-locked", result.stdout)
 
     def test_version_prefix_does_not_satisfy_exact_cli_pin(self) -> None:
-        result, marker_created = self._run_setup_with_fakes(
+        result, marker_created, _calls = self._run_setup_with_fakes(
             version_output="coderabbit 0.7.50",
         )
         self.assertEqual(result.returncode, 5, result.stdout + result.stderr)
