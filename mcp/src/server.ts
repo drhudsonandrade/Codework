@@ -56,6 +56,9 @@ const SCRIPT_OUTPUT_MAX_BYTES = 5 * 1024 * 1024;
 const STDERR_TAIL_MAX_BYTES = 4 * 1024;
 /** Time a terminated process group gets to exit before it is killed outright. */
 const GROUP_TERMINATION_GRACE_MS = 5_000;
+/** A claim may be recovered only after every supported tool budget has expired. */
+const REQUEST_CLAIM_STALE_MS =
+  Math.max(...Object.values(TOOL_TIMEOUTS_MS)) + GROUP_TERMINATION_GRACE_MS + MINUTE_MS;
 /** POSIX only: a negative pid signals the whole process group instead of one process. */
 const USE_PROCESS_GROUP = process.platform !== "win32";
 
@@ -199,6 +202,47 @@ type RequestClaim = {
   handle: Awaited<ReturnType<typeof open>>;
 };
 
+type RequestClaimMetadata = {
+  requestId: string;
+  tool: string;
+  claimedAt: string;
+};
+
+async function isRecoverableStaleClaim(
+  claimPath: string,
+  requestId: string,
+  tool: string,
+): Promise<boolean> {
+  let raw: string;
+  try {
+    raw = await readFile(claimPath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return true;
+    }
+    return false;
+  }
+
+  let metadata: RequestClaimMetadata;
+  try {
+    metadata = JSON.parse(raw) as RequestClaimMetadata;
+  } catch {
+    return false;
+  }
+  if (
+    metadata.requestId !== requestId ||
+    metadata.tool !== tool ||
+    typeof metadata.claimedAt !== "string"
+  ) {
+    return false;
+  }
+  const claimedAt = Date.parse(metadata.claimedAt);
+  if (!Number.isFinite(claimedAt)) {
+    return false;
+  }
+  return Date.now() - claimedAt > REQUEST_CLAIM_STALE_MS;
+}
+
 async function acquireRequestClaim(
   options: GenomeServerOptions,
   requestId: string,
@@ -208,38 +252,68 @@ async function acquireRequestClaim(
   await mkdir(root, { recursive: true, mode: 0o700 });
   await chmod(root, 0o700);
   const claimPath = `${resolveUnderRoot(root, requestId)}.claim`;
-  try {
-    const handle = await open(claimPath, "wx", 0o600);
-    await handle.writeFile(
-      `${JSON.stringify({ requestId, tool, claimedAt: new Date().toISOString() })}\n`,
-      "utf8",
-    );
-    return { claimPath, handle };
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-      throw error;
-    }
-    const completed = await loadAuditRecord(options.auditRoot, requestId);
-    if (completed) {
-      assertMatchingTool(completed, tool);
-      const prior = decodeCompletedResult<unknown>(completed);
-      if (prior.kind === "fail") {
-        throw new Error(prior.error);
+
+  while (true) {
+    try {
+      const handle = await open(claimPath, "wx", 0o600);
+      try {
+        await handle.writeFile(
+          `${JSON.stringify({ requestId, tool, claimedAt: new Date().toISOString() })}\n`,
+          "utf8",
+        );
+      } catch (error) {
+        await releaseRequestClaim({ claimPath, handle });
+        throw error;
       }
-      throw new Error("request id completed while another caller held its claim");
+      return { claimPath, handle };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+        throw error;
+      }
+      const completed = await loadAuditRecord(options.auditRoot, requestId);
+      if (completed) {
+        assertMatchingTool(completed, tool);
+        const prior = decodeCompletedResult<unknown>(completed);
+        if (prior.kind === "fail") {
+          throw new Error(prior.error);
+        }
+        throw new Error("request id completed while another caller held its claim");
+      }
+      if (!(await isRecoverableStaleClaim(claimPath, requestId, tool))) {
+        throw new Error("request id is already in progress");
+      }
+      try {
+        await unlink(claimPath);
+      } catch (unlinkError) {
+        if ((unlinkError as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw new Error("stale request claim could not be recovered");
+        }
+      }
+      // Retry O_EXCL acquisition after removing a demonstrably stale claim. If another
+      // caller wins the race, this loop observes its new claim and fails closed as active.
     }
-    throw new Error("request id is already in progress");
   }
 }
 
-async function releaseRequestClaim(claim: RequestClaim): Promise<void> {
-  await claim.handle.close();
+function logClaimReleaseFailure(stage: "close" | "unlink", error: unknown): void {
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === "ENOENT") {
+    return;
+  }
+  console.warn("request claim release cleanup failed", { stage, code: code ?? "UNKNOWN" });
+}
+
+/** @internal Exported for deterministic cleanup tests. */
+export async function releaseRequestClaim(claim: RequestClaim): Promise<void> {
+  try {
+    await claim.handle.close();
+  } catch (error) {
+    logClaimReleaseFailure("close", error);
+  }
   try {
     await unlink(claim.claimPath);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw error;
-    }
+    logClaimReleaseFailure("unlink", error);
   }
 }
 
