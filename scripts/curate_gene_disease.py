@@ -62,6 +62,8 @@ if str(ROOT) not in sys.path:
 
 from array_pipeline.clinical_findings import normalised_moi
 from array_pipeline.targets import load_target_manifest, sha256_json
+from scripts.curate_assessed_alleles import _spdi
+from scripts.verify_provenance_markers import fetch_refsnp, placements
 
 CLINGEN_CSV = "https://search.clinicalgenome.org/kb/gene-validity/download"
 GENCC_TSV = "https://search.thegencc.org/download/action/submissions-export-tsv"
@@ -260,11 +262,35 @@ def _gencc_summary(submissions: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def fetch_clinvar_conditions(rsid: str) -> dict[str, Any]:
-    """The variant's classification, its review status, and the conditions it is asserted for.
+    """Return only ClinVar summaries proven to describe this rsid's GRCh38 locus.
 
-    Review status is carried because a classification alone hides whether one submitter or
-    twenty agreed, and reports 01 and 03 read very differently under those two.
+    An rsid text search is discovery, not identity. Every returned summary is joined to the
+    dbSNP GRCh38 placement by sequence accession, zero-based SPDI position, and reference
+    allele before its classification or conditions may be marked verified.
     """
+    refsnp = fetch_refsnp(rsid)
+    grch38 = placements(refsnp).get("GRCh38")
+    if (
+        not isinstance(grch38, dict)
+        or not str(grch38.get("seq_id") or "").strip()
+        or not str(grch38.get("reference_allele") or "").strip()
+    ):
+        return {
+            "status": UNAVAILABLE,
+            "reason": f"dbSNP não retorna colocação GRCh38 utilizável para {rsid}",
+            "records": [],
+        }
+    try:
+        expected_position = int(grch38["position"]) - 1
+    except (KeyError, TypeError, ValueError):
+        return {
+            "status": UNAVAILABLE,
+            "reason": f"dbSNP não retorna posição GRCh38 utilizável para {rsid}",
+            "records": [],
+        }
+    expected_sequence = str(grch38["seq_id"])
+    expected_reference = str(grch38["reference_allele"]).upper()
+
     search = _json(
         f"{EUTILS}/esearch.fcgi?db=clinvar&retmode=json&retmax=20&term="
         + urllib.parse.quote(f"{rsid}[Variant ID]" if rsid.isdigit() else rsid)
@@ -277,8 +303,22 @@ def fetch_clinvar_conditions(rsid: str) -> dict[str, Any]:
     result = summary.get("result") or {}
 
     records: list[dict[str, Any]] = []
+    mismatched = 0
     for uid in result.get("uids", []):
         entry = result.get(uid) or {}
+        spdi = _spdi(entry)
+        if spdi is None:
+            mismatched += 1
+            continue
+        sequence, position, deleted, _inserted = spdi
+        if (
+            sequence != expected_sequence
+            or position != expected_position
+            or deleted != expected_reference
+        ):
+            mismatched += 1
+            continue
+
         germline = entry.get("germline_classification") or {}
         traits = [
             {
@@ -290,8 +330,6 @@ def fetch_clinvar_conditions(rsid: str) -> dict[str, Any]:
                 },
             }
             for trait in (germline.get("trait_set") or [])
-            # "not provided" and "not specified" are ClinVar placeholders for a submission
-            # with no condition attached; printing them as conditions would be an invention.
             if str(trait.get("trait_name") or "").strip().lower()
             not in ("not provided", "not specified", "")
         ]
@@ -306,9 +344,30 @@ def fetch_clinvar_conditions(rsid: str) -> dict[str, Any]:
                 "genes": sorted(
                     {str(g.get("symbol")) for g in (entry.get("genes") or []) if g.get("symbol")}
                 ),
+                "coordinate_check": {
+                    "status": "VERIFICADO",
+                    "assembly": "GRCh38",
+                    "sequence": sequence,
+                    "position": position + 1,
+                    "reference_allele": deleted,
+                },
             }
         )
-    return {"status": "VERIFICADO" if records else UNAVAILABLE, "records": records}
+    return {
+        "status": "VERIFICADO" if records else UNAVAILABLE,
+        "records": records,
+        "records_rejected_by_coordinate": mismatched,
+        **(
+            {}
+            if records
+            else {
+                "reason": (
+                    f"nenhum resumo ClinVar retornado para {rsid} corresponde à colocação "
+                    "GRCh38 confirmada no dbSNP"
+                )
+            }
+        ),
+    }
 
 
 def fetch_clinvar_gene_variant_counts(gene: str) -> dict[str, Any]:
