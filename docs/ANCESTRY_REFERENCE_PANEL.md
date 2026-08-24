@@ -70,7 +70,7 @@ para o mais próximo.
 alélica dos franceses, han e iorubás do AADR com as superpopulações EUR, EAS e AFR do 1000
 Genomes nos mesmos marcadores. Uma inversão aparece como correlação próxima de −1.
 
-```
+```text
 correlações medidas: −0,985 (EUR)  −0,989 (EAS)  −0,966 (AFR)  →  INVERTIDO
 ```
 
@@ -80,7 +80,7 @@ errada, e o painel é recusado sobre ela.
 
 ## Construção
 
-```
+```text
 584.131 marcadores Human Origins (AADR v66.p1, GRCh37)
 → 579.720  autossomos
 → 162.289  interseção por coordenada com o release Affy 6.0 do 1000 Genomes
