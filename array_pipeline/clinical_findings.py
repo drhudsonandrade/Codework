@@ -763,12 +763,14 @@ def _registry_totals(evidence: dict[str, Any]) -> dict[str, Any]:
     answers "how many genes could have been looked at", which is.
     """
     validity = evidence.get("gene_validity") or {}
-    established = [v for v in validity.values() if v.get("established")]
+    computed = [_validity_for(gene, evidence) for gene in validity]
+    established = [record for record in computed if record["established"]]
+
     def with_mode(mode: str) -> int:
         return sum(
             1
-            for v in established
-            if mode in {normalised_moi(m) for m in (v.get("modes_of_inheritance") or [])}
+            for record in established
+            if mode in set(record.get("modes_of_inheritance") or [])
         )
 
     return {
