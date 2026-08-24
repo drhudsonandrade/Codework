@@ -725,10 +725,21 @@ class GnomadConstraintTest(unittest.TestCase):
         self.assertIsNone(table["HFE"]["loeuf"])
 
     def test_constraint_never_appears_in_established_by(self):
-        block = EXPAND.gene_validity("HFE", {}, {}, {})
-        block["gnomad_constraint"] = {"status": "VERIFICADO", "pli": 1.0, "loeuf": 0.05}
+        constraint = {
+            "HFE": {
+                "status": "VERIFICADO",
+                "source": "fixture gnomAD",
+                "pli": 1.0,
+                "loeuf": 0.05,
+            }
+        }
+        block = EXPAND.gene_validity_with_constraint(
+            "HFE", {}, {}, {}, {}, constraint
+        )
         self.assertEqual(block["established_by"], [])
         self.assertFalse(block["established"])
+        self.assertEqual(block["gnomad_constraint"]["pli"], 1.0)
+        self.assertEqual(block["gnomad_constraint"]["loeuf"], 0.05)
 
 
 if __name__ == "__main__":
