@@ -36,10 +36,11 @@ registry declares `assessed_allele` for it:
 ```
 
 Where `assessed_allele` is absent the locus stays `OBSERVADO`, and the matrix states the
-reason in its `basis` field. `config/partial_genome_annotation_targets.json` currently
-declares **no** assessed alleles: populating them is a clinical assertion that requires a
-cited source, and guessing them here would be precisely the kind of invention section 6
-forbids. Adding them is a deliberate, sourced curation step.
+reason in its `basis` field. In version `2026-08-19.1`,
+`config/partial_genome_annotation_targets.json` declares sourced `assessed_allele` values
+for **28 of 29** targets; the remaining target stays unscored. The registry carries the
+source/status per target, and `tests/test_target_expansion.py` rejects stale refusal metadata
+beside a declared allele.
 
 ## Strand orientation is checked for every target
 
@@ -95,9 +96,11 @@ coverage is a measurement and cannot outrank the QC that established it.
 
 ## Worked example
 
-A demonstration array carrying 8 of the 29 registry targets produces:
+The following is a **historical illustrative example**. Its input and output artifacts are
+not committed with hashes, so the numbers are not independently reproducible evidence and
+must not be used as a release measurement:
 
-```
+```text
 8 de 29 alvos do registro são interpretáveis (27.6%).
 21 não foram testados, 0 sem chamada e 0 não reportáveis.
 ```
