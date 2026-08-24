@@ -255,7 +255,12 @@ def audit_summary(record: dict[str, Any]) -> dict[str, Any]:
     """
     problems = validate_record(record)
     metrics = record.get("metrics") if isinstance(record.get("metrics"), dict) else {}
-    measured = sorted(k for k in REQUIRED_METRICS if k in metrics and not _is_unavailable(metrics[k]))
+    measured = sorted(
+        k
+        for k in REQUIRED_METRICS
+        if isinstance(metrics.get(k), (int, float))
+        and not isinstance(metrics.get(k), bool)
+    )
     unavailable = sorted(k for k in REQUIRED_METRICS if _is_unavailable(metrics.get(k)))
     return {
         "schema": SCHEMA,
