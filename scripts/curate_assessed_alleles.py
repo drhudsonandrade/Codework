@@ -68,6 +68,17 @@ ASSERTING = (
 NON_ASSERTING = ("benign", "likely benign")
 
 
+def _is_asserting_classification(classification: str) -> bool:
+    terms = {
+        term.strip()
+        for term in re.split(r"[;/|]", str(classification).lower())
+        if term.strip()
+    }
+    return bool(terms.intersection(ASSERTING)) and not bool(
+        terms.intersection(NON_ASSERTING)
+    )
+
+
 class CurationError(RuntimeError):
     pass
 
@@ -251,14 +262,7 @@ def curate_target(rsid: str, pgx_registry: dict[str, Any] | None = None) -> dict
         if inserted == reference or inserted not in BASES:
             continue  # the reference-identity record, or an indel
         classification = _classification(record)
-        classification_terms = {
-            term.strip()
-            for term in re.split(r"[;/|]", classification.lower())
-            if term.strip()
-        }
-        asserts = bool(classification_terms.intersection(ASSERTING)) and not bool(
-            classification_terms.intersection(NON_ASSERTING)
-        )
+        asserts = _is_asserting_classification(classification)
         if record.get("uid"):
             matched_uids.append(str(record["uid"]))
         matched.append(
