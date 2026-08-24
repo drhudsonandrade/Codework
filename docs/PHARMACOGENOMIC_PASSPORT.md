@@ -85,8 +85,9 @@ is an invented clinical assertion wearing a schema.
 }
 ```
 
-No registry ships with the repository. Producing one is a deliberate, sourced curation step,
-and until it exists the passport reports every diplotype as `NÃO DISPONÍVEL` with that reason.
+The sourced registry ships as `config/pgx_allele_definitions.json` and can be regenerated
+with `scripts/build_pgx_registry.py`. A run that does not supply a valid registry still
+reports every diplotype as `NÃO DISPONÍVEL` rather than inventing definitions.
 
 ## The anaesthesia card
 
@@ -99,7 +100,8 @@ observations only:
 - which genes belong on it is a clinical judgement read from the curated registry, not
   hardcoded — without a registry the card reports that its relevance list was never declared
   rather than guessing one;
-- it is `NÃO DISPONÍVEL` when no relevant locus is interpretable.
+- it is `NÃO DISPONÍVEL` when no relevant locus is interpretable **or** when the declared
+  anaesthesia `scope.state` is not `COMPLETO`.
 
 ## Running it
 
@@ -108,8 +110,10 @@ python3 scripts/build_pharmacogenomic_report.py \
   --input array.csv.gz --qc array-qc.json \
   --targets config/partial_genome_annotation_targets.json \
   --annotation annotation.json \
-  --pgx-registry pgx-definitions.json \
+  --pgx-registry config/pgx_allele_definitions.json \
+  --pgx-panel config/pgx_panel_targets.json \
   --matrix-out completeness.json \
+  --panel-matrix-out pgx-panel-completeness.json \
   --passport-out passport.json \
   --payload-out payload-06.json
 ```
