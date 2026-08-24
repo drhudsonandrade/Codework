@@ -36,6 +36,19 @@ class HomozygosityReaderCleanupTest(unittest.TestCase):
         self.assertEqual(closed, [True])
 
 
+    def test_exact_autosomal_bounds_reject_zero_and_length_plus_one(self):
+        from array_pipeline import assembly
+        from array_pipeline.homozygosity import analyse
+
+        for position in (0, assembly.CHROMOSOME_LENGTHS["GRCh37"]["1"] + 1):
+            with self.subTest(position=position), (
+                patch("array_pipeline.homozygosity.MIN_CALLED_MARKERS", 1),
+                patch("array_pipeline.homozygosity.MIN_CALL_RATE", 0.0),
+            ):
+                result = analyse([("1", position, "AA")], build="GRCh37")
+            self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+            self.assertTrue(any("fim do próprio cromossomo" in x for x in result["refusals"]))
+
     def test_f_roh_bounds_follow_the_declared_build(self):
         from array_pipeline.homozygosity import analyse
 
