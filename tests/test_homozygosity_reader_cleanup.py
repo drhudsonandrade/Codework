@@ -41,7 +41,8 @@ class HomozygosityReaderCleanupTest(unittest.TestCase):
         from array_pipeline.homozygosity import analyse
 
         for position in (0, assembly.CHROMOSOME_LENGTHS["GRCh37"]["1"] + 1):
-            with self.subTest(position=position), (
+            with (
+                self.subTest(position=position),
                 patch("array_pipeline.homozygosity.MIN_CALLED_MARKERS", 1),
                 patch("array_pipeline.homozygosity.MIN_CALL_RATE", 0.0),
             ):
