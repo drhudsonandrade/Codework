@@ -113,6 +113,21 @@ class SectionCurationValidationTest(unittest.TestCase):
                 with self.assertRaisesRegex(CurationError, "ilegível"):
                     curation_for_schema("array")
 
+    def test_arbitrary_section_hash_is_rejected(self):
+        payload = self._payload()
+        payload["sections"] = {
+            "0": {
+                "applicability": "APPLICABLE",
+                "decision": "SATISFIED",
+                "status": "VERIFICADO",
+                "justification": "fixture",
+                "rule_sha256": "a" * 64,
+                "evidence_refs": ["ruleset-v3.4"],
+            }
+        }
+        problems = validate_curation(payload)
+        self.assertTrue(any("canonical section" in problem for problem in problems))
+
     def test_any_reused_not_applicable_justification_is_reported(self):
         def entry(reason):
             return {
