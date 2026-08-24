@@ -367,7 +367,9 @@ def audit(*, allow_template_sealed_only: bool = False) -> dict:
 
     checks.append(inspection_check("SCIENTIFIC_DATA_PLANE_ARRAY", _array_data_plane_probe))
     checks.append(inspection_check("EVIDENCE_ANNOTATION_PLANE", _evidence_plane_probe))
-    checks.append(inspection_check("GRCH38_NO_PERMANENT_HIGHMEM_STRATEGY", _grch38_strategy_probe, blocking=False))
+    # The GRCh38 runtime/reference strategy is a mandatory safety gate: if it cannot
+    # execute or prove the configured strategy, the audit must not report PASS.
+    checks.append(inspection_check("GRCH38_NO_PERMANENT_HIGHMEM_STRATEGY", _grch38_strategy_probe))
     checks.append(inspection_check("NO_PERSONAL_GENOTYPE_FIXTURES", _personal_fixtures_probe))
 
     planes = {
