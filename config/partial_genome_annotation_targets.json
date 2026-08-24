@@ -1313,9 +1313,7 @@
     {
       "assessed_allele": "C",
       "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
-      "assessed_allele_reason": "CPIC defines different alleles by different bases here (C, G); the locus interrogates more than one question",
       "assessed_allele_source": "CPIC + dbSNP frequency",
-      "assessed_allele_status": "NÃO DISPONÍVEL",
       "coordinates": {
         "GRCh37": {
           "alternate_allele": "C",
@@ -1644,5 +1642,5 @@
       "scope": "CLINICO"
     }
   ],
-  "version": "2026-08-16.1"
+  "version": "2026-08-19.1"
 }
