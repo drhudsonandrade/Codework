@@ -27,7 +27,9 @@ The workflow captures `docker inspect`, image ID, mount mode, health response an
 
 `scripts/run_live_post_deployment_smoke.py` sends all 15 canonical scenarios through the **running HTTP service**, not through an in-process unit fixture. Each case records the canonical natural-language prompt, expected behavior, expected blocking gate, observed gate and SHA-256 of the full HTTP response.
 
-The suite can report PASS only with `total=15`, `passed=15`, `critical_failures=0`, a verified ruleset-bootstrap attestation tied to the exact deployment Git SHA, and an independently verified `PROJECT_BOOTSTRAP_INSTALLED` attestation. It then submits the external post-deployment criteria to the live engine and requires `POST_DEPLOYMENT_GATE=PASS` and `post_deployment_status=PASS`.
+The suite can report PASS only with `total=15`, `passed=15`, `critical_failures=0`, a verified ruleset-bootstrap attestation tied to the exact deployment Git SHA, authenticated evidence that the persistent Project Instructions are installed, `POST_DEPLOYMENT_GATE=PASS`, and `post_deployment_status=PASS`. The repository-local owner-export snapshot is deliberately insufficient for the installation condition.
+
+At present the implementation has no authenticated machine-readable read of the authoritative persistent Project Instructions surface. Therefore `PROJECT_BOOTSTRAP_INSTALLED` remains false and the production ceremony remains fail-closed for POST-DEPLOYMENT until such evidence is available and bound to the deployment.
 
 The independent `genoma-policy smoke` suite remains separate and can never grant post-deployment status.
 
@@ -43,14 +45,14 @@ For production witnessing, the workflow generates a fresh bootstrap attestation 
 
 ### 4.2 PROJECT_BOOTSTRAP_INSTALLED
 
-`scripts/project_instructions_attestation.py` is a separate verifier. Its input is an owner-exported UTF-8 snapshot of the **actual persistent Project Instructions**, plus a locator identifying the deployed settings surface. It verifies the exact high-signal clauses of the canonical v3.4 BOOTSTRAP CURTO, records the source SHA-256/size, clause digests/lines and a strict RFC 3339 verification timestamp.
+`scripts/project_instructions_attestation.py` is a separate verifier for an owner-exported UTF-8 snapshot of the Project Instructions. It verifies the exact high-signal clauses of the canonical v3.4 BOOTSTRAP CURTO, records the source SHA-256/size, clause digests/lines, a locator describing the claimed settings surface, and a strict RFC 3339 verification timestamp.
 
 The production paths are:
 
-- `deploy/attestations/project-instructions-v3.4.txt` — owner-exported snapshot of the live Project Instructions;
+- `deploy/attestations/project-instructions-v3.4.txt` — owner-exported Project Instructions snapshot;
 - `deploy/attestations/project-instructions-v3.4.json` — attestation generated from that exact snapshot.
 
-Generate the attestation only after exporting the real settings:
+Generate the snapshot attestation only after exporting the settings:
 
 ```bash
 python3 -m scripts.project_instructions_attestation \
@@ -61,15 +63,15 @@ python3 -m scripts.project_instructions_attestation \
   --write
 ```
 
-The live smoke re-reads the source snapshot and recomputes the attestation. Only this independently reproduced result may set `post_deployment.bootstrap_installed=true`. The sealed ruleset can never satisfy this boolean by itself.
+The live smoke re-reads the source snapshot and recomputes the attestation, but this evidence remains snapshot-only and **MUST NOT** set `post_deployment.bootstrap_installed=true`. The boolean remains false until an authenticated read from the authoritative persistent Project Instructions surface is available and bound to the deployment. The sealed ruleset likewise can never satisfy this installation boolean by itself.
 
-If the platform does not expose a machine-readable Project Instructions API, the owner-exported snapshot is the explicit evidence boundary. The result must be described as an owner-export attestation, not as a direct platform API verification.
+If the platform does not expose a machine-readable Project Instructions API, the owner-exported snapshot is the explicit evidence boundary for snapshot verification only. Installation status remains `NÃO DISPONÍVEL`, and POST-DEPLOYMENT remains fail-closed; the snapshot must not be described as direct platform verification.
 
 ## 5. Evidence package
 
-The ceremony uploads a 365-day artifact named `genoma-post-deployment-evidence-<commit>` containing the materialization record, runtime-generated ruleset bootstrap attestation, container metadata, live ruleset response, the independent Project Instructions verification recorded in the live summary, all 15 case results, container log, and a sorted SHA-256 manifest.
+The ceremony uploads a 365-day artifact named `genoma-post-deployment-evidence-<commit>` containing the materialization record, runtime-generated ruleset bootstrap attestation, container metadata, live ruleset response, the Project Instructions snapshot verification recorded in the live summary, all 15 case results, container log, and a sorted SHA-256 manifest.
 
-A post-deployment result is therefore tied to a precise Git commit, container image, canonical ruleset hash, Project Instructions snapshot digest and execution run. A later model/UI/provider cannot retroactively alter it.
+A post-deployment execution record is therefore tied to a precise Git commit, container image, canonical ruleset hash, Project Instructions snapshot digest and execution run. This does not elevate the snapshot to installation proof. A later model/UI/provider cannot retroactively alter the captured execution evidence.
 
 ## 6. Branch governance
 
