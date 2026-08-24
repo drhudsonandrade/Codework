@@ -1,7 +1,9 @@
 {
-  "attestation_type": "GENOMA_PROJECT_INSTRUCTIONS",
+  "attestation_type": "GENOMA_PROJECT_INSTRUCTIONS_SNAPSHOT",
   "status": "VERIFICADO",
-  "project_bootstrap_installed": true,
+  "evidence_classification": "VERIFIED_OWNER_SNAPSHOT_ONLY",
+  "project_bootstrap_installed": false,
+  "installation_status": "NÃO DISPONÍVEL",
   "ruleset_identity": "v3.4/VIGENTE/17/08/2026",
   "canonical_filename": "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt",
   "canonical_sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
@@ -50,5 +52,5 @@
       "line": 1
     }
   },
-  "limitations": "This attestation is re-derived from an owner-exported snapshot of the persistent Project Instructions. It proves the snapshot content and its recorded locator; it is not evidence that can be generated from the sealed ruleset itself and must be refreshed whenever Project Instructions change."
+  "limitations": "VERIFICADO applies only to the bytes of this owner-exported snapshot. No authenticated machine-readable read of the authoritative persistent ChatGPT Project Instructions was available, so this artifact MUST NOT set PROJECT_BOOTSTRAP_INSTALLED=true. Refresh the snapshot whenever Project Instructions change and obtain authoritative persistent-source evidence before a POST-DEPLOYMENT PASS."
 }
