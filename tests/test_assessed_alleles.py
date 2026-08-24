@@ -14,6 +14,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -194,11 +195,55 @@ class DecisionRuleTest(unittest.TestCase):
         self.assertNotIn("variant_source", registry["genes"]["CYP2C19"])
 
     def test_a_benign_classification_is_not_a_clinical_assertion(self):
-        from scripts.curate_assessed_alleles import ASSERTING, NON_ASSERTING
+        from scripts import curate_assessed_alleles as curation
 
-        self.assertIn("pathogenic", ASSERTING)
-        self.assertIn("drug response", ASSERTING)
-        self.assertIn("benign", NON_ASSERTING)
+        def record(classification: str) -> dict:
+            return {
+                "uid": "1",
+                "accession": "VCV000000001",
+                "variation_set": [
+                    {"canonical_spdi": "NC_000001.11:100:A:T"}
+                ],
+                "germline_classification": {"description": classification},
+            }
+
+        placement = {
+            "GRCh38": {
+                "seq_id": "NC_000001.11",
+                "position": 101,
+                "reference_allele": "A",
+            }
+        }
+        for classification in (
+            "Benign",
+            "Conflicting classifications of pathogenicity",
+            "Pathogenic; Benign",
+        ):
+            with self.subTest(classification=classification), (
+                patch.object(curation, "fetch_refsnp", return_value={}),
+                patch.object(curation, "placements", return_value=placement),
+                patch.object(curation, "clinvar_records", return_value=[record(classification)]),
+                patch.object(curation, "frequency_alleles", return_value={}),
+                patch.object(curation, "clinvar_citations", return_value=[]),
+                patch.object(curation, "cpic_variant_alleles", return_value={}),
+                patch.object(curation.time, "sleep"),
+            ):
+                result = curation.curate_target("rs1")
+            self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+            self.assertIsNone(result["assessed_allele"])
+
+        with (
+            patch.object(curation, "fetch_refsnp", return_value={}),
+            patch.object(curation, "placements", return_value=placement),
+            patch.object(curation, "clinvar_records", return_value=[record("Pathogenic")]),
+            patch.object(curation, "frequency_alleles", return_value={}),
+            patch.object(curation, "clinvar_citations", return_value=[]),
+            patch.object(curation, "cpic_variant_alleles", return_value={}),
+            patch.object(curation.time, "sleep"),
+        ):
+            asserted = curation.curate_target("rs1")
+        self.assertEqual(asserted["status"], "VERIFICADO")
+        self.assertEqual(asserted["assessed_allele"], "T")
 
 
 class BcheFallbackTest(unittest.TestCase):
