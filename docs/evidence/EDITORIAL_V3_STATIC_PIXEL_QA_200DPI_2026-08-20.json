@@ -7,11 +7,13 @@
     "outside_changed_pixels": 0,
     "reference_pages": 100,
     "reports": 11,
-    "result": "PASS"
+    "result": "NÃO DISPONÍVEL"
   },
   "comparison_contract": "Original v3.0 PDF is the immutable base; replacement overlays are confined to compiled dynamic placeholder/control rectangles. Compare raster output outside all dynamic/control masks. PASS requires exactly zero changed pixels outside masks on every page.",
   "coordinate_compiler": {
     "field_counts": {
+      "10": 26,
+      "11": 77,
       "01": 130,
       "02": 117,
       "03": 136,
@@ -20,9 +22,7 @@
       "06": 92,
       "07": 91,
       "08": 82,
-      "09": 84,
-      "10": 26,
-      "11": 77
+      "09": 84
     },
     "manifest_sha256": "4a563c8e96e688da83fdaddd45712dd6981d5ea331ebe398b79fc1192e15380b",
     "name": "fitz-1.26.7-genoma-v2"
@@ -34,123 +34,141 @@
     "It is a layout control only. It says nothing about scientific correctness, QC or evidence, and never authorizes POST-DEPLOYMENT.",
     "DOCX renderer parity is a separate control and is not measured here."
   ],
-  "mask_padding_pt": 1.0,
+  "mask_padding_pt": 1,
   "reports": {
-    "01": {
-      "filename": "01_RELATORIO_GENOMA_CLINICO_v3.0.pdf",
-      "pages": 10,
-      "qa": {
-        "max_channel_diff": 0,
-        "outside_change_fraction": 0.0,
-        "outside_changed_pixels": 0
-      },
-      "sha256": "812a7e9ff15a1f6b368d924e78dd0456145d0f22e0d24af5ea0a9faa9d458797"
-    },
-    "02": {
-      "filename": "02_RELATORIO_ANCESTRALIDADE_GENEALOGIA_v3.0.pdf",
-      "pages": 10,
-      "qa": {
-        "max_channel_diff": 0,
-        "outside_change_fraction": 0.0,
-        "outside_changed_pixels": 0
-      },
-      "sha256": "2ede76a59e74a6425f22be31f7b96fa6bc1b0ce3fb74b03fa15775e0e6dbe496"
-    },
-    "03": {
-      "filename": "03_RELATORIO_REPRODUTIVO_INDIVIDUAL_CASAL_v3.0.pdf",
-      "pages": 10,
-      "qa": {
-        "max_channel_diff": 0,
-        "outside_change_fraction": 0.0,
-        "outside_changed_pixels": 0
-      },
-      "sha256": "945007f2a9db1e6252e9fa0352e211ef6957383970913e7c7cb3f604955ab2dd"
-    },
-    "04": {
-      "filename": "04_RELATORIO_NUTRIGENETICO_NUTRICAO_PRECISAO_v3.0.pdf",
-      "pages": 10,
-      "qa": {
-        "max_channel_diff": 0,
-        "outside_change_fraction": 0.0,
-        "outside_changed_pixels": 0
-      },
-      "sha256": "32687216782de91619249b3fd9aef7975fcb69544c74cbbf3a54b58cb716a394"
-    },
-    "05": {
-      "filename": "05_RELATORIO_TECNICO_METODOS_QC_LIMITACOES_v3.0.pdf",
-      "pages": 11,
-      "qa": {
-        "max_channel_diff": 0,
-        "outside_change_fraction": 0.0,
-        "outside_changed_pixels": 0
-      },
-      "sha256": "fd9a2fbfd90534af2fc78b8a0a85c8b89262568d78b21f711dc66b0f0bf00f41"
-    },
-    "06": {
-      "filename": "06_RELATORIO_FARMACOGENOMICA_CARTAO_ANESTESIA_v3.0.pdf",
-      "pages": 9,
-      "qa": {
-        "max_channel_diff": 0,
-        "outside_change_fraction": 0.0,
-        "outside_changed_pixels": 0
-      },
-      "sha256": "eeff08f634b3f40f3a280b6e7eeb7c3e09e8f0a4ca080a2da2882d2c9ec58fbe"
-    },
-    "07": {
-      "filename": "07_RELATORIO_LONGEVIDADE_PROTECAO_PREVENCAO_v3.0.pdf",
-      "pages": 9,
-      "qa": {
-        "max_channel_diff": 0,
-        "outside_change_fraction": 0.0,
-        "outside_changed_pixels": 0
-      },
-      "sha256": "60a3b80cf47e40b5405c567586800d03b0e0d882118c06775119dcc22ebf4a0a"
-    },
-    "08": {
-      "filename": "08_ATLAS_TRACOS_CURIOSIDADES_v3.0.pdf",
-      "pages": 9,
-      "qa": {
-        "max_channel_diff": 0,
-        "outside_change_fraction": 0.0,
-        "outside_changed_pixels": 0
-      },
-      "sha256": "3ebc0a412f587b08823baaae9553f88f33f5a0b53d6b74c2710ea647d3c93dd5"
-    },
-    "09": {
-      "filename": "09_GENOME_COMPLETENESS_BLIND_SPOTS_v3.0.pdf",
-      "pages": 9,
-      "qa": {
-        "max_channel_diff": 0,
-        "outside_change_fraction": 0.0,
-        "outside_changed_pixels": 0
-      },
-      "sha256": "f1b706a0b8948f27dddbee825779d7c89c44e90ca9468813c76b647164d9dfdd"
-    },
     "10": {
       "filename": "10_RESUMO_CLINICO_UMA_PAGINA_v3.0.pdf",
       "pages": 1,
       "qa": {
         "max_channel_diff": 0,
-        "outside_change_fraction": 0.0,
+        "outside_change_fraction": 0,
         "outside_changed_pixels": 0
       },
-      "sha256": "d0781af71f8855167311f9e7884c5e2d420ebe0b7da6d75f5a9cfed5b004ad59"
+      "sha256": "d0781af71f8855167311f9e7884c5e2d420ebe0b7da6d75f5a9cfed5b004ad59",
+      "status": "NÃO DISPONÍVEL"
     },
     "11": {
       "filename": "11_GUIA_EDITORIAL_MATRIZ_PREENCHIMENTO_v3.0.pdf",
       "pages": 12,
       "qa": {
         "max_channel_diff": 0,
-        "outside_change_fraction": 0.0,
+        "outside_change_fraction": 0,
         "outside_changed_pixels": 0
       },
-      "sha256": "169fe6c0b86697443b4cf6727fa106e42c5e8daa1f2d5a0dfffa335adafa49c6"
+      "sha256": "169fe6c0b86697443b4cf6727fa106e42c5e8daa1f2d5a0dfffa335adafa49c6",
+      "status": "NÃO DISPONÍVEL"
+    },
+    "01": {
+      "filename": "01_RELATORIO_GENOMA_CLINICO_v3.0.pdf",
+      "pages": 10,
+      "qa": {
+        "max_channel_diff": 0,
+        "outside_change_fraction": 0,
+        "outside_changed_pixels": 0
+      },
+      "sha256": "812a7e9ff15a1f6b368d924e78dd0456145d0f22e0d24af5ea0a9faa9d458797",
+      "status": "NÃO DISPONÍVEL"
+    },
+    "02": {
+      "filename": "02_RELATORIO_ANCESTRALIDADE_GENEALOGIA_v3.0.pdf",
+      "pages": 10,
+      "qa": {
+        "max_channel_diff": 0,
+        "outside_change_fraction": 0,
+        "outside_changed_pixels": 0
+      },
+      "sha256": "2ede76a59e74a6425f22be31f7b96fa6bc1b0ce3fb74b03fa15775e0e6dbe496",
+      "status": "NÃO DISPONÍVEL"
+    },
+    "03": {
+      "filename": "03_RELATORIO_REPRODUTIVO_INDIVIDUAL_CASAL_v3.0.pdf",
+      "pages": 10,
+      "qa": {
+        "max_channel_diff": 0,
+        "outside_change_fraction": 0,
+        "outside_changed_pixels": 0
+      },
+      "sha256": "945007f2a9db1e6252e9fa0352e211ef6957383970913e7c7cb3f604955ab2dd",
+      "status": "NÃO DISPONÍVEL"
+    },
+    "04": {
+      "filename": "04_RELATORIO_NUTRIGENETICO_NUTRICAO_PRECISAO_v3.0.pdf",
+      "pages": 10,
+      "qa": {
+        "max_channel_diff": 0,
+        "outside_change_fraction": 0,
+        "outside_changed_pixels": 0
+      },
+      "sha256": "32687216782de91619249b3fd9aef7975fcb69544c74cbbf3a54b58cb716a394",
+      "status": "NÃO DISPONÍVEL"
+    },
+    "05": {
+      "filename": "05_RELATORIO_TECNICO_METODOS_QC_LIMITACOES_v3.0.pdf",
+      "pages": 11,
+      "qa": {
+        "max_channel_diff": 0,
+        "outside_change_fraction": 0,
+        "outside_changed_pixels": 0
+      },
+      "sha256": "fd9a2fbfd90534af2fc78b8a0a85c8b89262568d78b21f711dc66b0f0bf00f41",
+      "status": "NÃO DISPONÍVEL"
+    },
+    "06": {
+      "filename": "06_RELATORIO_FARMACOGENOMICA_CARTAO_ANESTESIA_v3.0.pdf",
+      "pages": 9,
+      "qa": {
+        "max_channel_diff": 0,
+        "outside_change_fraction": 0,
+        "outside_changed_pixels": 0
+      },
+      "sha256": "eeff08f634b3f40f3a280b6e7eeb7c3e09e8f0a4ca080a2da2882d2c9ec58fbe",
+      "status": "NÃO DISPONÍVEL"
+    },
+    "07": {
+      "filename": "07_RELATORIO_LONGEVIDADE_PROTECAO_PREVENCAO_v3.0.pdf",
+      "pages": 9,
+      "qa": {
+        "max_channel_diff": 0,
+        "outside_change_fraction": 0,
+        "outside_changed_pixels": 0
+      },
+      "sha256": "60a3b80cf47e40b5405c567586800d03b0e0d882118c06775119dcc22ebf4a0a",
+      "status": "NÃO DISPONÍVEL"
+    },
+    "08": {
+      "filename": "08_ATLAS_TRACOS_CURIOSIDADES_v3.0.pdf",
+      "pages": 9,
+      "qa": {
+        "max_channel_diff": 0,
+        "outside_change_fraction": 0,
+        "outside_changed_pixels": 0
+      },
+      "sha256": "3ebc0a412f587b08823baaae9553f88f33f5a0b53d6b74c2710ea647d3c93dd5",
+      "status": "NÃO DISPONÍVEL"
+    },
+    "09": {
+      "filename": "09_GENOME_COMPLETENESS_BLIND_SPOTS_v3.0.pdf",
+      "pages": 9,
+      "qa": {
+        "max_channel_diff": 0,
+        "outside_change_fraction": 0,
+        "outside_changed_pixels": 0
+      },
+      "sha256": "f1b706a0b8948f27dddbee825779d7c89c44e90ca9468813c76b647164d9dfdd",
+      "status": "NÃO DISPONÍVEL"
     }
   },
   "schema": "genoma-editorial-static-pixel-qa-v2",
-  "status": "VERIFICADO",
+  "status": "NÃO DISPONÍVEL",
   "template_pack": {
-    "status": "VERIFICADO",
+    "status": "NÃO DISPONÍVEL",
     "verified_reports": 11
+  },
+  "reference_change_notice": {
+    "report": "11",
+    "previous_run_sha256": "d68fce73aeb7fd7bb6e0eb27679b167a3899cce92eb20b64ad5bb15352031fea",
+    "this_run_sha256": "169fe6c0b86697443b4cf6727fa106e42c5e8daa1f2d5a0dfffa335adafa49c6",
+    "status": "NÃO DISPONÍVEL",
+    "reason": "O PDF 11 mudou entre as execuções, mas o motivo da substituição não foi registrado. Esta execução é histórica, não reproduzível e não é declarada vigente."
   }
 }
