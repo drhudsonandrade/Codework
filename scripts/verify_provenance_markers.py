@@ -64,17 +64,17 @@ def _chromosome_from_accession(seq_id: str) -> str | None:
 
 
 def _numeric_rsid(rsid: str) -> str:
-    numeric = _numeric_rsid(rsid)
-    return numeric
-
-
-def fetch_refsnp(rsid: str, *, timeout: int = 30) -> dict[str, Any]:
     normalized = str(rsid or "").strip().lower()
     numeric = normalized.removeprefix("rs")
     if not numeric or not numeric.isdecimal():
         raise MarkerVerificationError(
             f"{rsid!r}: rsid must be a non-empty 'rs' identifier containing decimal digits"
         )
+    return numeric
+
+
+def fetch_refsnp(rsid: str, *, timeout: int = 30) -> dict[str, Any]:
+    numeric = _numeric_rsid(rsid)
     request = urllib.request.Request(
         REFSNP_URL.format(rsid=numeric),
         headers={"Accept": "application/json", "User-Agent": "genoma-provenance-verifier/1.0"},
