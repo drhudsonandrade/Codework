@@ -19,7 +19,7 @@ Required policy:
 - do not use an unrestricted administrator bypass to turn a failing gate into a merge;
 - keep auto-merge disabled unless every required gate and the human merge decision are still enforced.
 
-The required checks must be selected from checks that have actually reported on the repository recently. Do not invent check names. For the current architecture, the selected set must cover the repository/scaffold contract, policy contract, MCP contract, supply-chain/security checks and CodeRabbit review policy used by the active PR process.
+The required checks must be selected from checks that have actually reported on the repository recently. Do not invent check names. For the current architecture, the selected set must cover the repository/scaffold contract, policy contract, MCP contract, supply-chain/security checks and CodeRabbit review policy used by the active PR process. Any check configured as required must have an unconditional pull-request provider; a path-filtered workflow must not be made globally required because unrelated PRs would wait forever for a check that never starts.
 
 The versioned definition is `.github/governance/main-ruleset.json`. It is a desired-state artifact, not evidence that GitHub has applied the ruleset.
 
@@ -42,9 +42,9 @@ Required policy:
 The desired state is deliberately split into two layered GitHub rulesets:
 
 - `.github/governance/audit-evidence-integrity-ruleset.json` — `deletion` + `non_fast_forward`, with **no bypass actors**;
-- `.github/governance/audit-evidence-publisher-ruleset.json` — `update` only, with the trusted deploy key as the only bypass actor.
+- `.github/governance/audit-evidence-publisher-ruleset.json` — `update` only, with the GitHub `DeployKey` actor class as the bypass actor.
 
-The deploy key therefore bypasses only the update restriction required to append a new witness. It does not share a ruleset with deletion or non-fast-forward protections and cannot legitimately bypass those history controls through this desired-state design.
+For GitHub rulesets, a `DeployKey` bypass is represented with `actor_id: null`; this field therefore does not identify one numeric deploy-key ID. The desired-state JSON limits that bypass to the update-only layer, so it does not share a ruleset with deletion or non-fast-forward protections. Before governance can be marked verified, the live repository settings must also be read back to confirm that only the intended publisher deploy key is write-enabled for this publication path. If additional write-enabled deploy keys exist or the live rulesets differ from this design, keep governance status `PENDING`.
 
 These JSON files are desired-state artifacts, not evidence that GitHub has applied the rulesets or installed the corresponding deploy key.
 
@@ -59,7 +59,8 @@ After applying the GitHub settings, record all of the following in the closure r
 - observed protected/ruleset state for each branch;
 - required status checks actually configured on `main`;
 - force-push and deletion policy for both branches;
-- update-restriction bypass actors on `audit-evidence`, if any;
+- update-restriction bypass actor class on `audit-evidence`;
+- write-enabled deploy keys observed for the repository and which one is the intended publisher;
 - verification timestamp and GitHub settings/ruleset locator.
 
 The repository must remain **GOVERNANCE PENDING** until the live GitHub settings are read back and match this contract.
