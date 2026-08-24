@@ -141,7 +141,10 @@ def consent_for(root: Path, artifact_path: Path, **kwargs: Any) -> Path:
     fixture ends up authorising a different case than the one it renders.
     """
     payload = json.loads(Path(artifact_path).read_text(encoding="utf-8"))
-    return consent_file(root, case_id=str(payload.get("case_id")), **kwargs)
+    case_id = payload.get("case_id")
+    if not str(case_id or "").strip():
+        raise ValueError(f"artifact {artifact_path} does not declare a non-empty case_id")
+    return consent_file(root, case_id=str(case_id), **kwargs)
 
 
 def wgs_qc_record(*, case_id: str, vcf_sha256: str = "b" * 64, **overrides: Any) -> dict[str, Any]:
