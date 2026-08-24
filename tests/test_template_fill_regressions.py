@@ -47,9 +47,11 @@ class TemplateFillAssayTest(unittest.TestCase):
 
     def test_missing_count_fields_remain_unavailable(self):
         payload = {"findings": [{"id": "finding"}]}
-        self.assertIsNone(_resolve("01", "N_ACHADOS_P1_P2", payload))
-        self.assertIsNone(_resolve("01", "N_CONFIRMACOES", payload))
-        self.assertIsNone(_resolve("09", "N_CEGOS", payload))
+        failures: list[dict[str, str]] = []
+        self.assertIsNone(_resolve("01", "N_ACHADOS_P1_P2", payload, failures))
+        self.assertIsNone(_resolve("01", "N_CONFIRMACOES", payload, failures))
+        self.assertIsNone(_resolve("09", "N_CEGOS", payload, failures))
+        self.assertEqual(failures, [])
 
 
 if __name__ == "__main__":
