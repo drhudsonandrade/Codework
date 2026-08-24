@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 import zipfile
@@ -75,6 +76,26 @@ class EditorialRendererTest(unittest.TestCase):
             disclosed["data"]["execution_manifest"]["PROGRAMMATIC_FINAL_AUTHORIZATION"],
             "unit-test visual QA",
         )
+
+    def test_disclosure_is_present_in_json_bundle_too(self):
+        from reporting.editorial_v3 import prepare_editorial_render
+        from reporting.engine import render_document, write_bundle
+
+        rendered = prepare_editorial_render(
+            render_document("01", final_data(), mode="FINAL"),
+            programmatic_final_authorization="unit-test visual QA",
+        )
+        with tempfile.TemporaryDirectory() as td:
+            paths = write_bundle(rendered, Path(td), stem="disclosed")
+            payload = json.loads(paths["json"].read_text(encoding="utf-8"))
+        manifest = payload["data"]["execution_manifest"]
+        for key in (
+            "RENDERER",
+            "TEMPLATE_PACK_V3",
+            "PARIDADE_VISUAL",
+            "PROGRAMMATIC_FINAL_AUTHORIZATION",
+        ):
+            self.assertIn(key, manifest)
 
     def test_final_report_writes_real_pdf_and_editable_docx(self):
         from reporting.engine import render_document
