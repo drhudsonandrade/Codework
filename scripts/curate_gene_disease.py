@@ -63,7 +63,11 @@ if str(ROOT) not in sys.path:
 from array_pipeline.clinical_findings import normalised_moi
 from array_pipeline.targets import load_target_manifest, sha256_json
 from scripts.curate_assessed_alleles import _spdi
-from scripts.verify_provenance_markers import fetch_refsnp, placements
+from scripts.verify_provenance_markers import (
+    MarkerVerificationError,
+    fetch_refsnp,
+    placements,
+)
 
 CLINGEN_CSV = "https://search.clinicalgenome.org/kb/gene-validity/download"
 GENCC_TSV = "https://search.thegencc.org/download/action/submissions-export-tsv"
@@ -259,6 +263,18 @@ def _gencc_summary(submissions: list[dict[str, Any]]) -> dict[str, Any]:
         "mode_of_inheritance_conflicts": conflicts,
         "submitters": sorted({s for g in groups for s in g["submitters"]}),
     }
+
+
+def _clinvar_for_locus(rsid: str) -> dict[str, Any]:
+    """Fail one locus closed when dbSNP cannot substantiate its identity."""
+    try:
+        return fetch_clinvar_conditions(rsid)
+    except MarkerVerificationError as exc:
+        return {
+            "status": UNAVAILABLE,
+            "reason": f"dbSNP não pôde verificar {rsid}: {exc}",
+            "records": [],
+        }
 
 
 def fetch_clinvar_conditions(rsid: str) -> dict[str, Any]:
@@ -629,7 +645,7 @@ def curate(targets_path: Path, *, with_gwas: bool = True) -> dict[str, Any]:
     loci: list[dict[str, Any]] = []
     for target in sorted(manifest["targets"], key=lambda t: str(t["rsid"])):
         rsid = str(target["rsid"]).lower()
-        clinvar = fetch_clinvar_conditions(rsid)
+        clinvar = _clinvar_for_locus(rsid)
         time.sleep(REQUEST_INTERVAL_SECONDS)
         gwas = (
             fetch_gwas_associations(rsid)
