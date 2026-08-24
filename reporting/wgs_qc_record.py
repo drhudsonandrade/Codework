@@ -253,12 +253,14 @@ def audit_summary(record: dict[str, Any]) -> dict[str, Any]:
     the audit without reading the record — and so a record where most of §6 is `NÃO
     DISPONÍVEL` cannot look like a complete one.
     """
+    problems = validate_record(record)
     metrics = record.get("metrics") if isinstance(record.get("metrics"), dict) else {}
     measured = sorted(k for k in REQUIRED_METRICS if k in metrics and not _is_unavailable(metrics[k]))
     unavailable = sorted(k for k in REQUIRED_METRICS if _is_unavailable(metrics.get(k)))
     return {
         "schema": SCHEMA,
-        "status": "VERIFICADO",
+        "status": UNAVAILABLE if problems else "VERIFICADO",
+        "problems": problems,
         "laboratory": record.get("laboratory"),
         "report_date": record.get("report_date"),
         "vcf_sha256": record.get("vcf_sha256"),
