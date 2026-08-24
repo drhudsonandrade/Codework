@@ -324,6 +324,26 @@ class TraitScopeTest(unittest.TestCase):
                 TRAITS.build(associations, ancestry, scopes)
         self.assertIn("GO_0050916", str(raised.exception))
 
+    def test_unknown_scope_is_a_domain_error(self):
+        with tempfile.TemporaryDirectory() as td:
+            directory = Path(td)
+            associations = directory / "a.tsv"
+            ancestry = directory / "ancestry.tsv"
+            scopes = directory / "scopes.json"
+            associations.write_text("", encoding="utf-8")
+            ancestry.write_text("", encoding="utf-8")
+            scopes.write_text(
+                json.dumps(
+                    {
+                        "schema": "genoma-trait-scopes-v1",
+                        "scopes": {"DESCONHECIDO": {"terms": []}},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(TRAITS.TraitScopeError, "DESCONHECIDO"):
+                TRAITS.build(associations, ancestry, scopes)
+
     TRAIT_HEADER = "\t".join(
         ["SNPS", "P-VALUE", "MAPPED_TRAIT", "MAPPED_TRAIT_URI", "CHR_ID", "CHR_POS",
          "STRONGEST SNP-RISK ALLELE", "RISK ALLELE FREQUENCY", "OR or BETA",
