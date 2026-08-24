@@ -7,6 +7,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import {
   createGenomeMcpServer,
+  recoverClaimMutationLock,
   releaseRequestClaim,
   renewRequestClaimLease,
   runAudited,
@@ -468,20 +469,103 @@ test("an empty lock directory left by a half-finished release is absorbed", asyn
   await assert.rejects(stat(lockPath), /ENOENT/);
 });
 
-test("acquisition publishes the lock atomically and leaves no staging directory", async () => {
+test("a concurrent observer never sees the lock path without its owner", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-atomic-"));
   const claimPath = path.join(dir, "claim");
   const lockPath = `${claimPath}.lock`;
+  const ACQUISITIONS = 40;
 
-  const held = await withClaimMutationLock(claimPath, async () => {
-    // The shared lock path must never be observable without its owner inside it.
-    assert.deepEqual(await readdir(lockPath), ["owner.json"]);
-    return readdir(dir);
-  });
+  // The observer runs on the same event loop as the acquisition, so it is scheduled in
+  // exactly the gaps where a publish could expose an unfinished lock: any implementation
+  // that creates the lock path and only then fills it has to await in between, and that
+  // await is where this loop gets to look. Only the publish phase is judged — a release
+  // unlinks the owner file before removing the directory, so an empty lock path after the
+  // callback is the documented leftover that recovery absorbs, not an unfinished publish.
+  const exposedLockEntries = async (): Promise<string[] | undefined> => {
+    try {
+      const entries = await readdir(lockPath);
+      return entries.includes("owner.json") ? undefined : entries;
+    } catch {
+      // The lock path does not exist yet, which is the only other legal publish state.
+      return undefined;
+    }
+  };
 
-  assert.deepEqual(held, ["claim.lock"], "the staging directory must not outlive the publish");
+  const state = { publishing: false, running: true };
+  const exposures: string[][] = [];
+  const observer = (async () => {
+    while (state.running) {
+      const exposed = state.publishing ? await exposedLockEntries() : undefined;
+      if (exposed) {
+        exposures.push(exposed);
+      }
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  })();
+
+  try {
+    for (let attempt = 0; attempt < ACQUISITIONS; attempt += 1) {
+      state.publishing = true;
+      const held = await withClaimMutationLock(claimPath, async () => {
+        state.publishing = false;
+        assert.deepEqual(await readdir(lockPath), ["owner.json"]);
+        return readdir(dir);
+      });
+      assert.deepEqual(held, ["claim.lock"], "the staging directory must not outlive the publish");
+    }
+  } finally {
+    state.publishing = false;
+    state.running = false;
+    await observer;
+  }
+
+  assert.deepEqual(exposures, [], "the lock path was observable without its owner inside it");
   assert.deepEqual(await readdir(dir), [], "release must leave the claim directory clean");
 });
+
+test("recovery clears an ownerless lock directory without touching a live one", async () => {
+  // On POSIX the staged rename absorbs an empty lock directory before recovery is ever
+  // consulted; on Windows that rename is refused, and acquisition falls back to exactly
+  // this contract. Driving it directly keeps the win32 path covered on every platform.
+  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-recovery-"));
+  const ownerless = path.join(dir, "ownerless.lock");
+  await mkdir(ownerless, { mode: 0o700 });
+
+  assert.equal(await recoverClaimMutationLock(ownerless), true);
+  await assert.rejects(stat(ownerless), /ENOENT/, "an ownerless directory must not block acquisition");
+
+  const live = path.join(dir, "live.lock");
+  await mkdir(live, { mode: 0o700 });
+  await writeFile(
+    path.join(live, "owner.json"),
+    `${JSON.stringify({ lockId: CLAIM_ID_A, lockedAt: new Date().toISOString(), leaseExpiresAt: futureIso() })}\n`,
+    { mode: 0o600 },
+  );
+  await assert.rejects(recoverClaimMutationLock(live), /already in progress/);
+  assert.deepEqual(await readdir(live), ["owner.json"], "a live owner must survive recovery");
+
+  const unexpected = path.join(dir, "unexpected.lock");
+  await mkdir(unexpected, { mode: 0o700 });
+  await writeFile(path.join(unexpected, "stray.json"), "{}\n", { mode: 0o600 });
+  await assert.rejects(recoverClaimMutationLock(unexpected), /coordination lock is invalid/);
+  assert.deepEqual(await readdir(unexpected), ["stray.json"], "unexpected content must be preserved");
+});
+
+test(
+  "win32 acquisition recovers an empty lock directory the rename cannot replace",
+  { skip: process.platform === "win32" ? false : "win32-only rename semantics" },
+  async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-win32-"));
+    const claimPath = path.join(dir, "claim");
+    const lockPath = `${claimPath}.lock`;
+    await mkdir(lockPath, { mode: 0o700 });
+
+    const result = await withClaimMutationLock(claimPath, async () => "PASS");
+
+    assert.equal(result, "PASS", "EPERM from a refused directory rename must not wedge the request id");
+    await assert.rejects(stat(lockPath), /ENOENT/);
+  },
+);
 
 test("a lock directory with unexpected entries stays fail-closed", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-unexpected-"));
