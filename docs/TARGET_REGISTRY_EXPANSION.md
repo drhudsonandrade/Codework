@@ -217,7 +217,7 @@ Cadeia completa — QC, matriz de completude, passaporte PGx, junção clínica 
 — sobre um array de 700.000 SNPs contra o painel de 55.916 alvos, com o registro expandido
 como padrão:
 
-```
+```text
 14 de 14 etapas OK, nenhuma bloqueada
 tempo: 20,5 s   |   pico de memória: 676 MB
 matriz de completude: 23 MB   |   junção clínica: 59 MB
