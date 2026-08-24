@@ -747,7 +747,8 @@ def _anesthesia_card(gene_records: list[dict[str, Any]], registry: dict[str, Any
             )
 
     usable = [o for o in observations if o["interpretable"]]
-    covered = {record["gene"] for record in relevant}
+    covered = {observation["gene"] for observation in usable}
+    defined = {record["gene"] for record in relevant}
 
     scope = registry.get("anesthesia_scope") or {}
     scope_genes = scope.get("genes") or []
@@ -764,11 +765,23 @@ def _anesthesia_card(gene_records: list[dict[str, Any]], registry: dict[str, Any
                 "cpic_level": entry.get("cpic_level") or UNAVAILABLE,
                 "drugs": entry.get("drugs") or [],
                 "basis": (
-                    f"{gene} consta da diretriz CPIC {scope.get('guideline_name') or UNAVAILABLE} "
-                    f"(nível {entry.get('cpic_level') or UNAVAILABLE}) para {drugs}, e este "
-                    "registro não traz definições de alelo para ele: nenhuma posição deste gene "
-                    "foi interrogada e nada neste relatório fala sobre ele. Ausência de achado "
-                    "aqui não é ausência de risco — é ausência de exame."
+                    (
+                        f"{gene} consta da diretriz CPIC "
+                        f"{scope.get('guideline_name') or UNAVAILABLE} "
+                        f"(nível {entry.get('cpic_level') or UNAVAILABLE}) para {drugs}; o "
+                        "registro traz definições, mas nenhum locus interpretável deste gene "
+                        "teve chamada utilizável. Ausência de achado aqui não é ausência de risco — "
+                        "é ausência de medição utilizável."
+                    )
+                    if gene in defined
+                    else (
+                        f"{gene} consta da diretriz CPIC "
+                        f"{scope.get('guideline_name') or UNAVAILABLE} "
+                        f"(nível {entry.get('cpic_level') or UNAVAILABLE}) para {drugs}, e "
+                        "este registro não traz definições de alelo para ele: nenhuma posição "
+                        "deste gene foi interrogada e nada neste relatório fala sobre ele. "
+                        "Ausência de achado aqui não é ausência de risco — é ausência de exame."
+                    )
                 ),
             }
         )

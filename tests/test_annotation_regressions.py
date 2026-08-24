@@ -1,0 +1,56 @@
+from __future__ import annotations
+
+import unittest
+
+from array_pipeline.annotation import _observation_status, check_coordinate
+
+
+class AnnotationRegressionTest(unittest.TestCase):
+    def test_orientation_is_shared_by_qc_annotation_and_completeness(self):
+        from array_pipeline import annotation, completeness, qc
+
+        self.assertIs(annotation._orientation, qc._orientation)
+        self.assertIs(completeness._orientation, qc._orientation)
+
+    def test_determinate_orientation_refusal_is_not_promoted_to_inferred(self):
+        self.assertEqual(
+            _observation_status([{
+                "orientation_operational_status": "NÃO DISPONÍVEL",
+                "coordinate_operational_status": "VERIFICADO",
+                "coordinate_reason_code": "COORDINATE_MATCH",
+            }]),
+            "NÃO DISPONÍVEL",
+        )
+
+    def test_missing_expected_position_is_a_domain_refusal_not_an_exception(self):
+        result = check_coordinate(
+            {"chromosome": "1", "position": "100"},
+            {
+                "rsid": "rs1",
+                "coordinates": {
+                    "status": "VERIFICADO",
+                    "GRCh37": {"chromosome": "1"},
+                },
+            },
+            "GRCh37",
+        )
+        self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+        self.assertEqual(result["code"], "EXPECTED_POSITION_INVALID")
+
+    def test_missing_and_divergent_coordinates_have_distinct_structured_outcomes(self):
+        missing = _observation_status([{
+            "orientation_operational_status": "VERIFICADO",
+            "coordinate_operational_status": "NÃO DISPONÍVEL",
+            "coordinate_reason_code": "BUILD_COORDINATE_MISSING",
+        }])
+        divergent = _observation_status([{
+            "orientation_operational_status": "VERIFICADO",
+            "coordinate_operational_status": "NÃO DISPONÍVEL",
+            "coordinate_reason_code": "COORDINATE_MISMATCH",
+        }])
+        self.assertEqual(missing, "INFERIDO")
+        self.assertEqual(divergent, "NÃO DISPONÍVEL")
+
+
+if __name__ == "__main__":
+    unittest.main()

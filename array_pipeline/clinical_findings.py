@@ -34,7 +34,13 @@ from typing import Any
 import normative
 from array_pipeline.completeness import INTERPRETABLE, NAO_DETECTADO, NAO_TESTADO
 from array_pipeline.targets import read_manifest_bytes, sha256_json
-from reporting.case_dossier import SEX_FEMALE, SEX_MALE, normalised_sex
+from reporting.case_dossier import (
+    SEX_FEMALE,
+    SEX_INTERSEX,
+    SEX_MALE,
+    SEX_NOT_RECORDED,
+    normalised_sex,
+)
 
 SCHEMA = "genoma-clinical-findings-v1"
 UNAVAILABLE = "NÃO DISPONÍVEL"
@@ -338,7 +344,7 @@ def _validity_for(gene: str | None, evidence: dict[str, Any]) -> dict[str, Any]:
             {
                 str(c["disease"])
                 for c in established_clingen
-                if str(c.get("mode_of_inheritance")) == mode and c.get("disease")
+                if _normalised_moi(c.get("mode_of_inheritance")) == mode and c.get("disease")
             }
             | {
                 str(g["disease"])
@@ -568,6 +574,21 @@ def _interpretation(
         }
 
     sources = " e ".join(validity["established_by"]) or "registro curado"
+
+    def dossier_sex_clause() -> str:
+        if sex_at_birth in (SEX_MALE, SEX_FEMALE):
+            return f"o dossiê registra {sex_at_birth}"
+        if sex_at_birth == SEX_INTERSEX:
+            return (
+                "o dossiê registra intersexo; esse valor não determina complemento "
+                "cromossômico nem permite inferir hemizigose ou heterozigose"
+            )
+        if sex_at_birth == SEX_NOT_RECORDED:
+            return (
+                "o dossiê registra explicitamente que o sexo ao nascer não foi registrado"
+            )
+        return "o campo de sexo ao nascer está ausente do dossiê"
+
     matched = _matched_diseases(clinvar, validity)
     # The mode that applies is the one curated for the condition ClinVar names for *this*
     # variant. Only when no condition matches does the gene-level union stand in, and the
@@ -611,12 +632,8 @@ def _interpretation(
                 f"{', '.join(sorted(modes))} ({condition_note}). Um dos modos é ligado ao X, "
                 "e no X o sexo ao nascer decide entre hemizigoto afetado e heterozigota "
                 "portadora — "
-                + (
-                    f"o dossiê registra {sex_at_birth}, mas a divergência entre registros "
-                    "curados não é resolvida por este sistema"
-                    if sex_at_birth in (SEX_MALE, SEX_FEMALE)
-                    else "e o dossiê não registra o sexo ao nascer"
-                )
+                + dossier_sex_clause()
+                + ", mas a divergência entre registros curados não é resolvida por este sistema"
                 + ". Confirmação por método ortogonal e revisão da curadoria gene-doença "
                 "antes de qualquer conduta"
             ),
@@ -645,8 +662,37 @@ def _interpretation(
                         "inativação do X é aleatória e a inativação enviesada produz "
                         "mulheres afetadas — portadora não é sinônimo de não afetada"
                         if zygosity == "HETEROZIGOTO"
-                        else "Genótipo homozigoto no X; exige correlação clínica"
+                        else (
+                            "Genótipo homozigoto no X; exige correlação clínica"
+                            if zygosity == "HOMOZIGOTO"
+                            else (
+                                "A zigosidade não foi determinada a partir desta chamada; "
+                                "não se afirma heterozigose nem homozigose"
+                            )
+                        )
                     )
+                ),
+            }
+        if sex_at_birth == SEX_INTERSEX:
+            return {
+                "kind": GENOTIPO_DE_RISCO,
+                "basis": (
+                    "variante patogênica em condição de herança ligada ao X segundo "
+                    f"{sources} ({condition_note}); o dossiê registra intersexo. Esse registro "
+                    "não determina complemento cromossômico, hemizigose ou heterozigose, e "
+                    "este sistema não infere essas características do array. A interpretação "
+                    "ligada ao X permanece indeterminada e exige correlação clínica"
+                ),
+            }
+        if sex_at_birth == SEX_NOT_RECORDED:
+            return {
+                "kind": GENOTIPO_DE_RISCO,
+                "basis": (
+                    "variante patogênica em condição de herança ligada ao X segundo "
+                    f"{sources} ({condition_note}); o dossiê registra explicitamente que o "
+                    "sexo ao nascer não foi registrado. Sem essa informação, este sistema "
+                    "não distingue hemizigose de heterozigose e mantém a interpretação "
+                    "ligada ao X indeterminada"
                 ),
             }
         return {
@@ -863,6 +909,11 @@ def build_clinical_findings(
         "schema": SCHEMA,
         # Never stronger than the matrix that supplied the genotypes.
         "operational_status": matrix.get("operational_status", UNAVAILABLE),
+        **(
+            {"qc_reservations": matrix["qc_reservations"]}
+            if "qc_reservations" in matrix
+            else {}
+        ),
         "evaluated_at": now,
         "ruleset": normative.attested_ruleset_block(),
         # Registry-wide counts, over every gene the curated evidence carries — not only the

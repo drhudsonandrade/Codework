@@ -79,6 +79,64 @@ INTERPRETABLE_OVERLAP_STATUSES = frozenset({
     "",
 })
 
+
+def _orientation(row: dict[str, str], schema: str, qc: dict[str, Any]) -> tuple[str, str]:
+    """Determine whether one array row can be compared with plus-strand registries."""
+    inputs = qc.get("input", {})
+    strand = inputs.get("strand")
+    strand_evidence = inputs.get("strand_evidence")
+    # Prefer the verdict the QC published. The old proxy — "the evidence string is not the
+    # literal 'NÃO DISPONÍVEL'" — is satisfied by any non-empty text, including an
+    # attestation that failed structural verification.
+    verified = inputs.get("strand_evidence_verified")
+    if verified is None:
+        verified = strand_evidence not in {None, "", "NÃO DISPONÍVEL"}
+    forward = strand in FORWARD_STRANDS and bool(verified)
+
+    if str(strand or "").strip().lower() in REVERSE_STRANDS:
+        # A determinate reverse verdict disqualifies every locus, whatever its sources say.
+        # Cross-platform consensus would otherwise return INFERIDO here — a status
+        # `completeness._classify` accepts — and the allele comparison it admits runs against
+        # the complement of what the registry means.
+        return (
+            "NÃO DISPONÍVEL",
+            f"file reported on the reverse strand ({strand}); the reported allele is the "
+            "complement of the one the registry names",
+        )
+
+    if schema.startswith("harmonized"):
+        sources = (row.get("SOURCES") or "").strip()
+        status = (row.get("STATUS") or "").strip().lower()
+        # Presence in both platforms is not agreement between them. Reporting a record the
+        # harmonizer flagged as conflicting or ambiguous as "cross-platform consensus" would
+        # resolve the conflict by assertion, which sections 4 and 7 forbid.
+        if status in UNRESOLVED_OVERLAP_STATUSES:
+            return "NÃO DISPONÍVEL", f"unresolved cross-platform record ({status}); not auto-resolved"
+        # An allowlist, so a status this module has never seen is refused rather than
+        # assumed clean. A real harmonized export emitted ten distinct STATUS values and one
+        # of them was unknown here.
+        if status not in INTERPRETABLE_OVERLAP_STATUSES:
+            return "NÃO DISPONÍVEL", f"unrecognised harmonizer status ({status}); not assumed interpretable"
+        if sources == "GM":
+            # Agreement proves both vendors used the same strand convention, not which one:
+            # if both reported the reverse strand an AG call would read TC in both files and
+            # they would agree perfectly while both were flipped.
+            if forward:
+                return "VERIFICADO", "cross-platform consensus with documented forward-strand provenance"
+            return (
+                "INFERIDO",
+                "cross-platform consensus establishes mutual consistency between vendors, "
+                "not absolute strand orientation",
+            )
+        if sources == "M" and forward:
+            return "VERIFICADO", "MyHeritage forward-strand source metadata"
+        if sources == "G":
+            return "INFERIDO", "Genera-only locus; orientation is not independently verified"
+        return "NÃO DISPONÍVEL", "source-specific orientation evidence unavailable"
+    if forward:
+        return "VERIFICADO", str(strand_evidence)
+    return "NÃO DISPONÍVEL", "source-specific orientation evidence unavailable"
+
 BASELINE_RSIDS = [
     "rs1799807", "rs1803274", "rs17580", "rs28929474", "rs738409",
     "rs1799853", "rs1057910", "rs9923231", "rs4149056", "rs776746",
@@ -181,6 +239,37 @@ class _ZipBackedTextStream(io.TextIOWrapper):
             self._genoma_zipfile.close()
 
 
+class _BoundedRaw(io.RawIOBase):
+    """Bound a decompressor by bytes it actually emits, independent of its headers."""
+
+    def __init__(self, raw: Any, *, limit: int, name: str) -> None:
+        super().__init__()
+        self._raw = raw
+        self._limit = limit
+        self._name = name
+        self._read = 0
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, buffer: Any) -> int:
+        count = self._raw.readinto(buffer)
+        if count is None:
+            return 0
+        self._read += count
+        if self._read > self._limit:
+            raise ValueError(
+                f"{self._name}: decompressed bytes exceed the {self._limit:,}-byte limit"
+            )
+        return count
+
+    def close(self) -> None:
+        try:
+            self._raw.close()
+        finally:
+            super().close()
+
+
 def _text_stream(path: Path) -> tuple[TextIO, SourceInfo]:
     """Open plain/gzip/zip CSV text. ZIP must contain exactly one regular data file.
 
@@ -192,7 +281,13 @@ def _text_stream(path: Path) -> tuple[TextIO, SourceInfo]:
     """
     lower = path.name.lower()
     if lower.endswith(".gz"):
-        fh = gzip.open(path, "rt", encoding="utf-8-sig", errors="strict", newline="")
+        raw = gzip.open(path, "rb")
+        bounded = io.BufferedReader(
+            _BoundedRaw(raw, limit=MAX_UNCOMPRESSED_BYTES, name=str(path))
+        )
+        fh = io.TextIOWrapper(
+            bounded, encoding="utf-8-sig", errors="strict", newline=""
+        )
         return fh, SourceInfo("gzip", None, {})
     if lower.endswith(".zip"):
         zf = zipfile.ZipFile(path)
@@ -207,8 +302,15 @@ def _text_stream(path: Path) -> tuple[TextIO, SourceInfo]:
             raise
         raw = zf.open(members[0], "r")
         try:
+            bounded = io.BufferedReader(
+                _BoundedRaw(
+                    raw,
+                    limit=MAX_UNCOMPRESSED_BYTES,
+                    name=f"{path}:{members[0].filename}",
+                )
+            )
             text = _ZipBackedTextStream(
-                raw,
+                bounded,
                 zf,
                 encoding="utf-8-sig",
                 errors="strict",
@@ -330,6 +432,16 @@ def _normalised_assertion(kind: str, value: Any) -> str | None:
     return text.upper()
 
 
+def _build_from_reference_metadata(value: Any) -> str | None:
+    """Canonical build asserted by the file metadata itself, never by a caller."""
+    reference = str(value or "").strip().lower()
+    if reference in {"build37", "grch37", "hg19"}:
+        return "GRCh37"
+    if reference in {"build38", "grch38", "hg38"}:
+        return "GRCh38"
+    return None
+
+
 def _verified_provenance(
     value: str | None,
     input_sha: str,
@@ -423,17 +535,17 @@ def inspect_array(
         header, metadata = _read_header_and_metadata(fh)
         schema = detect_schema(header)
 
+        metadata_build = _build_from_reference_metadata(metadata.get("reference"))
         if build is None:
-            ref = metadata.get("reference", "")
-            if ref.lower() in {"build37", "grch37", "hg19"}:
-                build = "GRCh37"
-            elif ref.lower() in {"build38", "grch38", "hg38"}:
-                build = "GRCh38"
+            build = metadata_build
         if strand is None and metadata.get("strand"):
             strand = metadata.get("strand")
-        if build_evidence is None and metadata.get("reference") and build:
+        if build_evidence is None and metadata.get("reference") and metadata_build:
             build_evidence = _metadata_attestation(
-                "reference_build", metadata.get("reference", ""), input_sha, build
+                "reference_build",
+                metadata.get("reference", ""),
+                input_sha,
+                metadata_build,
             )
         if strand_evidence is None and metadata.get("strand_evidence"):
             strand_evidence = _metadata_attestation(
@@ -480,8 +592,7 @@ def inspect_array(
         # The file's own vote on its orientation. An attestation is a claim; these markers
         # are the data, and the data is allowed to contradict the claim.
         strand_markers = _strand_marker_alleles()
-        strand_votes_plus = 0
-        strand_votes_minus = 0
+        strand_votes_by_rsid: dict[str, set[str]] = {}
 
         for row in reader:
             total += 1
@@ -549,13 +660,23 @@ def inspect_array(
                     autosomal_het += 1
 
             plus_alleles = strand_markers.get(rsid.lower())
-            if plus_alleles and v and set(v) <= set("ACGT"):
+            overlap_status = (
+                str(row.get("STATUS") or "").strip().lower()
+                if schema.startswith("harmonized")
+                else ""
+            )
+            if (
+                plus_alleles
+                and overlap_status not in UNRESOLVED_OVERLAP_STATUSES
+                and v
+                and set(v) <= set("ACGT")
+            ):
                 letters = set(v)
                 minus_alleles = {COMPLEMENT[a] for a in plus_alleles}
                 if letters <= plus_alleles and not letters <= minus_alleles:
-                    strand_votes_plus += 1
+                    strand_votes_by_rsid.setdefault(rsid.lower(), set()).add("plus")
                 elif letters <= minus_alleles and not letters <= plus_alleles:
-                    strand_votes_minus += 1
+                    strand_votes_by_rsid.setdefault(rsid.lower(), set()).add("minus")
 
             if rsid in BASELINE_RSIDS:
                 reverse_strand = str(strand or "").strip().lower() in REVERSE_STRANDS
@@ -623,6 +744,9 @@ def inspect_array(
         ) from exc
     finally:
         fh.close()
+
+    strand_votes_plus = sum(votes == {"plus"} for votes in strand_votes_by_rsid.values())
+    strand_votes_minus = sum(votes == {"minus"} for votes in strand_votes_by_rsid.values())
 
     call_rate = valid_calls / total if total else 0.0
     overlap_denom = overlap_consensus + overlap_conflict

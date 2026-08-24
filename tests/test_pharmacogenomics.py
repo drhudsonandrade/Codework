@@ -543,6 +543,28 @@ class AnesthesiaScopeTest(unittest.TestCase):
         self.assertEqual(card["not_interrogated"], [])
         self.assertEqual(card["status"], "VERIFICADO")
 
+    def test_a_declared_gene_with_only_no_calls_is_not_covered(self):
+        registry = json.loads(json.dumps(REGISTRY))
+        registry["anesthesia_scope"] = {
+            "guideline_id": 1,
+            "guideline_name": "fixture",
+            "source": "fixture",
+            "genes": [
+                {"gene": "BCHE", "cpic_level": "B/C", "drugs": ["succinylcholine"],
+                 "definitions_available": True}
+            ],
+        }
+        rows = (
+            "rs1799807,3,165548529,--,consensus,--,--,GM\n"
+            "rs1803274,3,165551201,--,consensus,--,--,GM\n"
+        )
+        with tempfile.TemporaryDirectory() as td:
+            _matrix, passport, _root = _artifacts(Path(td), rows, registry=registry)
+        card = passport["anesthesia_card"]
+        self.assertEqual(card["scope"]["state"], "INCOMPLETO")
+        self.assertEqual([entry["gene"] for entry in card["not_interrogated"]], ["BCHE"])
+        self.assertIn("nenhum locus interpretável", card["not_interrogated"][0]["basis"])
+
 
 class ConditionalLayerReachesTheReportTest(unittest.TestCase):
     """The report and the passport must agree about what was derived.
@@ -700,7 +722,7 @@ class ReportIntegrationTest(unittest.TestCase):
         self.assertIn("Diplótipo condicional e risco residual", SECTIONS)
         self.assertIn("Requisição de sequenciamento", SECTIONS)
 
-    def test_cli_forwards_all_control_artifacts_to_the_payload_compiler(self):
+    def test_cli_forwards_exact_control_artifacts_and_fails_when_release_is_blocked(self):
         from scripts.build_pharmacogenomic_report import main
 
         with tempfile.TemporaryDirectory() as td:
@@ -708,6 +730,11 @@ class ReportIntegrationTest(unittest.TestCase):
             matrix_path, _passport, _ = _artifacts(root, CLEAN_ROWS)
             witness = root / "witness.json"
             witness.write_text("{}", encoding="utf-8")
+            policy = policy_evaluation_file(root)
+            consent = consent_for(root, matrix_path)
+            expected_policy_sha = hashlib.sha256(policy.read_bytes()).hexdigest()
+            expected_witness_sha = hashlib.sha256(witness.read_bytes()).hexdigest()
+            expected_consent_sha = hashlib.sha256(consent.read_bytes()).hexdigest()
             payload_out = root / "payload-cli.json"
             argv = [
                 "build_pharmacogenomic_report.py",
@@ -717,19 +744,22 @@ class ReportIntegrationTest(unittest.TestCase):
                 "--matrix-out", str(root / "matrix-cli.json"),
                 "--passport-out", str(root / "passport-cli.json"),
                 "--payload-out", str(payload_out),
-                "--policy-evaluation", str(policy_evaluation_file(root)),
+                "--policy-evaluation", str(policy),
                 "--post-deployment-witness", str(witness),
-                "--consent", str(consent_for(root, matrix_path)),
+                "--consent", str(consent),
             ]
             with patch.object(sys, "argv", argv):
-                self.assertEqual(main(), 0)
+                self.assertEqual(main(), 2)
 
             payload = json.loads(payload_out.read_text(encoding="utf-8"))
         self.assertEqual(
             payload["policy_evaluation"]["source"]["origin"], "policy-engine-output"
         )
         self.assertEqual(payload["consent"]["origin"], "operator-record")
-        self.assertIn("witness_sha256", payload["post_deployment"])
+        self.assertEqual(payload["policy_evaluation"]["source"]["sha256"], expected_policy_sha)
+        self.assertEqual(payload["post_deployment"]["witness_sha256"], expected_witness_sha)
+        self.assertEqual(payload["consent"]["record_sha256"], expected_consent_sha)
+        self.assertNotEqual(payload["operational_status"], "VERIFICADO")
 
 
 class CpicRegistryTest(unittest.TestCase):

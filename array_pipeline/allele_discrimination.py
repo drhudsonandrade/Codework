@@ -365,6 +365,7 @@ def sequencing_requisition(
     on it; the previous refusal gave them nothing to act on.
     """
     group = residual.get("worst_population")
+    uncertain_group = residual.get("worst_uncertain_population")
     targets = [
         partition["alleles"][name]
         for name in partition["indiscriminable"]
@@ -386,9 +387,10 @@ def sequencing_requisition(
             coordinates.setdefault(str(item["rsid"]).lower(), item)
 
     def weight(record: dict[str, Any]) -> float:
-        if group is None:
+        population = uncertain_group if record["function_bucket"] == UNCERTAIN else group
+        if population is None:
             return 0.0
-        value = record["frequency"].get(group)
+        value = record["frequency"].get(population)
         return float(value) if value is not None else 0.0
 
     remaining = {r["allele"]: set(r["missing_positions"]) for r in targets}
@@ -447,12 +449,20 @@ def sequencing_requisition(
         )
 
     cumulative = 0.0
+    cumulative_altered = 0.0
     for step in steps:
         cumulative = round(cumulative + step["frequency_recovered"], 6)
         step["cumulative_frequency_recovered"] = cumulative
+        cumulative_altered = round(
+            cumulative_altered
+            + sum(weights[name] for name in step["unlocks_altered_alleles"]),
+            6,
+        )
         start = residual.get("worst_altered")
         step["residual_altered_after"] = (
-            round(max(start - cumulative, 0.0), 6) if isinstance(start, (int, float)) else None
+            round(max(start - cumulative_altered, 0.0), 6)
+            if isinstance(start, (int, float))
+            else None
         )
 
     return {

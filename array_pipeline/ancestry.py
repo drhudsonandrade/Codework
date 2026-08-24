@@ -137,10 +137,11 @@ def load_panel(path: Path) -> dict[str, Any]:
         raise AncestryPanelError("ancestry panel carries no markers")
     loading_lengths: set[int] = set()
     for marker in markers:
-        loadings = marker.get("loadings") if isinstance(marker, dict) else None
+        is_mapping = isinstance(marker, dict)
+        loadings = marker.get("loadings") if is_mapping else None
         if not isinstance(loadings, list) or not loadings:
             raise AncestryPanelError(
-                f"ancestry panel marker {getattr(marker, 'get', lambda _k: None)('rsid')!r} "
+                f"ancestry panel marker {(marker.get('rsid') if is_mapping else None)!r} "
                 "must carry a non-empty loadings list"
             )
         loading_lengths.add(len(loadings))
@@ -149,6 +150,19 @@ def load_panel(path: Path) -> dict[str, Any]:
             "ancestry panel marker loadings must all have the same length; "
             f"found dimensions {sorted(loading_lengths)}"
         )
+    components = next(iter(loading_lengths))
+    centroids = panel.get("population_centroids")
+    if not isinstance(centroids, dict) or not centroids:
+        raise AncestryPanelError("ancestry panel must carry population centroids")
+    for population, centroid in centroids.items():
+        if (
+            not isinstance(centroid, list)
+            or len(centroid) != components
+            or any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in centroid)
+        ):
+            raise AncestryPanelError(
+                f"ancestry panel centroid {population!r} must carry {components} components"
+            )
     return panel
 
 

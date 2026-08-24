@@ -8,12 +8,9 @@ from pathlib import Path
 from typing import Any
 
 from array_pipeline.qc import (
-    FORWARD_STRANDS,
     detect_schema,
-    INTERPRETABLE_OVERLAP_STATUSES,
-    REVERSE_STRANDS,
-    UNRESOLVED_OVERLAP_STATUSES,
     _canonical_gt,
+    _orientation,
     _read_header_and_metadata,
     _text_stream,
     sha256_file,
@@ -41,66 +38,9 @@ def _stable_json(value: Any) -> bytes:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
-def _orientation(row: dict[str, str], schema: str, qc: dict[str, Any]) -> tuple[str, str]:
-    inputs = qc.get("input", {})
-    strand = inputs.get("strand")
-    strand_evidence = inputs.get("strand_evidence")
-    # Prefer the verdict the QC published. The old proxy — "the evidence string is not the
-    # literal 'NÃO DISPONÍVEL'" — is satisfied by any non-empty text, including an
-    # attestation that failed structural verification.
-    verified = inputs.get("strand_evidence_verified")
-    if verified is None:
-        verified = strand_evidence not in {None, "", "NÃO DISPONÍVEL"}
-    forward = strand in FORWARD_STRANDS and bool(verified)
-
-    if str(strand or "").strip().lower() in REVERSE_STRANDS:
-        # A determinate reverse verdict disqualifies every locus, whatever its sources say.
-        # Cross-platform consensus would otherwise return INFERIDO here — a status
-        # `completeness._classify` accepts — and the allele comparison it admits runs against
-        # the complement of what the registry means.
-        return (
-            "NÃO DISPONÍVEL",
-            f"file reported on the reverse strand ({strand}); the reported allele is the "
-            "complement of the one the registry names",
-        )
-
-    if schema.startswith("harmonized"):
-        sources = (row.get("SOURCES") or "").strip()
-        status = (row.get("STATUS") or "").strip().lower()
-        # Presence in both platforms is not agreement between them. Reporting a record the
-        # harmonizer flagged as conflicting or ambiguous as "cross-platform consensus" would
-        # resolve the conflict by assertion, which sections 4 and 7 forbid.
-        if status in UNRESOLVED_OVERLAP_STATUSES:
-            return "NÃO DISPONÍVEL", f"unresolved cross-platform record ({status}); not auto-resolved"
-        # An allowlist, so a status this module has never seen is refused rather than
-        # assumed clean. A real harmonized export emitted ten distinct STATUS values and one
-        # of them was unknown here.
-        if status not in INTERPRETABLE_OVERLAP_STATUSES:
-            return "NÃO DISPONÍVEL", f"unrecognised harmonizer status ({status}); not assumed interpretable"
-        if sources == "GM":
-            # Agreement proves both vendors used the same strand convention, not which one:
-            # if both reported the reverse strand an AG call would read TC in both files and
-            # they would agree perfectly while both were flipped.
-            if forward:
-                return "VERIFICADO", "cross-platform consensus with documented forward-strand provenance"
-            return (
-                "INFERIDO",
-                "cross-platform consensus establishes mutual consistency between vendors, "
-                "not absolute strand orientation",
-            )
-        if sources == "M" and forward:
-            return "VERIFICADO", "MyHeritage forward-strand source metadata"
-        if sources == "G":
-            return "INFERIDO", "Genera-only locus; orientation is not independently verified"
-        return "NÃO DISPONÍVEL", "source-specific orientation evidence unavailable"
-    if forward:
-        return "VERIFICADO", str(strand_evidence)
-    return "NÃO DISPONÍVEL", "source-specific orientation evidence unavailable"
-
-
 def check_coordinate(
     observation: dict[str, Any], target: dict[str, Any], build: str | None
-) -> tuple[str, str]:
+) -> dict[str, str]:
     """Compare the observed coordinate with the registry's canonical one.
 
     The observation used to be accepted on its rsID alone, because the registry held no
@@ -117,47 +57,78 @@ def check_coordinate(
     """
     coordinates = target.get("coordinates") if isinstance(target.get("coordinates"), dict) else {}
     if coordinates.get("status") != "VERIFICADO":
-        return (
-            "NÃO DISPONÍVEL",
-            f"registro não traz coordenada canônica para {target.get('rsid')}: "
+        return {
+            "status": "NÃO DISPONÍVEL",
+            "code": "REGISTRY_COORDINATES_UNAVAILABLE",
+            "basis": f"registro não traz coordenada canônica para {target.get('rsid')}: "
             f"{coordinates.get('reason') or 'coordenada ausente'}",
-        )
+        }
     if build not in ("GRCh37", "GRCh38"):
-        return (
-            "NÃO DISPONÍVEL",
-            "build do caso não verificado; sem build não há coordenada canônica com que comparar",
-        )
+        return {
+            "status": "NÃO DISPONÍVEL",
+            "code": "BUILD_UNVERIFIED",
+            "basis": "build do caso não verificado; sem build não há coordenada canônica com que comparar",
+        }
     expected = coordinates.get(build)
     if not isinstance(expected, dict):
-        return ("NÃO DISPONÍVEL", f"registro não traz coordenada em {build} para este locus")
+        return {
+            "status": "NÃO DISPONÍVEL",
+            "code": "BUILD_COORDINATE_MISSING",
+            "basis": f"registro não traz coordenada em {build} para este locus",
+        }
     if expected.get("ambiguous_positions"):
-        return (
-            "NÃO DISPONÍVEL",
-            f"o ClinVar registra este rsid em {expected['ambiguous_positions']} posições "
+        return {
+            "status": "NÃO DISPONÍVEL",
+            "code": "AMBIGUOUS_COORDINATE",
+            "basis": f"o ClinVar registra este rsid em {expected['ambiguous_positions']} posições "
             f"distintas em {build}; não há coordenada única para conferir",
-        )
+        }
+
+    raw_expected_position = expected.get("position")
+    if isinstance(raw_expected_position, bool):
+        return {
+            "status": "NÃO DISPONÍVEL",
+            "code": "EXPECTED_POSITION_INVALID",
+            "basis": f"registro não traz posição inteira utilizável em {build} para este locus",
+        }
+    try:
+        expected_position = int(str(raw_expected_position).strip())
+        if expected_position <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return {
+            "status": "NÃO DISPONÍVEL",
+            "code": "EXPECTED_POSITION_INVALID",
+            "basis": f"registro não traz posição inteira utilizável em {build} para este locus",
+        }
 
     observed_chromosome = str(observation.get("chromosome") or "").strip().upper().removeprefix("CHR")
     expected_chromosome = str(expected.get("chromosome") or "").strip().upper()
     try:
         observed_position = int(str(observation.get("position") or "").strip())
     except ValueError:
-        return ("NÃO DISPONÍVEL", "posição observada não é um inteiro")
+        return {
+            "status": "NÃO DISPONÍVEL",
+            "code": "OBSERVED_POSITION_INVALID",
+            "basis": "posição observada não é um inteiro",
+        }
 
-    if observed_chromosome != expected_chromosome or observed_position != int(expected["position"]):
-        return (
-            "NÃO DISPONÍVEL",
-            f"coordenada divergente em {build}: o arquivo traz "
+    if observed_chromosome != expected_chromosome or observed_position != expected_position:
+        return {
+            "status": "NÃO DISPONÍVEL",
+            "code": "COORDINATE_MISMATCH",
+            "basis": f"coordenada divergente em {build}: o arquivo traz "
             f"chr{observed_chromosome}:{observed_position:,} e o registro "
-            f"chr{expected_chromosome}:{int(expected['position']):,}. O rsid casa e a posição "
+            f"chr{expected_chromosome}:{expected_position:,}. O rsid casa e a posição "
             "não; o arquivo está em outra montagem ou a coluna de coordenadas foi reescrita.",
-        )
-    return (
-        "VERIFICADO",
-        f"coordenada confere com o registro em {build} "
-        f"(chr{expected_chromosome}:{int(expected['position']):,}, "
+        }
+    return {
+        "status": "VERIFICADO",
+        "code": "COORDINATE_MATCH",
+        "basis": f"coordenada confere com o registro em {build} "
+        f"(chr{expected_chromosome}:{expected_position:,}, "
         f"{expected.get('reference_allele')}>{expected.get('alternate_allele')})",
-    )
+    }
 
 
 def extract_target_observations(
@@ -207,9 +178,10 @@ def extract_target_observations(
             }
             target = by_rsid.get(rsid)
             if target is not None:
-                status, basis = check_coordinate(observation, target, case_build)
-                observation["coordinate_operational_status"] = status
-                observation["coordinate_basis"] = basis
+                coordinate = check_coordinate(observation, target, case_build)
+                observation["coordinate_operational_status"] = coordinate["status"]
+                observation["coordinate_reason_code"] = coordinate["code"]
+                observation["coordinate_basis"] = coordinate["basis"]
             found[rsid].append(observation)
     finally:
         fh.close()
@@ -235,7 +207,10 @@ def _observation_status(rows: list[dict[str, Any]]) -> str:
         # would be the arbitration sections 4 and 7 forbid.
         return "NÃO DISPONÍVEL"
     row = rows[0]
-    if row.get("orientation_operational_status") != "VERIFICADO":
+    orientation = row.get("orientation_operational_status")
+    if orientation == "NÃO DISPONÍVEL":
+        return "NÃO DISPONÍVEL"
+    if orientation != "VERIFICADO":
         return "INFERIDO"
     coordinate = row.get("coordinate_operational_status")
     if coordinate == "VERIFICADO":
@@ -244,7 +219,13 @@ def _observation_status(rows: list[dict[str, Any]]) -> str:
     # matches and the position does not, so this locus is not the locus the registry means.
     if coordinate is None:
         return "INFERIDO"
-    return "INFERIDO" if "não traz coordenada" in str(row.get("coordinate_basis") or "") else "NÃO DISPONÍVEL"
+    if row.get("coordinate_reason_code") in {
+        "REGISTRY_COORDINATES_UNAVAILABLE",
+        "BUILD_COORDINATE_MISSING",
+        "EXPECTED_POSITION_INVALID",
+    }:
+        return "INFERIDO"
+    return "NÃO DISPONÍVEL"
 
 
 def _query_key(source: str, query: dict[str, Any]) -> str:

@@ -21,6 +21,20 @@ def passing_policy_evaluation():
     }
 
 
+def final_fixture(report_id="01"):
+    from reporting.provenance import fixture_payload
+
+    data = fixture_payload(
+        case_id="CASE-001",
+        report_id=report_id,
+        summary="Nenhum achado fictício é inserido pelo motor.",
+        basis="fixture de teste do motor de relatórios",
+    )
+    data["ruleset"] = dict(RULESET)
+    data["publication_gate"]["placeholders_resolved"] = True
+    return data
+
+
 class ReportEngineTest(unittest.TestCase):
     def assert_release_rejected(self, callable_, expected_reason=None):
         from reporting.engine import ReportReleaseError
@@ -130,20 +144,7 @@ class ReportEngineTest(unittest.TestCase):
     def test_final_mode_writes_json_markdown_and_html_when_gate_passes(self):
         from reporting.engine import render_document, write_bundle
 
-        data = {
-            "case_id": "CASE-001",
-            "summary": "Nenhum achado fictício é inserido pelo motor.",
-            "ruleset": dict(RULESET),
-            "publication_gate": {
-                "passed": True,
-                "consent_verified": True,
-                "qc_verified": True,
-                "evidence_verified": True,
-                "placeholders_resolved": True,
-            },
-            "policy_evaluation": passing_policy_evaluation(),
-            "post_deployment_status": "PENDENTE",
-        }
+        data = final_fixture()
         rendered = render_document("01", data, mode="FINAL")
         with tempfile.TemporaryDirectory() as td:
             paths = write_bundle(rendered, Path(td), stem="case-001-genoma-clinico")

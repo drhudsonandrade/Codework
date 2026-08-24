@@ -6,41 +6,22 @@ from pathlib import Path
 from ruleset_test_support import RULESET
 
 
-PASSING_POLICY = {
-    "ready_for_requested_operation": True,
-    "planes": {
-        "policy_control": {"state": "PASS"},
-        "scientific_data": {"state": "PASS"},
-        "evidence": {"state": "PASS"},
-        "audit": {"state": "PASS"},
-    },
-    "gates": [{"gate": "FINAL_AUDIT_GATE", "state": "PASS", "blocking": True}],
-}
+def final_data(report_id="01"):
+    from reporting.provenance import fixture_payload
 
-
-def final_data():
-    return {
-        "case_id": "CASE-VISUAL-001",
-        "summary": "Conteúdo rastreável para teste editorial.",
-        "ruleset": dict(RULESET),
-        "publication_gate": {
-            "passed": True,
-            "consent_verified": True,
-            "qc_verified": True,
-            "evidence_verified": True,
-            "placeholders_resolved": True,
+    data = fixture_payload(
+        case_id="CASE-VISUAL-001",
+        report_id=report_id,
+        summary="Conteúdo rastreável para teste editorial.",
+        sections={
+            "Resumo clínico executivo":
+                "Teste de conteúdo sem interpretação genética nova."
         },
-        "policy_evaluation": PASSING_POLICY,
-        "post_deployment_status": "PENDENTE",
-        "sections": {"Resumo clínico executivo": "Teste de conteúdo sem interpretação genética nova."},
-        "findings": [],
-        "execution_manifest": {"status": "VERIFICADO"},
-        "sources": ["fixture:test"],
-        "limitations": "Fixture editorial; não representa paciente.",
-        # This fixture explicitly tests the non-approved programmatic renderer. Production
-        # FINAL output remains fail-closed unless this acknowledgement is present.
-        "allow_programmatic_final": True,
-    }
+        basis="Fixture editorial; não representa paciente.",
+    )
+    data["ruleset"] = dict(RULESET)
+    data["publication_gate"]["placeholders_resolved"] = True
+    return data
 
 
 class EditorialRendererTest(unittest.TestCase):
@@ -68,7 +49,32 @@ class EditorialRendererTest(unittest.TestCase):
 
         expected = {"01": "0F766E", "02": "2563EB", "03": "7C3AED", "04": "166534", "05": "475467", "06": "B42318", "07": "A16207", "08": "0F766E", "09": "475467", "10": "0B1F33", "11": "0B1F33"}
         for report_id, accent in expected.items():
-            self.assertEqual(render_document(report_id, final_data(), mode="FINAL")["metadata"]["accent"], accent)
+            self.assertEqual(render_document(report_id, final_data(report_id), mode="FINAL")["metadata"]["accent"], accent)
+
+    def test_payload_cannot_self_authorize_a_programmatic_final_render(self):
+        from reporting.editorial_v3 import UnapprovedRendererError, write_editorial_bundle
+        from reporting.engine import render_document
+
+        rendered = render_document("01", final_data(), mode="FINAL")
+        rendered["data"]["allow_programmatic_final"] = True
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaises(UnapprovedRendererError):
+                write_editorial_bundle(rendered, Path(td), stem="refused")
+
+    def test_programmatic_disclosure_preserves_anchored_limitations(self):
+        from reporting.editorial_v3 import _disclose_programmatic_render
+        from reporting.engine import render_document
+
+        rendered = render_document("01", final_data(), mode="FINAL")
+        limitations = rendered["data"]["limitations"]
+        disclosed = _disclose_programmatic_render(
+            rendered, final_authorization="unit-test visual QA"
+        )
+        self.assertEqual(disclosed["data"]["limitations"], limitations)
+        self.assertEqual(
+            disclosed["data"]["execution_manifest"]["PROGRAMMATIC_FINAL_AUTHORIZATION"],
+            "unit-test visual QA",
+        )
 
     def test_final_report_writes_real_pdf_and_editable_docx(self):
         from reporting.engine import render_document
@@ -76,7 +82,12 @@ class EditorialRendererTest(unittest.TestCase):
 
         rendered = render_document("01", final_data(), mode="FINAL")
         with tempfile.TemporaryDirectory() as td:
-            paths = write_editorial_bundle(rendered, Path(td), stem="case-visual-001")
+            paths = write_editorial_bundle(
+                rendered,
+                Path(td),
+                stem="case-visual-001",
+                programmatic_final_authorization="unit-test visual QA",
+            )
             self.assertEqual(set(paths), {"pdf", "docx"})
             self.assertGreater(paths["pdf"].stat().st_size, 2000)
             self.assertGreater(paths["docx"].stat().st_size, 5000)

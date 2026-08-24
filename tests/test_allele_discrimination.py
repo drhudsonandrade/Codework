@@ -442,6 +442,30 @@ class SequencingRequisitionTest(unittest.TestCase):
         self.assertEqual(requisition["structural_alleles_excluded"], ["G*5xN"])
         self.assertIn("fase", requisition["scope_note"])
 
+    def test_each_axis_uses_its_own_population_and_uncertainty_does_not_reduce_altered_residual(self):
+        spec = {
+            "alleles": {
+                "altered": {
+                    "defining": [{"rsid": "rs_altered", "allele": "A"}],
+                    "cpic_clinical_function": "No function",
+                    "cpic_frequency": {"A": 0.20, "B": 0.01},
+                },
+                "uncertain": {
+                    "defining": [{"rsid": "rs_uncertain", "allele": "G"}],
+                    "cpic_clinical_function": "Uncertain function",
+                    "cpic_frequency": {"A": 0.00, "B": 0.90},
+                },
+            }
+        }
+        partition = partition_alleles(spec, {})
+        requisition = sequencing_requisition("G", spec, partition, residual_risk(partition))
+        steps = requisition["positions"]
+
+        self.assertEqual([step["rsid"] for step in steps], ["rs_uncertain", "rs_altered"])
+        self.assertEqual(steps[0]["frequency_recovered"], 0.90)
+        self.assertEqual(steps[0]["residual_altered_after"], 0.20)
+        self.assertEqual(steps[1]["residual_altered_after"], 0.0)
+
 
 class AnalysisShapeTest(unittest.TestCase):
     def test_a_gene_with_no_curated_alleles_is_reported_unavailable(self):
@@ -544,10 +568,6 @@ class WorstGroupPerAxisTest(unittest.TestCase):
                 )
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class VacuousResidualTest(unittest.TestCase):
     """A residual of zero must never come from an empty catalogue."""
 
@@ -564,3 +584,7 @@ class VacuousResidualTest(unittest.TestCase):
         self.assertTrue(residual["computable"])
         self.assertEqual(residual["worst_altered"], 0.0)
         self.assertIn("por medição", residual["basis"])
+
+
+if __name__ == "__main__":
+    unittest.main()

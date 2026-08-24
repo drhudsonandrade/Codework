@@ -218,37 +218,21 @@ class TemplateV3ContractTest(unittest.TestCase):
             for item in meta["fields"]
             if not item.get("guidance_only")
         }
-        data = {
-            "case_id": "CASE-TEMPLATE-10",
-            "summary": "fixture",
-            "ruleset": dict(RULESET),
-            "publication_gate": {
-                "passed": True,
-                "consent_verified": True,
-                "qc_verified": True,
-                "evidence_verified": True,
-                "placeholders_resolved": True,
+        from reporting.provenance import fixture_payload
+
+        data = fixture_payload(
+            case_id="CASE-TEMPLATE-10",
+            report_id="10",
+            summary="fixture",
+            basis="fixture de contrato do template v3",
+            extra={
+                "editorial_mode": "template-v3",
+                "template_fields_complete": True,
+                "template_fields": fields,
             },
-            "policy_evaluation": {
-                "ready_for_requested_operation": True,
-                "planes": {
-                    "policy_control": {"state": "PASS"},
-                    "scientific_data": {"state": "PASS"},
-                    "evidence": {"state": "PASS"},
-                    "audit": {"state": "PASS"},
-                },
-                "gates": [{"gate": "FINAL_AUDIT_GATE", "state": "PASS", "blocking": True}],
-            },
-            "post_deployment_status": "PENDENTE",
-            "sections": {},
-            "findings": [],
-            "execution_manifest": {"status": "VERIFICADO"},
-            "sources": ["fixture"],
-            "limitations": "fixture",
-            "editorial_mode": "template-v3",
-            "template_fields_complete": True,
-            "template_fields": fields,
-        }
+        )
+        data["ruleset"] = dict(RULESET)
+        data["publication_gate"]["placeholders_resolved"] = True
         rendered = render_document("10", data, mode="FINAL")
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

@@ -52,6 +52,21 @@ class AncestryRegressionTest(unittest.TestCase):
             read_case_genotypes(Path("unused.csv"), {"rs1"})
         self.assertEqual(closed, [True])
 
+    def test_panel_rejects_centroids_with_a_different_dimension(self):
+        namespace = _load_without_optional_numpy()
+        error = namespace["AncestryPanelError"]
+        load_panel = namespace["load_panel"]
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "panel.json"
+            path.write_text(json.dumps({
+                "schema": "genoma-ancestry-reference-panel-v1",
+                "sources": ["fixture"],
+                "markers": [{"rsid": "rs1", "loadings": [0.1, 0.2]}],
+                "population_centroids": {"EUR": [0.1]},
+            }), encoding="utf-8")
+            with self.assertRaisesRegex(error, "centroid.*2 components"):
+                load_panel(path)
+
 
 if __name__ == "__main__":
     unittest.main()

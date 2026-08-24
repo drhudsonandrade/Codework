@@ -8,6 +8,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 from array_pipeline.qc import _text_stream, inspect_array
 
@@ -126,6 +127,43 @@ class ArrayQCTest(unittest.TestCase):
         self.assertEqual(r["input"]["build"], "GRCh37")
         self.assertEqual(r["input"]["strand"], "forward")
 
+    def test_metadata_cannot_attest_a_build_that_contradicts_the_file(self):
+        p = self._write(
+            "##reference=build37\n"
+            "RSID,CHROMOSOME,POSITION,RESULT\nrs1,1,100,AA\n"
+        )
+        strand_evidence = self._verified_evidence(p, asserted_value="forward")
+        result = inspect_array(
+            p,
+            case_id="T",
+            build="GRCh38",
+            strand="forward",
+            strand_evidence=strand_evidence,
+        )
+        self.assertFalse(result["input"]["build_evidence_verified"])
+        self.assertEqual(result["gates"]["BUILD_STRAND_GATE"]["state"], "BLOCKED")
+
+    def test_duplicate_rsid_contributes_at_most_one_strand_vote(self):
+        p = self._write(
+            "RSID,CHROMOSOME,POSITION,RESULT\n"
+            "rs1,1,100,TC\n"
+            "rs1,1,101,TC\n"
+            "rs1,1,102,TC\n"
+        )
+        build_evidence = self._verified_evidence(p, asserted_value="GRCh37")
+        strand_evidence = self._verified_evidence(p, asserted_value="forward")
+        with patch("array_pipeline.qc._strand_marker_alleles", return_value={"rs1": {"A", "G"}}):
+            result = inspect_array(
+                p,
+                case_id="T",
+                build="GRCh37",
+                strand="forward",
+                build_evidence=build_evidence,
+                strand_evidence=strand_evidence,
+            )
+        self.assertEqual(result["metrics"]["strand_markers_minus_only"], 1)
+        self.assertEqual(result["gates"]["BUILD_STRAND_GATE"]["state"], "PASS")
+
 
 class ZipSourceHandleTest(unittest.TestCase):
     """A rejected ZIP must not leave its archive handle open."""
@@ -224,6 +262,37 @@ class ZipSourceHandleTest(unittest.TestCase):
                 "ZipFile handle leaked on the success path",
             )
             self.assertTrue(stream._genoma_zipfile.fp is None)
+
+
+class RuntimeExpansionLimitTest(unittest.TestCase):
+    def test_gzip_limit_is_enforced_on_bytes_actually_read(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "input.csv.gz"
+            with gzip.open(path, "wb") as fh:
+                fh.write(b"123456")
+            with patch("array_pipeline.qc.MAX_UNCOMPRESSED_BYTES", 4):
+                stream, _ = _text_stream(path)
+                try:
+                    with self.assertRaisesRegex(ValueError, "decompressed bytes"):
+                        stream.read()
+                finally:
+                    stream.close()
+
+    def test_zip_limit_is_enforced_even_if_header_validation_is_bypassed(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "input.zip"
+            with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr("input.csv", b"123456")
+            with (
+                patch("array_pipeline.qc.MAX_UNCOMPRESSED_BYTES", 4),
+                patch("array_pipeline.qc._check_zip_member", return_value=None),
+            ):
+                stream, _ = _text_stream(path)
+                try:
+                    with self.assertRaisesRegex(ValueError, "decompressed bytes"):
+                        stream.read()
+                finally:
+                    stream.close()
 
 
 if __name__ == "__main__":

@@ -77,7 +77,9 @@ class UnapprovedRendererError(RuntimeError):
     """A FINAL report was about to be produced without the approved v3.0 template pack."""
 
 
-def _disclose_programmatic_render(rendered: dict[str, Any]) -> dict[str, Any]:
+def _disclose_programmatic_render(
+    rendered: dict[str, Any], *, final_authorization: str | None = None
+) -> dict[str, Any]:
     """Make the fallback renderer visible in the document it produces.
 
     The programmatic renderer never opens an approved v3.0 template; it reconstructs a
@@ -94,11 +96,14 @@ def _disclose_programmatic_render(rendered: dict[str, Any]) -> dict[str, Any]:
         data = {}
         disclosed["data"] = data
 
-    if str(metadata.get("mode", "")).upper() == "FINAL" and data.get("allow_programmatic_final") is not True:
+    final_mode = str(metadata.get("mode", "")).upper() == "FINAL"
+    if final_mode and (
+        not isinstance(final_authorization, str) or not final_authorization.strip()
+    ):
         raise UnapprovedRendererError(
             "FINAL publishing requires the approved v3.0 template pack. Install it and set "
-            "editorial_mode='template-v3' with GENOMA_REPORT_TEMPLATE_DIR, or set "
-            "allow_programmatic_final=True to acknowledge a non-approved programmatic render."
+            "editorial_mode='template-v3' with GENOMA_REPORT_TEMPLATE_DIR, or pass an explicit "
+            "programmatic_final_authorization to the publisher for a disclosed QA artifact."
         )
 
     manifest = data.get("execution_manifest")
@@ -107,18 +112,19 @@ def _disclose_programmatic_render(rendered: dict[str, Any]) -> dict[str, Any]:
     manifest["RENDERER"] = "aproximação programática (fora do pacote de modelos aprovado)"
     manifest["TEMPLATE_PACK_V3"] = "NÃO DISPONÍVEL"
     manifest["PARIDADE_VISUAL"] = "NÃO DISPONÍVEL"
+    if final_mode:
+        manifest["PROGRAMMATIC_FINAL_AUTHORIZATION"] = final_authorization.strip()
     data["execution_manifest"] = manifest
-
-    notice = (
-        "RENDERIZAÇÃO PROGRAMÁTICA — este documento NÃO foi gerado a partir do pacote de "
-        "modelos v3.0 aprovado; a paridade visual com o modelo oficial é NÃO DISPONÍVEL."
-    )
-    existing = data.get("limitations")
-    data["limitations"] = f"{notice} {existing}".strip() if existing else notice
     return disclosed
 
 
-def write_editorial_bundle(rendered: dict[str, Any], output_dir: Path, *, stem: str | None = None) -> dict[str, Path]:
+def write_editorial_bundle(
+    rendered: dict[str, Any],
+    output_dir: Path,
+    *,
+    stem: str | None = None,
+    programmatic_final_authorization: str | None = None,
+) -> dict[str, Path]:
     """Route final publishing through the exact v3 template engine when requested.
 
     Programmatic rendering remains available for development fixtures and is disclosed in
@@ -127,7 +133,11 @@ def write_editorial_bundle(rendered: dict[str, Any], output_dir: Path, *, stem: 
     """
     if not _template_v3.template_mode_requested(rendered):
         return _programmatic_write_editorial_bundle(
-            _disclose_programmatic_render(rendered), output_dir, stem=stem
+            _disclose_programmatic_render(
+                rendered, final_authorization=programmatic_final_authorization
+            ),
+            output_dir,
+            stem=stem,
         )
 
     output_dir.mkdir(parents=True, exist_ok=True)

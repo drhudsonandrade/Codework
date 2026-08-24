@@ -499,7 +499,11 @@ def main() -> int:
             indent=2,
         )
     )
-    return 0 if passport["operational_status"] == "VERIFICADO" else 2
+    publication_ready = (
+        payload.get("operational_status") == "VERIFICADO"
+        and (payload.get("publication_gate") or {}).get("passed") is True
+    )
+    return 0 if publication_ready else 2
 
 
 if __name__ == "__main__":

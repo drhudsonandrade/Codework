@@ -872,6 +872,13 @@ class PayloadCompiler:
             basis="identificador do caso com que este payload foi compilado",
             status="VERIFICADO",
         )
+        self.state(
+            "report_id",
+            self.report_id,
+            kind="case_control",
+            basis="identificador do relatório com que este payload foi compilado",
+            status="VERIFICADO",
+        )
         if self._fixture_witness:
             # Layout QA has to be able to render the PASS variant of the header. It may print
             # the string; what it may not do is anchor it as anything but a fixture, which is
@@ -1037,7 +1044,7 @@ SCALAR_FIELDS = ("summary", "sources", "limitations")
 #: genomic report to a human being. `FindingBuilder` had already reasoned that "the id is
 #: itself printed, so it is anchored like any other value"; the same sentence applies here
 #: and was not applied.
-IDENTITY_FIELDS = ("case_id", "post_deployment_status")
+IDENTITY_FIELDS = ("case_id", "report_id", "post_deployment_status")
 #: Per-finding keys printed verbatim by `reporting.engine._final_markdown`.
 FINDING_FIELDS = (
     "domain", "nature", "priority", "observed_data", "qc",
@@ -1209,15 +1216,33 @@ def provenance_blockers(data: dict[str, Any]) -> list[str]:
         check(_anchor_name_for_section(str(title)), value)
 
     findings = data.get("findings") if isinstance(data.get("findings"), list) else []
+    present_finding_anchors: set[str] = set()
     for index, finding in enumerate(findings):
         if not isinstance(finding, dict):
             blockers.append(f"provenance:finding_shape:{index}")
             continue
         finding_id = str(finding.get("id") or f"index-{index}")
-        check(f"findings[{finding_id}].id", finding.get("id"))
+        id_anchor = f"findings[{finding_id}].id"
+        present_finding_anchors.add(id_anchor)
+        check(id_anchor, finding.get("id"))
         for key in FINDING_FIELDS:
             if key in finding:
-                check(_anchor_name_for_finding(finding_id, key), finding[key])
+                name = _anchor_name_for_finding(finding_id, key)
+                present_finding_anchors.add(name)
+                check(name, finding[key])
+
+    # Check the reverse direction too. A hand edit that removes a section or one finding
+    # key leaves its original anchor behind; checking only values still present in `data`
+    # made that deletion invisible. Limit the comparison to the two structured namespaces
+    # so internal/artifact anchors do not become payload fields by accident.
+    present_section_anchors = {
+        _anchor_name_for_section(str(title)) for title in sections
+    }
+    for name in fields:
+        if name.startswith("sections[") and name not in present_section_anchors:
+            blockers.append(f"provenance:missing_value:{name}")
+        elif name.startswith("findings[") and name not in present_finding_anchors:
+            blockers.append(f"provenance:missing_value:{name}")
 
     # The floor and the distribution are both derived from the same anchors, so they are
     # recomputed here rather than trusted. A block that merely *stated* a reassuring floor

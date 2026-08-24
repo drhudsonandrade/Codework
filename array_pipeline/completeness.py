@@ -35,11 +35,12 @@ from pathlib import Path
 from typing import Any
 
 import normative
-from array_pipeline.annotation import UNSUPPORTED_ARRAY_CLAIMS, _orientation
+from array_pipeline.annotation import UNSUPPORTED_ARRAY_CLAIMS
 from array_pipeline.qc import (
     detect_schema,
     UNRESOLVED_OVERLAP_STATUSES,
     _canonical_gt,
+    _orientation,
     _is_valid_consensus,
     _read_header_and_metadata,
     _text_stream,
@@ -165,6 +166,14 @@ def _classify(
             OBSERVADO,
             "genótipo chamado; ausência não pode ser afirmada porque o registro não declara o alelo avaliado",
         )
+    multibase = sorted(allele for allele in assessed if len(allele) != 1)
+    if multibase:
+        return (
+            OBSERVADO,
+            "genótipo chamado, mas o alelo avaliado multibase "
+            f"({', '.join(multibase)}) não é comparável a uma chamada SNP de duas bases; "
+            "presença e ausência permanecem indeterminadas",
+        )
     present = sorted(assessed & set(genotype))
     named = ", ".join(sorted(assessed))
     if present:
@@ -266,7 +275,12 @@ def build_completeness_matrix(
         schema, first = rows[0]
         if len(rows) > 1:
             genotypes = {
-                _canonical_gt(r.get("CONSENSUS_RESULT") or r.get("RESULT")) for _s, r in rows
+                genotype
+                for genotype in (
+                    _canonical_gt(r.get("CONSENSUS_RESULT") or r.get("RESULT"))
+                    for _s, r in rows
+                )
+                if genotype is not None
             }
             if len(genotypes) > 1:
                 marked = dict(first)
