@@ -64,7 +64,12 @@ def _chromosome_from_accession(seq_id: str) -> str | None:
 
 
 def fetch_refsnp(rsid: str, *, timeout: int = 30) -> dict[str, Any]:
-    numeric = rsid.lower().removeprefix("rs")
+    normalized = str(rsid or "").strip().lower()
+    numeric = normalized.removeprefix("rs")
+    if not numeric or not numeric.isdecimal():
+        raise MarkerVerificationError(
+            f"{rsid!r}: rsid must be a non-empty 'rs' identifier containing decimal digits"
+        )
     request = urllib.request.Request(
         REFSNP_URL.format(rsid=numeric),
         headers={"Accept": "application/json", "User-Agent": "genoma-provenance-verifier/1.0"},
@@ -98,11 +103,11 @@ def placements(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
             spdi = allele.get("allele", {}).get("spdi")
             if not spdi:
                 continue
-            position = int(spdi["position"]) + 1  # SPDI is 0-based
             deleted = spdi.get("deleted_sequence")
             if deleted and len(deleted) == 1 and deleted in COMPLEMENT:
-                # The deleted sequence is the reference base, always on the plus strand.
+                # Position and reference must come from the same reference SPDI allele.
                 reference = deleted
+                position = int(spdi["position"]) + 1  # SPDI is 0-based
             inserted = spdi.get("inserted_sequence")
             if inserted and len(inserted) == 1 and inserted in COMPLEMENT:
                 submitted.add(inserted)
@@ -158,6 +163,20 @@ def frequency_alleles(payload: dict[str, Any]) -> dict[str, float]:
     return frequencies
 
 
+def _fetch_with_retries(rsid: str, *, attempts: int = 4) -> dict[str, Any]:
+    last: MarkerVerificationError | None = None
+    for attempt in range(attempts):
+        if attempt:
+            time.sleep(max(REQUEST_INTERVAL_SECONDS, 2 ** (attempt - 1)))
+        try:
+            return fetch_refsnp(rsid)
+        except MarkerVerificationError as exc:
+            last = exc
+    raise MarkerVerificationError(
+        f"{rsid}: dbSNP fetch failed after {attempts} attempts: {last}"
+    ) from last
+
+
 def verify(markers_path: Path, *, offline_payloads: dict[str, dict] | None = None) -> dict[str, Any]:
     table = load_markers(markers_path)
     results: list[dict[str, Any]] = []
@@ -169,7 +188,20 @@ def verify(markers_path: Path, *, offline_payloads: dict[str, dict] | None = Non
         if payload is None:
             if index:
                 time.sleep(REQUEST_INTERVAL_SECONDS)
-            payload = fetch_refsnp(rsid)
+            try:
+                payload = _fetch_with_retries(rsid)
+            except MarkerVerificationError as exc:
+                discrepancies.append(str(exc))
+                results.append(
+                    {
+                        "rsid": rsid,
+                        "gene": marker.get("gene"),
+                        "status": "NÃO VERIFICADO",
+                        "error": str(exc),
+                        "assemblies": {},
+                    }
+                )
+                continue
 
         observed = placements(payload)
         record: dict[str, Any] = {
