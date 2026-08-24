@@ -1,0 +1,141 @@
+name: GENOMA visual QA candidates
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'reporting/**'
+      - 'template_store/**'
+      - 'scripts/build_report_coordinate_pack.py'
+      - 'scripts/install_report_templates.py'
+      - 'scripts/verify_template_store.py'
+      - 'tests/**'
+      - 'docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_2026-08-16.json'
+      - '.github/workflows/genoma-visual-qa-candidates.yml'
+  pull_request:
+    paths:
+      - 'reporting/**'
+      - 'template_store/**'
+      - 'scripts/build_report_coordinate_pack.py'
+      - 'scripts/install_report_templates.py'
+      - 'scripts/verify_template_store.py'
+      - 'tests/**'
+      - 'docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_2026-08-16.json'
+      - '.github/workflows/genoma-visual-qa-candidates.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  render-candidates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Install pinned renderer dependencies
+        run: pip install -r reporting/requirements.txt
+      - name: Validate pinned v3 reference identities and static pixel QA evidence
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          index=json.loads(Path('reporting/reference_v3_manifest.json').read_text())
+          qa=json.loads(Path('docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_2026-08-16.json').read_text())
+          assert set(index['reports']) == {f'{i:02d}' for i in range(1,12)}
+          assert index['coordinate_compiler']['id'] == 'fitz-1.26.7-genoma-v2'
+          assert qa['status'] == 'VERIFICADO'
+          assert qa['aggregate'] == {'outside_changed_pixels': 0, 'reference_pages': 100, 'reports': 11, 'result': 'PASS'}
+          assert qa['coordinate_compiler']['manifest_sha256'] == index['generated_coordinate_manifest']['sha256']
+          assert qa['coordinate_compiler']['compressed_detail_sha256'] == index['generated_coordinate_detail']['sha256']
+          for rid, meta in index['reports'].items():
+              assert qa['reports'][rid]['sha256'] == meta['sha256']
+              assert qa['reports'][rid]['pages'] == meta['page_count']
+              assert qa['coordinate_compiler']['field_counts'][rid] == meta['placeholder_count']
+              assert qa['reports'][rid]['qa']['outside_changed_pixels'] == 0
+          print('pinned v3 static pixel QA evidence: PASS')
+          PY
+      - name: Verify immutable private template store when materialized
+        run: python3 scripts/verify_template_store.py --allow-sealed-only
+      - name: Coordinate compiler synthetic smoke
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, tempfile
+          from pathlib import Path
+          import fitz
+          from scripts.build_report_coordinate_pack import compile_pack, write_pack
+          with tempfile.TemporaryDirectory() as td:
+              root=Path(td)
+              pdf=root/'fixture.pdf'
+              doc=fitz.open(); page=doc.new_page(width=300,height=400); page.insert_text((30,50),'[[CASE_ID]]',fontsize=8); doc.save(pdf); doc.close()
+              index={'reports':{'01':{'filename':'fixture.pdf','sha256':hashlib.sha256(pdf.read_bytes()).hexdigest(),'size_bytes':pdf.stat().st_size,'page_count':1,'page_size_pt':[300,400],'placeholder_count':1}}}
+              idx=root/'index.json'; idx.write_text(json.dumps(index))
+              payload=compile_pack(root,idx)
+              assert len(payload['reports']['01']['fields'])==1
+              result=write_pack(payload,root/'out')
+              assert result['status']=='VERIFICADO'
+              assert result['reports']==1 and result['pages']==1 and result['placeholders']==1
+              print('coordinate compiler synthetic smoke: PASS')
+          PY
+      - name: Generate all 11 programmatic fixture reports
+        run: |
+          mkdir -p visual-qa/candidates
+          python3 - <<'PY'
+          from pathlib import Path
+          from reporting.engine import render_document
+          from reporting.editorial_v3 import write_editorial_bundle
+
+          PASSING_POLICY = {
+              'ready_for_requested_operation': True,
+              'planes': {
+                  'policy_control': {'state': 'PASS'},
+                  'scientific_data': {'state': 'PASS'},
+                  'evidence': {'state': 'PASS'},
+                  'audit': {'state': 'PASS'},
+              },
+              'gates': [{'gate': 'FINAL_AUDIT_GATE', 'state': 'PASS', 'blocking': True}],
+          }
+          data = {
+              'case_id': 'CASE-VISUAL-REFERENCE',
+              'summary': 'Conteúdo rastreável para teste editorial de regressão visual.',
+              'ruleset': {
+                  'status': 'VIGENTE',
+                  'version': 'v3.4',
+                  'effective_date': '17/08/2026',
+                  'sha256': 'ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580',
+              },
+              'publication_gate': {
+                  'passed': True,
+                  'consent_verified': True,
+                  'qc_verified': True,
+                  'evidence_verified': True,
+                  'placeholders_resolved': True,
+              },
+              'policy_evaluation': PASSING_POLICY,
+              'post_deployment_status': 'PENDENTE',
+              'sections': {},
+              'findings': [],
+              'execution_manifest': {'status': 'VERIFICADO'},
+              'sources': ['fixture:visual-reference'],
+              'limitations': 'Fixture editorial; não representa paciente.',
+          }
+          out = Path('visual-qa/candidates')
+          for i in range(1, 12):
+              rid = f'{i:02d}'
+              rendered = render_document(rid, data, mode='FINAL')
+              write_editorial_bundle(rendered, out, stem=rid)
+          PY
+      - name: Structural validation
+        run: |
+          test "$(find visual-qa/candidates -maxdepth 1 -name '*.pdf' | wc -l)" -eq 11
+          test "$(find visual-qa/candidates -maxdepth 1 -name '*.docx' | wc -l)" -eq 11
+          PYTHONPATH="$PWD/tests${PYTHONPATH:+:$PYTHONPATH}" python3 -m unittest tests.test_editorial_renderers tests.test_template_v3_contract -v
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: genoma-v3-visual-candidates-${{ github.sha }}
+          path: visual-qa/candidates
+          retention-days: 30
+          if-no-files-found: error

@@ -37,6 +37,16 @@ results/
 *.g.vcf.gz
 *.tbi
 *.csi
+private-data/
+genome-inputs/
+partial-genome-results/
+*Dados*DNA*.csv
+*Dados*DNA*.csv.gz
+*Dados*DNA*.zip
+*DNA_harmonizado*.csv
+*DNA_harmonizado*.csv.gz
+*MyHeritage_raw*
+*Genera_raw*
 
 # Reference bundles and indexes
 refs/

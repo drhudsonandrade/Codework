@@ -1,0 +1,80 @@
+{
+  "attestation_type": "GENOMA_PROJECT_BOOTSTRAP",
+  "status": "VERIFICADO",
+  "ruleset_identity": "v3.4/VIGENTE/17/08/2026",
+  "canonical_filename": "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt",
+  "canonical_sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
+  "verified_at": "2026-08-23T19:22:37-03:00",
+  "actor_type": "SERVICE",
+  "actor_id": "genoma-project-bootstrap-verifier",
+  "method": {
+    "kind": "DETERMINISTIC_VERIFIER",
+    "verifier": {
+      "id": "genoma-project-bootstrap-verifier",
+      "version": "2.0.0",
+      "command": "python3 -m scripts.bootstrap_attestation --write"
+    },
+    "source_commit_sha": "5f930973cd9f56c40b0b41169fd5153b4f94d563",
+    "input": {
+      "path": "normative/sealed",
+      "canonical_filename": "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt",
+      "raw_sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
+      "raw_size_bytes": 195733,
+      "transport_sha256": "41de7b727aadc3de7df654d663c39218be691741fb5364f4b7e7efcb1398508d"
+    },
+    "result_locator": "deploy/attestations/bootstrap-project-v3.4.json#/checks",
+    "checks_evidence": {
+      "consult_ruleset_before_relevant_genetic_analysis": {
+        "satisfied": true,
+        "clause_sha256": "3c1907a3c6faab9c9b0e833d4804d68c55c95ceb8a429346a813347594c50f53",
+        "line": 15
+      },
+      "require_status_vigente": {
+        "satisfied": true,
+        "clause_sha256": "3ef3312734275e81893b69d542478f68f876d7aba4aec7d7f9a6929b20a45d44",
+        "line": 2
+      },
+      "require_version_v3_4": {
+        "satisfied": true,
+        "clause_sha256": "982180b529ed6efeb344e5089578913519ee560a96313b37683b696f7c5358ba",
+        "line": 3
+      },
+      "require_effective_date_2026_08_17": {
+        "satisfied": true,
+        "clause_sha256": "7a7995973e2eb57f61542c2179ab878d3b7a25aae2f172a8bf0f3ef3a92d369f",
+        "line": 4
+      },
+      "fail_closed_on_missing_or_conflicting_ruleset": {
+        "satisfied": true,
+        "clause_sha256": "4f88030ffc70b9cc9dafcdcf1bbf9ea821fcc0d33f191320273755307df87eef",
+        "line": 15
+      },
+      "runtime_resource_gate_before_real_calling": {
+        "satisfied": true,
+        "clause_sha256": "28357a3556710b51050247749750da49040dc1422b3962ab542e3bb46b6305be",
+        "line": 15
+      },
+      "operational_status_contract_present": {
+        "satisfied": true,
+        "clause_sha256": "d703384371837e7c6340ebe67e0beafa08c61c092f46f005164f704a2e3716cf",
+        "line": 15
+      },
+      "post_deployment_requires_live_15_of_15_zero_critical": {
+        "satisfied": true,
+        "clause_sha256": "c3b9416609a60e7548b47839ea59bd87efef46e3ad2231967f590adfde51d92f",
+        "line": 5716
+      }
+    }
+  },
+  "checks": {
+    "consult_ruleset_before_relevant_genetic_analysis": true,
+    "require_status_vigente": true,
+    "require_version_v3_4": true,
+    "require_effective_date_2026_08_17": true,
+    "fail_closed_on_missing_or_conflicting_ruleset": true,
+    "runtime_resource_gate_before_real_calling": true,
+    "operational_status_contract_present": true,
+    "post_deployment_requires_live_15_of_15_zero_critical": true
+  },
+  "limitations": "Every check above is re-derived from the sealed canonical ruleset by python3 -m scripts.bootstrap_attestation --write; status is PENDENTE unless the verifier satisfies all of them. The attestation covers the normative bootstrap only: it is not a POST-DEPLOYMENT PASS, which still requires the live section-260 smoke. Regenerate this file whenever the canonical ruleset or the verifier changes."
+}

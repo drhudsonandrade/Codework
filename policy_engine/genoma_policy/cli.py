@@ -22,7 +22,7 @@ def _write_json(value: object, output: str | None) -> None:
 
 
 def _parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="genoma-policy", description="Executable policy engine for GENOMA ruleset v3.3")
+    p = argparse.ArgumentParser(prog="genoma-policy", description="Executable policy engine for GENOMA ruleset v3.4")
     p.add_argument("--ruleset")
     p.add_argument("--sha-manifest")
     sub = p.add_subparsers(dest="command", required=True)

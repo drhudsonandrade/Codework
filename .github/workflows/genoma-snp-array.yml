@@ -1,0 +1,191 @@
+name: GENOMA SNP-array partial-genome gate
+
+on:
+  pull_request:
+    paths:
+      - 'array_pipeline/**'
+      - 'config/partial_genome_annotation_targets.json'
+      - 'workflows/array.nf'
+      - 'main.nf'
+      - 'scripts/run_snp_array.py'
+      - 'scripts/annotate_partial_genome.py'
+      - 'scripts/build_array_case_manifest.py'
+      - 'tests/test_snp_array_qc.py'
+      - 'tests/test_partial_genome_annotation.py'
+      - 'tests/test_array_scientific_data_plane.py'
+      - 'tests/test_array_provenance_attestation.py'
+      - '.github/workflows/genoma-snp-array.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'array_pipeline/**'
+      - 'config/partial_genome_annotation_targets.json'
+      - 'workflows/array.nf'
+      - 'main.nf'
+      - 'scripts/run_snp_array.py'
+      - 'scripts/annotate_partial_genome.py'
+      - 'scripts/build_array_case_manifest.py'
+      - 'tests/test_snp_array_qc.py'
+      - 'tests/test_partial_genome_annotation.py'
+      - 'tests/test_array_scientific_data_plane.py'
+      - 'tests/test_array_provenance_attestation.py'
+      - '.github/workflows/genoma-snp-array.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  array-qc-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Validate repository contract
+        run: python3 scripts/validate_repo.py
+      - name: Run SNP-array and annotation unit tests
+        run: python3 -m unittest tests.test_snp_array_qc tests.test_partial_genome_annotation tests.test_array_scientific_data_plane tests.test_array_provenance_attestation -v
+      - name: Execute synthetic harmonized partial-genome smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/genoma-array"
+          python3 - <<'PY'
+          import gzip, hashlib, json, os
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])/'genoma-array'
+          p=root/'synthetic.csv.gz'
+          with gzip.open(p,'wt',encoding='utf-8',newline='') as f:
+              f.write('RSID,CHROMOSOME,POSITION,CONSENSUS_RESULT,STATUS,GENERA_RESULT,MYHERITAGE_RESULT,SOURCES\n')
+              f.write('rs1799807,3,165548529,CT,consensus,CT,CT,GM\n')
+              f.write('rs17580,14,94847262,AT,consensus,AT,AT,GM\n')
+              f.write('rsX,1,12345,AG,genotype_conflict,AG,AA,GM\n')
+          sha=hashlib.sha256(p.read_bytes()).hexdigest()
+          base={
+              'status':'VERIFICADO',
+              'decision':'SATISFIED',
+              'justification':'Synthetic fixture controls explicitly define build and strand for infrastructure testing only.',
+              'evidence_refs':['synthetic-fixture-definition'],
+              'trace':{
+                  'attestation_id':'synthetic-array-provenance',
+                  'created_at':'2026-08-17T00:00:00Z',
+                  'actor_type':'SOFTWARE',
+                  'actor_id':'github-actions',
+                  'method':'deterministic synthetic fixture generation',
+                  'run_id':os.environ['GITHUB_RUN_ID'],
+                  'input_sha256':[sha],
+                  'output_sha256':[],
+                  'tool_versions':{'python':'3.12'}
+              }
+          }
+          for name in ('build-attestation.json','strand-attestation.json'):
+              (root/name).write_text(json.dumps(base),encoding='utf-8')
+          PY
+          python3 scripts/run_snp_array.py \
+            --input "$RUNNER_TEMP/genoma-array/synthetic.csv.gz" \
+            --case-id SYNTHETIC-NO-PERSONAL-DATA \
+            --build GRCh37 \
+            --strand forward \
+            --build-evidence "$RUNNER_TEMP/genoma-array/build-attestation.json" \
+            --strand-evidence "$RUNNER_TEMP/genoma-array/strand-attestation.json" \
+            --min-call-rate 0.90 \
+            --max-overlap-conflict-rate 0.50 \
+            --output-dir "$RUNNER_TEMP/genoma-array/out"
+          python3 scripts/annotate_partial_genome.py \
+            --input "$RUNNER_TEMP/genoma-array/synthetic.csv.gz" \
+            --qc "$RUNNER_TEMP/genoma-array/out/array-qc.json" \
+            --mode plan-only \
+            --output "$RUNNER_TEMP/genoma-array/out/annotation.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])/'genoma-array'/'out'
+          q=json.loads((root/'array-qc.json').read_text())
+          a=json.loads((root/'annotation.json').read_text())
+          assert q['operational_status']=='VERIFICADO'
+          assert q['gates']['LIMITED_INTERPRETATION_GATE']['state']=='PASS'
+          assert q['metrics']['direct_overlap_genotype_conflicts']==1
+          assert q['gates']['LIMITED_INTERPRETATION_GATE']['scope'].startswith('SNP-array loci only')
+          assert a['operational_status']=='PROPOSTO'
+          assert a['evidence_gate']['state']=='BLOCKED'
+          assert a['query_plan']['query_count'] > 0
+          print('synthetic SNP-array + annotation smoke: PASS')
+          PY
+      - name: Enforce no personal genotype fixtures in repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-files | grep -Ei '(^|/)(dados[ _-]*dna|dna_harmonizado|myheritage_raw|genera_raw)' ; then
+            echo 'Personal genotype-like file name detected in repository' >&2
+            exit 1
+          fi
+
+  array-nextflow-orchestration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build exact integrated runtime
+        run: docker build --tag genoma-array:${{ github.sha }} .
+      - name: Run full synthetic array Scientific Data Plane through Nextflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/genoma-array/workspace"
+          chmod 0777 "$RUNNER_TEMP/genoma-array/workspace"
+          python3 - <<'PY'
+          import gzip, hashlib, json, os
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])/'genoma-array'/'workspace'
+          p=root/'synthetic.csv.gz'
+          with gzip.open(p,'wt',encoding='utf-8',newline='') as f:
+              f.write('RSID,CHROMOSOME,POSITION,CONSENSUS_RESULT,STATUS,GENERA_RESULT,MYHERITAGE_RESULT,SOURCES\n')
+              f.write('rs1799807,3,165548529,CT,consensus,CT,CT,GM\n')
+              f.write('rs17580,14,94847262,AT,consensus,AT,AT,GM\n')
+          sha=hashlib.sha256(p.read_bytes()).hexdigest()
+          base={
+              'status':'VERIFICADO',
+              'decision':'SATISFIED',
+              'justification':'Synthetic fixture controls explicitly define build and strand for infrastructure testing only.',
+              'evidence_refs':['synthetic-fixture-definition'],
+              'trace':{
+                  'attestation_id':'synthetic-nextflow-array-provenance',
+                  'created_at':'2026-08-17T00:00:00Z',
+                  'actor_type':'SOFTWARE',
+                  'actor_id':'github-actions',
+                  'method':'deterministic synthetic fixture generation',
+                  'run_id':os.environ['GITHUB_RUN_ID'],
+                  'input_sha256':[sha],
+                  'output_sha256':[],
+                  'tool_versions':{'python':'3.12'}
+              }
+          }
+          for name in ('build-attestation.json','strand-attestation.json'):
+              (root/name).write_text(json.dumps(base),encoding='utf-8')
+          PY
+          docker run --rm \
+            -v "$RUNNER_TEMP/genoma-array/workspace:/workspace" \
+            genoma-array:${{ github.sha }} \
+            nextflow run /opt/codework/main.nf \
+              -work-dir /workspace/work \
+              --mode array \
+              --array_input /workspace/synthetic.csv.gz \
+              --case_id SYNTHETIC-NEXTFLOW-NO-PERSONAL-DATA \
+              --array_build GRCh37 \
+              --array_strand forward \
+              --array_build_evidence /workspace/build-attestation.json \
+              --array_strand_evidence /workspace/strand-attestation.json \
+              --array_evidence_mode plan-only \
+              --array_target_manifest /opt/codework/config/partial_genome_annotation_targets.json \
+              -ansi-log false
+          echo 'integrated Nextflow array lane: PASS'
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: genoma-array-nextflow-${{ github.sha }}
+          path: ${{ runner.temp }}/genoma-array/workspace/
+          retention-days: 30
+          if-no-files-found: error

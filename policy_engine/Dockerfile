@@ -6,8 +6,8 @@ WORKDIR /opt/genoma
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/opt/genoma/policy_engine \
-    GENOMA_RULESET_PATH=/run/genoma/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt \
-    GENOMA_RULESET_SHA_MANIFEST=/run/genoma/manifests/RULESET_V3.3.sha256
+    GENOMA_RULESET_PATH=/run/genoma/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt \
+    GENOMA_RULESET_SHA_MANIFEST=/run/genoma/manifests/RULESET_V3.4.sha256
 RUN groupadd --gid ${GID} genoma && useradd --uid ${UID} --gid ${GID} --create-home genoma
 COPY policy_engine /opt/genoma/policy_engine
 RUN chmod +x /opt/genoma/policy_engine/scripts/genoma-policy

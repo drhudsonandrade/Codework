@@ -1,0 +1,33 @@
+{
+  "schema": "genoma-runtime-lock-v1",
+  "checked_at": "2026-08-22T21:48:00Z",
+  "ruleset_sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
+  "base_image": {
+    "reference": "mambaorg/micromamba:2.3.2-ubuntu22.04@sha256:0e87302b8b802b595c947f408e02c436c1d49aa582132ddaa4cd5e1c991a4871",
+    "version": "2.3.2-ubuntu22.04",
+    "digest": "sha256:0e87302b8b802b595c947f408e02c436c1d49aa582132ddaa4cd5e1c991a4871"
+  },
+  "secret_scanner": {
+    "reference": "ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:b109bc5f8f76a38196a3e413704fc5b9e3c32360bce4e4b603bd6f45b3721dbb",
+    "platform": "linux/amd64",
+    "version": "8.30.1"
+  },
+  "conda": {
+    "python": "3.11",
+    "openjdk": "17",
+    "nodejs": "22",
+    "samtools": "1.24",
+    "bcftools": "1.24",
+    "htslib": "1.24",
+    "bwa-mem2": "2.3",
+    "gatk4": "4.6.2.0",
+    "nextflow": "26.04.6",
+    "snakemake-minimal": "7.32.4",
+    "poppler": "26.07.0"
+  },
+  "python_requirements": "reporting/requirements.txt",
+  "npm_lock": "mcp/package-lock.json",
+  "actions_lock": "locks/actions-lock.json",
+  "template_manifest": "template_store/v3.0/MANIFEST.json",
+  "policy": "Version fields are human-readable constraints. Immutable action commit SHAs, container digests, package lockfiles and source manifests are the executable identities. Mutable scientific databases are intentionally not frozen and must pass RECENCY-FIRST on each analysis."
+}

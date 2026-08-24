@@ -1,0 +1,402 @@
+================================================================================
+RELATÓRIO DE ANÁLISE - PULL REQUEST #27
+Repositório: drhudsonandrade/Codework
+Data da Análise: 2026-08-23
+================================================================================
+
+RESUMO EXECUTIVO
+================================================================================
+A PR #27 contém 30+ arquivos modificados com mudanças substanciais em:
+- Infraestrutura de CI/CD (CircleCI config)
+- Validação e atestação de bootstrap
+- Tratamento de processos e timeouts
+- Segurança e validação de URLs
+- Documentação de procedimentos
+
+Foram identificados ERROS CRÍTICOS e MELHORIAS que requerem atenção.
+
+================================================================================
+ERROS CRÍTICOS ENCONTRADOS
+================================================================================
+
+1. ERRO: policy_engine/policy/rego/genoma.rego (Linhas 9-15)
+   ───────────────────────────────────────────────────────────────────────────
+   PROBLEMA:
+   - Falta tratamento para quando "ruleset" está ausente completamente
+   - Sem o primeiro "deny", um manifesto sem "ruleset" é permitido (PASS)
+   - Todos os checks subsequentes ficariam "undefined" (sem rejeição)
+
+   SOLUÇÃO:
+   Adicionar verificação obrigatória no início dos checks:
+   
+   ```rego
+   deny contains "RULESET: ruleset block is required" if not is_object(object.get(input, "ruleset", null))
+   ```
+   
+   STATUS: ✓ CORRIGIDO NA PR (linha 12-13)
+
+
+2. ERRO: mcp/src/server.ts (Linhas 53-129)
+   ───────────────────────────────────────────────────────────────────────────
+   PROBLEMA:
+   - Função runFixedScript usa execFile que não cria grupo de processos
+   - Timeout mata apenas o processo direto, deixando descendentes rodando
+   - Scripts como "scripts/run_canary.sh" iniciam pipelines em background
+   - Remanescentes consomem recursos e testam contra resultados incorretos
+
+   SOLUÇÃO:
+   - Mudar de execFile para spawn com detached: true
+   - Usar processo.kill(-pid) para POSIX (sinaliza grupo inteiro)
+   - Implementar dois estágios: SIGTERM (gracioso) + SIGKILL (força)
+   - Adicionar constantes de timeout:
+     * GROUP_TERMINATION_GRACE_MS = 5_000
+     * USE_PROCESS_GROUP = process.platform !== "win32"
+
+   STATUS: ✓ CORRIGIDO NA PR (linhas 75-157)
+
+
+3. ERRO: mcp/src/server.ts (Linhas 105-145)
+   ───────────────────────────────────────────────────────────────────────────
+   PROBLEMA:
+   - Leitura de stdout com maxBuffer fixo não previne truncamento
+   - Mensagens de erro grandes são perdidas silenciosamente
+   - Apenas últimos bytes de stderr são conservados
+
+   SOLUÇÃO:
+   - Ler stdout em chunks, verificar total de bytes
+   - Se exceder limite (SCRIPT_OUTPUT_MAX_BYTES = 5MB):
+     * Setar flag "overflowed"
+     * Matar processo com SIGKILL
+     * Lançar erro informativo
+   - Manter últimos 4KB de stderr (STDERR_TAIL_MAX_BYTES)
+
+   STATUS: ✓ CORRIGIDO NA PR (linhas 72-92, 95-108)
+
+
+4. ERRO: mcp/src/server.ts (Linhas 258-295)
+   ───────────────────────────────────────────────────────────────────────────
+   PROBLEMA:
+   - Race condition: múltiplos callers com mesmo requestId podem executar em paralelo
+   - Dois processadores podem ambos passar pelo check de "prior result"
+   - Ambos executam operation(), resultados divergem
+
+   SOLUÇÃO:
+   - Implementar O_EXCL no arquivo de "claim":
+     ```typescript
+     const handle = await open(claimPath, "wx", 0o600)
+     ```
+   - Apenas um caller consegue criar o arquivo (atomic)
+   - Losers detectam EEXIST e falham com "already in progress"
+   - Liberar claim no finally para permitir retry
+
+   STATUS: ✓ CORRIGIDO NA PR (linhas 197-243, 263-310)
+
+
+5. ERRO: scripts/sealed_ruleset.py (Linhas 226-244)
+   ───────────────────────────────────────────────────────────────────────────
+   PROBLEMA:
+   - Função _already_materialized não verifica symlinks
+   - Arquivo reusável pode ser symlink → permite substituição de identidade
+   - Modo verificado com .stat() (segue symlink), não .lstat() (próprio arquivo)
+
+   SOLUÇÃO:
+   - Usar os.lstat() em vez de .stat() para modo (não segue symlink)
+   - Verificar: existing.is_symlink() ou not existing.is_file()
+   - Comparar modo esperado EXATAMENTE com 0o444:
+     ```python
+     if mode != 0o444:  # não apenas "não tem bits de write"
+     ```
+
+   STATUS: ✓ CORRIGIDO NA PR (linhas 243-249)
+
+
+6. ERRO: scripts/validate_repo.py (Linhas 261-270)
+   ───────────────────────────────────────────────────────────────────────────
+   PROBLEMA:
+   - Função _identity_declaration_strings silencia SyntaxError
+   - Arquivo Python malformado é ignorado = nunca validado
+   - Identidade supersedida em código quebrado passa despercebida
+
+   SOLUÇÃO:
+   - Reportar SyntaxError e marcar como erro:
+     ```python
+     except SyntaxError as exc:
+         errors.append(f"unparseable Python: {relative}: {exc.msg} (line {exc.lineno})")
+         continue
+     ```
+   - Continuar validação para outros arquivos
+
+   STATUS: ✓ CORRIGIDO NA PR (linhas 348-352)
+
+
+7. ERRO: evidence_adapters/__init__.py (Linhas 53-65)
+   ───────────────────────────────────────────────────────────────────────────
+   PROBLEMA:
+   - response.read(MAX_RESPONSE_BYTES + 1) pode timeouts indefinidos
+   - Resposta lenta/streaming pode bloquear aguardando MAX_RESPONSE_BYTES+1
+   - Sem timeout específico, connection.read() espera por sempre
+
+   SOLUÇÃO:
+   - Ler em chunks de 64KB
+   - Monitorar total acumulado
+   - Se total > MAX_RESPONSE_BYTES, abortar (EOF e erro)
+   - Usar loop com verificação de bytes:
+     ```python
+     while total <= MAX_RESPONSE_BYTES:
+         chunk = response.read(min(64*1024, MAX_RESPONSE_BYTES+1-total))
+         if not chunk: break
+         chunks.append(chunk)
+         total += len(chunk)
+     ```
+
+   STATUS: ✓ CORRIGIDO NA PR (linhas 56-65)
+
+
+8. ERRO: evidence_adapters/__init__.py (Linhas 226-235)
+   ───────────────────────────────────────────────────────────────────────────
+   PROBLEMA:
+   - Log de erro não inclui traceback completo (exc_info=True ausente)
+   - Root cause (TLS rejection, timeout, oversized) indistinguível nos logs
+   - Operador não consegue diagnosticar por que adaptador falhou
+
+   SOLUÇÃO:
+   - Adicionar exc_info=True ao LOGGER.warning:
+     ```python
+     LOGGER.warning(
+         "evidence retrieval failed adapter=%s error_class=%s",
+         self.key, type(exc).__name__,
+         exc_info=True,  # ← adicionado
+     )
+     ```
+
+   STATUS: ✓ CORRIGIDO NA PR (linhas 243-248)
+
+
+================================================================================
+AVISOS E MELHORIAS (Não-Críticos)
+================================================================================
+
+1. AVISO: Array pipeline QC (array_pipeline/qc.py)
+   ───────────────────────────────────────────────────────────────────────────
+   - Classe _ZipBackedTextStream abstrai lógica de cleanup de arquivo ZIP
+   - Antes: .close() propagava para arquivo mas não archive
+   - Agora: close() garante que arquivo e archive são fechados
+   
+   IMPACTO: ✓ Melhoria importante para leak prevention
+
+
+2. AVISO: Docstring truncada intencionalmente (array_pipeline/qc.py:222)
+   ───────────────────────────────────────────────────────────────────────────
+   - Docstring extensa removida propositalmente
+   - Mantém apenas resumo essencial
+   - Documentação completa deve estar em externa
+   
+   IMPACTO: Aceitável se documentação está em outro lugar
+
+
+3. AVISO: Testes de validação de path (mcp/test/core.test.ts)
+   ───────────────────────────────────────────────────────────────────────────
+   - Novos testes separam validação de identifier da contention check
+   - Antes: apenas "assert.throws()"
+   - Agora: verifica QUAL guarda rejeitou cada entrada
+   
+   IMPACTO: ✓ Melhoria em cobertura e explicitude de testes
+
+
+4. AVISO: Shell escaping (scripts/codex/setup-coderabbit.sh:82-84)
+   ───────────────────────────────────────────────────────────────────────────
+   MUDANÇA: $verified_binary → "$verified_binary"
+   - Sem aspas: caminho com espaços causa word-splitting
+   - Com aspas: path é atomicamente passado
+   
+   IMPACTO: ✓ Bug fix de segurança/robustez
+
+
+5. AVISO: Retry logic curl (scripts/codex/setup-coderabbit.sh:72-74)
+   ───────────────────────────────────────────────────────────────────────────
+   Adicionado:
+   - --connect-timeout 15  (timeout de conexão)
+   - --max-time 300        (timeout total)
+   - --retry 3             (tentativas)
+   - --retry-connrefused   (retry em "connection refused")
+   
+   IMPACTO: ✓ Resiliência para downloads instáveis
+
+
+6. AVISO: Materialize PDF (reporting/template_v3.py:223-228)
+   ───────────────────────────────────────────────────────────────────────────
+   PROBLEMA:
+   - Função _fit_single_line_size ignora altura da caixa
+   - Texto pode ficar tão pequeno que não cabe mesmo na altura disponível
+   
+   SOLUÇÃO: Adicionar parâmetro max_height e verificar também:
+   ```python
+   or (max_height is not None and size * SINGLE_LINE_LEADING > max_height)
+   ```
+   
+   IMPACTO: ✓ Previne texto invisível em relatórios
+
+
+7. AVISO: Poppler error handling (reporting/template_v3.py:589-608)
+   ───────────────────────────────────────────────────────────────────────────
+   PROBLEMA:
+   - Conversão PDF→SVG/PNG usa subprocess.run(check=True) silenciosamente
+   - Erro stderr perdido = diagnóstico impossível
+   
+   SOLUÇÃO: Nova função _run_poppler():
+   - Captura stderr
+   - Implementa timeout (POPPLER_TIMEOUT_SECONDS = 120)
+   - Reporta exit code + últimos 500 chars de stderr
+   - Fornece contexto (qual página falhou)
+   
+   IMPACTO: ✓ Debugging de falhas de template melhorado
+
+
+8. AVISO: Zip member deduplication (reporting/template_v3.py:655-667)
+   ───────────────────────────────────────────────────────────────────────────
+   PROBLEMA:
+   - DOCX .zip pode ter membros que se extraem no mesmo caminho
+   - Extração silenciosa sobrescreve sem avisar
+   
+   SOLUÇÃO:
+   - Manter set("seen") com paths normalizados
+   - Se duplicado: lançar TemplateV3Error
+   
+   IMPACTO: ✓ Detecção de DOCX malformados
+
+
+================================================================================
+MUDANÇAS DE LÓGICA DE NEGÓCIO
+================================================================================
+
+1. Bootstrap attestation (scripts/bootstrap_attestation.py)
+   ───────────────────────────────────────────────────────────────────────────
+   ANTES:
+   - Status "VERIFICADO" era declarativo (armazenado como string)
+   - Nenhuma evidência anexada = confiança na mão que escreveu
+   
+   DEPOIS:
+   - Status é re-derivado de checkpoints
+   - Campo "method" armazena:
+     * Verifier id/version
+     * Input: path, filename, sha256s
+     * Source commit SHA (reproducibilidade)
+     * Evidence: per-check clause digest e line number
+   - Status = "PENDENTE" se algum check falhar
+   - Edição manual → verificação falha ("não é DETERMINISTIC_VERIFIER")
+   
+   IMPACTO: ✓ Fail-closed, reproducível, a prova de tampering
+
+
+2. Validação de identidade ausente (policy_engine/genoma.rego)
+   ───────────────────────────────────────────────────────────────────────────
+   MUDANÇA: object.get(input.ruleset, "field", default) em cada check
+   
+   ANTES:
+   - Ler input.ruleset.version diretamente
+   - Se ausente: Rego retorna undefined (sem reject)
+   
+   DEPOIS:
+   - object.get() fornece default vazio ""
+   - Comparação com "" falha = check falha = deny dispara
+   
+   IMPACTO: ✓ Manifest incompleto agora é rejeitado
+
+
+3. Operacional (scripts/genoma_audit.py:391-399)
+   ───────────────────────────────────────────────────────────────────────────
+   MUDANÇA: Distinguir "blocking_unavailable" de "unavailable"
+   
+   ANTES:
+   - result = ERROR se ANY check estava unavailable
+   
+   DEPOIS:
+   - result = ERROR se blocking check estava unavailable
+   - Se apenas non-blocking unavailable → resultado FAIL (não ERROR)
+   
+   IMPACTO: Relatórios mais precisos sobre falhas vs. indisponibilidade
+
+
+================================================================================
+TESTES ADICIONADOS
+================================================================================
+
+✓ test_runAudited_atomically_prevents_concurrent_duplicate_execution
+  - Verifica race condition fix (múltiplos callers com mesmo requestId)
+  - Espera que apenas 1 execute e 1 falhe com "already in progress"
+
+✓ test_runFixedScript_rejects_script_exceeding_output_budget
+  - Gera script que produz > 5MB de output
+  - Verifica que é morto e erro é reportado
+
+✓ test_timed_out_script_takes_its_whole_process_group_down
+  - Script spawna descendentes que dormem por 30s
+  - timeout de 300ms deve matar TODOS (não apenas pai)
+  - Verifica que descendente não criou arquivo (prova que foi morto)
+
+✓ test_runFixedScript_returns_stdout_and_sanitizes_stderr
+  - Testa captura de stdout trimmed
+  - Testa sanitização de stdout em stderr (redacts tokens/paths)
+
+✓ Policy test cases para missing/wrong ruleset fields
+  - test_reject_missing_ruleset_version
+  - test_reject_missing_ruleset_effective_date
+  - test_reject_missing_ruleset_canonical_filename
+  - test_reject_absent_ruleset
+
+
+================================================================================
+CHECKLIST DE VALIDAÇÃO PRÉ-MERGE
+================================================================================
+
+[ ] Verificar que CircleCI config (.circleci/config.yml) está sintaxe válida
+    → Usar: circleci config validate
+
+[ ] Confirmar que todos os 263 checks policy têm canonical_filename
+    → Validar contra execution-manifest.schema.json
+
+[ ] Testar race condition em ambiente multi-processo
+    → npm test -- --grep "concurrent duplicate"
+
+[ ] Testar process group cleanup em Linux/Mac
+    → npm test -- --grep "process group"
+
+[ ] Revalidar sealed ruleset após changes
+    → python3 -m scripts.bootstrap_attestation --sealed normative/sealed
+
+[ ] Confirmar que workflow genoma-pr-gates passa
+    → Verificar: repository-contract, policy-contract, mcp-contract, shell-quality
+
+[ ] Review manual das mudanças de docstring em array_pipeline/qc.py
+
+[ ] Validar que nenhum arquivo Python .py está malformado
+    → python3 -m py_compile scripts/*.py
+
+
+================================================================================
+RECOMENDAÇÕES FINAIS
+================================================================================
+
+1. CRÍTICO - Verificar antes de merge:
+   • CircleCI config sintaxe
+   • Policy tests passam (especialmente ruleset validation)
+   • Race condition fix está testado em ambiente real
+   • Process group cleanup confirmado em POSIX
+
+2. COMUNICAÇÃO:
+   • PR traz mudanças não-triviais em fluxo de attestation
+   • Documentar que bootstrap-project-v3.4.json agora é GERADO
+   • Nunca editar por mão → regenerar com --write
+
+3. OBSERVABILIDADE PÓS-MERGE:
+   • Monitorar logs de evidence_adapters para exc_info (agora com traces)
+   • Validar que scripts com timeout não deixam zombies
+   • Confirmar que bootstrap checks reproductibilidade funciona
+
+4. PRÓXIMOS PASSOS:
+   • Implementar PR com testes de integração do bootstrap
+   • Documentar procedimento de regeneração de attestation
+
+================================================================================
+FIM DO RELATÓRIO
+================================================================================

@@ -1,4 +1,4 @@
-FROM mambaorg/micromamba:2.3.2
+FROM mambaorg/micromamba:2.3.2-ubuntu22.04@sha256:0e87302b8b802b595c947f408e02c436c1d49aa582132ddaa4cd5e1c991a4871
 
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
 WORKDIR /opt/codework
@@ -6,6 +6,9 @@ WORKDIR /opt/codework
 COPY --chown=$MAMBA_USER:$MAMBA_USER environment.yml /tmp/environment.yml
 RUN micromamba install --yes --name base --file /tmp/environment.yml \
     && micromamba clean --all --yes
+
+COPY --chown=$MAMBA_USER:$MAMBA_USER reporting/requirements.txt /tmp/reporting-requirements.txt
+RUN python -m pip install --no-cache-dir --disable-pip-version-check -r /tmp/reporting-requirements.txt
 
 COPY --chown=$MAMBA_USER:$MAMBA_USER mcp/package.json mcp/package-lock.json /opt/codework/mcp/
 RUN cd /opt/codework/mcp \

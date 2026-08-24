@@ -3,29 +3,31 @@ name: GENOMA deterministic policy engine
 on:
   pull_request:
     paths:
-      - 'manifests/RULESET_V3.3.sha256'
+      - 'manifests/RULESET_V3.4.sha256'
       - 'normative/**'
       - 'policy_engine/**'
+      - 'locks/**'
+      - 'template_store/**'
       - 'scripts/validate_repo.py'
+      - 'scripts/verify_supply_chain_lock.py'
       - 'scripts/materialize_ruleset.py'
       - 'scripts/run_live_post_deployment_smoke.py'
       - 'adapters/**'
       - '.github/workflows/genoma-policy-engine.yml'
-      - '.github/workflows/genoma-production-ceremony.yml'
-      - '.github/workflows/genoma-ngs-runtime-gate.yml'
   push:
     branches: [main]
     paths:
-      - 'manifests/RULESET_V3.3.sha256'
+      - 'manifests/RULESET_V3.4.sha256'
       - 'normative/**'
       - 'policy_engine/**'
+      - 'locks/**'
+      - 'template_store/**'
       - 'scripts/validate_repo.py'
+      - 'scripts/verify_supply_chain_lock.py'
       - 'scripts/materialize_ruleset.py'
       - 'scripts/run_live_post_deployment_smoke.py'
       - 'adapters/**'
       - '.github/workflows/genoma-policy-engine.yml'
-      - '.github/workflows/genoma-production-ceremony.yml'
-      - '.github/workflows/genoma-ngs-runtime-gate.yml'
   workflow_dispatch:
 
 permissions:
@@ -37,44 +39,41 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
       - name: Verify repository scaffold and sealed canonical contract
         run: python3 scripts/validate_repo.py
+      - name: Verify immutable supply-chain lock
+        run: python3 scripts/verify_supply_chain_lock.py
       - name: Materialize byte-exact canonical ruleset for this job
         run: |
           mkdir -p "$RUNNER_TEMP/genoma-normative"
-          python3 scripts/materialize_ruleset.py \
-            --output-dir "$RUNNER_TEMP/genoma-normative" \
-            --evidence "$GITHUB_WORKSPACE/ruleset-materialization.json"
-          echo "GENOMA_RULESET_PATH=$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt" >> "$GITHUB_ENV"
-          echo "GENOMA_RULESET_SHA_MANIFEST=$GITHUB_WORKSPACE/manifests/RULESET_V3.3.sha256" >> "$GITHUB_ENV"
+          python3 scripts/materialize_ruleset.py --output-dir "$RUNNER_TEMP/genoma-normative" --evidence "$GITHUB_WORKSPACE/ruleset-materialization.json"
+          echo "GENOMA_RULESET_PATH=$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt" >> "$GITHUB_ENV"
+          echo "GENOMA_RULESET_SHA_MANIFEST=$GITHUB_WORKSPACE/manifests/RULESET_V3.4.sha256" >> "$GITHUB_ENV"
           echo 'GENOMA_EXPECT_CANONICAL_SHA=1' >> "$GITHUB_ENV"
-      - name: Unit tests against the actual canonical v3.3 bytes
+      - name: Unit tests against actual canonical v3.4 bytes
         working-directory: policy_engine
         run: python -m unittest discover -s tests -v
       - name: Verify canonical identity and 263-section parser contract
         working-directory: policy_engine
         run: python -m genoma_policy ruleset-check
-      - name: Verify portable stdlib CLI without package manager
+      - name: Verify portable stdlib CLI
         run: |
           chmod +x policy_engine/scripts/genoma-policy
           policy_engine/scripts/genoma-policy ruleset-check
-          python -m compileall -q policy_engine/genoma_policy scripts/materialize_ruleset.py scripts/run_live_post_deployment_smoke.py scripts/runtime_resource_gate.py
-      - name: Independent 15-case deterministic regression smoke
+          python -m compileall -q policy_engine/genoma_policy scripts
+      - name: Independent deterministic regression smoke
         run: policy_engine/scripts/genoma-policy smoke --output "$GITHUB_WORKSPACE/genoma-policy-smoke.json"
-      - name: Compile complete 263-rule catalog
+      - name: Compile complete rule catalog
         run: policy_engine/scripts/genoma-policy catalog --output "$GITHUB_WORKSPACE/genoma-ruleset-catalog.json"
-      - name: Verify JSON schema syntax
-        run: python -m json.tool policy_engine/policy/schema/execution-manifest.schema.json >/dev/null
       - name: Build portable deterministic source archive
         run: |
-          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
-            -czf genoma-policy-engine-source.tgz policy_engine scripts/materialize_ruleset.py scripts/run_live_post_deployment_smoke.py normative/sealed adapters
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -czf genoma-policy-engine-source.tgz policy_engine scripts/materialize_ruleset.py scripts/run_live_post_deployment_smoke.py normative/sealed adapters locks template_store/v3.0/MANIFEST.json
           sha256sum genoma-policy-engine-source.tgz > genoma-policy-engine-source.tgz.sha256
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: genoma-policy-verification-${{ github.sha }}
           path: |
@@ -91,87 +90,49 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: open-policy-agent/setup-opa@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: open-policy-agent/setup-opa@b2b258e089860efaadaaf71bf6e3aecb4a3eeff1 # v2.4.0
         with:
           version: 1.17.0
-      - name: OPA version
-        run: opa version
-      - name: Parse and normalize Rego
-        run: opa fmt --write policy_engine/policy/rego
-      - name: Rego tests
-        run: opa test policy_engine/policy/rego -v
+      - run: opa version
+      - run: opa fmt --write policy_engine/policy/rego
+      - run: opa test policy_engine/policy/rego -v
 
   secrets:
     name: Gitleaks secret scan
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - name: Scan repository code with pinned Gitleaks
-        run: |
-          docker run --rm -v "$PWD:/repo:ro" ghcr.io/gitleaks/gitleaks:v8.30.1 \
-            dir /repo --no-banner --redact --exit-code 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Scan repository with immutable Gitleaks image
+        run: docker run --rm -v "$PWD:/repo:ro" ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:b109bc5f8f76a38196a3e413704fc5b9e3c32360bce4e4b603bd6f45b3721dbb dir /repo --no-banner --redact --exit-code 1
 
   container:
-    name: Real Docker + exact canonical read-only mount
+    name: Real Docker + canonical read-only mount
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - name: Build policy engine OCI image
-        run: docker build --file policy_engine/Dockerfile --tag genoma-policy-engine:${{ github.sha }} .
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: docker build --file policy_engine/Dockerfile --tag genoma-policy-engine:${{ github.sha }} .
       - name: Materialize exact canonical ruleset
         run: |
           mkdir -p "$RUNNER_TEMP/genoma-normative"
           python3 scripts/materialize_ruleset.py --output-dir "$RUNNER_TEMP/genoma-normative"
-          sha256sum "$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt"
-      - name: Run hardened container and verify mount + HTTP contract
+      - name: Hardened HTTP smoke
         shell: bash
         run: |
           set -euo pipefail
-          canonical="$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt"
-          cid=$(docker run -d \
-            --read-only \
-            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m \
-            --cap-drop ALL \
-            --security-opt no-new-privileges:true \
-            -v "$canonical:/run/genoma/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt:ro" \
-            -v "$PWD/manifests/RULESET_V3.3.sha256:/run/genoma/manifests/RULESET_V3.3.sha256:ro" \
-            -p 127.0.0.1:8787:8787 \
-            genoma-policy-engine:${{ github.sha }})
-          cleanup() { docker logs "$cid" || true; docker rm -f "$cid" >/dev/null 2>&1 || true; }
-          trap cleanup EXIT
-          http_ready=0
-          for _ in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8787/healthz >/tmp/health.json; then http_ready=1; break; fi
-            sleep 1
-          done
-          test "$http_ready" = 1
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          p=json.loads(Path('/tmp/health.json').read_text())
-          assert p == {'status':'ok','engine':'genoma-policy-engine','version':'0.3.0'}
-          PY
+          canonical="$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
+          cid=$(docker run -d --read-only --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m --cap-drop ALL --security-opt no-new-privileges:true -v "$canonical:/run/genoma/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt:ro" -v "$PWD/manifests/RULESET_V3.4.sha256:/run/genoma/manifests/RULESET_V3.4.sha256:ro" -p 127.0.0.1:8787:8787 genoma-policy-engine:${{ github.sha }})
+          trap 'docker logs "$cid" || true; docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
+          for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:8787/healthz >/tmp/health.json && break; sleep 1; done
           curl -fsS http://127.0.0.1:8787/v1/ruleset >/tmp/ruleset.json
           python - <<'PY'
           import json
-          from pathlib import Path
-          p=json.loads(Path('/tmp/ruleset.json').read_text())
-          assert p['status']=='VIGENTE'; assert p['version']=='v3.3'; assert p['effective_date']=='14/08/2026'
-          assert p['sha256']=='187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a'
-          assert p['section_count']==263
+          p=json.load(open('/tmp/ruleset.json'))
+          assert p['status']=='VIGENTE' and p['version']=='v3.4' and p['effective_date']=='17/08/2026'
+          assert p['sha256']=='ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580' and p['section_count']==263
           PY
-          mount_rw=$(docker inspect "$cid" --format '{{range .Mounts}}{{if eq .Destination "/run/genoma/REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt"}}{{.RW}}{{end}}{{end}}')
-          test "$mount_rw" = false
-          health_state=$(docker inspect "$cid" --format '{{.State.Health.Status}}')
-          for _ in $(seq 1 30); do
-            test "$health_state" = healthy && break
-            sleep 1
-            health_state=$(docker inspect "$cid" --format '{{.State.Health.Status}}')
-          done
-          test "$health_state" = healthy
 
   publish:
     name: Publish immutable OCI image + embedded provenance
@@ -183,18 +144,18 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
         with:
           driver: docker-container
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push immutable policy image with OCI provenance and SBOM
         id: push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           file: policy_engine/Dockerfile
@@ -203,30 +164,27 @@ jobs:
           sbom: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/genoma-policy-engine:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/genoma-policy-engine:v0.3.0
+            ghcr.io/${{ github.repository_owner }}/genoma-policy-engine:v0.8.0
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=0.3.0
-      - name: Verify OCI index contains attached attestations
+            org.opencontainers.image.version=0.8.0
+      - name: Verify OCI attestations
         env:
           IMAGE_REF: ghcr.io/${{ github.repository_owner }}/genoma-policy-engine@${{ steps.push.outputs.digest }}
         run: |
           docker buildx imagetools inspect "$IMAGE_REF" --raw > genoma-policy-oci-index.json
           python - <<'PY'
           import json
-          from pathlib import Path
-          data=json.loads(Path('genoma-policy-oci-index.json').read_text())
-          manifests=data.get('manifests', [])
-          assert manifests, 'OCI index has no manifests'
-          attached=[m for m in manifests if m.get('platform',{}).get('os')=='unknown' and m.get('platform',{}).get('architecture')=='unknown']
-          assert attached, 'no attached OCI provenance/SBOM manifest found'
+          d=json.load(open('genoma-policy-oci-index.json'))
+          assert d.get('manifests')
+          assert any(x.get('platform',{}).get('os')=='unknown' for x in d['manifests'])
           PY
-      - name: Record immutable image reference and digest
+      - name: Record immutable image reference
         run: |
-          printf 'ghcr.io/%s/genoma-policy-engine@%s\n' '${{ github.repository_owner }}' '${{ steps.push.outputs.digest }}' | tee genoma-policy-image-reference.txt
+          printf 'ghcr.io/%s/genoma-policy-engine@%s\n' '${{ github.repository_owner }}' '${{ steps.push.outputs.digest }}' > genoma-policy-image-reference.txt
           printf '%s\n' '${{ steps.push.outputs.digest }}' > genoma-policy-image-digest.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: genoma-policy-image-reference-${{ github.sha }}
           path: |

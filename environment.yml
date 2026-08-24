@@ -16,5 +16,7 @@ dependencies:
   - snakemake-minimal=7.32.4
   - curl
   - coreutils
+  - procps-ng
+  - poppler=26.07.0
   - jq
   - pigz

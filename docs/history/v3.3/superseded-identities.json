@@ -1,0 +1,15 @@
+{
+  "canonical_filename": "REGRAS_PROJETO_GENOMA_VIGENTE_v3.3_2026-08-14.txt",
+  "effective_date": "14/08/2026",
+  "forbidden_active_paths": [
+    "manifests/RULESET_V3.3.sha256",
+    "deploy/attestations/bootstrap-project-v3.3.json"
+  ],
+  "iso_date": "2026-08-14",
+  "manifest_filename": "RULESET_V3.3.sha256",
+  "raw_sha256": "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a",
+  "rule_id_prefix": "GENOMA-V3.3",
+  "schema": "genoma-superseded-identity-v1",
+  "status": "HISTORICAL",
+  "version": "v3.3"
+}
