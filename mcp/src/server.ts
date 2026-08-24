@@ -367,16 +367,16 @@ async function inspectClaimMutationLock(lockPath: string): Promise<ClaimMutation
   }
 }
 
-async function cleanupStagedClaimMutationLock(stagingPath: string, ownerPath: string): Promise<void> {
+async function cleanupFailedClaimMutationLock(lockPath: string, ownerPath: string): Promise<void> {
   try {
     await unlink(ownerPath);
   } catch {
-    // Preserve the acquisition error; this staging path never became the shared lock.
+    // Preserve the acquisition error while removing a partially created lock.
   }
   try {
-    await rmdir(stagingPath);
+    await rmdir(lockPath);
   } catch {
-    // Preserve the acquisition error; a unique staging directory cannot block another owner.
+    // Preserve the acquisition error; if cleanup fails, later acquisition fails closed.
   }
 }
 
@@ -387,21 +387,19 @@ async function createClaimMutationLock(lockPath: string): Promise<ClaimMutationL
     lockedAt: new Date().toISOString(),
     leaseExpiresAt: leaseExpiresAt(CLAIM_MUTATION_LOCK_LEASE_MS),
   };
-  const stagingPath = `${lockPath}.owner-${lockId}`;
-  const stagingOwnerPath = path.join(stagingPath, CLAIM_MUTATION_LOCK_OWNER);
-  await mkdir(stagingPath, { mode: 0o700 });
+  const ownerPath = path.join(lockPath, CLAIM_MUTATION_LOCK_OWNER);
+  await mkdir(lockPath, { mode: 0o700 });
   try {
-    await writeFile(stagingOwnerPath, `${JSON.stringify(metadata)}\n`, {
+    await writeFile(ownerPath, `${JSON.stringify(metadata)}\n`, {
       encoding: "utf8",
       flag: "wx",
       mode: 0o600,
     });
-    await rename(stagingPath, lockPath);
   } catch (error) {
-    await cleanupStagedClaimMutationLock(stagingPath, stagingOwnerPath);
+    await cleanupFailedClaimMutationLock(lockPath, ownerPath);
     throw error;
   }
-  return { lockPath, ownerPath: path.join(lockPath, CLAIM_MUTATION_LOCK_OWNER), metadata };
+  return { lockPath, ownerPath, metadata };
 }
 
 function assertRecoverableClaimMutationLock(
