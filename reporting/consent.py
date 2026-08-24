@@ -153,10 +153,10 @@ def input_set_sha256(paths: "list[Path | str]") -> tuple[str, list[dict[str, Any
     for path in paths:
         resolved = Path(path)
         digest = sha256_file(resolved)
-        if resolved.name in seen and seen[resolved.name] != digest:
+        if resolved.name in seen:
             raise ConsentError(
-                f"dois arquivos distintos chamados {resolved.name!r} na entrada; renomeie um "
-                "deles, porque o vínculo do consentimento não conseguiria distingui-los"
+                f"o basename {resolved.name!r} aparece mais de uma vez na entrada; informe "
+                "cada arquivo exatamente uma vez e renomeie colisões"
             )
         seen[resolved.name] = digest
         entries.append({"name": resolved.name, "sha256": digest, "size_bytes": resolved.stat().st_size})
