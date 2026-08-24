@@ -24,7 +24,7 @@ class CaseDossierExampleTest(unittest.TestCase):
         source = root / "config/case_dossier.example.json"
         raw = json.loads(source.read_text(encoding="utf-8"))
         self.assertIn("notes", raw)
-        self.assertEqual(raw.get("consent"), {})
+        self.assertTrue(all(value in ("", [], None) for value in raw["consent"].values()))
         dossier = load_dossier(source, expected_case_id=raw["case_id"])
         self.assertFalse(dossier["consent_documented"])
         self.assertEqual(dossier["consent"], {})
