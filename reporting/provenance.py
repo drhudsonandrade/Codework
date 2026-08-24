@@ -871,6 +871,31 @@ class PayloadCompiler:
         POST-DEPLOYMENT verdict are derived for the same reason — see `policy_verdict` and
         `post_deployment`.
         """
+        schema_sources = [
+            (name, artifact)
+            for name, artifact in self._artifacts.items()
+            if isinstance(artifact.payload.get("input"), dict)
+            and str(artifact.payload["input"].get("schema") or "").strip()
+        ]
+        schemas = {
+            str(artifact.payload["input"]["schema"]).strip()
+            for _name, artifact in schema_sources
+        }
+        if len(schemas) > 1:
+            raise ProvenanceError(
+                f"registered artifacts disagree about input.schema: {sorted(schemas)}"
+            )
+        if schema_sources:
+            source_name, _source = schema_sources[0]
+            self.derive(
+                "input.schema",
+                artifact=source_name,
+                locator="input.schema",
+                status="VERIFICADO",
+                basis="schema medido do artefato de QC/entrada compilado",
+                kind="computed",
+            )
+
         if self._fixture_verdict or self._fixture_witness or self._fixture_consent:
             # The fixture verdict exists so layout QA can render a FINAL document and measure
             # it. It is safe only while every value on the payload is a fixture, which floors
@@ -944,6 +969,11 @@ class PayloadCompiler:
         data: dict[str, Any] = {
             "case_id": self.case_id,
             "report_id": self.report_id,
+            **(
+                {"input": {"schema": self.value("input.schema")}}
+                if "input.schema" in self._anchors
+                else {}
+            ),
             "summary": self.value("summary"),
             "ruleset": normative.ruleset_block(include_sha256=False),
             "publication_gate": dict(publication_gate),
