@@ -37,6 +37,30 @@ class AnnotationRegressionTest(unittest.TestCase):
         self.assertEqual(result["status"], "NÃO DISPONÍVEL")
         self.assertEqual(result["code"], "EXPECTED_POSITION_INVALID")
 
+    def test_registry_chromosome_prefix_is_normalized(self):
+        result = check_coordinate(
+            {"chromosome": "3", "position": "100"},
+            {
+                "rsid": "rs1",
+                "coordinates": {
+                    "status": "VERIFICADO",
+                    "GRCh37": {"chromosome": "chr3", "position": 100},
+                },
+            },
+            "GRCh37",
+        )
+        self.assertEqual(result["code"], "COORDINATE_MATCH")
+
+    def test_ambiguous_registry_coordinate_is_inferred(self):
+        self.assertEqual(
+            _observation_status([{
+                "orientation_operational_status": "VERIFICADO",
+                "coordinate_operational_status": "NÃO DISPONÍVEL",
+                "coordinate_reason_code": "AMBIGUOUS_COORDINATE",
+            }]),
+            "INFERIDO",
+        )
+
     def test_missing_and_divergent_coordinates_have_distinct_structured_outcomes(self):
         missing = _observation_status([{
             "orientation_operational_status": "VERIFICADO",
