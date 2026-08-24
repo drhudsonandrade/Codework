@@ -112,6 +112,15 @@ class TemplateV3ContractTest(unittest.TestCase):
             self.assertEqual(recompressed["content_sha256"], verified["content_sha256"])
             self.assertFalse(recompressed["container_sha256_matches_pinned"])
 
+            multi_member = gzip.compress(manifest, mtime=0) + gzip.compress(
+                b"unexpected", mtime=0
+            )
+            path.write_bytes(base64.b64encode(multi_member) + b"\n")
+            with self.assertRaisesRegex(
+                TemplateV3Error, "incomplete or multi-member"
+            ):
+                verify_coordinate_detail(path, meta, manifest)
+
             path.write_bytes(base64.b64encode(gzip.compress(b"different", mtime=0)) + b"\n")
             with self.assertRaisesRegex(TemplateV3Error, "decoded content mismatch"):
                 verify_coordinate_detail(path, meta, manifest)
