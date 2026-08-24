@@ -6,10 +6,8 @@ told this pipeline about, or the coordinate column is corrupt — and every down
 keyed on position is then joining on nothing.
 
 `homozygosity` already refused on exactly this, using its own private copy of the table.
-Array QC did not check at all, so a file where 47% of markers sat beyond their chromosome
-passed all five gates and only fell over later, in one analysis, while the clinical join and
-the completeness matrix consumed the same coordinates without comment. Two copies of a fact
-also drift; this module is the single copy both read.
+Array QC previously did not check this bound, so invalid coordinates could reach downstream
+position-keyed joins. Two copies of a fact also drift; this module is the single copy both read.
 
 Lengths are the GRCh37 (hg19) and GRCh38 primary-assembly totals. M and MT are accepted
 aliases for the rCRS at 16,569 bases in both.
@@ -80,9 +78,8 @@ AUTOSOME_TOTAL_KB: float = float(sum(AUTOSOME_KB_BY_CHROMOSOME.values()))
 
 #: Ceilings for decompressing a curated registry or panel. The QC gate applies the same two
 #: to an array export inside a ZIP; the registry loaders applied neither, so a path handed to
-#: `--targets` or `--panel` was expanded with no bound at all. The shipped files decompress at
-#: 5x to 17x and reach 168 MB, so these admit them with room while refusing a bomb, which
-#: reaches a thousandfold and beyond.
+#: `--targets` or `--panel` was expanded with no bound at all. These ceilings permit the
+#: versioned registries while rejecting inputs that exceed the declared byte or ratio limits.
 MAX_REGISTRY_UNCOMPRESSED_BYTES = 1024 * 1024 * 1024
 MAX_REGISTRY_COMPRESSION_RATIO = 200.0
 
@@ -114,8 +111,15 @@ def bounded_gunzip(raw: bytes, *, name: str) -> bytes:
             if not decompressor.unconsumed_tail:
                 break
             chunk = decompressor.decompress(decompressor.unconsumed_tail, step * 64)
-    chunks.append(decompressor.flush())
-    produced += len(chunks[-1])
+    tail = decompressor.flush(MAX_REGISTRY_UNCOMPRESSED_BYTES - produced + 1)
+    produced += len(tail)
+    if produced > MAX_REGISTRY_UNCOMPRESSED_BYTES:
+        raise ValueError(
+            f"{name}: gzip payload expands past "
+            f"{MAX_REGISTRY_UNCOMPRESSED_BYTES:,} bytes and was refused before "
+            "the rest was read"
+        )
+    chunks.append(tail)
     if not decompressor.eof:
         raise ValueError(f"{name}: gzip payload is truncated or incomplete")
     if decompressor.unused_data:
