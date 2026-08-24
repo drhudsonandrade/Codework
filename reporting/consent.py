@@ -203,7 +203,16 @@ def validate_record(
     if record.get("schema") != SCHEMA:
         raise ConsentError(f"schema {record.get('schema')!r}; esperado {SCHEMA!r}")
 
-    for field in ("subject_id", "version", "instrument", "instrument_version", "captured_by", "basis"):
+    for field in (
+        "subject_id",
+        "case_id",
+        "input_sha256",
+        "version",
+        "instrument",
+        "instrument_version",
+        "captured_by",
+        "basis",
+    ):
         if not str(record.get(field) or "").strip():
             raise ConsentError(f"{field} está vazio")
 
