@@ -547,12 +547,6 @@
       "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "assessed_allele_source": "CPIC",
       "coordinates": {
-        "GRCh37": {
-          "alternate_allele": "C",
-          "chromosome": "7",
-          "position": 99270539,
-          "reference_allele": "C"
-        },
         "GRCh38": {
           "alternate_allele": "C",
           "chromosome": "7",
@@ -595,7 +589,13 @@
       },
       "rsid": "rs776746",
       "scope": "CLINICO",
-      "assessed_allele_status": "VERIFICADO"
+      "assessed_allele_status": "VERIFICADO",
+      "coordinate_limitations": {
+        "GRCh37": {
+          "status": "NÃO DISPONÍVEL",
+          "reason": "NCBI ClinVar VCV000005066 reports NC_000007.13:g.99270539= on GRCh37: the represented C allele equals that assembly's reference, so no REF>ALT SNV can be asserted for GRCh37."
+        }
+      }
     },
     {
       "assessed_allele": "A",
@@ -783,12 +783,6 @@
       "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
       "assessed_allele_source": "ClinVar",
       "coordinates": {
-        "GRCh37": {
-          "alternate_allele": "T",
-          "chromosome": "1",
-          "position": 169519049,
-          "reference_allele": "T"
-        },
         "GRCh38": {
           "alternate_allele": "T",
           "chromosome": "1",
@@ -825,7 +819,13 @@
       },
       "rsid": "rs6025",
       "scope": "CLINICO",
-      "assessed_allele_status": "VERIFICADO"
+      "assessed_allele_status": "VERIFICADO",
+      "coordinate_limitations": {
+        "GRCh37": {
+          "status": "NÃO DISPONÍVEL",
+          "reason": "NCBI ClinVar VCV000000642 reports NC_000001.10:g.169519049= on GRCh37: the represented T allele equals that assembly's reference, so no REF>ALT SNV can be asserted for GRCh37."
+        }
+      }
     },
     {
       "assessed_allele": "A",
