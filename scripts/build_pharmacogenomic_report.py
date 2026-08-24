@@ -184,6 +184,12 @@ def build_payload(
 ) -> dict:
     passport = Artifact.from_path("pgx-passport", passport_path)
     matrix = Artifact.from_path("completeness-matrix", matrix_path)
+    passport_input = str(passport.payload.get("input_sha256") or "").strip()
+    matrix_input = str(matrix.payload.get("input_sha256") or "").strip()
+    if not passport_input or not matrix_input or passport_input != matrix_input:
+        raise ValueError(
+            "passport and completeness matrix must describe the same non-empty input_sha256"
+        )
 
     case_id = passport.payload.get("case_id") or UNAVAILABLE
     compiler = PayloadCompiler(
