@@ -1,16 +1,27 @@
 from __future__ import annotations
 
 import json
+import runpy
+import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from array_pipeline.ancestry import AncestryPanelError, load_panel, read_case_genotypes
+
+def _load_without_optional_numpy():
+    """Load the narrow helpers under test without adding NumPy to the static CI image."""
+    module_path = Path(__file__).resolve().parents[1] / "array_pipeline" / "ancestry.py"
+    with patch.dict(sys.modules, {"numpy": types.ModuleType("numpy")}):
+        return runpy.run_path(str(module_path))
 
 
 class AncestryRegressionTest(unittest.TestCase):
     def test_panel_rejects_inconsistent_loading_dimensions(self):
+        namespace = _load_without_optional_numpy()
+        error = namespace["AncestryPanelError"]
+        load_panel = namespace["load_panel"]
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "panel.json"
             path.write_text(json.dumps({
@@ -21,10 +32,12 @@ class AncestryRegressionTest(unittest.TestCase):
                     {"rsid": "rs2", "loadings": [0.3]},
                 ],
             }), encoding="utf-8")
-            with self.assertRaisesRegex(AncestryPanelError, "loadings.*same length"):
+            with self.assertRaisesRegex(error, "loadings.*same length"):
                 load_panel(path)
 
     def test_case_reader_closes_row_generator(self):
+        namespace = _load_without_optional_numpy()
+        read_case_genotypes = namespace["read_case_genotypes"]
         closed = []
 
         def rows():
