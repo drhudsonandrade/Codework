@@ -55,7 +55,14 @@ def _publication_blockers(data: dict[str, Any]) -> list[str]:
             blockers.append(f"ruleset:{key}")
 
     publication = data.get("publication_gate") if isinstance(data.get("publication_gate"), dict) else {}
-    for key in ("passed", "consent_verified", "qc_verified", "evidence_verified", "placeholders_resolved"):
+    for key in (
+        "passed",
+        "consent_verified",
+        "consent_scope_verified",
+        "qc_verified",
+        "evidence_verified",
+        "placeholders_resolved",
+    ):
         if publication.get(key) is not True:
             blockers.append(f"publication_gate:{key}")
 
