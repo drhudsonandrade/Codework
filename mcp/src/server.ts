@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
-import { chmod, mkdir, open, readFile, rename, rmdir, unlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, open, readFile, readdir, rename, rmdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -56,9 +56,11 @@ const SCRIPT_OUTPUT_MAX_BYTES = 5 * 1024 * 1024;
 const STDERR_TAIL_MAX_BYTES = 4 * 1024;
 /** Time a terminated process group gets to exit before it is killed outright. */
 const GROUP_TERMINATION_GRACE_MS = 5_000;
-/** A claim may be recovered only after every supported tool budget has expired. */
+/** A request lease outlives every supported operation budget and termination grace. */
 const REQUEST_CLAIM_STALE_MS =
   Math.max(...Object.values(TOOL_TIMEOUTS_MS)) + GROUP_TERMINATION_GRACE_MS + MINUTE_MS;
+/** Mutation-lock critical sections contain only local filesystem coordination. */
+const CLAIM_MUTATION_LOCK_LEASE_MS = 2 * MINUTE_MS;
 /** POSIX only: a negative pid signals the whole process group instead of one process. */
 const USE_PROCESS_GROUP = process.platform !== "win32";
 
@@ -240,17 +242,21 @@ type RequestClaimMetadata = {
   requestId: string;
   tool: string;
   claimedAt: string;
+  leaseExpiresAt: string;
   claimId: string;
-  ownerPid: number;
 };
+
+const isoTimestampSchema = z
+  .string()
+  .refine((value) => Number.isFinite(Date.parse(value)), "invalid ISO timestamp");
 
 const requestClaimMetadataSchema = z
   .object({
     requestId: z.string(),
     tool: z.string(),
-    claimedAt: z.string(),
+    claimedAt: isoTimestampSchema,
+    leaseExpiresAt: isoTimestampSchema,
     claimId: z.string().uuid(),
-    ownerPid: z.number().int().positive(),
   })
   .strict();
 
@@ -276,22 +282,17 @@ async function inspectRequestClaim(claimPath: string): Promise<ClaimInspection> 
   }
 }
 
-function processIsAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code !== "ESRCH";
-  }
+function leaseExpired(expiresAt: string): boolean {
+  const parsed = Date.parse(expiresAt);
+  return Number.isFinite(parsed) && Date.now() > parsed;
+}
+
+function leaseExpiresAt(durationMs: number): string {
+  return new Date(Date.now() + durationMs).toISOString();
 }
 
 function claimMetadataMatches(metadata: RequestClaimMetadata, requestId: string, tool: string): boolean {
   return metadata.requestId === requestId && metadata.tool === tool;
-}
-
-function claimTimestampIsStale(claimedAt: string): boolean {
-  const parsed = Date.parse(claimedAt);
-  return Number.isFinite(parsed) && Date.now() - parsed > REQUEST_CLAIM_STALE_MS;
 }
 
 function isRecoverableStaleClaim(
@@ -302,15 +303,14 @@ function isRecoverableStaleClaim(
   return (
     inspection.kind === "metadata" &&
     claimMetadataMatches(inspection.value, requestId, tool) &&
-    claimTimestampIsStale(inspection.value.claimedAt) &&
-    !processIsAlive(inspection.value.ownerPid)
+    leaseExpired(inspection.value.leaseExpiresAt)
   );
 }
 
 type ClaimMutationLockMetadata = {
   lockId: string;
-  ownerPid: number;
   lockedAt: string;
+  leaseExpiresAt: string;
 };
 
 type ClaimMutationLock = {
@@ -320,21 +320,19 @@ type ClaimMutationLock = {
 };
 
 type ClaimMutationLockInspection =
-  | { kind: "owner-missing"; ownerPath: string }
-  | { kind: "invalid"; ownerPath: string }
+  | { kind: "missing" }
+  | { kind: "invalid" }
   | { kind: "owner"; ownerPath: string; metadata: ClaimMutationLockMetadata };
 
 const claimMutationLockMetadataSchema = z
   .object({
     lockId: z.string().uuid(),
-    ownerPid: z.number().int().positive(),
-    lockedAt: z.string(),
-    state: z.enum(["HELD", "RELEASE_PENDING"]).optional(),
+    lockedAt: isoTimestampSchema,
+    leaseExpiresAt: isoTimestampSchema,
   })
   .strict();
 
 const CLAIM_MUTATION_LOCK_OWNER = "owner.json";
-const INVALID_OWNERLESS_LOCK_ERRORS = new Set(["ENOTEMPTY", "EEXIST"]);
 
 function lockContention(error: unknown): boolean {
   const code = (error as NodeJS.ErrnoException).code;
@@ -342,19 +340,30 @@ function lockContention(error: unknown): boolean {
 }
 
 async function inspectClaimMutationLock(lockPath: string): Promise<ClaimMutationLockInspection> {
+  let entries: string[];
+  try {
+    entries = (await readdir(lockPath, { encoding: "utf8" })) as string[];
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { kind: "missing" };
+    }
+    return { kind: "invalid" };
+  }
+  if (entries.length !== 1 || entries[0] !== CLAIM_MUTATION_LOCK_OWNER) {
+    return { kind: "invalid" };
+  }
+
   const ownerPath = path.join(lockPath, CLAIM_MUTATION_LOCK_OWNER);
   let raw: string;
   try {
     raw = await readFile(ownerPath, "utf8");
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "ENOENT"
-      ? { kind: "owner-missing", ownerPath }
-      : { kind: "invalid", ownerPath };
+  } catch {
+    return { kind: "invalid" };
   }
   try {
     return { kind: "owner", ownerPath, metadata: claimMutationLockMetadataSchema.parse(JSON.parse(raw)) };
   } catch {
-    return { kind: "invalid", ownerPath };
+    return { kind: "invalid" };
   }
 }
 
@@ -375,8 +384,8 @@ async function createClaimMutationLock(lockPath: string): Promise<ClaimMutationL
   const lockId = randomUUID();
   const metadata: ClaimMutationLockMetadata = {
     lockId,
-    ownerPid: process.pid,
     lockedAt: new Date().toISOString(),
+    leaseExpiresAt: leaseExpiresAt(CLAIM_MUTATION_LOCK_LEASE_MS),
   };
   const stagingPath = `${lockPath}.owner-${lockId}`;
   const stagingOwnerPath = path.join(stagingPath, CLAIM_MUTATION_LOCK_OWNER);
@@ -401,56 +410,51 @@ function assertRecoverableClaimMutationLock(
   if (inspection.kind !== "owner") {
     throw new Error("request claim coordination lock is invalid");
   }
-  if (processIsAlive(inspection.metadata.ownerPid)) {
+  if (!leaseExpired(inspection.metadata.leaseExpiresAt)) {
     throw new Error("request id is already in progress");
   }
   return inspection;
 }
 
-async function removeClaimMutationLockOwnerForRecovery(ownerPath: string): Promise<void> {
+function logClaimMutationLockFailure(stage: "owner" | "directory" | "ownership" | "recovery", error?: unknown): void {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  if (code === "ENOENT") {
+    return;
+  }
+  console.warn("request claim coordination lock cleanup failed", { stage, code: code ?? "UNKNOWN" });
+}
+
+async function cleanupRecoveredClaimMutationLock(recoveredPath: string): Promise<void> {
+  const ownerPath = path.join(recoveredPath, CLAIM_MUTATION_LOCK_OWNER);
   try {
     await unlink(ownerPath);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw new Error("request claim coordination lock could not be recovered");
-    }
+    logClaimMutationLockFailure("recovery", error);
   }
-}
-
-type OwnerlessLockRemovalError = "gone" | "invalid" | "failed";
-
-function classifyOwnerlessLockRemovalError(error: unknown): OwnerlessLockRemovalError {
-  const code = (error as NodeJS.ErrnoException).code;
-  if (code === "ENOENT") {
-    return "gone";
-  }
-  return INVALID_OWNERLESS_LOCK_ERRORS.has(code ?? "") ? "invalid" : "failed";
-}
-
-async function removeOwnerlessClaimMutationLock(lockPath: string): Promise<boolean> {
   try {
-    await rmdir(lockPath);
-    return true;
+    await rmdir(recoveredPath);
   } catch (error) {
-    const outcome = classifyOwnerlessLockRemovalError(error);
-    if (outcome === "gone") {
-      return true;
-    }
-    if (outcome === "invalid") {
-      throw new Error("request claim coordination lock is invalid");
-    }
-    throw new Error("request claim coordination lock could not be recovered");
+    logClaimMutationLockFailure("recovery", error);
   }
 }
 
 async function recoverClaimMutationLock(lockPath: string): Promise<boolean> {
   const inspection = await inspectClaimMutationLock(lockPath);
-  if (inspection.kind === "owner-missing") {
-    return removeOwnerlessClaimMutationLock(lockPath);
+  if (inspection.kind === "missing") {
+    return true;
   }
   const owner = assertRecoverableClaimMutationLock(inspection);
-  await removeClaimMutationLockOwnerForRecovery(owner.ownerPath);
-  return removeOwnerlessClaimMutationLock(lockPath);
+  const recoveredPath = `${lockPath}.recovered-${owner.metadata.lockId}-${randomUUID()}`;
+  try {
+    await rename(lockPath, recoveredPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+    throw new Error("request claim coordination lock could not be recovered");
+  }
+  await cleanupRecoveredClaimMutationLock(recoveredPath);
+  return true;
 }
 
 async function tryCreateClaimMutationLock(lockPath: string): Promise<ClaimMutationLock | undefined> {
@@ -477,14 +481,6 @@ async function acquireClaimMutationLock(lockPath: string): Promise<ClaimMutation
     throw new Error("request id is already in progress");
   }
   return retried;
-}
-
-function logClaimMutationLockFailure(stage: "owner" | "directory" | "ownership", error?: unknown): void {
-  const code = (error as NodeJS.ErrnoException | undefined)?.code;
-  if (code === "ENOENT") {
-    return;
-  }
-  console.warn("request claim coordination lock cleanup failed", { stage, code: code ?? "UNKNOWN" });
 }
 
 function claimMutationLockOwnedBy(
@@ -534,7 +530,11 @@ export async function withClaimMutationLock<T>(
   try {
     return await operation();
   } finally {
-    await releaseClaimMutationLock(lock);
+    try {
+      await releaseClaimMutationLock(lock);
+    } catch (error) {
+      logClaimMutationLockFailure("ownership", error);
+    }
   }
 }
 
@@ -547,8 +547,8 @@ async function createRequestClaim(claimPath: string, requestId: string, tool: st
         requestId,
         tool,
         claimedAt: new Date().toISOString(),
+        leaseExpiresAt: leaseExpiresAt(REQUEST_CLAIM_STALE_MS),
         claimId,
-        ownerPid: process.pid,
       })}\n`,
       "utf8",
     );
@@ -686,8 +686,39 @@ export async function releaseRequestClaim(claim: RequestClaim): Promise<void> {
   }
 }
 
+function assertClaimCanPersist(
+  inspection: ClaimInspection,
+  claim: RequestClaim,
+  requestId: string,
+  tool: string,
+): void {
+  if (
+    inspection.kind !== "metadata" ||
+    inspection.value.claimId !== claim.claimId ||
+    !claimMetadataMatches(inspection.value, requestId, tool)
+  ) {
+    throw new Error("request claim ownership was lost before audit persistence");
+  }
+  if (leaseExpired(inspection.value.leaseExpiresAt)) {
+    throw new Error("request claim lease expired before audit persistence");
+  }
+}
+
+async function persistOutcomeIfOwned(
+  options: GenomeServerOptions,
+  claim: RequestClaim,
+  record: AuditRecord,
+): Promise<void> {
+  await withClaimMutationLock(claim.claimPath, async () => {
+    const inspection = await inspectRequestClaim(claim.claimPath);
+    assertClaimCanPersist(inspection, claim, record.requestId, record.tool);
+    await persistOutcome(options, record);
+  });
+}
+
 async function executeAuditedOperation<T>(
   options: GenomeServerOptions,
+  claim: RequestClaim,
   requestId: string,
   tool: string,
   args: Record<string, unknown>,
@@ -695,19 +726,9 @@ async function executeAuditedOperation<T>(
   startedAt: string,
   started: number,
 ): Promise<T> {
+  let result: T;
   try {
-    const result = await operation();
-    const record: AuditRecord = {
-      requestId,
-      tool,
-      arguments: sanitizeToolArguments({ ...args, requestId }),
-      status: "PASS",
-      startedAt,
-      durationMs: Date.now() - started,
-      result,
-    };
-    await persistOutcome(options, record);
-    return result;
+    result = await operation();
   } catch (error) {
     const sanitized = sanitizeError(error);
     const record: AuditRecord = {
@@ -719,9 +740,21 @@ async function executeAuditedOperation<T>(
       durationMs: Date.now() - started,
       error: sanitized,
     };
-    await persistOutcome(options, record);
+    await persistOutcomeIfOwned(options, claim, record);
     throw new Error(sanitized);
   }
+
+  const record: AuditRecord = {
+    requestId,
+    tool,
+    arguments: sanitizeToolArguments({ ...args, requestId }),
+    status: "PASS",
+    startedAt,
+    durationMs: Date.now() - started,
+    result,
+  };
+  await persistOutcomeIfOwned(options, claim, record);
+  return result;
 }
 
 /** @internal Exported for deterministic idempotency and redaction tests. */
@@ -739,9 +772,9 @@ export async function runAudited<T>(
     return prior.value;
   }
 
-  // The mutation lock serializes claim-path changes, and stale recovery is allowed only
-  // after the recorded owner process is no longer alive. This prevents an active owner
-  // from being fenced out by elapsed wall-clock time alone.
+  // Request ownership is a lease plus a random claimId. Expired leases may be
+  // recovered even if an OS PID has been reused; persistence revalidates claimId
+  // under the mutation lock so a superseded owner is fenced from the audit record.
   const claim = await acquireRequestClaim(options, requestId, tool);
   const startedAt = new Date().toISOString();
   const started = Date.now();
@@ -752,7 +785,7 @@ export async function runAudited<T>(
     if (afterClaim.kind === "return") {
       return afterClaim.value;
     }
-    return await executeAuditedOperation(options, requestId, tool, args, operation, startedAt, started);
+    return await executeAuditedOperation(options, claim, requestId, tool, args, operation, startedAt, started);
   } finally {
     await releaseRequestClaim(claim);
   }
