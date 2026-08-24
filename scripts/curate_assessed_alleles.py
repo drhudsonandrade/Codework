@@ -523,6 +523,25 @@ def curate(targets_path: Path, pgx_registry_path: Path | None = None) -> dict[st
     }
 
 
+def _apply_target_assessment(
+    target: dict[str, Any],
+    record: dict[str, Any] | None,
+    evidence_name: str,
+) -> None:
+    """Apply one curation result without separating an allele from its attestation."""
+    if record and record["assessed_allele"]:
+        target.pop("assessed_allele_reason", None)
+        target["assessed_allele"] = record["assessed_allele"]
+        target["assessed_allele_status"] = "VERIFICADO"
+        target["assessed_allele_source"] = record.get("source", "ClinVar")
+        target["assessed_allele_evidence"] = evidence_name
+        target["references"] = record.get("references", {})
+    else:
+        target.pop("assessed_allele", None)
+        target["assessed_allele_status"] = record["status"] if record else "NÃO DISPONÍVEL"
+        target["assessed_allele_reason"] = record["reason"] if record else "not curated"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--targets", default=str(DEFAULT_TARGETS))
@@ -541,17 +560,7 @@ def main() -> int:
         by_rsid = {r["rsid"]: r for r in evidence["results"]}
         for target in registry["targets"]:
             record = by_rsid.get(str(target["rsid"]).lower())
-            if record and record["assessed_allele"]:
-                target.pop("assessed_allele_reason", None)
-                target["assessed_allele"] = record["assessed_allele"]
-                target["assessed_allele_status"] = "VERIFICADO"
-                target["assessed_allele_source"] = record.get("source", "ClinVar")
-                target["assessed_allele_evidence"] = out.name
-                target["references"] = record.get("references", {})
-            else:
-                target.pop("assessed_allele", None)
-                target["assessed_allele_status"] = record["status"] if record else "NÃO DISPONÍVEL"
-                target["assessed_allele_reason"] = record["reason"] if record else "not curated"
+            _apply_target_assessment(target, record, out.name)
         registry["assessed_allele_curation"] = {
             "curated_at": evidence["curated_at"],
             "sources": evidence["sources"],
