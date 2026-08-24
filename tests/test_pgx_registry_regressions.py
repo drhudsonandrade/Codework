@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import urllib.error
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from array_pipeline.allele_discrimination import partition_alleles
-from scripts import build_pgx_registry
+from scripts import build_pgx_panel, build_pgx_registry
 
 
 class CpicRetryPolicyTest(unittest.TestCase):
@@ -22,7 +22,7 @@ class CpicRetryPolicyTest(unittest.TestCase):
         slept.assert_not_called()
 
     def test_transient_http_error_is_retried(self):
-        response = unittest.mock.MagicMock()
+        response = MagicMock()
         response.__enter__.return_value.read.return_value = json.dumps([]).encode()
         error = urllib.error.HTTPError(
             "https://api.cpicpgx.org/v1/gene", 503, "Unavailable", None, None
@@ -80,6 +80,47 @@ class PartialDefinitionTest(unittest.TestCase):
         self.assertEqual(result["discriminable"], [])
         self.assertEqual(result["indiscriminable"], ["TEST*2"])
         self.assertIn("definição parcial", result["alleles"]["TEST*2"]["basis"])
+
+
+class PgxPanelIdentityTest(unittest.TestCase):
+    @staticmethod
+    def _registry(position=10):
+        return {
+            "id": "fixture",
+            "version": "1",
+            "source": "fixture",
+            "genes": {
+                "G": {
+                    "alleles": {
+                        "G*2": {
+                            "defining": [{
+                                "rsid": "rs1", "allele": "A", "position": 10,
+                                "chromosome": "chr1", "reference_accession": "NC_000001.11",
+                                "cpic_location": "loc", "chromosome_location": "1:10",
+                            }]
+                        },
+                        "G*3": {
+                            "defining": [{
+                                "rsid": "rs1", "allele": "T", "position": position,
+                                "chromosome": "chr1", "reference_accession": "NC_000001.11",
+                                "cpic_location": "loc", "chromosome_location": "1:10",
+                            }]
+                        },
+                    }
+                }
+            },
+        }
+
+    def test_conflicting_coordinates_for_one_rsid_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, "rs1.*position"):
+            build_pgx_panel.build_panel(self._registry(position=11))
+
+    def test_version_changes_when_registry_content_changes(self):
+        first = build_pgx_panel.build_panel(self._registry())
+        second_registry = self._registry()
+        second_registry["version"] = "2"
+        second = build_pgx_panel.build_panel(second_registry)
+        self.assertNotEqual(first["version"], second["version"])
 
 
 if __name__ == "__main__":
