@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from reporting.editorial_v3 import write_editorial_bundle
+from reporting.editorial_v3 import prepare_editorial_render, write_editorial_bundle
 from reporting.engine import ReportReleaseError, render_document, write_bundle
 
 
@@ -28,6 +28,7 @@ def main() -> int:
     data = json.loads(Path(args.input).read_text(encoding="utf-8")) if args.input else {}
     try:
         rendered = render_document(args.report, data, mode=args.mode)
+        rendered = prepare_editorial_render(rendered)
         output_dir = Path(args.output_dir)
         paths = write_bundle(rendered, output_dir, stem=args.stem)
         paths.update(write_editorial_bundle(rendered, output_dir, stem=args.stem))
