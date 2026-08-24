@@ -140,7 +140,7 @@ deram certo é peça de marketing.
 | HG02461 | Gâmbia | AFR ✓ | 27% | AFR 100% |
 | HGDP00995 | **Karitiana, Brasil** | AMR-NAT-AMAZONIA ✓ | 16% | AMR-NAT-AMAZONIA 100% |
 | HGDP00832 | **Surui, Brasil** | AMR-NAT-AMAZONIA ✓ | 6% | AMR-NAT-AMAZONIA 100% |
-| HGDP00702 | Piapoco, Colômbia | AMR-NAT-ANDES | 7% | ANDES 48%; AMAZONIA 28%; MESOAMERICA 24% |
+| HGDP00702 | Piapoco, Colômbia | AMR-NAT-ANDES ✓ | 7% | ANDES 48%; AMAZONIA 28%; MESOAMERICA 24% |
 | NA11200 | Quechua, Peru | AMR-NAT-ANDES ✓ | 11% | AMR-NAT-ANDES 100% |
 | HGDP00854 | Mayan, México | AMR-NAT-MESOAMERICA ✓ | 3% | MESOAMERICA 60%; ANDES 32% |
 
@@ -219,34 +219,15 @@ de ancestralidade local.
 - Coordenadas em GRCh37.
 - Ancestralidade genética não é identidade, cultura, nacionalidade nem história familiar.
 
-## Reproduzir
+## Reprodutibilidade
 
-```bash
-B=https://ftp.1000genomes.ebi.ac.uk/vol1/ftp
-curl -O $B/release/20130502/supporting/hd_genotype_chip/ALL.wgs.nhgri_coriell_affy_6.20140825.genotypes_has_ped.vcf.gz
-curl -O $B/release/20130502/integrated_call_samples_v3.20130502.ALL.panel
-# AADR v66.p1 Human Origins: .ind, .anno e .snp inteiros; os genótipos são lidos por
-# requisições HTTP Range, ~100 indivíduos em vez dos 3,8 GB do arquivo.
-D=https://dataverse.harvard.edu/api/access/datafile
-for id in 13994526 13994528 13994527; do curl -sL -o aadr.$id "$D/$id?format=original"; done
-python3 scripts/fetch_aadr_genotypes.py \
-    --ind aadr.13994526 --anno aadr.13994528 --snp aadr.13994527 \
-    --output aadr_reference.json.gz
-python3 scripts/build_ancestry_panel.py \
-    --vcf ALL.wgs.nhgri_coriell_affy_6.20140825.genotypes_has_ped.vcf.gz \
-    --panel integrated_call_samples_v3.20130502.ALL.panel \
-    --aadr aadr_reference.json.gz \
-    --output config/ancestry_reference_panel.json.gz
+O resultado pinado está em `docs/evidence/ANCESTRY_PANEL_VALIDATION.json`; o campo
+`cases[].closest_matches_expected` é verdadeiro nos 11 casos e sustenta “onze de onze”.
+O checkout atual **não inclui** os antigos scripts
+`fetch_aadr_genotypes.py`, `build_ancestry_panel.py` e
+`validate_ancestry_panel.py`. Por isso, os comandos históricos que os citavam foram
+removidos: o artefato é um snapshot de evidência inspecionável, mas sua regeneração não é
+reproduzível a partir deste repositório e não deve ser apresentada como tal.
 
-python3 scripts/validate_ancestry_panel.py \
-    --panel config/ancestry_reference_panel.json.gz \
-    --vcf ALL.wgs.nhgri_coriell_affy_6.20140825.genotypes_has_ped.vcf.gz \
-    --aadr aadr_reference.json.gz \
-    --aadr-sample HGDP00995.HO --aadr-sample HGDP00832.HO --aadr-sample HGDP00702.HO \
-    --aadr-sample NA11200.HO --aadr-sample HGDP00854.HO \
-    --stamp-panel
-```
-
-O artefato tem 2,9 MB comprimido: 60.000 marcadores com loadings, 3.547 amostras de
-referência com coordenadas, os centróides das oito populações nomeadas, a decisão medida de
-orientação dos alelos e o resumo de validação carimbado por `--stamp-panel`.
+O painel comprometido contém os loadings, amostras de referência, centróides, orientação e
+resumo de validação que os consumidores atuais validam estruturalmente antes da projeção.
