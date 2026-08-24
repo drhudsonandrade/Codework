@@ -41,20 +41,37 @@ def _verified_coordinate_manifest(template_dir: Path) -> tuple[dict[str, Any], d
         if not manifest_path.is_file() or not detail_path.is_file():
             errors.append(f"{mode}:missing")
             continue
-        actual_manifest = _sha256(manifest_path)
+        manifest_bytes = manifest_path.read_bytes()
+        actual_manifest = hashlib.sha256(manifest_bytes).hexdigest()
         if actual_manifest != manifest_meta.get("sha256"):
             raise _template_v3.TemplateV3Error(f"{mode} v3 coordinate manifest checksum mismatch")
         # The detail is verified by decoded content because DEFLATE bytes are not
-        # reproducible across zlib builds. The decoded bytes must equal this exact,
-        # hash-pinned manifest.
+        # reproducible across zlib builds. Every subsequent check uses this same immutable
+        # byte capture, so the accepted hash, decoded detail and loaded inventory cannot
+        # describe different filesystem reads.
         detail_result = _template_v3.verify_coordinate_detail(
-            detail_path, detail_meta, manifest_path.read_bytes()
+            detail_path, detail_meta, manifest_bytes
         )
         actual_detail = detail_result.get("content_sha256") or detail_result["container_sha256"]
+        try:
+            detailed = json.loads(manifest_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise _template_v3.TemplateV3Error(
+                f"{mode} v3 coordinate manifest is not valid UTF-8 JSON"
+            ) from exc
         if mode == "external":
-            detailed = _ORIGINAL_LOADER(manifest_path)
+            if detailed.get("schema") != "genoma-editorial-v3-reference-manifest-v1":
+                raise _template_v3.TemplateV3Error("external v3 coordinate schema mismatch")
+            if set(detailed.get("reports", {})) != {f"{i:02d}" for i in range(1, 12)}:
+                raise _template_v3.TemplateV3Error("external v3 coordinate report set mismatch")
+            for rid, report in detailed["reports"].items():
+                if not isinstance(report, dict):
+                    raise _template_v3.TemplateV3Error(
+                        f"invalid external v3 coordinate report metadata: {rid}"
+                    )
+                _template_v3._validate_page_size_pt(rid, report)
+            _template_v3._validate_controlled_span_sources(detailed)
         else:
-            detailed = json.loads(manifest_path.read_text(encoding="utf-8"))
             if detailed.get("schema") != "genoma-editorial-v3-reference-manifest-v2":
                 raise _template_v3.TemplateV3Error("generated v3 coordinate schema mismatch")
             if set(detailed.get("reports", {})) != {f"{i:02d}" for i in range(1, 12)}:
