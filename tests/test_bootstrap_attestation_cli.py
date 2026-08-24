@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -38,10 +39,29 @@ class BootstrapAttestationCliTests(unittest.TestCase):
 
     @staticmethod
     def _init_git_repo(root: Path) -> tuple[str, str]:
-        subprocess.run(["git", "init", "-q", str(root)], check=True)
+        hooks_dir = root / ".disabled-hooks"
+        template_dir = root / ".empty-template"
+        hooks_dir.mkdir()
+        template_dir.mkdir()
+        git_env = os.environ.copy()
+        git_env.update(
+            {
+                "GIT_CONFIG_NOSYSTEM": "1",
+                "GIT_CONFIG_GLOBAL": os.devnull,
+                "GIT_TEMPLATE_DIR": str(template_dir),
+                "GIT_CONFIG_COUNT": "3",
+                "GIT_CONFIG_KEY_0": "commit.gpgSign",
+                "GIT_CONFIG_VALUE_0": "false",
+                "GIT_CONFIG_KEY_1": "tag.gpgSign",
+                "GIT_CONFIG_VALUE_1": "false",
+                "GIT_CONFIG_KEY_2": "core.hooksPath",
+                "GIT_CONFIG_VALUE_2": str(hooks_dir),
+            }
+        )
+        subprocess.run(["git", "init", "-q", str(root)], check=True, env=git_env)
         tracked = root / "tracked.txt"
         tracked.write_text("fixture\n", encoding="utf-8")
-        subprocess.run(["git", "-C", str(root), "add", tracked.name], check=True)
+        subprocess.run(["git", "-C", str(root), "add", tracked.name], check=True, env=git_env)
         subprocess.run(
             [
                 "git",
@@ -57,18 +77,21 @@ class BootstrapAttestationCliTests(unittest.TestCase):
                 "fixture",
             ],
             check=True,
+            env=git_env,
         )
         commit_sha = subprocess.run(
             ["git", "-C", str(root), "rev-parse", "HEAD"],
             check=True,
             capture_output=True,
             text=True,
+            env=git_env,
         ).stdout.strip()
         blob_sha = subprocess.run(
             ["git", "-C", str(root), "hash-object", tracked.name],
             check=True,
             capture_output=True,
             text=True,
+            env=git_env,
         ).stdout.strip()
         return commit_sha, blob_sha
 
@@ -192,23 +215,33 @@ class BootstrapAttestationCliTests(unittest.TestCase):
         ):
             bootstrap_attestation.build_attestation(verified_at="invalido")
 
+    def test_build_attestation_rejects_naive_verified_at(self) -> None:
+        with self.assertRaisesRegex(
+            bootstrap_attestation.BootstrapAttestationError,
+            "explicit timezone offset",
+        ):
+            bootstrap_attestation.build_attestation(verified_at="2026-08-23T20:26:00")
+
     def test_verify_attestation_rejects_invalid_verified_at(self) -> None:
         source = bootstrap_attestation.ATTESTATION_PATH
-        payload = json.loads(source.read_text(encoding="utf-8"))
-        payload["verified_at"] = "invalido"
-        raw = bootstrap_attestation.serialize(payload)
-        with tempfile.TemporaryDirectory() as td:
-            target = Path(td) / source.name
-            target.write_text(raw, encoding="utf-8")
-            digest = hashlib.sha256(target.read_bytes()).hexdigest()
-            with (
-                patch.object(bootstrap_attestation, "EXPECTED_FILE_SHA256", digest),
-                self.assertRaisesRegex(
-                    bootstrap_attestation.BootstrapAttestationError,
-                    "verified_at must be a parseable ISO 8601 datetime",
-                ),
-            ):
-                bootstrap_attestation.verify_bootstrap_attestation(target)
+        original = json.loads(source.read_text(encoding="utf-8"))
+        for invalid in ("invalido", "2026-08-23T20:26:00"):
+            with self.subTest(invalid=invalid):
+                payload = dict(original)
+                payload["verified_at"] = invalid
+                raw = bootstrap_attestation.serialize(payload)
+                with tempfile.TemporaryDirectory() as td:
+                    target = Path(td) / source.name
+                    target.write_text(raw, encoding="utf-8")
+                    digest = hashlib.sha256(target.read_bytes()).hexdigest()
+                    with (
+                        patch.object(bootstrap_attestation, "EXPECTED_FILE_SHA256", digest),
+                        self.assertRaisesRegex(
+                            bootstrap_attestation.BootstrapAttestationError,
+                            "verified_at must be a parseable ISO 8601 datetime",
+                        ),
+                    ):
+                        bootstrap_attestation.verify_bootstrap_attestation(target)
 
 
 if __name__ == "__main__":
