@@ -339,32 +339,46 @@ function lockContention(error: unknown): boolean {
   return code === "EEXIST" || code === "ENOTEMPTY";
 }
 
-async function inspectClaimMutationLock(lockPath: string): Promise<ClaimMutationLockInspection> {
-  let entries: string[];
+async function listClaimMutationLockEntries(lockPath: string): Promise<string[] | undefined> {
   try {
-    entries = (await readdir(lockPath, { encoding: "utf8" })) as string[];
+    return (await readdir(lockPath, { encoding: "utf8" })) as string[];
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return { kind: "missing" };
+      return undefined;
     }
-    return { kind: "invalid" };
+    throw error;
   }
-  if (entries.length !== 1 || entries[0] !== CLAIM_MUTATION_LOCK_OWNER) {
-    return { kind: "invalid" };
-  }
+}
 
+function canonicalClaimMutationLockOwner(entries: string[]): boolean {
+  return entries.length === 1 && entries[0] === CLAIM_MUTATION_LOCK_OWNER;
+}
+
+async function parseClaimMutationLockOwner(ownerPath: string): Promise<ClaimMutationLockMetadata | undefined> {
+  try {
+    const raw = await readFile(ownerPath, "utf8");
+    return claimMutationLockMetadataSchema.parse(JSON.parse(raw));
+  } catch {
+    return undefined;
+  }
+}
+
+async function inspectClaimMutationLock(lockPath: string): Promise<ClaimMutationLockInspection> {
+  let entries: string[] | undefined;
+  try {
+    entries = await listClaimMutationLockEntries(lockPath);
+  } catch {
+    return { kind: "invalid" };
+  }
+  if (entries === undefined) {
+    return { kind: "missing" };
+  }
+  if (!canonicalClaimMutationLockOwner(entries)) {
+    return { kind: "invalid" };
+  }
   const ownerPath = path.join(lockPath, CLAIM_MUTATION_LOCK_OWNER);
-  let raw: string;
-  try {
-    raw = await readFile(ownerPath, "utf8");
-  } catch {
-    return { kind: "invalid" };
-  }
-  try {
-    return { kind: "owner", ownerPath, metadata: claimMutationLockMetadataSchema.parse(JSON.parse(raw)) };
-  } catch {
-    return { kind: "invalid" };
-  }
+  const metadata = await parseClaimMutationLockOwner(ownerPath);
+  return metadata === undefined ? { kind: "invalid" } : { kind: "owner", ownerPath, metadata };
 }
 
 async function cleanupFailedClaimMutationLock(lockPath: string, ownerPath: string): Promise<void> {
@@ -684,22 +698,34 @@ export async function releaseRequestClaim(claim: RequestClaim): Promise<void> {
   }
 }
 
+function assertClaimIdentity(
+  metadata: RequestClaimMetadata,
+  claimId: string,
+  requestId: string,
+  tool: string,
+): void {
+  if (metadata.claimId !== claimId || !claimMetadataMatches(metadata, requestId, tool)) {
+    throw new Error("request claim ownership was lost before audit persistence");
+  }
+}
+
+function assertClaimLeaseActive(metadata: RequestClaimMetadata): void {
+  if (leaseExpired(metadata.leaseExpiresAt)) {
+    throw new Error("request claim lease expired before audit persistence");
+  }
+}
+
 function assertClaimCanPersist(
   inspection: ClaimInspection,
   claim: RequestClaim,
   requestId: string,
   tool: string,
 ): void {
-  if (
-    inspection.kind !== "metadata" ||
-    inspection.value.claimId !== claim.claimId ||
-    !claimMetadataMatches(inspection.value, requestId, tool)
-  ) {
+  if (inspection.kind !== "metadata") {
     throw new Error("request claim ownership was lost before audit persistence");
   }
-  if (leaseExpired(inspection.value.leaseExpiresAt)) {
-    throw new Error("request claim lease expired before audit persistence");
-  }
+  assertClaimIdentity(inspection.value, claim.claimId, requestId, tool);
+  assertClaimLeaseActive(inspection.value);
 }
 
 async function persistOutcomeIfOwned(
