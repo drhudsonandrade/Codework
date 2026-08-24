@@ -167,10 +167,13 @@ class InterpretationRefusesUntestedLociTest(unittest.TestCase):
 
     def test_a_homozygous_reference_call_is_not_a_homozygous_pathogenic_variant(self):
         """The exact sentence the defect produced, on the exact shape that produced it."""
+        from array_pipeline.clinical_findings import SEM_INTERPRETACAO
+
         result = self._interpret({
             "classification": "OBSERVADO", "genotype": "TT", "scope": "CLINICO",
             "assessed_alleles": [], "assessed_allele": None, "basis": "genótipo chamado",
         })
+        self.assertEqual(result["kind"], SEM_INTERPRETACAO)
         self.assertNotIn("homozigoto para variante patogênica", result["basis"])
 
     def test_a_named_base_still_reaches_the_clinical_reading(self):
@@ -197,9 +200,10 @@ class InterpretationRefusesUntestedLociTest(unittest.TestCase):
 class ShippedRegistryTest(unittest.TestCase):
     def test_most_multi_allelic_targets_can_now_be_answered(self):
         """Measured, not assumed: the fix has to actually reach the shipped registry."""
-        targets = json.loads(
-            gzip.open(ROOT / "config/targets_merged_panel_1star.json.gz", "rt", encoding="utf-8").read()
-        )["targets"]
+        with gzip.open(
+            ROOT / "config/targets_merged_panel_1star.json.gz", "rt", encoding="utf-8"
+        ) as handle:
+            targets = json.load(handle)["targets"]
         multi = [t for t in targets if not t.get("assessed_allele") and t.get("clinvar_alternate_alleles")]
         blank = [t for t in targets if not assessed_bases(t)]
         self.assertGreater(len(multi), 5_000)
