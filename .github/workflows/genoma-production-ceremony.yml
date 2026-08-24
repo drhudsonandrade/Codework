@@ -13,6 +13,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
@@ -27,6 +29,14 @@ jobs:
           canonical="$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
           test "$(stat -c '%a' "$canonical")" = 444
           echo 'ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580  '"$canonical" | sha256sum -c -
+      - name: Generate fresh ruleset bootstrap attestation for exact main SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          verified_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          python3 -m scripts.bootstrap_attestation --write \
+            --verified-at "$verified_at" \
+            --output production-evidence/bootstrap-project-v3.4.json
       - name: Build exact policy image for this commit
         run: |
           docker build --file policy_engine/Dockerfile --tag genoma-policy-live:${{ github.sha }} .
@@ -69,18 +79,21 @@ jobs:
         run: |
           python3 scripts/run_live_post_deployment_smoke.py \
             --base-url http://127.0.0.1:8787 \
-            --bootstrap-attestation deploy/attestations/bootstrap-project-v3.4.json \
+            --bootstrap-attestation production-evidence/bootstrap-project-v3.4.json \
+            --expected-source-commit "$GITHUB_SHA" \
+            --project-instructions-source deploy/attestations/project-instructions-v3.4.txt \
+            --project-instructions-attestation deploy/attestations/project-instructions-v3.4.json \
             --deployment-id "github-${GITHUB_RUN_ID}-${GITHUB_SHA}" \
             --output production-evidence/live-section-260.json
       - name: Hash complete evidence bundle and verify result
         run: |
-          jq -e '.passed == 15 and .total == 15 and .critical_failures == 0 and .post_deployment_status == "PASS"' production-evidence/live-section-260.json >/dev/null
+          jq -e '.passed == 15 and .total == 15 and .critical_failures == 0 and .project_bootstrap_installed == true and .post_deployment_status == "PASS"' production-evidence/live-section-260.json >/dev/null
           (cd production-evidence && sha256sum * | sort) > production-evidence.sha256
           python3 - <<'PY'
           import json
           from pathlib import Path
           p=json.loads(Path('production-evidence/live-section-260.json').read_text())
-          print(f"POST-DEPLOYMENT {p['post_deployment_status']}: {p['passed']}/{p['total']}, critical_failures={p['critical_failures']}")
+          print(f"POST-DEPLOYMENT {p['post_deployment_status']}: {p['passed']}/{p['total']}, critical_failures={p['critical_failures']}, project_bootstrap_installed={p['project_bootstrap_installed']}")
           PY
       - name: Stop live instance after evidence capture
         if: always()
