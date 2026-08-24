@@ -340,9 +340,11 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         self.assertIn("configurados a partir de release checksum-locked", result.stdout)
 
     def test_already_installed_plugin_is_not_added_again(self) -> None:
-        result, marker_created, calls = self._run_setup_with_fakes(already_installed=True)
+        result, _marker_created, calls = self._run_setup_with_fakes(already_installed=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertTrue(marker_created)
+        self.assertIn("plugin marketplace list --json", calls)
+        self.assertIn("plugin list --marketplace codework-codex --json --available", calls)
+        self.assertIn("plugin list --marketplace codework-codex --json", calls)
         self.assertNotIn("plugin add coderabbit@codework-codex --json", calls)
         self.assertIn("configurados a partir de release checksum-locked", result.stdout)
 
