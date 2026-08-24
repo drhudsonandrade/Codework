@@ -98,7 +98,26 @@ def merge(paths: list[Path]) -> dict[str, Any]:
 
             old = str(existing.get("assessed_allele") or "").strip().upper()
             new = str(incoming.get("assessed_allele") or "").strip().upper()
-            if old and new and old != new:
+            recorded = {
+                str(value).strip().upper()
+                for value in (existing.get("assessed_allele_conflict") or [])
+                if str(value).strip()
+            }
+            if new and recorded:
+                recorded.add(new)
+                values = sorted(recorded)
+                existing["assessed_allele_conflict"] = values
+                existing["assessed_allele_reason"] = (
+                    f"registros divergem sobre o alelo avaliado deste locus "
+                    f"({', '.join(values)}, em {', '.join(origin[rsid])}); escolher um seria "
+                    "arbitrar um conflito, e o locus não admite NÃO DETECTADO"
+                )
+                for conflict in conflicts:
+                    if conflict["rsid"] == rsid:
+                        conflict["assessed_alleles"] = values
+                        conflict["registries"] = list(origin[rsid])
+                        break
+            elif old and new and old != new:
                 conflicts.append(
                     {
                         "rsid": rsid,
