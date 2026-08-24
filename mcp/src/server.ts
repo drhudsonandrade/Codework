@@ -59,8 +59,6 @@ const GROUP_TERMINATION_GRACE_MS = 5_000;
 /** A claim may be recovered only after every supported tool budget has expired. */
 const REQUEST_CLAIM_STALE_MS =
   Math.max(...Object.values(TOOL_TIMEOUTS_MS)) + GROUP_TERMINATION_GRACE_MS + MINUTE_MS;
-const CLAIM_LOCK_RETRY_MS = 10;
-const CLAIM_LOCK_WAIT_MS = 2_000;
 /** POSIX only: a negative pid signals the whole process group instead of one process. */
 const USE_PROCESS_GROUP = process.platform !== "win32";
 
@@ -297,23 +295,14 @@ function isRecoverableStaleClaim(
   );
 }
 
-const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-
 async function acquireClaimMutationLock(lockPath: string): Promise<void> {
-  const deadline = Date.now() + CLAIM_LOCK_WAIT_MS;
-  while (true) {
-    try {
-      await mkdir(lockPath, { mode: 0o700 });
-      return;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-        throw error;
-      }
-      if (Date.now() >= deadline) {
-        throw new Error("request claim coordination lock is busy");
-      }
-      await delay(CLAIM_LOCK_RETRY_MS);
+  try {
+    await mkdir(lockPath, { mode: 0o700 });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      throw new Error("request id is already in progress");
     }
+    throw error;
   }
 }
 
@@ -373,18 +362,21 @@ async function assertNoCompletedAudit(options: GenomeServerOptions, requestId: s
   throw new Error("request id completed while another caller held its claim");
 }
 
-async function removeRecoverableStaleClaim(
-  claimPath: string,
+function staleClaimNeedsRemoval(
   inspection: ClaimInspection,
   requestId: string,
   tool: string,
-): Promise<void> {
+): boolean {
   if (inspection.kind === "missing") {
-    return;
+    return false;
   }
   if (!isRecoverableStaleClaim(inspection, requestId, tool)) {
     throw new Error("request id is already in progress");
   }
+  return true;
+}
+
+async function unlinkStaleClaim(claimPath: string): Promise<void> {
   try {
     await unlink(claimPath);
   } catch (error) {
@@ -392,6 +384,18 @@ async function removeRecoverableStaleClaim(
       throw new Error("stale request claim could not be recovered");
     }
   }
+}
+
+async function removeRecoverableStaleClaim(
+  claimPath: string,
+  inspection: ClaimInspection,
+  requestId: string,
+  tool: string,
+): Promise<void> {
+  if (!staleClaimNeedsRemoval(inspection, requestId, tool)) {
+    return;
+  }
+  await unlinkStaleClaim(claimPath);
 }
 
 async function acquireRequestClaim(
@@ -424,6 +428,30 @@ function logClaimOwnershipChange(): void {
   console.warn("request claim release skipped because ownership changed or metadata is invalid");
 }
 
+function inspectionBelongsToClaim(inspection: ClaimInspection, claimId: string): boolean {
+  return inspection.kind === "metadata" && inspection.value.claimId === claimId;
+}
+
+async function unlinkReleasedClaim(claimPath: string): Promise<void> {
+  try {
+    await unlink(claimPath);
+  } catch (error) {
+    logClaimReleaseFailure("unlink", error);
+  }
+}
+
+async function releaseOwnedClaimPath(claim: RequestClaim): Promise<void> {
+  const inspection = await inspectRequestClaim(claim.claimPath);
+  if (inspection.kind === "missing") {
+    return;
+  }
+  if (!inspectionBelongsToClaim(inspection, claim.claimId)) {
+    logClaimOwnershipChange();
+    return;
+  }
+  await unlinkReleasedClaim(claim.claimPath);
+}
+
 /** @internal Exported for deterministic cleanup tests. */
 export async function releaseRequestClaim(claim: RequestClaim): Promise<void> {
   try {
@@ -433,21 +461,7 @@ export async function releaseRequestClaim(claim: RequestClaim): Promise<void> {
   }
 
   try {
-    await withClaimMutationLock(claim.claimPath, async () => {
-      const inspection = await inspectRequestClaim(claim.claimPath);
-      if (inspection.kind === "missing") {
-        return;
-      }
-      if (inspection.kind !== "metadata" || inspection.value.claimId !== claim.claimId) {
-        logClaimOwnershipChange();
-        return;
-      }
-      try {
-        await unlink(claim.claimPath);
-      } catch (error) {
-        logClaimReleaseFailure("unlink", error);
-      }
-    });
+    await withClaimMutationLock(claim.claimPath, () => releaseOwnedClaimPath(claim));
   } catch (error) {
     logClaimReleaseFailure("lock", error);
   }
