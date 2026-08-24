@@ -16,6 +16,7 @@ from reporting.section_attestations import (
     validate_curation,
 )
 from reporting.wgs_qc_record import UNAVAILABLE, audit_summary
+from tests.attestations import wgs_qc_record
 
 
 class CaseDossierExampleTest(unittest.TestCase):
@@ -34,6 +35,15 @@ class WgsQcSummaryValidationTest(unittest.TestCase):
     def test_invalid_record_cannot_claim_verified(self):
         summary = audit_summary({"schema": "wrong"})
         self.assertEqual(summary["status"], UNAVAILABLE)
+        self.assertTrue(summary["problems"])
+
+
+    def test_invalid_metric_is_not_counted_as_measured(self):
+        record = wgs_qc_record(case_id="CASE")
+        record["metrics"]["mean_depth"] = {"status": "DESCONHECIDO"}
+        summary = audit_summary(record)
+        self.assertEqual(summary["status"], UNAVAILABLE)
+        self.assertNotIn("mean_depth", summary["measured"])
         self.assertTrue(summary["problems"])
 
 
