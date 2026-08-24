@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from array_pipeline.qc import (
+    UNRESOLVED_OVERLAP_STATUSES,
     detect_schema,
     _canonical_gt,
     _read_header_and_metadata,
@@ -41,6 +42,7 @@ SCHEMA = "genoma-array-provenance-probe-v1"
 MARKERS_SCHEMA = "genoma-array-provenance-markers-v1"
 
 COMPLEMENT = {"A": "T", "T": "A", "C": "G", "G": "C"}
+VALID_ALLELES = frozenset(COMPLEMENT)
 
 #: Minimum markers that must agree before a build or strand is declared. One matching
 #: marker is a coincidence; the threshold makes the conclusion rest on a panel.
@@ -64,17 +66,24 @@ def load_markers(path: Path) -> dict[str, Any]:
     if not isinstance(markers, list) or not markers:
         raise ProvenanceProbeError("marker table must contain markers")
     for marker in markers:
+        rsid = str(marker.get("rsid") or "").strip()
         for build in ("grch37", "grch38"):
             spec = marker.get(build)
             if not isinstance(spec, dict) or "chromosome" not in spec or "position" not in spec:
-                raise ProvenanceProbeError(f"{marker.get('rsid')}: missing {build} coordinates")
+                raise ProvenanceProbeError(f"{rsid}: missing {build} coordinates")
         alleles = marker.get("plus_alleles")
         if not isinstance(alleles, list) or len(alleles) != 2:
-            raise ProvenanceProbeError(f"{marker.get('rsid')}: plus_alleles must list two alleles")
-        if set(alleles) == {COMPLEMENT[alleles[0]], COMPLEMENT[alleles[1]]} and not marker.get("palindromic"):
+            raise ProvenanceProbeError(f"{rsid}: plus_alleles must list two alleles")
+        normalized = [str(allele or "").strip().upper() for allele in alleles]
+        if any(allele not in VALID_ALLELES for allele in normalized):
+            raise ProvenanceProbeError(
+                f"{rsid}: plus_alleles must contain only A, C, G or T; got {alleles!r}"
+            )
+        marker["plus_alleles"] = normalized
+        if set(normalized) == {COMPLEMENT[normalized[0]], COMPLEMENT[normalized[1]]} and not marker.get("palindromic"):
             # A/T and C/G are their own complement pair; a table that failed to flag one
             # would silently contribute a meaningless vote to the strand verdict.
-            raise ProvenanceProbeError(f"{marker.get('rsid')}: palindromic pair must be flagged")
+            raise ProvenanceProbeError(f"{rsid}: palindromic pair must be flagged")
     return payload
 
 
@@ -82,6 +91,8 @@ def _read_markers_from_array(path: Path, wanted: set[str]) -> dict[str, dict[str
     import csv
 
     found: dict[str, dict[str, str]] = {}
+    seen: set[str] = set()
+    duplicates: set[str] = set()
     fh, _ = _text_stream(path)
     try:
         header, _meta = _read_header_and_metadata(fh)
@@ -94,15 +105,26 @@ def _read_markers_from_array(path: Path, wanted: set[str]) -> dict[str, dict[str
         )
         for row in csv.DictReader(fh, fieldnames=header):
             rsid = (row.get("RSID") or "").strip().lower()
-            if rsid in wanted and rsid not in found:
-                found[rsid] = {
-                    "chromosome": (row.get("CHROMOSOME") or "").strip().upper(),
-                    "position": (row.get("POSITION") or "").strip(),
-                    "genotype": _canonical_gt(row.get(genotype_column)) or "",
-                    "status": (row.get("STATUS") or "").strip(),
-                }
+            if rsid not in wanted:
+                continue
+            if rsid in seen:
+                duplicates.add(rsid)
+                found.pop(rsid, None)
+                continue
+            seen.add(rsid)
+            status = (row.get("STATUS") or "").strip()
+            if status in UNRESOLVED_OVERLAP_STATUSES:
+                continue
+            found[rsid] = {
+                "chromosome": (row.get("CHROMOSOME") or "").strip().upper(),
+                "position": (row.get("POSITION") or "").strip(),
+                "genotype": _canonical_gt(row.get(genotype_column)) or "",
+                "status": status,
+            }
     finally:
         fh.close()
+    for rsid in duplicates:
+        found.pop(rsid, None)
     return found
 
 
