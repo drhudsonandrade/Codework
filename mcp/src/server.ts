@@ -62,6 +62,54 @@ const REQUEST_CLAIM_STALE_MS =
 /** POSIX only: a negative pid signals the whole process group instead of one process. */
 const USE_PROCESS_GROUP = process.platform !== "win32";
 
+type SpawnedChild = ReturnType<typeof spawn>;
+
+function terminateProcessGroup(child: SpawnedChild, signal: NodeJS.Signals): void {
+  const pid = child.pid;
+  if (pid === undefined) {
+    return;
+  }
+  try {
+    process.kill(USE_PROCESS_GROUP ? -pid : pid, signal);
+  } catch {
+    // The group has already exited; nothing left to signal.
+  }
+}
+
+function scriptExitError(code: number | null, stderrTail: Buffer): Error {
+  const message = `fixed script exited with code ${code}`;
+  const detail = stderrTail.toString("utf8").trim();
+  if (!detail) {
+    return new Error(message);
+  }
+  return new Error(`${message}: ${sanitizeError(detail)}`);
+}
+
+function assertScriptOutcome(
+  code: number | null,
+  timedOut: boolean,
+  overflowed: boolean,
+  stderrTail: Buffer,
+  timeout: number,
+): void {
+  if (timedOut) {
+    throw new Error(`fixed script timed out after ${timeout}ms and its process group was terminated`);
+  }
+  if (overflowed) {
+    throw new Error(`fixed script exceeded the ${SCRIPT_OUTPUT_MAX_BYTES} byte output budget`);
+  }
+  if (code !== 0) {
+    throw scriptExitError(code, stderrTail);
+  }
+}
+
+function clearScriptTimers(timeoutTimer: NodeJS.Timeout, killTimer: NodeJS.Timeout | undefined): void {
+  clearTimeout(timeoutTimer);
+  if (killTimer !== undefined) {
+    clearTimeout(killTimer);
+  }
+}
+
 /**
  * @internal Exported so the timeout containment contract can be tested directly.
  *
@@ -82,18 +130,7 @@ export async function runFixedScript(
     detached: USE_PROCESS_GROUP,
     stdio: ["ignore", "pipe", "pipe"],
   });
-
-  const terminate = (signal: NodeJS.Signals): void => {
-    const pid = child.pid;
-    if (pid === undefined) {
-      return;
-    }
-    try {
-      process.kill(USE_PROCESS_GROUP ? -pid : pid, signal);
-    } catch {
-      // The group has already exited; nothing left to signal.
-    }
-  };
+  const terminate = (signal: NodeJS.Signals): void => terminateProcessGroup(child, signal);
 
   let stdout = "";
   let stdoutBytes = 0;
@@ -129,26 +166,10 @@ export async function runFixedScript(
       child.once("error", reject);
       child.once("close", (exitCode) => resolve(exitCode));
     });
-    if (timedOut) {
-      throw new Error(`fixed script timed out after ${timeout}ms and its process group was terminated`);
-    }
-    if (overflowed) {
-      throw new Error(`fixed script exceeded the ${SCRIPT_OUTPUT_MAX_BYTES} byte output budget`);
-    }
-    if (code !== 0) {
-      const detail = stderrTail.toString("utf8").trim();
-      throw new Error(
-        detail
-          ? `fixed script exited with code ${code}: ${sanitizeError(detail)}`
-          : `fixed script exited with code ${code}`,
-      );
-    }
+    assertScriptOutcome(code, timedOut, overflowed, stderrTail, timeout);
     return stdout.trim();
   } finally {
-    clearTimeout(timeoutTimer);
-    if (killTimer !== undefined) {
-      clearTimeout(killTimer);
-    }
+    clearScriptTimers(timeoutTimer, killTimer);
     terminate("SIGKILL");
   }
 }
@@ -157,6 +178,8 @@ type PriorResult<T> =
   | { kind: "missing" }
   | { kind: "pass"; value: T }
   | { kind: "fail"; error: string };
+
+type ReplayDecision<T> = { kind: "continue" } | { kind: "return"; value: T };
 
 async function loadAuditRecord(auditRoot: string, requestId: string): Promise<AuditRecord | undefined> {
   try {
@@ -190,6 +213,16 @@ function decodePriorResult<T>(existing: AuditRecord | undefined, tool: string): 
   return decodeCompletedResult<T>(existing);
 }
 
+function replayPriorResult<T>(prior: PriorResult<T>): ReplayDecision<T> {
+  if (prior.kind === "pass") {
+    return { kind: "return", value: prior.value };
+  }
+  if (prior.kind === "fail") {
+    throw new Error(prior.error);
+  }
+  return { kind: "continue" };
+}
+
 async function persistOutcome(
   options: GenomeServerOptions,
   record: AuditRecord,
@@ -208,39 +241,104 @@ type RequestClaimMetadata = {
   claimedAt: string;
 };
 
-async function isRecoverableStaleClaim(
-  claimPath: string,
-  requestId: string,
-  tool: string,
-): Promise<boolean> {
+type ClaimInspection =
+  | { kind: "missing" }
+  | { kind: "invalid" }
+  | { kind: "metadata"; value: RequestClaimMetadata };
+
+async function inspectRequestClaim(claimPath: string): Promise<ClaimInspection> {
   let raw: string;
   try {
     raw = await readFile(claimPath, "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return true;
+      return { kind: "missing" };
     }
-    return false;
+    return { kind: "invalid" };
   }
-
-  let metadata: RequestClaimMetadata;
   try {
-    metadata = JSON.parse(raw) as RequestClaimMetadata;
+    return { kind: "metadata", value: JSON.parse(raw) as RequestClaimMetadata };
   } catch {
+    return { kind: "invalid" };
+  }
+}
+
+function claimMetadataMatches(metadata: RequestClaimMetadata, requestId: string, tool: string): boolean {
+  return (
+    metadata.requestId === requestId &&
+    metadata.tool === tool &&
+    typeof metadata.claimedAt === "string"
+  );
+}
+
+function claimTimestampIsStale(claimedAt: string): boolean {
+  const parsed = Date.parse(claimedAt);
+  return Number.isFinite(parsed) && Date.now() - parsed > REQUEST_CLAIM_STALE_MS;
+}
+
+async function isRecoverableStaleClaim(
+  claimPath: string,
+  requestId: string,
+  tool: string,
+): Promise<boolean> {
+  const inspection = await inspectRequestClaim(claimPath);
+  if (inspection.kind === "missing") {
+    return true;
+  }
+  if (inspection.kind !== "metadata") {
     return false;
   }
-  if (
-    metadata.requestId !== requestId ||
-    metadata.tool !== tool ||
-    typeof metadata.claimedAt !== "string"
-  ) {
-    return false;
+  return claimMetadataMatches(inspection.value, requestId, tool) && claimTimestampIsStale(inspection.value.claimedAt);
+}
+
+async function createRequestClaim(claimPath: string, requestId: string, tool: string): Promise<RequestClaim> {
+  const handle = await open(claimPath, "wx", 0o600);
+  try {
+    await handle.writeFile(
+      `${JSON.stringify({ requestId, tool, claimedAt: new Date().toISOString() })}\n`,
+      "utf8",
+    );
+  } catch (error) {
+    await releaseRequestClaim({ claimPath, handle });
+    throw error;
   }
-  const claimedAt = Date.parse(metadata.claimedAt);
-  if (!Number.isFinite(claimedAt)) {
-    return false;
+  return { claimPath, handle };
+}
+
+async function assertNoCompletedAudit(options: GenomeServerOptions, requestId: string, tool: string): Promise<void> {
+  const completed = await loadAuditRecord(options.auditRoot, requestId);
+  if (!completed) {
+    return;
   }
-  return Date.now() - claimedAt > REQUEST_CLAIM_STALE_MS;
+  assertMatchingTool(completed, tool);
+  const prior = decodeCompletedResult<unknown>(completed);
+  if (prior.kind === "fail") {
+    throw new Error(prior.error);
+  }
+  throw new Error("request id completed while another caller held its claim");
+}
+
+async function removeRecoverableStaleClaim(claimPath: string, requestId: string, tool: string): Promise<void> {
+  if (!(await isRecoverableStaleClaim(claimPath, requestId, tool))) {
+    throw new Error("request id is already in progress");
+  }
+  try {
+    await unlink(claimPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw new Error("stale request claim could not be recovered");
+    }
+  }
+}
+
+async function recoverClaimCollision(
+  options: GenomeServerOptions,
+  claimPath: string,
+  requestId: string,
+  tool: string,
+): Promise<void> {
+  await assertNoCompletedAudit(options, requestId, tool);
+  await removeRecoverableStaleClaim(claimPath, requestId, tool);
 }
 
 async function acquireRequestClaim(
@@ -255,40 +353,12 @@ async function acquireRequestClaim(
 
   while (true) {
     try {
-      const handle = await open(claimPath, "wx", 0o600);
-      try {
-        await handle.writeFile(
-          `${JSON.stringify({ requestId, tool, claimedAt: new Date().toISOString() })}\n`,
-          "utf8",
-        );
-      } catch (error) {
-        await releaseRequestClaim({ claimPath, handle });
-        throw error;
-      }
-      return { claimPath, handle };
+      return await createRequestClaim(claimPath, requestId, tool);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
         throw error;
       }
-      const completed = await loadAuditRecord(options.auditRoot, requestId);
-      if (completed) {
-        assertMatchingTool(completed, tool);
-        const prior = decodeCompletedResult<unknown>(completed);
-        if (prior.kind === "fail") {
-          throw new Error(prior.error);
-        }
-        throw new Error("request id completed while another caller held its claim");
-      }
-      if (!(await isRecoverableStaleClaim(claimPath, requestId, tool))) {
-        throw new Error("request id is already in progress");
-      }
-      try {
-        await unlink(claimPath);
-      } catch (unlinkError) {
-        if ((unlinkError as NodeJS.ErrnoException).code !== "ENOENT") {
-          throw new Error("stale request claim could not be recovered");
-        }
-      }
+      await recoverClaimCollision(options, claimPath, requestId, tool);
       // Retry O_EXCL acquisition after removing a demonstrably stale claim. If another
       // caller wins the race, this loop observes its new claim and fails closed as active.
     }
@@ -317,6 +387,44 @@ export async function releaseRequestClaim(claim: RequestClaim): Promise<void> {
   }
 }
 
+async function executeAuditedOperation<T>(
+  options: GenomeServerOptions,
+  requestId: string,
+  tool: string,
+  args: Record<string, unknown>,
+  operation: () => Promise<T>,
+  startedAt: string,
+  started: number,
+): Promise<T> {
+  try {
+    const result = await operation();
+    const record: AuditRecord = {
+      requestId,
+      tool,
+      arguments: sanitizeToolArguments({ ...args, requestId }),
+      status: "PASS",
+      startedAt,
+      durationMs: Date.now() - started,
+      result,
+    };
+    await persistOutcome(options, record);
+    return result;
+  } catch (error) {
+    const sanitized = sanitizeError(error);
+    const record: AuditRecord = {
+      requestId,
+      tool,
+      arguments: sanitizeToolArguments({ ...args, requestId }),
+      status: "FAIL",
+      startedAt,
+      durationMs: Date.now() - started,
+      error: sanitized,
+    };
+    await persistOutcome(options, record);
+    throw new Error(sanitized);
+  }
+}
+
 /** @internal Exported for deterministic idempotency and redaction tests. */
 export async function runAudited<T>(
   options: GenomeServerOptions,
@@ -325,13 +433,11 @@ export async function runAudited<T>(
   operation: () => Promise<T>,
 ): Promise<T> {
   const requestId = String(args.requestId);
-  const existing = await loadAuditRecord(options.auditRoot, requestId);
-  const prior = decodePriorResult<T>(existing, tool);
-  if (prior.kind === "pass") {
+  const prior = replayPriorResult(
+    decodePriorResult<T>(await loadAuditRecord(options.auditRoot, requestId), tool),
+  );
+  if (prior.kind === "return") {
     return prior.value;
-  }
-  if (prior.kind === "fail") {
-    throw new Error(prior.error);
   }
 
   // O_EXCL establishes ownership before the operation begins. Concurrent callers with
@@ -340,44 +446,13 @@ export async function runAudited<T>(
   const startedAt = new Date().toISOString();
   const started = Date.now();
   try {
-    const afterClaim = decodePriorResult<T>(
-      await loadAuditRecord(options.auditRoot, requestId),
-      tool,
+    const afterClaim = replayPriorResult(
+      decodePriorResult<T>(await loadAuditRecord(options.auditRoot, requestId), tool),
     );
-    if (afterClaim.kind === "pass") {
+    if (afterClaim.kind === "return") {
       return afterClaim.value;
     }
-    if (afterClaim.kind === "fail") {
-      throw new Error(afterClaim.error);
-    }
-
-    try {
-      const result = await operation();
-      const record: AuditRecord = {
-        requestId,
-        tool,
-        arguments: sanitizeToolArguments({ ...args, requestId }),
-        status: "PASS",
-        startedAt,
-        durationMs: Date.now() - started,
-        result,
-      };
-      await persistOutcome(options, record);
-      return result;
-    } catch (error) {
-      const sanitized = sanitizeError(error);
-      const record: AuditRecord = {
-        requestId,
-        tool,
-        arguments: sanitizeToolArguments({ ...args, requestId }),
-        status: "FAIL",
-        startedAt,
-        durationMs: Date.now() - started,
-        error: sanitized,
-      };
-      await persistOutcome(options, record);
-      throw new Error(sanitized);
-    }
+    return await executeAuditedOperation(options, requestId, tool, args, operation, startedAt, started);
   } finally {
     await releaseRequestClaim(claim);
   }
