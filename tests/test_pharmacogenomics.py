@@ -498,6 +498,14 @@ class AnesthesiaScopeTest(unittest.TestCase):
         self.assertIn("succinylcholine", text)
         self.assertIn("não libera nem contraindica", text)
 
+    def test_one_page_names_a_refused_compiled_passport(self):
+        from scripts.build_one_page_summary import _pgx_line
+
+        line = _pgx_line({"operational_status": "NÃO DISPONÍVEL"})
+        self.assertIn("compilado, porém recusado", line)
+        self.assertNotIn("nenhum passaporte", line)
+        self.assertIn("dados PGx", line)
+
     def test_the_one_page_summary_never_prints_the_status_word_alone(self):
         from scripts.build_one_page_summary import _pgx_line
 
