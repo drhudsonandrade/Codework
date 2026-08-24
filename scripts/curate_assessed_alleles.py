@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import time
 import urllib.error
@@ -250,9 +251,13 @@ def curate_target(rsid: str, pgx_registry: dict[str, Any] | None = None) -> dict
         if inserted == reference or inserted not in BASES:
             continue  # the reference-identity record, or an indel
         classification = _classification(record)
-        lowered = classification.lower()
-        asserts = any(term in lowered for term in ASSERTING) and not all(
-            term in lowered for term in NON_ASSERTING
+        classification_terms = {
+            term.strip()
+            for term in re.split(r"[;/|]", classification.lower())
+            if term.strip()
+        }
+        asserts = bool(classification_terms.intersection(ASSERTING)) and not bool(
+            classification_terms.intersection(NON_ASSERTING)
         )
         if record.get("uid"):
             matched_uids.append(str(record["uid"]))
@@ -495,6 +500,8 @@ def main() -> int:
         for target in registry["targets"]:
             record = by_rsid.get(str(target["rsid"]).lower())
             if record and record["assessed_allele"]:
+                target.pop("assessed_allele_status", None)
+                target.pop("assessed_allele_reason", None)
                 target["assessed_allele"] = record["assessed_allele"]
                 target["assessed_allele_source"] = record.get("source", "ClinVar")
                 target["assessed_allele_evidence"] = out.name
