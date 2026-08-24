@@ -383,9 +383,12 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         self.assertNotIn("configurados a partir de release checksum-locked", result.stdout)
 
     def test_disabled_installed_plugin_is_rejected(self) -> None:
-        result, marker_created, _calls = self._run_setup_with_fakes(installed_enabled=False)
+        result, _marker_created, calls = self._run_setup_with_fakes(
+            already_installed=True,
+            installed_enabled=False,
+        )
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertTrue(marker_created)
+        self.assertNotIn("plugin add coderabbit@codework-codex --json", calls)
         self.assertIn("não foi confirmado como instalado, habilitado", result.stderr)
         self.assertNotIn("configurados a partir de release checksum-locked", result.stdout)
 
