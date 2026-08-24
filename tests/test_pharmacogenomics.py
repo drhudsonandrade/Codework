@@ -637,7 +637,14 @@ class ConditionalLayerReachesTheReportTest(unittest.TestCase):
 
 
 class ReportIntegrationTest(unittest.TestCase):
-    def _payload(self, root: Path, rows: str = CLEAN_ROWS, registry: dict | None = REGISTRY):
+    def _payload(
+        self,
+        root: Path,
+        rows: str = CLEAN_ROWS,
+        registry: dict | None = REGISTRY,
+        *,
+        prepare_release: bool = True,
+    ):
         from scripts.build_pharmacogenomic_report import build_payload
 
         matrix_path, passport, _ = _artifacts(root, rows, registry=registry)
@@ -650,9 +657,21 @@ class ReportIntegrationTest(unittest.TestCase):
         # emits a curated payload whose ruleset digest and placeholder result must be
         # supplied by the release assembly, so model those separately verified release
         # prerequisites without changing the compiler's fail-closed defaults.
-        payload["ruleset"] = normative.ruleset_block()
-        payload["publication_gate"]["placeholders_resolved"] = True
+        if prepare_release:
+            payload["ruleset"] = normative.ruleset_block()
+            payload["publication_gate"]["placeholders_resolved"] = True
         return payload, passport
+
+    def test_unassembled_payload_keeps_release_prerequisites_fail_closed(self):
+        from reporting.engine import ReportReleaseError, render_document
+
+        with tempfile.TemporaryDirectory() as td:
+            payload, _ = self._payload(Path(td), prepare_release=False)
+            with self.assertRaises(ReportReleaseError) as ctx:
+                render_document("06", payload, mode="FINAL")
+        message = str(ctx.exception)
+        self.assertIn("ruleset:sha256", message)
+        self.assertIn("publication_gate:placeholders_resolved", message)
 
     def test_the_compiled_payload_passes_the_provenance_gate(self):
         from reporting.provenance import provenance_blockers
