@@ -131,11 +131,15 @@ def _fetch(url: str, *, attempts: int = 4) -> bytes:
         try:
             with urllib.request.urlopen(request, timeout=1800) as response:
                 return response.read()
+        except urllib.error.HTTPError as exc:
+            last = exc
+            if exc.code != 429 and not 500 <= exc.code < 600:
+                break
+            if attempt < attempts - 1:
+                time.sleep(2**attempt)
         except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
             last = exc
             if attempt < attempts - 1:
-                import time
-
                 time.sleep(2**attempt)
     raise RuntimeError(f"download failed for {url}: {last}")
 
