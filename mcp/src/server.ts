@@ -449,6 +449,24 @@ async function cleanupStagedClaimMutationLock(stagingPath: string, ownerPath: st
 }
 
 /**
+ * Marks a failure of the publish step alone. Only the publish can lose a race for the lock
+ * path, so only its errno may be read as contention; a staging failure keeps its own error.
+ */
+class ClaimMutationLockPublishError extends Error {
+  constructor(cause: unknown) {
+    super("request claim coordination lock could not be published", { cause });
+  }
+}
+
+async function publishStagedClaimMutationLock(stagingPath: string, lockPath: string): Promise<void> {
+  try {
+    await rename(stagingPath, lockPath);
+  } catch (error) {
+    throw new ClaimMutationLockPublishError(error);
+  }
+}
+
+/**
  * Publishes the lock in a single step. The owner file is written inside a uniquely named
  * staging directory, so the shared lock path only ever appears with its owner already in
  * it and a crash before the rename leaves nothing there to recover. POSIX rename replaces
@@ -472,7 +490,7 @@ async function createClaimMutationLock(lockPath: string): Promise<ClaimMutationL
       flag: "wx",
       mode: 0o600,
     });
-    await rename(stagingPath, lockPath);
+    await publishStagedClaimMutationLock(stagingPath, lockPath);
   } catch (error) {
     await cleanupStagedClaimMutationLock(stagingPath, stagingOwnerPath);
     throw error;
@@ -591,10 +609,15 @@ async function tryCreateClaimMutationLock(lockPath: string): Promise<ClaimMutati
   try {
     return await createClaimMutationLock(lockPath);
   } catch (error) {
-    if (lockContention(error)) {
+    if (!(error instanceof ClaimMutationLockPublishError)) {
+      // A staging failure says nothing about the lock: it keeps its own errno rather than
+      // being reported as a request id that is already in progress.
+      throw error;
+    }
+    if (lockContention(error.cause)) {
       return undefined;
     }
-    throw error;
+    throw error.cause;
   }
 }
 

@@ -523,6 +523,33 @@ test("a concurrent observer never sees the lock path without its owner", async (
   assert.deepEqual(await readdir(dir), [], "release must leave the claim directory clean");
 });
 
+test("a staging failure keeps its own errno instead of reading as lock contention", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-staging-"));
+  const occupied = path.join(dir, "occupied");
+  await writeFile(occupied, "not a directory\n", { mode: 0o600 });
+  // Staging is created next to the claim, so a file where its parent should be fails the
+  // mkdir with ENOTDIR — an errno the publish step would legitimately read as contention.
+  const claimPath = path.join(occupied, "claim");
+  let executions = 0;
+
+  await assert.rejects(
+    withClaimMutationLock(claimPath, async () => {
+      executions += 1;
+      return "unexpected";
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal(
+        (error as NodeJS.ErrnoException).code,
+        "ENOTDIR",
+        "a failure to stage the lock must surface as itself, not as a busy or invalid lock",
+      );
+      return true;
+    },
+  );
+  assert.equal(executions, 0);
+});
+
 test("recovery clears an ownerless lock directory without touching a live one", async () => {
   // On POSIX the staged rename absorbs an empty lock directory before recovery is ever
   // consulted; on Windows that rename is refused, and acquisition falls back to exactly
