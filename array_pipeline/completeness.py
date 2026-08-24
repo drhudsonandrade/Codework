@@ -289,6 +289,14 @@ def build_completeness_matrix(
                 ) or "sem genótipo válido"
                 seen[rsid] = (schema, marked)
                 continue
+            if len(genotypes) == 1:
+                valid_genotype = next(iter(genotypes))
+                schema, first = next(
+                    (row_schema, row)
+                    for row_schema, row in rows
+                    if _canonical_gt(row.get("CONSENSUS_RESULT") or row.get("RESULT"))
+                    == valid_genotype
+                )
         seen[rsid] = (schema, first)
 
     entries: list[dict[str, Any]] = []
