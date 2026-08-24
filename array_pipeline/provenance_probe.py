@@ -84,6 +84,10 @@ def load_markers(path: Path) -> dict[str, Any]:
             raise ProvenanceProbeError(
                 f"{rsid}: plus_alleles must contain only A, C, G or T; got {alleles!r}"
             )
+        if len(set(normalized)) != 2:
+            raise ProvenanceProbeError(
+                f"{rsid}: plus_alleles must describe two distinct alleles"
+            )
         marker["plus_alleles"] = normalized
         if set(normalized) == {COMPLEMENT[normalized[0]], COMPLEMENT[normalized[1]]} and not marker.get("palindromic"):
             # A/T and C/G are their own complement pair; a table that failed to flag one
