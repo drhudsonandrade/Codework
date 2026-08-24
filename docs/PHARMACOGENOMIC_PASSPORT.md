@@ -129,7 +129,7 @@ render time rather than published.
 
 A demonstration array carrying 8 of the 19 pharmacogenomic loci produces:
 
-```
+```text
 8 de 19 loci farmacogenômicos são interpretáveis (42.1%) em 10 genes.
 Diplótipos estabelecidos: 0. Fenótipos emitidos: 0.
 
