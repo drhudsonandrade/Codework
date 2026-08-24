@@ -68,8 +68,14 @@ def _observed_findings(matrix: dict[str, Any]) -> str:
 
 
 def _pgx_line(passport: dict[str, Any] | None) -> str:
-    if not passport:
+    if passport is None:
         return f"{UNAVAILABLE} — nenhum passaporte farmacogenômico foi compilado nesta execução"
+    if passport.get("operational_status") != "VERIFICADO":
+        status = passport.get("operational_status", UNAVAILABLE)
+        return (
+            f"{UNAVAILABLE} — passaporte farmacogenômico compilado, porém recusado "
+            f"(operational_status={status}); dados PGx e cartão anestésico não publicados"
+        )
     totals = passport["totals"]
     card = passport["anesthesia_card"]
     # The status word alone was the whole sentence here. On a card whose declared scope is
@@ -115,11 +121,7 @@ def build_payload(
 
     verified = matrix.payload.get("operational_status") == "VERIFICADO"
     status = "VERIFICADO" if verified else UNAVAILABLE
-    passport_payload = (
-        passport.payload
-        if passport and passport.payload.get("operational_status") == "VERIFICADO"
-        else None
-    )
+    passport_payload = passport.payload if passport else None
 
     compiler.derive(
         "summary", artifact="completeness-matrix", locator="totals", status=status,
