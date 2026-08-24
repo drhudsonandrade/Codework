@@ -85,14 +85,17 @@ def curation_for_schema(schema: str | None) -> Path | None:
     makes RULE_COVERAGE_GATE report 263 rules not considered — which is true. Borrowing
     another lane's file would make the gate pass on judgements about a different run.
     """
+    matches: list[Path] = []
     for candidate in CURATIONS:
-        try:
-            payload = json.loads(candidate.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
+        payload = load_curation(candidate)
         if str(schema) in (payload.get("applies_to_schemas") or []):
-            return candidate
-    return None
+            matches.append(candidate)
+    if len(matches) > 1:
+        raise CurationError(
+            f"mais de uma curadoria declara o schema {schema!r}: "
+            + ", ".join(str(path) for path in matches)
+        )
+    return matches[0] if matches else None
 
 
 def load_curation(path: Path | str | None = None) -> dict[str, Any]:
@@ -113,6 +116,14 @@ def load_curation(path: Path | str | None = None) -> dict[str, Any]:
         )
     if not isinstance(curation.get("sections"), dict):
         raise CurationError("a curadoria não traz um objeto 'sections'")
+    invalid_section_keys = sorted(
+        str(key) for key in curation["sections"] if not str(key).isdigit()
+    )
+    if invalid_section_keys:
+        raise CurationError(
+            f"a curadoria em {source} traz chaves de seção não numéricas: "
+            f"{invalid_section_keys}"
+        )
     if not curation.get("applies_to_schemas"):
         raise CurationError(
             f"a curadoria em {source} não declara `applies_to_schemas`; sem isso nada impede "
@@ -165,11 +176,15 @@ def validate_curation(curation: dict[str, Any]) -> list[str]:
         e for e in curation.get("sections", {}).values()
         if isinstance(e, dict) and e.get("applicability") == "NOT_APPLICABLE"
     ]
-    justifications = {str(e.get("justification") or "").strip() for e in not_applicable}
-    if len(not_applicable) > 1 and len(justifications) == 1:
+    justification_counts: dict[str, int] = {}
+    for entry in not_applicable:
+        justification = str(entry.get("justification") or "").strip()
+        justification_counts[justification] = justification_counts.get(justification, 0) + 1
+    reused = sorted(text for text, count in justification_counts.items() if count > 1)
+    if reused:
         problems.append(
-            "every NOT_APPLICABLE entry shares one justification; one text cannot be the "
-            "reason each distinct rule does not apply"
+            "NOT_APPLICABLE entries reuse justification text across distinct rules: "
+            + "; ".join(repr(text) for text in reused)
         )
     return problems
 
