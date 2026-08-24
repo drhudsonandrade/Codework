@@ -269,10 +269,11 @@ def _clinvar_for_locus(rsid: str) -> dict[str, Any]:
     """Fail one locus closed when dbSNP cannot substantiate its identity."""
     try:
         return fetch_clinvar_conditions(rsid)
-    except MarkerVerificationError as exc:
+    except (MarkerVerificationError, CurationError) as exc:
+        source = "dbSNP" if isinstance(exc, MarkerVerificationError) else "ClinVar"
         return {
             "status": UNAVAILABLE,
-            "reason": f"dbSNP não pôde verificar {rsid}: {exc}",
+            "reason": f"{source} não pôde verificar {rsid}: {exc}",
             "records": [],
         }
 
@@ -307,16 +308,60 @@ def fetch_clinvar_conditions(rsid: str) -> dict[str, Any]:
     expected_sequence = str(grch38["seq_id"])
     expected_reference = str(grch38["reference_allele"]).upper()
 
-    search = _json(
-        f"{EUTILS}/esearch.fcgi?db=clinvar&retmode=json&retmax=20&term="
-        + urllib.parse.quote(f"{rsid}[Variant ID]" if rsid.isdigit() else rsid)
-    )
-    uids = (search.get("esearchresult") or {}).get("idlist") or []
+    term = urllib.parse.quote(f"{rsid}[Variant ID]" if rsid.isdigit() else rsid)
+    uids: list[str] = []
+    retstart = 0
+    count: int | None = None
+    while count is None or retstart < count:
+        search = _json(
+            f"{EUTILS}/esearch.fcgi?db=clinvar&retmode=json&retmax=50"
+            f"&retstart={retstart}&term={term}"
+        )
+        search_result = search.get("esearchresult") or {}
+        page = [str(uid) for uid in (search_result.get("idlist") or []) if str(uid)]
+        if count is None:
+            try:
+                count = int(search_result.get("count") or len(page))
+            except (TypeError, ValueError) as exc:
+                raise CurationError(
+                    f"{rsid}: ClinVar esearch returned an invalid count"
+                ) from exc
+        uids.extend(page)
+        retstart += len(page)
+        if not page:
+            break
+        if retstart < count:
+            time.sleep(REQUEST_INTERVAL_SECONDS)
     if not uids:
-        return {"status": UNAVAILABLE, "reason": f"ClinVar não retorna registro para {rsid}", "records": []}
-    time.sleep(REQUEST_INTERVAL_SECONDS)
-    summary = _json(f"{EUTILS}/esummary.fcgi?db=clinvar&retmode=json&id=" + ",".join(uids))
-    result = summary.get("result") or {}
+        return {
+            "status": UNAVAILABLE,
+            "reason": f"ClinVar não retorna registro para {rsid}",
+            "records": [],
+        }
+    if count is not None and len(uids) < count:
+        raise CurationError(
+            f"{rsid}: ClinVar returned {len(uids)} of {count} record ids; "
+            "refusing partial curation"
+        )
+
+    result: dict[str, Any] = {"uids": []}
+    for start in range(0, len(uids), 50):
+        time.sleep(REQUEST_INTERVAL_SECONDS)
+        chunk = uids[start : start + 50]
+        summary = _json(
+            f"{EUTILS}/esummary.fcgi?db=clinvar&retmode=json&id="
+            + ",".join(chunk)
+        )
+        page_result = summary.get("result") or {}
+        for uid in page_result.get("uids", []):
+            if uid in page_result:
+                result["uids"].append(uid)
+                result[uid] = page_result[uid]
+    if len(result["uids"]) != len(uids):
+        raise CurationError(
+            f"{rsid}: ClinVar returned {len(result['uids'])} of {len(uids)} "
+            "summaries; refusing partial curation"
+        )
 
     records: list[dict[str, Any]] = []
     mismatched = 0
