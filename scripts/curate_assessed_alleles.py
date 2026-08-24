@@ -542,9 +542,9 @@ def main() -> int:
         for target in registry["targets"]:
             record = by_rsid.get(str(target["rsid"]).lower())
             if record and record["assessed_allele"]:
-                target.pop("assessed_allele_status", None)
                 target.pop("assessed_allele_reason", None)
                 target["assessed_allele"] = record["assessed_allele"]
+                target["assessed_allele_status"] = "VERIFICADO"
                 target["assessed_allele_source"] = record.get("source", "ClinVar")
                 target["assessed_allele_evidence"] = out.name
                 target["references"] = record.get("references", {})
