@@ -38,6 +38,41 @@ class ProvenanceProbeRegressionTest(unittest.TestCase):
                     with self.assertRaisesRegex(ProvenanceProbeError, "rsid.*non-empty string"):
                         load_markers(self._write_markers(root, marker))
 
+    def test_marker_positions_must_be_positive_integers(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            for position in (None, "abc", 0, -1, True):
+                marker = {
+                    "rsid": "rs1",
+                    "grch37": {"chromosome": "1", "position": position},
+                    "grch38": {"chromosome": "1", "position": 2},
+                    "plus_alleles": ["A", "C"],
+                }
+                with self.subTest(position=position):
+                    with self.assertRaisesRegex(
+                        ProvenanceProbeError, "rs1.*positive integer"
+                    ):
+                        load_markers(self._write_markers(root, marker))
+
+    def test_duplicate_rsids_are_rejected_case_insensitively(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "markers.json"
+            marker = {
+                "grch37": {"chromosome": "1", "position": 1},
+                "grch38": {"chromosome": "1", "position": 2},
+                "plus_alleles": ["A", "C"],
+            }
+            path.write_text(json.dumps({
+                "schema": "genoma-array-provenance-markers-v1",
+                "source": "fixture",
+                "markers": [
+                    {**marker, "rsid": "rs1"},
+                    {**marker, "rsid": "RS1"},
+                ],
+            }), encoding="utf-8")
+            with self.assertRaisesRegex(ProvenanceProbeError, "duplicate.*rsid"):
+                load_markers(path)
+
     def test_invalid_plus_allele_is_domain_error_not_keyerror(self):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "markers.json"
