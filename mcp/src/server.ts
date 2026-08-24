@@ -329,10 +329,12 @@ const claimMutationLockMetadataSchema = z
     lockId: z.string().uuid(),
     ownerPid: z.number().int().positive(),
     lockedAt: z.string(),
+    state: z.enum(["HELD", "RELEASE_PENDING"]).optional(),
   })
   .strict();
 
 const CLAIM_MUTATION_LOCK_OWNER = "owner.json";
+const INVALID_OWNERLESS_LOCK_ERRORS = new Set(["ENOTEMPTY", "EEXIST"]);
 
 function lockContention(error: unknown): boolean {
   const code = (error as NodeJS.ErrnoException).code;
@@ -415,16 +417,26 @@ async function removeClaimMutationLockOwnerForRecovery(ownerPath: string): Promi
   }
 }
 
+type OwnerlessLockRemovalError = "gone" | "invalid" | "failed";
+
+function classifyOwnerlessLockRemovalError(error: unknown): OwnerlessLockRemovalError {
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === "ENOENT") {
+    return "gone";
+  }
+  return INVALID_OWNERLESS_LOCK_ERRORS.has(code ?? "") ? "invalid" : "failed";
+}
+
 async function removeOwnerlessClaimMutationLock(lockPath: string): Promise<boolean> {
   try {
     await rmdir(lockPath);
     return true;
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === "ENOENT") {
+    const outcome = classifyOwnerlessLockRemovalError(error);
+    if (outcome === "gone") {
       return true;
     }
-    if (code === "ENOTEMPTY" || code === "EEXIST") {
+    if (outcome === "invalid") {
       throw new Error("request claim coordination lock is invalid");
     }
     throw new Error("request claim coordination lock could not be recovered");
