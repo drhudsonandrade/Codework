@@ -81,8 +81,12 @@ jobs:
                   'tool_versions':{'python':'3.12'}
               }
           }
-          for name in ('build-attestation.json','strand-attestation.json'):
-              (root/name).write_text(json.dumps(base),encoding='utf-8')
+          for name, asserted_value in (
+              ('build-attestation.json','GRCh37'),
+              ('strand-attestation.json','forward'),
+          ):
+              payload={**base, 'asserted_value': asserted_value}
+              (root/name).write_text(json.dumps(payload),encoding='utf-8')
           PY
           python3 scripts/run_snp_array.py \
             --input "$RUNNER_TEMP/genoma-array/synthetic.csv.gz" \
@@ -163,8 +167,12 @@ jobs:
                   'tool_versions':{'python':'3.12'}
               }
           }
-          for name in ('build-attestation.json','strand-attestation.json'):
-              (root/name).write_text(json.dumps(base),encoding='utf-8')
+          for name, asserted_value in (
+              ('build-attestation.json','GRCh37'),
+              ('strand-attestation.json','forward'),
+          ):
+              payload={**base, 'asserted_value': asserted_value}
+              (root/name).write_text(json.dumps(payload),encoding='utf-8')
           PY
           docker run --rm \
             -v "$RUNNER_TEMP/genoma-array/workspace:/workspace" \
