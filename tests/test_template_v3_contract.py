@@ -1,3 +1,6 @@
+import base64
+import gzip
+import hashlib
 import json
 import os
 import sys
@@ -82,6 +85,36 @@ class TemplateV3ContractTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             with self.assertRaises(TemplateV3Error):
                 verify_template_pack(Path(td))
+
+    def test_coordinate_detail_is_bound_to_decoded_manifest_content(self):
+        from reporting.template_v3 import TemplateV3Error, verify_coordinate_detail
+
+        manifest = b'{"schema":"fixture"}\n'
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            canonical = base64.b64encode(gzip.compress(manifest, mtime=0)) + b"\n"
+            path = root / "detail.json.gz.b64"
+            path.write_bytes(canonical)
+            meta = {
+                "filename": path.name,
+                "sha256": hashlib.sha256(canonical).hexdigest(),
+            }
+            verified = verify_coordinate_detail(path, meta, manifest)
+            self.assertEqual(
+                verified["content_sha256"], hashlib.sha256(manifest).hexdigest()
+            )
+            self.assertTrue(verified["container_sha256_matches_pinned"])
+
+            # A different gzip header is acceptable only because the decoded, pinned bytes
+            # remain byte-identical; its distinct container identity is still disclosed.
+            path.write_bytes(base64.b64encode(gzip.compress(manifest, mtime=1)) + b"\n")
+            recompressed = verify_coordinate_detail(path, meta, manifest)
+            self.assertEqual(recompressed["content_sha256"], verified["content_sha256"])
+            self.assertFalse(recompressed["container_sha256_matches_pinned"])
+
+            path.write_bytes(base64.b64encode(gzip.compress(b"different", mtime=0)) + b"\n")
+            with self.assertRaisesRegex(TemplateV3Error, "decoded content mismatch"):
+                verify_coordinate_detail(path, meta, manifest)
 
     def test_noncanonical_template_ruleset_labels_fail_closed(self):
         from reporting.template_v3 import (

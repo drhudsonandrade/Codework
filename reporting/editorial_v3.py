@@ -44,8 +44,9 @@ def _verified_coordinate_manifest(template_dir: Path) -> tuple[dict[str, Any], d
         actual_manifest = _sha256(manifest_path)
         if actual_manifest != manifest_meta.get("sha256"):
             raise _template_v3.TemplateV3Error(f"{mode} v3 coordinate manifest checksum mismatch")
-        # Shared with the installer: the detail is verified by decoded content, because
-        # DEFLATE bytes are not reproducible across zlib builds.
+        # The detail is verified by decoded content because DEFLATE bytes are not
+        # reproducible across zlib builds. The decoded bytes must equal this exact,
+        # hash-pinned manifest.
         detail_result = _template_v3.verify_coordinate_detail(
             detail_path, detail_meta, manifest_path.read_bytes()
         )

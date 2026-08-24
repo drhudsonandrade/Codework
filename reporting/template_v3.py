@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
+import zlib
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -50,6 +51,54 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def verify_coordinate_detail(
+    detail_path: Path,
+    detail_meta: dict[str, Any],
+    expected_content: bytes,
+) -> dict[str, Any]:
+    """Verify a base64/gzip coordinate detail by the exact bytes it decodes to.
+
+    A gzip container can differ across zlib builds while carrying identical content. The
+    decoded bytes are therefore compared with the already hash-pinned coordinate manifest;
+    the container digest is retained as evidence, including whether it matches the
+    historical pinned container. Decompression is capped at the expected content size, so
+    a malformed external pack cannot turn this verification into an expansion bomb.
+    """
+    filename = str(detail_meta.get("filename") or "")
+    if not filename or detail_path.name != filename:
+        raise TemplateV3Error("v3 coordinate detail filename mismatch")
+    pinned_container_sha256 = str(detail_meta.get("sha256") or "")
+    if len(pinned_container_sha256) != 64 or any(
+        char not in "0123456789abcdef" for char in pinned_container_sha256
+    ):
+        raise TemplateV3Error("invalid pinned v3 coordinate detail SHA-256")
+
+    container = detail_path.read_bytes()
+    container_sha256 = hashlib.sha256(container).hexdigest()
+    try:
+        packed = base64.b64decode(container.strip(), validate=True)
+        decompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
+        decoded = decompressor.decompress(packed, len(expected_content) + 1)
+        if len(decoded) > len(expected_content) or decompressor.unconsumed_tail:
+            raise TemplateV3Error("v3 coordinate detail exceeds the expected content size")
+        decoded += decompressor.flush(len(expected_content) + 1 - len(decoded))
+    except TemplateV3Error:
+        raise
+    except (OSError, ValueError, zlib.error) as exc:
+        raise TemplateV3Error("invalid compressed v3 coordinate detail") from exc
+
+    if not decompressor.eof or decompressor.unused_data:
+        raise TemplateV3Error("incomplete or multi-member v3 coordinate detail")
+    if decoded != expected_content:
+        raise TemplateV3Error("v3 coordinate detail decoded content mismatch")
+    return {
+        "content_sha256": hashlib.sha256(decoded).hexdigest(),
+        "container_sha256": container_sha256,
+        "container_sha256_matches_pinned": container_sha256
+        == pinned_container_sha256,
+    }
 
 
 def _validate_controlled_span_sources(payload: dict[str, Any]) -> None:
