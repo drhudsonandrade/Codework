@@ -71,6 +71,16 @@ class ReportEngineTest(unittest.TestCase):
             expected_reason="publication_gate:passed",
         )
 
+    def test_final_mode_rejects_consent_outside_report_domain(self):
+        from reporting.engine import render_document
+
+        data = final_fixture()
+        data["publication_gate"]["consent_scope_verified"] = False
+        self.assert_release_rejected(
+            lambda: render_document("01", data, mode="FINAL"),
+            expected_reason="publication_gate:consent_scope_verified",
+        )
+
     def test_final_mode_rejects_wrong_ruleset_digest(self):
         from reporting.engine import render_document
 
@@ -82,6 +92,7 @@ class ReportEngineTest(unittest.TestCase):
             "publication_gate": {
                 "passed": True,
                 "consent_verified": True,
+                "consent_scope_verified": True,
                 "qc_verified": True,
                 "evidence_verified": True,
                 "placeholders_resolved": True,
@@ -102,6 +113,7 @@ class ReportEngineTest(unittest.TestCase):
             "publication_gate": {
                 "passed": True,
                 "consent_verified": True,
+                "consent_scope_verified": True,
                 "qc_verified": True,
                 "evidence_verified": True,
                 "placeholders_resolved": True,
@@ -130,6 +142,7 @@ class ReportEngineTest(unittest.TestCase):
             "publication_gate": {
                 "passed": True,
                 "consent_verified": True,
+                "consent_scope_verified": True,
                 "qc_verified": True,
                 "evidence_verified": True,
                 "placeholders_resolved": True,
