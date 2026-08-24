@@ -54,6 +54,24 @@ class ProvenanceProbeRegressionTest(unittest.TestCase):
             with self.assertRaisesRegex(ProvenanceProbeError, "rs1.*A, C, G or T"):
                 load_markers(path)
 
+    def test_plus_alleles_must_be_distinct(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "markers.json"
+            path.write_text(json.dumps({
+                "schema": "genoma-array-provenance-markers-v1",
+                "source": "fixture",
+                "markers": [{
+                    "rsid": "rs1",
+                    "grch37": {"chromosome": "1", "position": 1},
+                    "grch38": {"chromosome": "1", "position": 2},
+                    "plus_alleles": ["A", "A"],
+                }],
+            }), encoding="utf-8")
+            with self.assertRaisesRegex(
+                ProvenanceProbeError, "two distinct alleles"
+            ):
+                load_markers(path)
+
     def test_duplicate_and_unresolved_markers_are_discarded(self):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "array.csv"
