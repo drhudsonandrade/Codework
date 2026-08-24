@@ -1,0 +1,247 @@
+{
+  "schema": "genoma-array-provenance-markers-v1",
+  "id": "GENOMA-PROVENANCE-MARKERS",
+  "version": "2026-08-19.1",
+  "source": "NCBI dbSNP RefSNP API (api.ncbi.nlm.nih.gov/variation/v0/refsnp), build 157. Coordenadas e alelos conferidos entrada a entrada; evidência em docs/evidence/ARRAY_PROVENANCE_MARKERS_DBSNP.json. Reproduzir com scripts/verify_provenance_markers.py.",
+  "verification_status": "VERIFICADO",
+  "notes": [
+    "Coordenadas são 1-based; o dbSNP as expressa em SPDI 0-based e a verificação converte.",
+    "reference_allele é a base de referência (SPDI deleted_sequence), sempre na fita plus.",
+    "alternate_allele é o alternativo de maior frequência no maior coorte que o dbSNP reporta.",
+    "plus_alleles é o par {reference, alternate}; a lista completa de alelos submetidos ao dbSNP costuma trazer as quatro bases e é inútil para determinar fita, porque um conjunto de quatro alelos é o próprio complemento.",
+    "Marcadores palindrômicos (A/T ou C/G) não determinam fita e são excluídos do teste."
+  ],
+  "markers": [
+    {
+      "rsid": "rs429358",
+      "gene": "APOE",
+      "grch37": {
+        "chromosome": "19",
+        "position": 45411941
+      },
+      "grch38": {
+        "chromosome": "19",
+        "position": 44908684
+      },
+      "plus_alleles": [
+        "T",
+        "C"
+      ],
+      "palindromic": false,
+      "reference_allele": "T",
+      "alternate_allele": "C",
+      "alternate_frequency": 0.147929,
+      "dbsnp_build": "157"
+    },
+    {
+      "rsid": "rs7412",
+      "gene": "APOE",
+      "grch37": {
+        "chromosome": "19",
+        "position": 45412079
+      },
+      "grch38": {
+        "chromosome": "19",
+        "position": 44908822
+      },
+      "plus_alleles": [
+        "C",
+        "T"
+      ],
+      "palindromic": false,
+      "reference_allele": "C",
+      "alternate_allele": "T",
+      "alternate_frequency": 0.074002,
+      "dbsnp_build": "157"
+    },
+    {
+      "rsid": "rs6025",
+      "gene": "F5",
+      "grch37": {
+        "chromosome": "1",
+        "position": 169519049
+      },
+      "grch38": {
+        "chromosome": "1",
+        "position": 169549811
+      },
+      "plus_alleles": [
+        "C",
+        "T"
+      ],
+      "palindromic": false,
+      "reference_allele": "C",
+      "alternate_allele": "T",
+      "alternate_frequency": 0.022019,
+      "dbsnp_build": "157"
+    },
+    {
+      "rsid": "rs1799963",
+      "gene": "F2",
+      "grch37": {
+        "chromosome": "11",
+        "position": 46761055
+      },
+      "grch38": {
+        "chromosome": "11",
+        "position": 46739505
+      },
+      "plus_alleles": [
+        "G",
+        "A"
+      ],
+      "palindromic": false,
+      "reference_allele": "G",
+      "alternate_allele": "A",
+      "alternate_frequency": 0.011596,
+      "dbsnp_build": "157"
+    },
+    {
+      "rsid": "rs9923231",
+      "gene": "VKORC1",
+      "grch37": {
+        "chromosome": "16",
+        "position": 31107689
+      },
+      "grch38": {
+        "chromosome": "16",
+        "position": 31096368
+      },
+      "plus_alleles": [
+        "C",
+        "T"
+      ],
+      "palindromic": false,
+      "reference_allele": "C",
+      "alternate_allele": "T",
+      "alternate_frequency": 0.322691,
+      "dbsnp_build": "157"
+    },
+    {
+      "rsid": "rs4149056",
+      "gene": "SLCO1B1",
+      "grch37": {
+        "chromosome": "12",
+        "position": 21331549
+      },
+      "grch38": {
+        "chromosome": "12",
+        "position": 21178615
+      },
+      "plus_alleles": [
+        "T",
+        "C"
+      ],
+      "palindromic": false,
+      "reference_allele": "T",
+      "alternate_allele": "C",
+      "alternate_frequency": 0.14443,
+      "dbsnp_build": "157"
+    },
+    {
+      "rsid": "rs1799853",
+      "gene": "CYP2C9",
+      "grch37": {
+        "chromosome": "10",
+        "position": 96702047
+      },
+      "grch38": {
+        "chromosome": "10",
+        "position": 94942290
+      },
+      "plus_alleles": [
+        "C",
+        "T"
+      ],
+      "palindromic": false,
+      "reference_allele": "C",
+      "alternate_allele": "T",
+      "alternate_frequency": 0.118073,
+      "dbsnp_build": "157"
+    },
+    {
+      "rsid": "rs1057910",
+      "gene": "CYP2C9",
+      "grch37": {
+        "chromosome": "10",
+        "position": 96741053
+      },
+      "grch38": {
+        "chromosome": "10",
+        "position": 94981296
+      },
+      "plus_alleles": [
+        "A",
+        "C"
+      ],
+      "palindromic": false,
+      "reference_allele": "A",
+      "alternate_allele": "C",
+      "alternate_frequency": 0.063889,
+      "dbsnp_build": "157"
+    },
+    {
+      "rsid": "rs4244285",
+      "gene": "CYP2C19",
+      "grch37": {
+        "chromosome": "10",
+        "position": 96541616
+      },
+      "grch38": {
+        "chromosome": "10",
+        "position": 94781859
+      },
+      "plus_alleles": [
+        "G",
+        "A"
+      ],
+      "palindromic": false,
+      "reference_allele": "G",
+      "alternate_allele": "A",
+      "alternate_frequency": 0.159125,
+      "dbsnp_build": "157"
+    },
+    {
+      "rsid": "rs738409",
+      "gene": "PNPLA3",
+      "grch37": {
+        "chromosome": "22",
+        "position": 44324727
+      },
+      "grch38": {
+        "chromosome": "22",
+        "position": 43928847
+      },
+      "plus_alleles": [
+        "C",
+        "G"
+      ],
+      "palindromic": true,
+      "reference_allele": "C",
+      "alternate_allele": "G",
+      "alternate_frequency": 0.244815,
+      "dbsnp_build": "157"
+    },
+    {
+      "rsid": "rs17580",
+      "gene": "SERPINA1",
+      "grch37": {
+        "chromosome": "14",
+        "position": 94847262
+      },
+      "grch38": {
+        "chromosome": "14",
+        "position": 94380925
+      },
+      "plus_alleles": [
+        "T",
+        "A"
+      ],
+      "palindromic": true,
+      "reference_allele": "T",
+      "alternate_allele": "A",
+      "alternate_frequency": 0.03736,
+      "dbsnp_build": "157"
+    }
+  ]
+}

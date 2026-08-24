@@ -1,0 +1,72 @@
+{
+  "schema": "genoma-trait-scopes-v1",
+  "id": "GENOMA-TRAIT-SCOPES",
+  "version": "20260819.1",
+  "declaration": "Quais termos de ontologia entram nos relatórios 04, 07 e 08. Esta é a única parte do processo que é julgamento editorial do operador, e por isso está aqui, num arquivo versionado, em vez de embutida no código: o GWAS Catalog expõe os rótulos EFO/MONDO/OBA/GO das associações mas não uma categorização por tema, então não existe fonte legível por máquina que decida que um traço é 'nutricional'. Os loci, os tamanhos de efeito, os p-valores e a ancestralidade da coorte de descoberta vêm todos do catálogo; só a lista abaixo é escolha humana, e cada termo é identificado pelo seu ID de ontologia para que a escolha seja rastreável e contestável.",
+  "verification": "scripts/build_trait_targets.py recusa um termo que não apareça no catálogo com pelo menos uma associação de significância genômica, para que a lista não possa envelhecer em silêncio.",
+  "significance_threshold": 5e-8,
+  "max_loci_per_term": 40,
+  "scopes": {
+    "PREDISPOSICAO": {
+      "reports": ["04", "07"],
+      "rationale": "Traços em que a ligação gene-nutriente ou gene-metabolismo é o objeto do relatório 04, e que o 07 lê como linha de base metabólica.",
+      "terms": [
+        {"id": "EFO_0801753", "label": "lactase-phlorizin hydrolase measurement"},
+        {"id": "OBA_VT0015043", "label": "milk amount"},
+        {"id": "MONDO_0005130", "label": "celiac disease"},
+        {"id": "EFO_0021177", "label": "caffeine measurement"},
+        {"id": "EFO_0007872", "label": "caffeine metabolite measurement"},
+        {"id": "EFO_0006781", "label": "coffee consumption measurement"},
+        {"id": "EFO_0010091", "label": "tea consumption measurement"},
+        {"id": "OBA_1000840", "label": "alcohol consumption quality"},
+        {"id": "OBA_1000968", "label": "vitamin d level"},
+        {"id": "EFO_0803357", "label": "25-hydroxyvitamin d3 measurement"},
+        {"id": "EFO_0004620", "label": "vitamin b12 measurement"},
+        {"id": "OBA_1001015", "label": "folic acid level"},
+        {"id": "EFO_0004459", "label": "ferritin measurement"},
+        {"id": "OBA_2050055", "label": "serum iron amount"},
+        {"id": "EFO_0010119", "label": "omega-3 polyunsaturated fatty acid measurement"},
+        {"id": "EFO_0005680", "label": "omega-6 polyunsaturated fatty acid measurement"},
+        {"id": "EFO_0009282", "label": "sodium measurement"},
+        {"id": "EFO_0004468", "label": "glucose measurement"},
+        {"id": "EFO_0004471", "label": "insulin sensitivity measurement"},
+        {"id": "EFO_0004530", "label": "triglyceride measurement"},
+        {"id": "EFO_0004340", "label": "body mass index"}
+      ]
+    },
+    "CURIOSIDADE": {
+      "reports": ["08"],
+      "rationale": "Traços não clínicos. Entram no atlas de curiosidades, nunca em conduta: são poligênicos, fortemente influenciados por ambiente, e o relatório 08 os apresenta com o tamanho de efeito e a coorte de descoberta à vista.",
+      "terms": [
+        {"id": "EFO_0008328", "label": "chronotype measurement"},
+        {"id": "EFO_0003924", "label": "hair color"},
+        {"id": "EFO_0003949", "label": "eye color"},
+        {"id": "EFO_0009764", "label": "eye colour measurement"},
+        {"id": "OBA_VT0002095", "label": "skin pigmentation"},
+        {"id": "EFO_0009902", "label": "handedness"},
+        {"id": "EFO_0003963", "label": "freckles"},
+        {"id": "GO_0050913", "label": "sensory perception of bitter taste"},
+        {"id": "EFO_0010155", "label": "taste liking measurement"},
+        {"id": "OBA_0003493", "label": "strand of hair shape"},
+        {"id": "MONDO_0005339", "label": "androgenetic alopecia"},
+        {"id": "HP_0000545", "label": "myopia"}
+      ]
+    }
+  },
+  "exclusions": [
+    "Nenhum termo de comportamento, cognição, personalidade, orientação ou desempenho intelectual entra em qualquer escopo. Associações desse tipo existem no catálogo, têm tamanho de efeito ínfimo, não replicam entre ancestralidades, e apresentá-las produz estigma sem informação.",
+    "Nenhum termo de doença psiquiátrica entra no escopo CURIOSIDADE."
+  ],
+  "rejected_terms": [
+    {
+      "id": "GO_0050916",
+      "label": "sensory perception of sweet taste",
+      "reason": "O catálogo traz 56 associações para este termo e a mais forte é p = 4e-07, abaixo da significância genômica. Percepção de sabor doce é um traço popular em relatórios de consumo e não tem locus estabelecido; incluí-lo exigiria baixar o limiar só para ele."
+    },
+    {
+      "id": "MONDO_0100345",
+      "label": "lactose intolerance",
+      "reason": "O termo existe na ontologia e o endpoint de busca do GWAS Catalog o retorna, mas o release anotado não tem nenhuma associação mapeada para ele. A persistência da lactase entra por EFO_0801753 (lactase-phlorizin hydrolase measurement, rs4988235) e OBA_VT0015043 (milk amount), ambos com associações significativas verificadas."
+    }
+  ]
+}

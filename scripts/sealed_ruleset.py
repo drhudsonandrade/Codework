@@ -20,12 +20,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import normative
+
 EXPECTED_SHA = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
 EXPECTED_NAME = "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
 EXPECTED_STATUS = "VIGENTE"
 EXPECTED_VERSION = "v3.4"
 EXPECTED_DATE = "17/08/2026"
 EXPECTED_SECTIONS = 263
+EXPECTED_IDENTIFIER = normative.NORMATIVE_IDENTIFIER
 EXPECTED_TRANSPORT_PARTS = tuple(f"parts/part-{index:03d}.b64" for index in range(13))
 MANIFEST_NAME = "MANIFEST.json"
 
@@ -166,11 +169,12 @@ def _verify_identity(raw: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
         "status": EXPECTED_STATUS,
         "version": EXPECTED_VERSION,
         "effective_date": EXPECTED_DATE,
+        "normative_identifier": EXPECTED_IDENTIFIER,
         "canonical_filename": EXPECTED_NAME,
         "raw_sha256": digest,
         "raw_size_bytes": len(raw),
         "section_count": len(sections),
-        "section_range": [0, 262],
+        "section_range": [0, normative.LAST_SECTION],
     }
 
 

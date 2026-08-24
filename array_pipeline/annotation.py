@@ -8,8 +8,11 @@ from pathlib import Path
 from typing import Any
 
 from array_pipeline.qc import (
-    HARMONIZED_COLUMNS,
-    RAW_COLUMNS,
+    FORWARD_STRANDS,
+    detect_schema,
+    INTERPRETABLE_OVERLAP_STATUSES,
+    REVERSE_STRANDS,
+    UNRESOLVED_OVERLAP_STATUSES,
     _canonical_gt,
     _read_header_and_metadata,
     _text_stream,
@@ -18,12 +21,9 @@ from array_pipeline.qc import (
 from array_pipeline.targets import build_query_plan, load_target_manifest, sha256_json
 from evidence_adapters import get_adapter
 
-RULESET = {
-    "status": "VIGENTE",
-    "version": "v3.4",
-    "effective_date": "17/08/2026",
-    "sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
-}
+import normative
+
+RULESET = normative.ruleset_block()
 
 UNSUPPORTED_ARRAY_CLAIMS = [
     "genome-wide negative/exclusion claims",
@@ -42,35 +42,139 @@ def _stable_json(value: Any) -> bytes:
 
 
 def _orientation(row: dict[str, str], schema: str, qc: dict[str, Any]) -> tuple[str, str]:
-    strand = qc.get("input", {}).get("strand")
-    strand_evidence = qc.get("input", {}).get("strand_evidence")
+    inputs = qc.get("input", {})
+    strand = inputs.get("strand")
+    strand_evidence = inputs.get("strand_evidence")
+    # Prefer the verdict the QC published. The old proxy — "the evidence string is not the
+    # literal 'NÃO DISPONÍVEL'" — is satisfied by any non-empty text, including an
+    # attestation that failed structural verification.
+    verified = inputs.get("strand_evidence_verified")
+    if verified is None:
+        verified = strand_evidence not in {None, "", "NÃO DISPONÍVEL"}
+    forward = strand in FORWARD_STRANDS and bool(verified)
+
+    if str(strand or "").strip().lower() in REVERSE_STRANDS:
+        # A determinate reverse verdict disqualifies every locus, whatever its sources say.
+        # Cross-platform consensus would otherwise return INFERIDO here — a status
+        # `completeness._classify` accepts — and the allele comparison it admits runs against
+        # the complement of what the registry means.
+        return (
+            "NÃO DISPONÍVEL",
+            f"file reported on the reverse strand ({strand}); the reported allele is the "
+            "complement of the one the registry names",
+        )
+
     if schema.startswith("harmonized"):
         sources = (row.get("SOURCES") or "").strip()
+        status = (row.get("STATUS") or "").strip().lower()
+        # Presence in both platforms is not agreement between them. Reporting a record the
+        # harmonizer flagged as conflicting or ambiguous as "cross-platform consensus" would
+        # resolve the conflict by assertion, which sections 4 and 7 forbid.
+        if status in UNRESOLVED_OVERLAP_STATUSES:
+            return "NÃO DISPONÍVEL", f"unresolved cross-platform record ({status}); not auto-resolved"
+        # An allowlist, so a status this module has never seen is refused rather than
+        # assumed clean. A real harmonized export emitted ten distinct STATUS values and one
+        # of them was unknown here.
+        if status not in INTERPRETABLE_OVERLAP_STATUSES:
+            return "NÃO DISPONÍVEL", f"unrecognised harmonizer status ({status}); not assumed interpretable"
         if sources == "GM":
-            return "VERIFICADO", "cross-platform consensus"
-        if sources == "M" and strand == "forward" and strand_evidence not in {None, "NÃO DISPONÍVEL"}:
+            # Agreement proves both vendors used the same strand convention, not which one:
+            # if both reported the reverse strand an AG call would read TC in both files and
+            # they would agree perfectly while both were flipped.
+            if forward:
+                return "VERIFICADO", "cross-platform consensus with documented forward-strand provenance"
+            return (
+                "INFERIDO",
+                "cross-platform consensus establishes mutual consistency between vendors, "
+                "not absolute strand orientation",
+            )
+        if sources == "M" and forward:
             return "VERIFICADO", "MyHeritage forward-strand source metadata"
         if sources == "G":
             return "INFERIDO", "Genera-only locus; orientation is not independently verified"
         return "NÃO DISPONÍVEL", "source-specific orientation evidence unavailable"
-    if strand in {"forward", "plus", "+"} and strand_evidence not in {None, "NÃO DISPONÍVEL"}:
+    if forward:
         return "VERIFICADO", str(strand_evidence)
     return "NÃO DISPONÍVEL", "source-specific orientation evidence unavailable"
 
 
-def extract_target_observations(path: Path, target_rsids: set[str], qc: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+def check_coordinate(
+    observation: dict[str, Any], target: dict[str, Any], build: str | None
+) -> tuple[str, str]:
+    """Compare the observed coordinate with the registry's canonical one.
+
+    The observation used to be accepted on its rsID alone, because the registry held no
+    coordinates to compare against. An rsID is a label: a file that carries the right label
+    at the wrong position is a file annotated on another assembly, or a file whose
+    coordinate column has been rebuilt by a tool nobody recorded. Either way the locus is
+    not the locus the registry means, and interpreting it produces a finding about a
+    position that was never interrogated.
+
+    Returns an operational status and the basis for it, in the vocabulary the rest of the
+    pipeline uses. Anything short of an actual match is refused rather than downgraded, but
+    a registry with no coordinate for the locus is NÃO DISPONÍVEL, not a mismatch — there is
+    nothing to disagree with.
+    """
+    coordinates = target.get("coordinates") if isinstance(target.get("coordinates"), dict) else {}
+    if coordinates.get("status") != "VERIFICADO":
+        return (
+            "NÃO DISPONÍVEL",
+            f"registro não traz coordenada canônica para {target.get('rsid')}: "
+            f"{coordinates.get('reason') or 'coordenada ausente'}",
+        )
+    if build not in ("GRCh37", "GRCh38"):
+        return (
+            "NÃO DISPONÍVEL",
+            "build do caso não verificado; sem build não há coordenada canônica com que comparar",
+        )
+    expected = coordinates.get(build)
+    if not isinstance(expected, dict):
+        return ("NÃO DISPONÍVEL", f"registro não traz coordenada em {build} para este locus")
+    if expected.get("ambiguous_positions"):
+        return (
+            "NÃO DISPONÍVEL",
+            f"o ClinVar registra este rsid em {expected['ambiguous_positions']} posições "
+            f"distintas em {build}; não há coordenada única para conferir",
+        )
+
+    observed_chromosome = str(observation.get("chromosome") or "").strip().upper().removeprefix("CHR")
+    expected_chromosome = str(expected.get("chromosome") or "").strip().upper()
+    try:
+        observed_position = int(str(observation.get("position") or "").strip())
+    except ValueError:
+        return ("NÃO DISPONÍVEL", "posição observada não é um inteiro")
+
+    if observed_chromosome != expected_chromosome or observed_position != int(expected["position"]):
+        return (
+            "NÃO DISPONÍVEL",
+            f"coordenada divergente em {build}: o arquivo traz "
+            f"chr{observed_chromosome}:{observed_position:,} e o registro "
+            f"chr{expected_chromosome}:{int(expected['position']):,}. O rsid casa e a posição "
+            "não; o arquivo está em outra montagem ou a coluna de coordenadas foi reescrita.",
+        )
+    return (
+        "VERIFICADO",
+        f"coordenada confere com o registro em {build} "
+        f"(chr{expected_chromosome}:{int(expected['position']):,}, "
+        f"{expected.get('reference_allele')}>{expected.get('alternate_allele')})",
+    )
+
+
+def extract_target_observations(
+    path: Path,
+    target_rsids: set[str],
+    qc: dict[str, Any],
+    targets_by_rsid: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, list[dict[str, Any]]]:
     """Read only target loci into the annotation workspace; never duplicate the full chip."""
     wanted = {x.lower() for x in target_rsids}
+    by_rsid = {k.lower(): v for k, v in (targets_by_rsid or {}).items()}
+    case_build = str((qc.get("input") or {}).get("build") or "") or None
     found: dict[str, list[dict[str, Any]]] = {x: [] for x in sorted(wanted)}
     fh, _ = _text_stream(path)
     try:
         header, _metadata = _read_header_and_metadata(fh)
-        if header == HARMONIZED_COLUMNS:
-            schema = "harmonized_genera_myheritage_v1"
-        elif header == RAW_COLUMNS:
-            schema = "raw_snp_array_v1"
-        else:
-            raise ValueError(f"unsupported SNP-array CSV header: {header}")
+        schema = detect_schema(header)
         reader = csv.DictReader(fh, fieldnames=header)
         for row in reader:
             rsid = (row.get("RSID") or "").strip().lower()
@@ -78,21 +182,69 @@ def extract_target_observations(path: Path, target_rsids: set[str], qc: dict[str
                 continue
             gt = row.get("CONSENSUS_RESULT") if schema.startswith("harmonized") else row.get("RESULT")
             orientation_status, orientation_basis = _orientation(row, schema, qc)
-            found[rsid].append(
-                {
-                    "rsid": rsid,
-                    "chromosome": (row.get("CHROMOSOME") or "").strip(),
-                    "position": (row.get("POSITION") or "").strip(),
-                    "genotype": _canonical_gt(gt),
-                    "status": (row.get("STATUS") or "observed").strip(),
-                    "sources": (row.get("SOURCES") or "single_source").strip(),
-                    "orientation_operational_status": orientation_status,
-                    "orientation_basis": orientation_basis,
-                }
-            )
+            observation = {
+                "rsid": rsid,
+                "chromosome": (row.get("CHROMOSOME") or "").strip(),
+                "position": (row.get("POSITION") or "").strip(),
+                "genotype": _canonical_gt(gt),
+                # The file's own text, kept beside the canonical form. `_canonical_gt` sorts
+                # the alleles, which is what makes two vendors comparable and is also what
+                # destroys any ordering the file carried. Keeping both means the canonical
+                # form is a derivation rather than a replacement.
+                "genotype_as_reported": (gt or "").strip(),
+                # An array reports two alleles at a position and says nothing about which
+                # chromosome each sits on. Stated on every observation so no consumer has to
+                # infer it from the absence of a phase field.
+                "phase_status": "UNPHASED",
+                "phase_basis": (
+                    "genotipagem por microarranjo não resolve fase; diplótipo exige "
+                    "evidência de fase que este ensaio não produz"
+                ),
+                "status": (row.get("STATUS") or "observed").strip(),
+                "sources": (row.get("SOURCES") or "single_source").strip(),
+                "orientation_operational_status": orientation_status,
+                "orientation_basis": orientation_basis,
+            }
+            target = by_rsid.get(rsid)
+            if target is not None:
+                status, basis = check_coordinate(observation, target, case_build)
+                observation["coordinate_operational_status"] = status
+                observation["coordinate_basis"] = basis
+            found[rsid].append(observation)
     finally:
         fh.close()
     return {k: v for k, v in found.items() if v}
+
+
+def _observation_status(rows: list[dict[str, Any]]) -> str:
+    """The status of one locus, from every check that was actually made about it.
+
+    It read the orientation alone. `check_coordinate` was computed per observation, written
+    onto the record — and consumed by nothing: a locus whose coordinate diverged from the
+    registry, which is proof the file is annotated on another assembly, still reached
+    VERIFICADO because its strand happened to be established. On the first real array,
+    rs4307059 was VERIFICADO with `coordinate_operational_status: NÃO DISPONÍVEL` beside it.
+
+    Both must hold. A coordinate the registry could not supply is not a failure of the file,
+    but it is not a verification either: an rsID is a label, and nothing checked that this
+    label sits where the registry means. Such a locus is INFERIDO — usable, and not
+    presented as confirmed.
+    """
+    if len(rows) != 1:
+        # More than one row for one rsid is an unresolved duplicate; choosing between them
+        # would be the arbitration sections 4 and 7 forbid.
+        return "NÃO DISPONÍVEL"
+    row = rows[0]
+    if row.get("orientation_operational_status") != "VERIFICADO":
+        return "INFERIDO"
+    coordinate = row.get("coordinate_operational_status")
+    if coordinate == "VERIFICADO":
+        return "VERIFICADO"
+    # A divergent coordinate is a positive finding of disagreement, not a gap: the rsid
+    # matches and the position does not, so this locus is not the locus the registry means.
+    if coordinate is None:
+        return "INFERIDO"
+    return "INFERIDO" if "não traz coordenada" in str(row.get("coordinate_basis") or "") else "NÃO DISPONÍVEL"
 
 
 def _query_key(source: str, query: dict[str, Any]) -> str:
@@ -168,7 +320,10 @@ def annotate_partial_genome(
 
     manifest = load_target_manifest(target_manifest_path)
     target_ids = {str(x["rsid"]).lower() for x in manifest["targets"]}
-    observations = extract_target_observations(input_path, target_ids, qc)
+    # Passed so each observation can be checked against the registry's canonical coordinate
+    # instead of being accepted on its rsID alone.
+    targets_by_rsid = {str(x["rsid"]).lower(): x for x in manifest["targets"]}
+    observations = extract_target_observations(input_path, target_ids, qc, targets_by_rsid)
     plan = build_query_plan(observations.keys(), manifest, max_targets=max_targets, max_queries=max_queries)
     now = checked_at or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -215,7 +370,7 @@ def annotate_partial_genome(
                 "label": meta.get("label"),
                 "gene": meta.get("gene"),
                 "records": rows,
-                "observation_operational_status": "VERIFICADO" if len(rows) == 1 and rows[0]["orientation_operational_status"] == "VERIFICADO" else ("INFERIDO" if len(rows) == 1 else "NÃO DISPONÍVEL"),
+                "observation_operational_status": _observation_status(rows),
                 "interpretation": "not automatically interpreted; evidence snapshot requires curation",
             }
         )
@@ -225,7 +380,7 @@ def annotate_partial_genome(
         "operational_status": operational_status,
         "mode": mode,
         "evaluated_at": now,
-        "ruleset": RULESET,
+        "ruleset": normative.attested_ruleset_block(),
         "case_id": qc.get("case_id"),
         "input_sha256": qc.get("input", {}).get("sha256"),
         "target_manifest": {
