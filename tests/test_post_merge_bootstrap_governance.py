@@ -300,17 +300,23 @@ class PostMergeBootstrapGovernanceTests(unittest.TestCase):
         self.assertIn("Gitleaks secret scan", contexts)
         self.assertTrue(status_rule["parameters"]["strict_required_status_checks_policy"])
 
-    def test_audit_evidence_ruleset_restricts_updates_to_deploy_key_bypass(self) -> None:
-        ruleset = json.loads((ROOT / ".github/governance/audit-evidence-ruleset.json").read_text(encoding="utf-8"))
-        self.assertEqual(ruleset["enforcement"], "active")
-        types = {rule["type"] for rule in ruleset["rules"]}
-        self.assertEqual(types, {"deletion", "non_fast_forward", "update"})
+    def test_audit_evidence_governance_is_layered(self) -> None:
+        governance = ROOT / ".github/governance"
+        combined = governance / "audit-evidence-ruleset.json"
+        integrity = json.loads(
+            (governance / "audit-evidence-integrity-ruleset.json").read_text(encoding="utf-8")
+        )
+        publisher = json.loads(
+            (governance / "audit-evidence-publisher-ruleset.json").read_text(encoding="utf-8")
+        )
+        self.assertFalse(combined.exists(), "unsafe combined audit-evidence ruleset must remain removed")
+        self.assertEqual(integrity["bypass_actors"], [])
+        self.assertEqual({rule["type"] for rule in integrity["rules"]}, {"deletion", "non_fast_forward"})
+        self.assertEqual({rule["type"] for rule in publisher["rules"]}, {"update"})
         self.assertEqual(
-            ruleset["bypass_actors"],
+            publisher["bypass_actors"],
             [{"actor_id": None, "actor_type": "DeployKey", "bypass_mode": "always"}],
         )
-        update_rule = next(rule for rule in ruleset["rules"] if rule["type"] == "update")
-        self.assertFalse(update_rule["parameters"]["update_allows_fetch_and_merge"])
 
     def test_audit_publisher_rejects_existing_witness_mutation_and_checks_latest(self) -> None:
         text = (ROOT / ".github" / "workflows" / "genoma-production-witness.yml").read_text(
