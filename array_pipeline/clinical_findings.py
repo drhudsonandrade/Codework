@@ -817,6 +817,10 @@ def build_clinical_findings(
     # recognise becomes None and every X-linked locus is refused with a reason the operator
     # can act on — it never silently matches neither branch and lands in a generic bucket.
     sex = normalised_sex(sex_at_birth)
+    if str(sex_at_birth or "").strip() and sex is None:
+        raise ValueError(
+            f"sex_at_birth {sex_at_birth!r} is outside the controlled case-dossier vocabulary"
+        )
 
     by_rsid = {str(x["rsid"]).lower(): x for x in evidence.get("loci", [])}
 
