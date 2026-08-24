@@ -213,6 +213,14 @@ class PostMergeBootstrapGovernanceTests(unittest.TestCase):
                 path,
                 expected_file_sha256=None,  # type: ignore[arg-type]
             )
+        with self.assertRaisesRegex(
+            bootstrap_attestation.BootstrapAttestationError,
+            "digest mismatch",
+        ):
+            bootstrap_attestation.verify_bootstrap_attestation(
+                path,
+                expected_file_sha256="0" * 64,
+            )
 
     def test_bootstrap_result_locator_mismatch_fails_closed(self) -> None:
         path = ROOT / "deploy" / "attestations" / "bootstrap-project-v3.4.json"
@@ -247,6 +255,8 @@ class PostMergeBootstrapGovernanceTests(unittest.TestCase):
         text = (ROOT / ".github" / "workflows" / "genoma-production-ceremony.yml").read_text(
             encoding="utf-8"
         )
+        self.assertIn("if: github.ref == 'refs/heads/main'", text)
+        self.assertIn("test \"$GITHUB_REF\" = 'refs/heads/main'", text)
         self.assertIn("python3 -m scripts.bootstrap_attestation --write", text)
         self.assertIn("--result-locator \"$locator\"", text)
         self.assertIn("GENOMA_BOOTSTRAP_ATTESTATION_SHA256", text)
