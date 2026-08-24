@@ -63,6 +63,11 @@ def _chromosome_from_accession(seq_id: str) -> str | None:
     return {23: "X", 24: "Y", 12920: "MT"}.get(number)
 
 
+def _numeric_rsid(rsid: str) -> str:
+    numeric = _numeric_rsid(rsid)
+    return numeric
+
+
 def fetch_refsnp(rsid: str, *, timeout: int = 30) -> dict[str, Any]:
     normalized = str(rsid or "").strip().lower()
     numeric = normalized.removeprefix("rs")
@@ -77,6 +82,10 @@ def fetch_refsnp(rsid: str, *, timeout: int = 30) -> dict[str, Any]:
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise MarkerVerificationError(
+            f"{rsid}: dbSNP HTTP {exc.code}: {exc.reason}"
+        ) from exc
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
         raise MarkerVerificationError(f"{rsid}: dbSNP fetch failed: {exc}") from exc
 
@@ -164,6 +173,7 @@ def frequency_alleles(payload: dict[str, Any]) -> dict[str, float]:
 
 
 def _fetch_with_retries(rsid: str, *, attempts: int = 4) -> dict[str, Any]:
+    _numeric_rsid(rsid)
     last: MarkerVerificationError | None = None
     for attempt in range(attempts):
         if attempt:
@@ -171,6 +181,13 @@ def _fetch_with_retries(rsid: str, *, attempts: int = 4) -> dict[str, Any]:
         try:
             return fetch_refsnp(rsid)
         except MarkerVerificationError as exc:
+            cause = exc.__cause__
+            if (
+                isinstance(cause, urllib.error.HTTPError)
+                and cause.code != 429
+                and not 500 <= cause.code < 600
+            ):
+                raise
             last = exc
     raise MarkerVerificationError(
         f"{rsid}: dbSNP fetch failed after {attempts} attempts: {last}"
