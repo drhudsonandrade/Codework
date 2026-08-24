@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 import normative
+from reporting.assay import UnknownAssayError, assay_for_schema
 
 UNAVAILABLE = "NÃO DISPONÍVEL"
 
@@ -51,6 +52,31 @@ def _count_findings(payload: dict[str, Any], predicate: Callable[[dict], bool]) 
         return None
     return str(sum(1 for f in findings if isinstance(f, dict) and predicate(f)))
 
+def _assay(payload: dict[str, Any]):
+    input_block = payload.get("input")
+    schema = input_block.get("schema") if isinstance(input_block, dict) else None
+    return assay_for_schema(schema)
+
+
+def _qc_reference(payload: dict[str, Any]) -> Any:
+    assay = _assay(payload)
+    return _manifest(payload, f"{assay.evidence_prefix.upper()}_QC_SHA256")
+
+
+def _count_findings_with_field(
+    payload: dict[str, Any],
+    field: str,
+    predicate: Callable[[dict], bool],
+) -> Any:
+    findings = payload.get("findings")
+    if not isinstance(findings, list):
+        return None
+    typed = [finding for finding in findings if isinstance(finding, dict)]
+    if len(typed) != len(findings) or any(field not in finding for finding in typed):
+        return None
+    return str(sum(1 for finding in typed if predicate(finding)))
+
+
 
 #: Tokens every report shares. Values come only from the compiled payload.
 COMMON_RESOLVERS: dict[str, Resolver] = {
@@ -58,7 +84,7 @@ COMMON_RESOLVERS: dict[str, Resolver] = {
     "IDENTIFICACAO": lambda p: p.get("case_id"),
     "AMOSTRA": lambda p: p.get("case_id"),
     "TIPO_AMOSTRA_E_IDENTIFICADOR": lambda p: (
-        f"Genotipagem por microarranjo de SNP; identificador do caso {p.get('case_id')}"
+        f"{_assay(p).name}; identificador do caso {p.get('case_id')}"
         if p.get("case_id")
         else None
     ),
@@ -67,19 +93,14 @@ COMMON_RESOLVERS: dict[str, Resolver] = {
     "VERSAO_RELATORIO": lambda _p: f"v3.0 / ruleset {normative.VERSION}",
     "VERSAO": lambda _p: f"v3.0 / ruleset {normative.VERSION}",
     "MANIFESTO_DE_ENTRADAS": lambda p: p.get("sources"),
-    "RELATORIO_QC": lambda p: _manifest(p, "ARRAY_QC_SHA256"),
+    "RELATORIO_QC": _qc_reference,
     "LOGS_WORKFLOW_VERSOES": lambda p: json.dumps(
         p.get("execution_manifest", {}), ensure_ascii=False
     ) if isinstance(p.get("execution_manifest"), dict) else None,
     "CONCLUSAO_LIMITADA": lambda p: p.get("summary"),
     "STATUS": lambda p: p.get("operational_status"),
-    "METODO": lambda _p: (
-        "Genotipagem por microarranjo de SNP, harmonizada entre duas plataformas de consumo"
-    ),
-    "CALLER_ENSAIO": lambda _p: (
-        "Chamada de genótipo pelo fornecedor do array; este pipeline não realiza chamada de "
-        "variantes a partir de leituras"
-    ),
+    "METODO": lambda p: _assay(p).name,
+    "CALLER_ENSAIO": lambda p: _assay(p).depth_note,
 }
 
 #: Report-specific tokens, resolved from the sections that report actually compiled.
@@ -167,8 +188,15 @@ REPORT_RESOLVERS: dict[str, dict[str, Resolver]] = {
         "NIVEL_E_FONTES": lambda p: _section(p, "Fontes e Execution Manifest"),
         "REGISTRO_DE_CONSULTAS": lambda p: _section(p, "Fontes e Execution Manifest"),
         "STATUS_OPERACIONAL": lambda p: p.get("operational_status"),
-        "N_ACHADOS_P1_P2": lambda p: _count_findings(p, lambda _f: True),
-        "N_CONFIRMACOES": lambda p: _count_findings(p, lambda _f: True),
+        "N_ACHADOS_P1_P2": lambda p: _count_findings_with_field(
+            p,
+            "priority",
+            lambda f: str(f.get("priority")).strip().upper()
+            in {"1", "2", "P1", "P2", "PRIORIDADE 1", "PRIORIDADE 2"},
+        ),
+        "N_CONFIRMACOES": lambda p: _count_findings_with_field(
+            p, "confirmation_required", lambda f: f.get("confirmation_required") is True
+        ),
     },
     # Report 02: ancestry. It measures feasibility rather than estimating origins, so the
     # tokens asking for an estimate deliberately have no resolver and print NÃO DISPONÍVEL.
@@ -282,7 +310,9 @@ REPORT_RESOLVERS: dict[str, dict[str, Resolver]] = {
     "09": {
         "LABORATORIO_E_PLATAFORMA": lambda p: _section(p, "Painel de completude"),
         "N_CLASSES": lambda p: _section(p, "Matriz por classe"),
-        "N_CEGOS": lambda p: _count_findings(p, lambda f: True),
+        "N_CEGOS": lambda p: _count_findings_with_field(
+            p, "source", lambda f: f.get("source") == "structural_blind_spots"
+        ),
         "REGIOES": lambda p: _section(p, "Matriz por gene/região"),
         "GENE_REGIAO": lambda p: _section(p, "Matriz por gene/região"),
         "NEGATIVO": lambda p: _section(p, "Evidência negativa"),
@@ -318,7 +348,7 @@ def _resolve(
             continue
         try:
             value = resolver(payload)
-        except (KeyError, TypeError, ValueError) as exc:
+        except (KeyError, TypeError, ValueError, UnknownAssayError) as exc:
             if failures is not None:
                 failures.append(
                     {"token": token, "error": f"{type(exc).__name__}: {exc}"[:200]}
