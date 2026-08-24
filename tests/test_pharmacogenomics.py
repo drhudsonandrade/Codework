@@ -662,6 +662,19 @@ class ReportIntegrationTest(unittest.TestCase):
             payload["publication_gate"]["placeholders_resolved"] = True
         return payload, passport
 
+    def test_passport_and_matrix_must_share_the_same_input(self):
+        from scripts.build_pharmacogenomic_report import build_payload
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            matrix_path, passport, _ = _artifacts(root, CLEAN_ROWS, registry=REGISTRY)
+            passport_path = write_passport(passport, root / "passport.json")
+            mismatched = json.loads(passport_path.read_text(encoding="utf-8"))
+            mismatched["input_sha256"] = "f" * 64
+            passport_path.write_text(json.dumps(mismatched), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "same non-empty input_sha256"):
+                build_payload(passport_path, matrix_path)
+
     def test_unassembled_payload_keeps_release_prerequisites_fail_closed(self):
         from reporting.engine import ReportReleaseError, render_document
 
