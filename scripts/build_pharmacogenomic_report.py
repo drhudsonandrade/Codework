@@ -499,9 +499,20 @@ def main() -> int:
             indent=2,
         )
     )
+    publication_gate = payload.get("publication_gate") or {}
     publication_ready = (
         payload.get("operational_status") == "VERIFICADO"
-        and (payload.get("publication_gate") or {}).get("passed") is True
+        and all(
+            publication_gate.get(key) is True
+            for key in (
+                "passed",
+                "consent_verified",
+                "consent_scope_verified",
+                "qc_verified",
+                "evidence_verified",
+                "placeholders_resolved",
+            )
+        )
     )
     return 0 if publication_ready else 2
 
