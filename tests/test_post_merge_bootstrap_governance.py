@@ -60,15 +60,17 @@ class PostMergeBootstrapGovernanceTests(unittest.TestCase):
     def test_project_instructions_attestation_verifier_exists(self) -> None:
         self.assertIsNotNone(
             importlib.util.find_spec("scripts.project_instructions_attestation"),
-            "PROJECT_BOOTSTRAP_INSTALLED needs an independent Project Instructions attestation verifier",
+            "Project Instructions snapshot needs an independent verifier",
         )
 
-    def test_project_instructions_attestation_is_derived_from_owner_export(self) -> None:
+    def test_project_instructions_attestation_is_snapshot_only(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             source, output = _write_project_attestation(Path(td))
             payload = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(payload["status"], "VERIFICADO")
-            self.assertTrue(payload["project_bootstrap_installed"])
+            self.assertEqual(payload["evidence_classification"], "VERIFIED_OWNER_SNAPSHOT_ONLY")
+            self.assertFalse(payload["project_bootstrap_installed"])
+            self.assertEqual(payload["installation_status"], "NÃO DISPONÍVEL")
             self.assertEqual(payload["source"]["locator"], "chatgpt-project://GENOMA/instructions")
             verified = subprocess.run(
                 [
@@ -161,38 +163,96 @@ class PostMergeBootstrapGovernanceTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("source locator is required", result.stdout)
 
-    def test_live_smoke_does_not_reuse_ruleset_bootstrap_as_installation_proof(self) -> None:
+    def test_live_smoke_never_promotes_local_snapshot_to_installation_proof(self) -> None:
         text = (ROOT / "scripts" / "run_live_post_deployment_smoke.py").read_text(encoding="utf-8")
         self.assertIn("verify_project_instructions_attestation", text)
+        self.assertIn("project_bootstrap_ok = False", text)
         self.assertNotIn('"bootstrap_installed": bootstrap_ok', text)
         self.assertIn('"bootstrap_installed": project_bootstrap_ok', text)
 
-    def test_bootstrap_verifier_supports_runtime_main_sha_binding(self) -> None:
+    def test_bootstrap_verifier_supports_runtime_binding_inputs(self) -> None:
         parameters = inspect.signature(bootstrap_attestation.verify_bootstrap_attestation).parameters
         self.assertIn("expected_source_revision", parameters)
         self.assertIn("expected_file_sha256", parameters)
+        self.assertIn("expected_result_locator", parameters)
 
-    def test_production_witness_generates_fresh_bootstrap_for_exact_main_sha(self) -> None:
+    def test_bootstrap_runtime_sha_binding_is_behavioral(self) -> None:
+        path = ROOT / "deploy" / "attestations" / "bootstrap-project-v3.4.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        recorded = payload["method"]["source_commit_sha"]
+        head = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        if head == recorded:
+            head = subprocess.run(
+                ["git", "-C", str(ROOT), "rev-parse", "HEAD^"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+        self.assertNotEqual(head, recorded)
+        with self.assertRaisesRegex(
+            bootstrap_attestation.BootstrapAttestationError,
+            "does not match the required runtime commit",
+        ):
+            bootstrap_attestation.verify_bootstrap_attestation(
+                path,
+                expected_source_revision=head,
+            )
+
+    def test_bootstrap_digest_verification_cannot_be_disabled(self) -> None:
+        path = ROOT / "deploy" / "attestations" / "bootstrap-project-v3.4.json"
+        with self.assertRaisesRegex(
+            bootstrap_attestation.BootstrapAttestationError,
+            "digest verification cannot be disabled",
+        ):
+            bootstrap_attestation.verify_bootstrap_attestation(
+                path,
+                expected_file_sha256=None,  # type: ignore[arg-type]
+            )
+
+    def test_bootstrap_result_locator_mismatch_fails_closed(self) -> None:
+        path = ROOT / "deploy" / "attestations" / "bootstrap-project-v3.4.json"
+        with self.assertRaisesRegex(
+            bootstrap_attestation.BootstrapAttestationError,
+            "result_locator does not match",
+        ):
+            bootstrap_attestation.verify_bootstrap_attestation(
+                path,
+                expected_result_locator="evidence/bootstrap-project-v3.4.json#/checks",
+            )
+
+    def test_production_witness_pins_fresh_bootstrap_digest_locator_and_sha(self) -> None:
         text = (ROOT / ".github" / "workflows" / "genoma-production-witness.yml").read_text(
             encoding="utf-8"
         )
         self.assertIn("python3 -m scripts.bootstrap_attestation --write", text)
+        self.assertIn("--result-locator \"$locator\"", text)
+        self.assertIn("GENOMA_BOOTSTRAP_ATTESTATION_SHA256", text)
+        self.assertIn("--bootstrap-attestation-sha256", text)
+        self.assertIn("--bootstrap-result-locator", text)
         self.assertIn("--expected-source-commit \"$GITHUB_SHA\"", text)
         self.assertIn("--project-instructions-attestation", text)
         self.assertIn("--project-instructions-source", text)
+        self.assertNotIn("expected_file_sha256=None", text)
         self.assertNotIn(
             "--bootstrap-attestation deploy/attestations/bootstrap-project-v3.4.json",
             text,
         )
 
-    def test_manual_ceremony_uses_same_external_bootstrap_contract(self) -> None:
+    def test_manual_ceremony_uses_same_runtime_binding_contract(self) -> None:
         text = (ROOT / ".github" / "workflows" / "genoma-production-ceremony.yml").read_text(
             encoding="utf-8"
         )
         self.assertIn("python3 -m scripts.bootstrap_attestation --write", text)
+        self.assertIn("--result-locator \"$locator\"", text)
+        self.assertIn("GENOMA_BOOTSTRAP_ATTESTATION_SHA256", text)
+        self.assertIn("--bootstrap-attestation-sha256", text)
+        self.assertIn("--bootstrap-result-locator", text)
         self.assertIn("--expected-source-commit \"$GITHUB_SHA\"", text)
-        self.assertIn("--project-instructions-attestation", text)
-        self.assertIn("--project-instructions-source", text)
 
     def test_main_ruleset_is_fail_closed(self) -> None:
         ruleset = json.loads((ROOT / ".github/governance/main-ruleset.json").read_text(encoding="utf-8"))
@@ -206,11 +266,27 @@ class PostMergeBootstrapGovernanceTests(unittest.TestCase):
         self.assertIn("Gitleaks secret scan", contexts)
         self.assertTrue(status_rule["parameters"]["strict_required_status_checks_policy"])
 
-    def test_audit_evidence_ruleset_preserves_append_only_publisher(self) -> None:
+    def test_audit_evidence_ruleset_restricts_updates_to_deploy_key_bypass(self) -> None:
         ruleset = json.loads((ROOT / ".github/governance/audit-evidence-ruleset.json").read_text(encoding="utf-8"))
         self.assertEqual(ruleset["enforcement"], "active")
         types = {rule["type"] for rule in ruleset["rules"]}
-        self.assertEqual(types, {"deletion", "non_fast_forward"})
+        self.assertEqual(types, {"deletion", "non_fast_forward", "update"})
+        self.assertEqual(
+            ruleset["bypass_actors"],
+            [{"actor_id": None, "actor_type": "DeployKey", "bypass_mode": "always"}],
+        )
+        update_rule = next(rule for rule in ruleset["rules"] if rule["type"] == "update")
+        self.assertFalse(update_rule["parameters"]["update_allows_fetch_and_merge"])
+
+    def test_audit_publisher_rejects_existing_witness_mutation_and_checks_latest(self) -> None:
+        text = (ROOT / ".github" / "workflows" / "genoma-production-witness.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("GENOMA_AUDIT_DEPLOY_KEY", text)
+        self.assertIn("ssh-key: ${{ secrets.GENOMA_AUDIT_DEPLOY_KEY }}", text)
+        self.assertIn("refusing to modify an existing witness path", text)
+        self.assertIn('cmp "$tmp/witness.json" latest.json', text)
+        self.assertIn('cmp "$target/witness.json" latest.json', text)
 
 
 if __name__ == "__main__":
