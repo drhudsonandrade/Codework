@@ -121,6 +121,10 @@ jobs:
               'execution_manifest': {'status': 'VERIFICADO'},
               'sources': ['fixture:visual-reference'],
               'limitations': 'Fixture editorial; não representa paciente.',
+              # This workflow intentionally renders programmatic QA candidates rather than
+              # approved template-v3 final reports. The explicit acknowledgement is required
+              # by editorial_v3's fail-closed FINAL renderer contract.
+              'allow_programmatic_final': True,
           }
           out = Path('visual-qa/candidates')
           for i in range(1, 12):
