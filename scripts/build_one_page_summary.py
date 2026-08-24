@@ -115,7 +115,11 @@ def build_payload(
 
     verified = matrix.payload.get("operational_status") == "VERIFICADO"
     status = "VERIFICADO" if verified else UNAVAILABLE
-    passport_payload = passport.payload if passport else None
+    passport_payload = (
+        passport.payload
+        if passport and passport.payload.get("operational_status") == "VERIFICADO"
+        else None
+    )
 
     compiler.derive(
         "summary", artifact="completeness-matrix", locator="totals", status=status,
@@ -184,16 +188,46 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--matrix", required=True)
     parser.add_argument("--passport")
+    parser.add_argument("--policy-evaluation")
+    parser.add_argument("--post-deployment-witness")
+    parser.add_argument("--consent")
     parser.add_argument("--payload-out", required=True)
     args = parser.parse_args()
 
-    payload = build_payload(Path(args.matrix), Path(args.passport) if args.passport else None)
+    payload = build_payload(
+        Path(args.matrix),
+        Path(args.passport) if args.passport else None,
+        policy_evaluation=(
+            Path(args.policy_evaluation) if args.policy_evaluation else None
+        ),
+        post_deployment_witness=(
+            Path(args.post_deployment_witness)
+            if args.post_deployment_witness
+            else None
+        ),
+        consent=Path(args.consent) if args.consent else None,
+    )
     out = Path(args.payload_out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps({"payload": str(out), "operational_status": payload["operational_status"]},
                      ensure_ascii=False, indent=2))
-    return 0
+    publication_gate = payload.get("publication_gate") or {}
+    publication_ready = (
+        payload.get("operational_status") == "VERIFICADO"
+        and all(
+            publication_gate.get(key) is True
+            for key in (
+                "passed",
+                "consent_verified",
+                "consent_scope_verified",
+                "qc_verified",
+                "evidence_verified",
+                "placeholders_resolved",
+            )
+        )
+    )
+    return 0 if publication_ready else 2
 
 
 if __name__ == "__main__":
