@@ -6,9 +6,8 @@ an *empty* section while the anchored text sits unreachable under a key nobody r
 document loses a page and nothing errors. Both times the mistake survived until a PDF was
 opened and read.
 
-Reading the titles from the catalogue removes the possibility. `tests/test_report_sections.py`
-additionally asserts that every builder's declared `SECTIONS` equals what this module returns,
-so a builder that keeps a literal tuple for readability still cannot drift away from it.
+Reading the titles from the catalogue removes the possibility. `tests/test_pharmacogenomics.py` additionally asserts that report 06's declared `SECTIONS`
+equals what this module returns, so that builder's literal tuple cannot drift away from it.
 """
 from __future__ import annotations
 
