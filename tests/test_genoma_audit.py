@@ -258,16 +258,17 @@ class ReportContractTest(unittest.TestCase):
         expected = [c["id"] for c in report["checks"] if c["blocking"] and c["result"] != PASS]
         self.assertEqual(report["blocking_failures"], expected)
 
-    def test_nonblocking_unavailable_check_preserves_result_axis(self):
+    def test_grch38_unavailable_gate_is_fail_closed(self):
         with mock.patch("scripts.genoma_audit._grch38_strategy_probe", side_effect=OSError("probe unreadable")):
             report = audit(allow_template_sealed_only=True)
         gate = next(c for c in report["checks"] if c["id"] == "GRCH38_NO_PERMANENT_HIGHMEM_STRATEGY")
         self.assertEqual((gate["operational_status"], gate["result"]), (UNAVAILABLE, "ERROR"))
-        self.assertFalse(gate["blocking"])
+        self.assertTrue(gate["blocking"])
         self.assertIn("GRCH38_NO_PERMANENT_HIGHMEM_STRATEGY", report["unavailable_checks"])
+        self.assertIn("GRCH38_NO_PERMANENT_HIGHMEM_STRATEGY", report["blocking_failures"])
         self.assertEqual(report["operational_status"], UNAVAILABLE)
-        self.assertEqual(report["result"], PASS)
-        self.assertNotIn("GRCH38_NO_PERMANENT_HIGHMEM_STRATEGY", report["blocking_failures"])
+        self.assertEqual(report["result"], "ERROR")
+        self.assertEqual(report["four_planes"]["audit"], "BLOCKED")
 
 
 if __name__ == "__main__":
