@@ -37,13 +37,17 @@ class ManifestIdentityMergeTest(unittest.TestCase):
             "assessed_allele_evidence": {"accession": "VCV1"},
         }
 
-    def _merge(self, first, second):
+    def _merge(self, *targets):
         with tempfile.TemporaryDirectory() as td:
-            one = Path(td) / "one.json"
-            two = Path(td) / "two.json"
-            one.write_text(json.dumps(self._manifest(first, identifier="one")), encoding="utf-8")
-            two.write_text(json.dumps(self._manifest(second, identifier="two")), encoding="utf-8")
-            return merge([one, two])
+            paths = []
+            for index, target in enumerate(targets):
+                path = Path(td) / f"manifest-{index}.json"
+                path.write_text(
+                    json.dumps(self._manifest(target, identifier=f"registry-{index}")),
+                    encoding="utf-8",
+                )
+                paths.append(path)
+            return merge(paths)
 
     def test_divergent_coordinates_are_removed_and_recorded(self):
         payload = self._merge(self._target(10), self._target(11))
@@ -61,6 +65,19 @@ class ManifestIdentityMergeTest(unittest.TestCase):
         self.assertNotIn("assessed_allele", target)
         self.assertNotIn("assessed_allele_evidence", target)
         self.assertEqual(target["assessed_allele_conflict"], ["A", "T"])
+
+    def test_three_way_allele_conflict_records_every_value(self):
+        payload = self._merge(
+            self._target(10, assessed="A"),
+            self._target(10, assessed="T"),
+            self._target(10, assessed="G"),
+        )
+        target = payload["targets"][0]
+        self.assertEqual(target["assessed_allele_conflict"], ["A", "G", "T"])
+        self.assertEqual(
+            payload["assessed_allele_conflicts"][0]["assessed_alleles"],
+            ["A", "G", "T"],
+        )
 
     def test_version_is_bound_to_input_content(self):
         with tempfile.TemporaryDirectory() as td:
