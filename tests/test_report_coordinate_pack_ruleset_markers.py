@@ -39,8 +39,16 @@ class ReportCoordinatePackRulesetMarkerTests(unittest.TestCase):
         page.insert_text((72, 72), "GENOMA-HUDSON-RULESET-", fontsize=12)
         page.insert_text((72, 90), "v3.4", fontsize=12)
         try:
-            first_line = page.search_for("GENOMA-HUDSON-RULESET-")[0]
-            second_line = page.search_for("v3.4")[0]
+            spans = [
+                span
+                for block in page.get_text("dict", sort=True)["blocks"]
+                for line in block.get("lines", [])
+                for span in line.get("spans", [])
+            ]
+            first_line = fitz.Rect(
+                next(span["bbox"] for span in spans if span["text"] == "GENOMA-HUDSON-RULESET-")
+            )
+            second_line = fitz.Rect(next(span["bbox"] for span in spans if span["text"] == "v3.4"))
             controls = [item for item in _controls(page) if item[0] == CANONICAL_RULESET_CONTROL]
         finally:
             doc.close()
