@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -60,12 +61,19 @@ class RepoContractTest(unittest.TestCase):
                 "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt\u00a0\n",
                 encoding="utf-8",
             )
+            # This deliberately wrong dependency is checked after the ruleset manifest,
+            # so its diagnostic proves validate() continued beyond the failed ASCII read.
+            package = root / "mcp" / "package.json"
+            package.parent.mkdir(parents=True)
+            package.write_text(
+                json.dumps({"devDependencies": {"fallow": "0.0.0"}}),
+                encoding="utf-8",
+            )
             with self.assertRaises(UnicodeDecodeError):
                 manifest.read_text(encoding="ascii")
             errors = validator.validate(root)
         self.assertIn("ruleset external manifest does not match the verified v3.4 artifact", errors)
-        # The rest of the contract still ran rather than being cut short by the exception.
-        self.assertTrue(any("missing required path" in error for error in errors))
+        self.assertIn("mcp/package.json must pin fallow 3.16.0 exactly", errors)
 
 
 if __name__ == "__main__":
