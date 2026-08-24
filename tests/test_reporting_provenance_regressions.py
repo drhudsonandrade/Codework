@@ -35,7 +35,7 @@ class ReportingProvenanceRegressionTest(unittest.TestCase):
         )
         payload["publication_gate"]["passed"] = False
         self.assertIn(
-            "provenance:mismatch:publication_gate",
+            "provenance:mismatch:publication_gate.passed",
             provenance_blockers(payload),
         )
 
