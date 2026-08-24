@@ -34,6 +34,7 @@ def _load(name: str):
 EXPAND = _load("expand_clinvar_targets")
 MERGE = _load("merge_target_manifests")
 TRAITS = _load("build_trait_targets")
+CURATE = _load("curate_assessed_alleles")
 
 COLUMNS = [
     "#AlleleID", "Type", "Name", "GeneID", "GeneSymbol", "HGNC_ID", "ClinicalSignificance",
@@ -257,6 +258,32 @@ class MergeTest(unittest.TestCase):
         self.assertEqual(merged["assessed_allele_conflict"], ["G", "T"])
         self.assertEqual(result["totals"]["assessed_allele_conflicts"], 1)
 
+    def test_reference_conflict_removes_assessed_allele_and_its_evidence(self):
+        first = {
+            "rsid": "rs1",
+            "scope": "CLINICO",
+            "label": "a",
+            "queries": {"clinvar": {"term": "rs1"}},
+            "reference_allele": "A",
+            "assessed_allele": "G",
+            "assessed_allele_source": "fixture",
+            "assessed_allele_evidence": "evidence.json",
+            "references": {"clinvar": ["VCV1"]},
+        }
+        second = {
+            **first,
+            "label": "b",
+            "reference_allele": "C",
+        }
+        merged = self._merge(_manifest("A", [first]), _manifest("B", [second]))[
+            "targets"
+        ][0]
+        self.assertNotIn("reference_allele", merged)
+        self.assertNotIn("assessed_allele", merged)
+        self.assertNotIn("assessed_allele_source", merged)
+        self.assertNotIn("assessed_allele_evidence", merged)
+        self.assertIn("reference", merged["assessed_allele_reason"])
+
     def test_silence_is_not_disagreement(self):
         result = self._merge(
             _manifest("A", [{"rsid": "rs1", "scope": "CLINICO", "label": "a",
@@ -460,6 +487,35 @@ class ShippedRegistryTest(unittest.TestCase):
             [],
             f"{path.name}: assessed allele lacks a clean VERIFICADO attestation",
         )
+
+
+class AssessedAlleleApplicationTest(unittest.TestCase):
+    def test_refusal_clears_stale_allele_and_provenance(self):
+        target = {
+            "rsid": "rs1",
+            "assessed_allele": "A",
+            "assessed_allele_status": "VERIFICADO",
+            "assessed_allele_source": "old",
+            "assessed_allele_evidence": "old.json",
+            "assessed_allele_references": ["old"],
+            "references": {"clinvar": ["old"]},
+        }
+        CURATE._apply_target_assessment(
+            target,
+            {
+                "assessed_allele": None,
+                "status": "NÃO DISPONÍVEL",
+                "reason": "fixture refusal",
+            },
+            "new.json",
+        )
+        self.assertNotIn("assessed_allele", target)
+        self.assertNotIn("assessed_allele_source", target)
+        self.assertNotIn("assessed_allele_evidence", target)
+        self.assertNotIn("assessed_allele_references", target)
+        self.assertNotIn("references", target)
+        self.assertEqual(target["assessed_allele_status"], "NÃO DISPONÍVEL")
+        self.assertEqual(target["assessed_allele_reason"], "fixture refusal")
 
 
 class ReviewStarTierTest(unittest.TestCase):
