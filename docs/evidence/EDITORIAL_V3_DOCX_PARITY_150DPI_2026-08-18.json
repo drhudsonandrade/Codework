@@ -1,4 +1,8 @@
 {
+  "reproducibility": {
+    "status": "NÃO DISPONÍVEL",
+    "reason": "Execução histórica: o artefato não registra os caminhos e SHA-256 de todos os DOCX/PDFs, rasters e máscaras usados, a versão exata do renderer e o comando ou job reprodutível. As métricas são preservadas como registro histórico, mas não constituem evidência reproduzível para uma publicação atual."
+  },
   "aggregate": {
     "reports": 11,
     "result": "PASS",
