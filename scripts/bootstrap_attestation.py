@@ -59,10 +59,8 @@ VERIFIED_AT_ERROR = (
     "bootstrap attestation verified_at must be a parseable ISO 8601 datetime in strict RFC 3339 form "
     "with T separator and an explicit timezone offset (Z or ±HH:MM)"
 )
+_DEFAULT_FILE_SHA = object()
 
-# Every bootstrap check is a literal clause of the sealed canonical ruleset. The check is
-# satisfied only when the clause is found in the verified payload, so the answer is
-# recomputable by anyone holding the same sealed transport.
 BOOTSTRAP_CLAUSES: dict[str, str] = {
     "consult_ruleset_before_relevant_genetic_analysis": (
         "Antes de qualquer análise genética relevante, abrir e consultar "
@@ -74,9 +72,7 @@ BOOTSTRAP_CLAUSES: dict[str, str] = {
     "fail_closed_on_missing_or_conflicting_ruleset": (
         "interromper a análise e declarar RULESET NÃO DISPONÍVEL/CONFLITANTE"
     ),
-    "runtime_resource_gate_before_real_calling": (
-        "reexecutar o Runtime/Resource Gate antes de calling real"
-    ),
+    "runtime_resource_gate_before_real_calling": "reexecutar o Runtime/Resource Gate antes de calling real",
     "operational_status_contract_present": (
         "EXECUTADO, VERIFICADO, INFERIDO, PROPOSTO ou NÃO DISPONÍVEL"
     ),
@@ -112,7 +108,6 @@ def _require_verified_at(value: Any) -> str:
 
 
 def _require_source_revision(revision: Any, *, root: Path = ROOT) -> str:
-    """Require a full SHA that resolves to that exact commit in the associated repository."""
     if revision == "UNKNOWN":
         raise BootstrapAttestationError("bootstrap attestation source_commit_sha is UNKNOWN")
     if not isinstance(revision, str) or FULL_GIT_SHA_RE.fullmatch(revision) is None:
@@ -139,11 +134,6 @@ def _require_source_revision(revision: Any, *, root: Path = ROOT) -> str:
 
 
 def _source_revision(root: Path) -> str:
-    """Repository revision the verifier read, recorded as provenance.
-
-    Unlike the input digests this cannot be recomputed from the attestation alone; it is
-    stored so a reader can fetch the exact tree that produced the result.
-    """
     try:
         result = subprocess.run(
             ["git", "-C", str(root), "rev-parse", "HEAD"],
@@ -158,7 +148,6 @@ def _source_revision(root: Path) -> str:
 
 
 def verify_project_bootstrap(sealed_dir: str | Path = SEALED_DIR) -> dict[str, Any]:
-    """Re-derive every bootstrap check from the verified sealed canonical ruleset."""
     raw, transport_evidence = decode_verified_payload(Path(sealed_dir))
     text = raw.decode("utf-8")
     checks: dict[str, Any] = {}
@@ -170,11 +159,7 @@ def verify_project_bootstrap(sealed_dir: str | Path = SEALED_DIR) -> dict[str, A
             "line": (text.count("\n", 0, offset) + 1) if offset >= 0 else None,
         }
     return {
-        "verifier": {
-            "id": VERIFIER_ID,
-            "version": VERIFIER_VERSION,
-            "command": VERIFIER_COMMAND,
-        },
+        "verifier": {"id": VERIFIER_ID, "version": VERIFIER_VERSION, "command": VERIFIER_COMMAND},
         "input": {
             "path": "normative/sealed",
             "canonical_filename": str(transport_evidence["canonical_filename"]),
@@ -210,7 +195,6 @@ def _require_reproducible_method(
     *,
     root: Path = ROOT,
 ) -> None:
-    """The recorded method must be verifier metadata that this run reproduces."""
     method = payload.get("method")
     if not isinstance(method, dict):
         raise BootstrapAttestationError(
@@ -225,8 +209,7 @@ def _require_reproducible_method(
                 f"bootstrap attestation {field} does not match the verifier that produced this run: "
                 f"{method.get(field)!r} != {evidence[field]!r}"
             )
-    recorded = method.get("checks_evidence")
-    if recorded != evidence["checks"]:
+    if method.get("checks_evidence") != evidence["checks"]:
         raise BootstrapAttestationError(
             "bootstrap attestation check evidence is not reproducible from the sealed ruleset"
         )
@@ -238,22 +221,17 @@ def verify_bootstrap_attestation(
     sealed_dir: str | Path = SEALED_DIR,
     root: Path = ROOT,
     expected_source_revision: str | None = None,
-    expected_file_sha256: str | None = EXPECTED_FILE_SHA256,
+    expected_file_sha256: str | None | object = _DEFAULT_FILE_SHA,
 ) -> dict[str, Any]:
-    """Verify an attestation, optionally binding it to the exact runtime Git revision.
-
-    ``expected_file_sha256`` defaults to the committed, versioned artifact digest. Runtime
-    witnesses generate a fresh attestation for their exact merged SHA and therefore pass
-    ``None`` here while separately requiring ``expected_source_revision``.
-    """
     source = Path(path)
     if not source.is_file():
         raise BootstrapAttestationError("bootstrap attestation is missing")
     raw = source.read_bytes()
     observed_sha = hashlib.sha256(raw).hexdigest()
-    if expected_file_sha256 is not None and observed_sha != expected_file_sha256:
+    required_sha = EXPECTED_FILE_SHA256 if expected_file_sha256 is _DEFAULT_FILE_SHA else expected_file_sha256
+    if required_sha is not None and observed_sha != required_sha:
         raise BootstrapAttestationError(
-            f"bootstrap attestation digest mismatch: expected {expected_file_sha256}, observed {observed_sha}"
+            f"bootstrap attestation digest mismatch: expected {required_sha}, observed {observed_sha}"
         )
     try:
         payload = json.loads(raw)
@@ -320,7 +298,6 @@ def build_attestation(
     root: Path = ROOT,
     verified_at: str,
 ) -> dict[str, Any]:
-    """Produce the attestation payload from a verifier run, never from prose."""
     verified_at = _require_verified_at(verified_at)
     evidence = verify_project_bootstrap(sealed_dir)
     source_revision = _require_source_revision(_source_revision(root), root=root)
@@ -347,8 +324,8 @@ def build_attestation(
             "Every check above is re-derived from the sealed canonical ruleset by "
             f"{VERIFIER_COMMAND}; status is PENDENTE unless the verifier satisfies all of them. "
             "The attestation covers the normative bootstrap only: it is not a POST-DEPLOYMENT "
-            "PASS, which still requires independent Project Instructions proof plus the live "
-            "section-260 smoke. Regenerate this file whenever the canonical ruleset or verifier changes."
+            "PASS, which still requires the live section-260 smoke. Regenerate this file "
+            "whenever the canonical ruleset or the verifier changes."
         ),
     }
 
