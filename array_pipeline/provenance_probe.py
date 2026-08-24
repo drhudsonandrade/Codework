@@ -65,6 +65,7 @@ def load_markers(path: Path) -> dict[str, Any]:
     markers = payload.get("markers")
     if not isinstance(markers, list) or not markers:
         raise ProvenanceProbeError("marker table must contain markers")
+    seen_rsids: set[str] = set()
     for marker in markers:
         if not isinstance(marker, dict):
             raise ProvenanceProbeError("marker table entries must be objects")
@@ -72,10 +73,23 @@ def load_markers(path: Path) -> dict[str, Any]:
         if not isinstance(raw_rsid, str) or not raw_rsid.strip():
             raise ProvenanceProbeError("marker rsid must be a non-empty string")
         rsid = raw_rsid.strip()
+        normalized_rsid = rsid.lower()
+        if normalized_rsid in seen_rsids:
+            raise ProvenanceProbeError(f"{rsid}: duplicate marker rsid")
+        seen_rsids.add(normalized_rsid)
         for build in ("grch37", "grch38"):
             spec = marker.get(build)
             if not isinstance(spec, dict) or "chromosome" not in spec or "position" not in spec:
                 raise ProvenanceProbeError(f"{rsid}: missing {build} coordinates")
+            position = spec.get("position")
+            if (
+                isinstance(position, bool)
+                or not isinstance(position, int)
+                or position < 1
+            ):
+                raise ProvenanceProbeError(
+                    f"{rsid}: {build} position must be a positive integer"
+                )
         alleles = marker.get("plus_alleles")
         if not isinstance(alleles, list) or len(alleles) != 2:
             raise ProvenanceProbeError(f"{rsid}: plus_alleles must list two alleles")
