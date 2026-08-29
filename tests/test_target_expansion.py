@@ -282,7 +282,7 @@ class MergeTest(unittest.TestCase):
         self.assertNotIn("assessed_allele", merged)
         self.assertNotIn("assessed_allele_source", merged)
         self.assertNotIn("assessed_allele_evidence", merged)
-        self.assertIn("reference", merged["assessed_allele_reason"])
+        self.assertIn("alelo de referência", merged["assessed_allele_reason"])
 
     def test_silence_is_not_disagreement(self):
         result = self._merge(
