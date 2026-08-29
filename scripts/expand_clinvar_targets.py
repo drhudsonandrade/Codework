@@ -704,7 +704,13 @@ def scan_clinvar(
             if classification in PATHOGENIC:
                 for symbol in row_genes:
                     gene_counts[symbol]["pathogenic_any"] += 1
-                    if review in TWO_STAR_OR_BETTER:
+                    # `review_stars` is the one normalisation: it lowercases as well as
+                    # strips. Testing membership of the raw stripped value against a
+                    # lowercase frozenset made this denominator disagree with every
+                    # selection path in the file for any ClinVar export whose ReviewStatus
+                    # differs only in case — the count of two-star records and the records
+                    # actually treated as two-star would then be measuring different sets.
+                    if review_stars(review) >= 2:
                         gene_counts[symbol]["pathogenic_two_star"] += 1
 
             if row[idx["Type"]] != "single nucleotide variant":

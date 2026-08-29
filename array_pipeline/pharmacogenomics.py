@@ -685,8 +685,23 @@ def build_pharmacogenomic_passport(
             "Diplótipo condicional não é diplótipo estabelecido: vale sob a suposição declarada "
             "de que nenhum alelo não interrogado está presente, e o risco residual dessa "
             "suposição está quantificado por grupo biogeográfico.",
-            "Risco residual sem limite superior (alelo sem frequência publicada pelo CPIC) "
-            "impede a emissão de fenótipo condicional.",
+            # This used to read "Risco residual sem limite superior (...) impede a emissão de
+            # fenótipo condicional." — which the engine contradicts. `conditional_phenotype`
+            # requires the residual to be *computable*, not *bounded*: boundedness is
+            # deliberately not required, because a handful of CPIC alleles carry no published
+            # frequency in any population and demanding it would block every gene. So the
+            # report published, next to the label, a rule saying that this very scenario had
+            # prevented the label from being emitted. The two statements below say what the
+            # code does: no frequency at all refuses the phenotype, partial frequency emits it
+            # with the residual disclosed as a lower bound.
+            "Fenótipo condicional não é emitido quando o CPIC não publica frequência para "
+            "nenhum dos alelos que o painel não pôde excluir: sem qualquer quantificação, o "
+            "risco residual da suposição não é mensurável.",
+            "Quando parte dos alelos não excluídos tem frequência publicada e parte não tem, "
+            "o fenótipo condicional é emitido e o risco residual vale como limite inferior, "
+            "não como o risco residual: o registro declara isso em residual_bounded, na "
+            "ressalva e na contagem de alelos sem frequência, e o rótulo não pode ser citado "
+            "separado dessa suposição.",
         ],
     }
     payload["sha256"] = sha256_json({k: v for k, v in payload.items() if k != "sha256"})

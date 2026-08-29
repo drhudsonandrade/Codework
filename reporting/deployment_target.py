@@ -168,6 +168,18 @@ def refusal(target: Any) -> str | None:
             f"a testemunha declara o alvo como {declared!r}, mas os endereços que ela mesma "
             f"registra ({addresses}) classificam como {recomputed!r}"
         )
+    # Coherence was the only test here: a witness that honestly recorded 127.0.0.1 and
+    # honestly classified it as loopback passed, and certified POST-DEPLOYMENT. But the
+    # question a post-deployment witness answers is whether something other than the
+    # verifier can reach the service, and loopback and unresolved answer no. The module
+    # already computes exactly this as `reachable_beyond_this_machine`; it was recorded in
+    # the artifact and never enforced.
+    if recomputed not in REACHABLE_BEYOND_THIS_MACHINE:
+        return (
+            f"a testemunha certifica um alvo {recomputed!r}: {NOTES[recomputed]}. Uma "
+            "certificação pós-implantação exige um serviço alcançável além da máquina que "
+            "verificou, então este veredicto fica PENDENTE"
+        )
     return None
 
 

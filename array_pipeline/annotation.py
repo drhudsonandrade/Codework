@@ -106,6 +106,19 @@ def check_coordinate(
     expected_chromosome = (
         str(expected.get("chromosome") or "").strip().upper().removeprefix("CHR")
     )
+    # The expected *position* is validated above; the expected *chromosome* was not, so a
+    # registry entry missing it collapsed to "" and then failed the comparison below as
+    # COORDINATE_MISMATCH — whose basis tells the reader the patient's file "is on another
+    # assembly or had its coordinate column rewritten". That is a causal claim about the
+    # sample, asserted from a gap in our own reference data. A missing chromosome is our
+    # incompleteness and has to say so.
+    if not expected_chromosome:
+        return {
+            "status": "NÃO DISPONÍVEL",
+            "code": "EXPECTED_CHROMOSOME_INVALID",
+            "basis": f"registro não traz cromossomo utilizável em {build} para este locus; "
+            "sem os dois lados da coordenada nada pode ser afirmado sobre o arquivo",
+        }
     try:
         observed_position = int(str(observation.get("position") or "").strip())
     except ValueError:

@@ -13,10 +13,13 @@
   "aggregate": {
     "reports": 11,
     "result": "NÃO DISPONÍVEL",
-    "structural_parity": "PASS",
-    "within_envelope": true,
+    "structural_parity": "NÃO DISPONÍVEL",
+    "structural_parity_historical_observation": "PASS",
+    "within_envelope": "NÃO DISPONÍVEL",
+    "within_envelope_historical_observation": true,
     "worst_differing_pixel_fraction": 0.111019,
-    "worst_rmse": 32.836
+    "worst_rmse": 32.836,
+    "historical_observation_note": "Observação histórica preservada como registro. Não é veredicto atual: a reprodutibilidade deste artefato é NÃO DISPONÍVEL, então nenhum campo aqui sustenta uma aprovação para publicação corrente."
   },
   "contract": "Structural parity is gated: the converted DOCX must carry the reference page count and page geometry. Visual similarity is measured and reported, never asserted as pixel parity, because DOCX rasterisation is renderer-dependent.",
   "dpi": 150,

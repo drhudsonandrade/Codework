@@ -284,6 +284,31 @@ class MergeTest(unittest.TestCase):
         self.assertNotIn("assessed_allele_evidence", merged)
         self.assertIn("alelo de referência", merged["assessed_allele_reason"])
 
+    def test_a_third_registry_cannot_restore_an_allele_refused_for_reference_conflict(self):
+        """The refusal has to outlive the registry that caused it.
+
+        Clearing on a reference_allele conflict removes every `assessed_allele*` key, and
+        the sentinel `assessed_allele_conflict` lives in that namespace, so it was cleared
+        too. A third registry then saw a locus with no allele and no conflict marker —
+        indistinguishable from one never assessed — and copied its own allele in. The locus
+        was refused for disagreeing about which base is the reference and still came out of
+        the merge carrying an arbitrated allele.
+        """
+        first = {"rsid": "rs1", "scope": "CLINICO", "label": "a",
+                 "queries": {"clinvar": {"term": "rs1"}},
+                 "reference_allele": "A", "assessed_allele": "G"}
+        second = {**first, "label": "b", "reference_allele": "C"}
+        third = {"rsid": "rs1", "scope": "CLINICO", "label": "c",
+                 "queries": {"clinvar": {"term": "rs1"}}, "assessed_allele": "T"}
+        merged = self._merge(
+            _manifest("A", [first]),
+            _manifest("B", [second]),
+            _manifest("C", [third]),
+        )["targets"][0]
+        self.assertNotIn("assessed_allele", merged)
+        self.assertIn("reference_allele", merged["identity_conflict"])
+        self.assertIn("alelo de referência", merged["assessed_allele_reason"])
+
     def test_silence_is_not_disagreement(self):
         result = self._merge(
             _manifest("A", [{"rsid": "rs1", "scope": "CLINICO", "label": "a",

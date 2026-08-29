@@ -136,12 +136,23 @@ def load_panel(path: Path) -> dict[str, Any]:
     if not isinstance(markers, list) or not markers:
         raise AncestryPanelError("ancestry panel carries no markers")
     loading_lengths: set[int] = set()
+    # `project_case` walks the markers as a list and looks each rsid up in the case, so a locus
+    # listed twice contributes its genotype to the projection twice and is counted twice in
+    # overlap_fraction. That silently double-weights one position against every other marker in
+    # the panel, which is a distorted ancestry projection rather than a rejected one.
+    seen_rsids: set[str] = set()
     for marker in markers:
         if not isinstance(marker, dict):
             raise AncestryPanelError("ancestry panel marker entries must be objects")
         rsid = str(marker.get("rsid") or "").strip()
         if not rsid:
             raise AncestryPanelError("ancestry panel marker must carry a non-empty rsid")
+        if rsid in seen_rsids:
+            raise AncestryPanelError(
+                f"ancestry panel lists {rsid!r} more than once; a repeated marker would weight "
+                "one locus twice in the projection"
+            )
+        seen_rsids.add(rsid)
         reference = str(marker.get("reference_allele") or "").strip().upper()
         effect = str(marker.get("effect_allele") or "").strip().upper()
         if reference not in COMPLEMENT or effect not in COMPLEMENT or reference == effect:

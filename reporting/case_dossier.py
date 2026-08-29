@@ -136,6 +136,13 @@ def _parse_date(section: str, field: str, value: Any) -> str:
 def load_dossier(path: Path, *, expected_case_id: str | None = None) -> dict[str, Any]:
     """Validate an operator-written dossier and normalise its dates."""
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    # A dossier whose root is a list, a string, a number or null reached `.get` and died with
+    # AttributeError, which is not this module's error type: callers catching CaseDossierError
+    # to fail closed saw an unhandled traceback instead.
+    if not isinstance(payload, dict):
+        raise CaseDossierError(
+            f"dossier root must be a JSON object, got {type(payload).__name__}"
+        )
     if payload.get("schema") != SCHEMA:
         raise CaseDossierError(f"unsupported dossier schema: {payload.get('schema')!r}")
 

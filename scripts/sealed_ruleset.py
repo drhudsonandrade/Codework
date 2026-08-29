@@ -150,12 +150,14 @@ def _verify_identity(raw: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
         text = raw.decode("utf-8")
     except UnicodeError as exc:
         raise SealedRulesetError("canonical normative payload is not UTF-8") from exc
-    required_lines = {
-        f"STATUS NORMATIVO: {EXPECTED_STATUS}",
-        f"VERSÃO NORMATIVA: {EXPECTED_VERSION}",
-        f"DATA FORMAL DE EMISSÃO E VIGÊNCIA: {EXPECTED_DATE}",
-        f"ARQUIVO CANÔNICO: {EXPECTED_NAME}",
-    }
+    # One contract, not a copy of it. This set used to be rebuilt here with four of the five
+    # header lines — IDENTIFICADOR NORMATIVO was missing — yet the evidence below returns
+    # `normative_identifier` from a module constant. A payload whose identifier line was
+    # absent, wrong, or belonged to another ruleset therefore verified clean and was still
+    # reported as carrying the expected identifier, which is the field a consumer reads to
+    # learn *which* normative text it got. Reading the tuple `normative` already publishes
+    # keeps the requirement and the emitted evidence from drifting apart again.
+    required_lines = set(normative.REQUIRED_HEADER_LINES)
     header = set(text.splitlines()[:20])
     missing = sorted(required_lines - header)
     if missing:

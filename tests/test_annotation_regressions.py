@@ -37,6 +37,30 @@ class AnnotationRegressionTest(unittest.TestCase):
         self.assertEqual(result["status"], "NÃO DISPONÍVEL")
         self.assertEqual(result["code"], "EXPECTED_POSITION_INVALID")
 
+    def test_missing_expected_chromosome_is_not_blamed_on_the_patient_file(self):
+        """A gap in our registry must not be published as a claim about the sample.
+
+        With no chromosome in the registry the expected value collapsed to "", the
+        comparison below failed, and the locus came back COORDINATE_MISMATCH — whose basis
+        tells the reader the file is on another assembly or had its coordinate column
+        rewritten. That is a causal statement about the patient's data, asserted from our
+        own incomplete reference.
+        """
+        result = check_coordinate(
+            {"chromosome": "7", "position": "99672916"},
+            {
+                "rsid": "rs776746",
+                "coordinates": {
+                    "status": "VERIFICADO",
+                    "GRCh38": {"position": 99672916},
+                },
+            },
+            "GRCh38",
+        )
+        self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+        self.assertEqual(result["code"], "EXPECTED_CHROMOSOME_INVALID")
+        self.assertNotIn("outra montagem", result["basis"])
+
     def test_registry_chromosome_prefix_is_normalized(self):
         result = check_coordinate(
             {"chromosome": "3", "position": "100"},

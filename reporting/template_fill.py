@@ -23,7 +23,6 @@ Two properties make this safe to automate:
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from typing import Any, Callable
 
 import normative
@@ -108,8 +107,16 @@ COMMON_RESOLVERS: dict[str, Resolver] = {
         if p.get("case_id")
         else None
     ),
-    "DATA_EMISSAO": lambda _p: datetime.now(timezone.utc).strftime("%d/%m/%Y"),
-    "DATA": lambda _p: datetime.now(timezone.utc).strftime("%d/%m/%Y"),
+    # No clock here, deliberately. This table's contract is that values come only from the
+    # compiled payload, and a formal issue date is an administrative fact. `REPORT_RESOLVERS`
+    # is consulted first and carries the dossier's real `issue_date`, so `datetime.now()`
+    # only ever spoke in the one case that matters: a case whose dossier records no issue
+    # date. There the document printed today's date as its formal date of emission — a date
+    # nobody registered, anchored to nothing, and indistinguishable in the rendered PDF from
+    # one that had been. Absent the dossier field the token prints NÃO DISPONÍVEL, like every
+    # other value this renderer was never given.
+    "DATA_EMISSAO": lambda _p: None,
+    "DATA": lambda _p: None,
     "VERSAO_RELATORIO": lambda _p: f"v3.0 / ruleset {normative.VERSION}",
     "VERSAO": lambda _p: f"v3.0 / ruleset {normative.VERSION}",
     "MANIFESTO_DE_ENTRADAS": lambda p: p.get("sources"),

@@ -26,6 +26,7 @@ from project_instructions_attestation import (
     ProjectInstructionsAttestationError,
     verify_project_instructions_attestation,
 )
+from reporting import deployment_target
 
 EXPECTED_SHA = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
 EXPECTED_IDENTITY = "v3.4/VIGENTE/17/08/2026"
@@ -230,6 +231,10 @@ def main() -> int:
         "suite": "GENOMA v3.4 section-260 LIVE post-deployment smoke",
         "classification": "live HTTP execution against a real container instance; not a unit fixture",
         "deployment_id": args.deployment_id,
+        # What this run actually reached. Without it `deployment_target.refusal` has nothing
+        # to judge, and every consumer has to take the `classification` string's word for it —
+        # an ephemeral CI container and a deployed host present exactly the same PASS face.
+        "target": deployment_target.classify(args.base_url),
         "ruleset": metadata,
         "ruleset_response_sha256": sha256_bytes(metadata_raw),
         "ruleset_bootstrap_clause_present": bootstrap_ok,

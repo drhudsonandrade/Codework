@@ -134,9 +134,24 @@ def merge(paths: list[Path]) -> dict[str, Any]:
                     f"em {', '.join(origin[rsid])}); escolher um seria arbitrar um conflito, e "
                     "o locus não admite NÃO DETECTADO"
                 )
-            elif new and not old and "assessed_allele_conflict" not in existing:
+            elif (
+                new
+                and not old
+                and "assessed_allele_conflict" not in existing
+                and not existing.get("identity_conflict")
+            ):
                 # Silence is not disagreement: a registry that declares nothing does not
                 # override one that does.
+                #
+                # The `identity_conflict` guard closes a way back in. A reference_allele
+                # conflict below clears every `assessed_allele*` key — the sentinel
+                # `assessed_allele_conflict` among them, since it lives in that namespace —
+                # so by the time a third registry arrived this branch saw a locus with no
+                # allele and no conflict marker and copied its allele straight in. The locus
+                # was refused for disagreeing about which base is the reference, and it came
+                # out of the merge with an assessed allele anyway. `identity_conflict` is
+                # deliberately outside the `assessed_allele_` prefix so that clearing cannot
+                # erase it.
                 for key in (
                     "assessed_allele",
                     "assessed_allele_source",
@@ -164,6 +179,12 @@ def merge(paths: list[Path]) -> dict[str, Any]:
                         )
                         field_conflicts.add(field)
                         existing.pop(field, None)
+                        # Outside the `assessed_allele_` namespace on purpose: the clearing
+                        # loop just below removes everything in that namespace, so a sentinel
+                        # kept inside it would be erased by the very refusal it records, and
+                        # a later registry would find the locus indistinguishable from one
+                        # that had simply never been assessed.
+                        existing["identity_conflict"] = sorted(field_conflicts)
                         if field == "reference_allele":
                             for key in list(existing):
                                 if key == "assessed_allele" or key.startswith(
