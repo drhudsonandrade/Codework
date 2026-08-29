@@ -75,7 +75,36 @@ class WitnessProducerRecordsTargetTest(unittest.TestCase):
             / "run_live_post_deployment_smoke.py"
         ).read_text(encoding="utf-8")
         self.assertIn("from reporting import deployment_target", source)
-        self.assertIn('"target": deployment_target.classify(args.base_url)', source)
+        self.assertIn("target = deployment_target.classify(args.base_url)", source)
+        self.assertIn('"target": target,', source)
+
+    def test_the_target_is_classified_before_the_first_request(self):
+        """Resolving after the run records a lookup nothing ties to what was exercised.
+
+        The classification originally sat in the evidence dict, built after every
+        `http_json` call, so the addresses recorded came from a fresh lookup taken once the
+        smoke was over — the name could have moved in between and the witness would have
+        published the later answer as the target it tested.
+
+        This asserts ordering in the source. It does not prove the peer address each
+        connection used: `urllib` resolves again per request, and pinning to a literal
+        address would break TLS hostname verification. The field is a contemporaneous
+        resolution, and the code says so where it is taken.
+        """
+        from pathlib import Path
+
+        source = (
+            Path(__file__).resolve().parents[1]
+            / "scripts"
+            / "run_live_post_deployment_smoke.py"
+        ).read_text(encoding="utf-8")
+        classified_at = source.index("target = deployment_target.classify(args.base_url)")
+        first_request_at = source.index('http_json(args.base_url, "GET", "/v1/ruleset")')
+        self.assertLess(
+            classified_at,
+            first_request_at,
+            "the target must be classified before the smoke contacts the deployment",
+        )
 
 
 if __name__ == "__main__":

@@ -163,6 +163,20 @@ def main() -> int:
     args = p.parse_args()
     started = time.time()
 
+    # Classified before the first request, not while assembling the evidence at the end.
+    # Resolving afterwards recorded a fresh lookup that nothing tied to the run: the name
+    # could have moved between the last request and the record, and the witness would have
+    # published the later answer as the target it exercised.
+    #
+    # What this field proves and what it does not: it is the resolution taken immediately
+    # before the smoke ran, not the peer address each connection actually used. `urllib`
+    # resolves again per request, and pinning connections to a literal address would break
+    # TLS hostname verification, so the defensible record is a contemporaneous resolution
+    # rather than a connected-peer attestation. That is enough for the gate it feeds —
+    # loopback and unresolved cannot certify a deployment — and it is not evidence of
+    # anything narrower than that.
+    target = deployment_target.classify(args.base_url)
+
     code, metadata, metadata_raw = http_json(args.base_url, "GET", "/v1/ruleset")
     if code != 200:
         raise RuntimeError(f"live ruleset endpoint returned HTTP {code}")
@@ -234,7 +248,7 @@ def main() -> int:
         # What this run actually reached. Without it `deployment_target.refusal` has nothing
         # to judge, and every consumer has to take the `classification` string's word for it —
         # an ephemeral CI container and a deployed host present exactly the same PASS face.
-        "target": deployment_target.classify(args.base_url),
+        "target": target,
         "ruleset": metadata,
         "ruleset_response_sha256": sha256_bytes(metadata_raw),
         "ruleset_bootstrap_clause_present": bootstrap_ok,
