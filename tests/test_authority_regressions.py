@@ -74,6 +74,12 @@ class WgsQcSummaryValidationTest(unittest.TestCase):
             any("mean_depth" in problem for problem in summary["problems"]),
             summary["problems"],
         )
+        # And the count must agree with the refusal. `audit_summary` used its own test —
+        # "is it an int or a float?" — so the same value was reported as not finite *and*
+        # listed among the laboratory's measurements, inflating `measured_count` with a
+        # number the record had just rejected.
+        self.assertNotIn("mean_depth", summary["measured"])
+        self.assertEqual(summary["measured_count"], len(summary["measured"]))
 
     def test_invalid_metric_is_not_counted_as_measured(self):
         record = wgs_qc_record(case_id="CASE")

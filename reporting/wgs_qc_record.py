@@ -108,6 +108,24 @@ def _is_unavailable(value: Any) -> bool:
     )
 
 
+def _is_finite_number(value: Any) -> bool:
+    """One predicate for "this is a measurement", used by validation and by the summary.
+
+    They disagreed. `validate_record` rejected a non-finite metric, but `audit_summary`
+    counted anything `isinstance(value, (int, float))` as measured — and JSON integers are
+    arbitrary precision, so `mean_depth = 10**400` came back NÃO DISPONÍVEL *and* was listed
+    among the laboratory's measurements. A reader would see a count that includes a value the
+    record itself refused. `math.isfinite` raises OverflowError on such an int, which is why
+    the call is guarded rather than trusted.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
 def _unavailable_problem(key: str, value: Any) -> str | None:
     """Why this looks like an unavailable marker but is not a usable one."""
     if not isinstance(value, dict):
@@ -173,18 +191,7 @@ def validate_record(
             continue
         if _is_unavailable(value):
             continue
-        # JSON integers are arbitrary precision, so a metric can arrive as an int too large
-        # to convert to float — `math.isfinite(10**400)` raises OverflowError. Uncaught, that
-        # killed the QC record instead of recording the value as not finite, which is exactly
-        # the outcome this branch exists to produce.
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            finite = False
-        else:
-            try:
-                finite = math.isfinite(value)
-            except OverflowError:
-                finite = False
-        if not finite:
+        if not _is_finite_number(value):
             problems.append(f"metrics.{key} ({label}): {value!r} não é um número finito")
             continue
         if low is not None and value < low:
@@ -267,12 +274,7 @@ def audit_summary(record: dict[str, Any]) -> dict[str, Any]:
     """
     problems = validate_record(record)
     metrics = record.get("metrics") if isinstance(record.get("metrics"), dict) else {}
-    measured = sorted(
-        k
-        for k in REQUIRED_METRICS
-        if isinstance(metrics.get(k), (int, float))
-        and not isinstance(metrics.get(k), bool)
-    )
+    measured = sorted(k for k in REQUIRED_METRICS if _is_finite_number(metrics.get(k)))
     unavailable = sorted(k for k in REQUIRED_METRICS if _is_unavailable(metrics.get(k)))
     return {
         "schema": SCHEMA,

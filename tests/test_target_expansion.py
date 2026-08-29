@@ -267,7 +267,9 @@ class MergeTest(unittest.TestCase):
             "reference_allele": "A",
             "assessed_allele": "G",
             "assessed_allele_source": "fixture",
+            "assessed_allele_status": "VERIFICADO",
             "assessed_allele_evidence": "evidence.json",
+            "assessed_allele_references": {"clinvar": ["VCV9"]},
             "references": {"clinvar": ["VCV1"]},
         }
         second = {
@@ -282,7 +284,22 @@ class MergeTest(unittest.TestCase):
         self.assertNotIn("assessed_allele", merged)
         self.assertNotIn("assessed_allele_source", merged)
         self.assertNotIn("assessed_allele_evidence", merged)
+        self.assertNotIn("assessed_allele_status", merged)
+        # Allele-scoped references go with the allele: they are the records cited *for* a
+        # scoring that no longer stands.
+        self.assertNotIn("assessed_allele_references", merged)
         self.assertIn("alelo de referência", merged["assessed_allele_reason"])
+        # Locus-scoped `references` deliberately survives, asserted on purpose rather than
+        # left to omission. It records which registry entries were consulted for rs1, not
+        # which allele they supported; the locus is still in the manifest, refused and
+        # carrying `identity_conflict`, and an auditor has to be able to see which records
+        # disagreed. Dropping it would strip provenance from exactly the target that most
+        # needs it. Note the retention is structural, not incidental: the field sits outside
+        # the `assessed_allele_` namespace, so even a `pop` in the clearing branch is undone
+        # by the generic carry-over below it. Removing it would take a deliberate change to
+        # both, which is the point — this assertion says that change is not wanted.
+        self.assertEqual(merged["references"], {"clinvar": ["VCV1"]})
+        self.assertEqual(merged["identity_conflict"], ["reference_allele"])
 
     def test_a_third_registry_cannot_restore_an_allele_refused_for_reference_conflict(self):
         """The refusal has to outlive the registry that caused it.

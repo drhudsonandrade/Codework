@@ -100,6 +100,46 @@ class ClinvarCoordinateIdentityTests(unittest.TestCase):
         self.assertIn("retstart=0", urls[0])
         self.assertIn("retstart=20", urls[1])
 
+    def test_a_page_short_of_the_reported_count_is_refused_not_called_absence(self):
+        """An incomplete collection is not the same fact as "ClinVar has no record".
+
+        Under load NCBI answers esearch with `count > 0` and an empty `idlist`. The loop
+        breaks on the empty page, and with the completeness check placed after the
+        emptiness check the function returned `NÃO DISPONÍVEL: ClinVar não retorna registro`
+        — a sentence asserting absence — so the locus entered the curated record as a
+        verified gap. It has to refuse instead: order matters here, and only running it
+        proves the order is right.
+        """
+        placement = {
+            "GRCh38": {
+                "seq_id": "NC_000001.11",
+                "position": 101,
+                "reference_allele": "A",
+            }
+        }
+        for label, pages in (
+            ("first page empty", [{"esearchresult": {"count": "1", "idlist": []}}]),
+            (
+                "second page empty",
+                [
+                    {"esearchresult": {"count": "40", "idlist": [str(i) for i in range(1, 21)]}},
+                    {"esearchresult": {"count": "40", "idlist": []}},
+                ],
+            ),
+        ):
+            with self.subTest(case=label):
+                with (
+                    patch.object(CURATE, "fetch_refsnp", return_value={}),
+                    patch.object(CURATE, "placements", return_value=placement),
+                    patch.object(CURATE, "_json", side_effect=list(pages)),
+                    patch.object(CURATE.time, "sleep"),
+                ):
+                    with self.assertRaises(CURATE.CurationError) as caught:
+                        CURATE.fetch_clinvar_conditions("rs123")
+                message = str(caught.exception)
+                self.assertIn("refusing partial curation", message)
+                self.assertNotIn("não retorna registro", message)
+
     def test_clinvar_fetch_failure_is_local_to_one_locus(self):
         with patch.object(
             CURATE,

@@ -27,6 +27,11 @@ class ProvenanceMarkerEvidenceTest(unittest.TestCase):
         )
         observed = {record["rsid"]: record for record in evidence["results"]}
         self.assertEqual(set(observed), {marker["rsid"] for marker in table["markers"]})
+        # Indexing by rsid silently drops duplicates: two records for one marker, even with
+        # conflicting placements, would collapse to whichever came last and every assertion
+        # below would still pass. Counts have to agree on all three sides.
+        self.assertEqual(len(evidence["results"]), len(table["markers"]))
+        self.assertEqual(len(observed), len(table["markers"]))
 
         for marker in table["markers"]:
             with self.subTest(rsid=marker["rsid"]):

@@ -15,8 +15,12 @@ these words.
 What this module does *not* do is fabricate the missing ones. The shape it refuses outright is
 a blanket attestation: all 263 rules marked NOT_APPLICABLE behind one boilerplate
 justification, which would reach `ready_for_requested_operation: true` while establishing
-nothing. That refusal is enforced and tested here; no external audit result is cited for it,
-because none in this repository is bound to an artifact or a reproducible procedure. A section with no curated entry is reported as pending, by number
+nothing. That refusal is `validate_curation`'s "reuse justification" problem, pinned by
+`tests/test_authority_regressions.py::SectionCurationValidationTest::
+test_any_reused_not_applicable_justification_is_reported` — run it with
+`PYTHONPATH=tests python -m unittest tests.test_authority_regressions`. No external audit
+result is cited for the refusal, because none in this repository is bound to an artifact or a
+reproducible procedure. A section with no curated entry is reported as pending, by number
 and title, and the gate refuses — which is the honest state of a partially curated ruleset.
 
 The trace is bound at run time, never stored: `input_sha256` is the file actually analysed and

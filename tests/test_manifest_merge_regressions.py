@@ -85,6 +85,9 @@ class ManifestIdentityMergeTest(unittest.TestCase):
         self.assertNotIn("assessed_allele", target)
         self.assertNotIn("assessed_allele_evidence", target)
         self.assertNotIn("assessed_allele_source", target)
+        # `assessed_allele_status` too: a branch that restored only that key would leave the
+        # target publishing an assessed-allele *status* with no assessed allele under it.
+        self.assertNotIn("assessed_allele_status", target)
 
     def test_version_is_bound_to_input_content(self):
         with tempfile.TemporaryDirectory() as td:
