@@ -23,14 +23,30 @@ def resolve(root: Path, value: str | None) -> Path | None:
     name a file outside the sample directory that the gate would then hash and record as a
     verified input. Symlinks are followed before the containment check, so a link planted
     inside the sample directory cannot reach out either.
+
+    Every refusal is a ValueError, so `validate_manifest` has one exception type to catch and
+    the gate always answers with a status rather than a traceback.
     """
     if not value:
         return None
+    # The manifest is JSON, so a path field can arrive as a number, a bool, a list or an
+    # object, and `Path()` raises TypeError on all of them — an unhandled crash where the
+    # contract is a reported error.
+    if not isinstance(value, str):
+        raise ValueError(
+            f"input path must be a string, got {type(value).__name__}"
+        )
     raw = Path(value)
     if raw.is_absolute():
         raise ValueError("absolute input paths are not allowed in sample-manifest.json")
-    absolute_root = root.resolve()
-    candidate = (absolute_root / raw).resolve()
+    try:
+        absolute_root = root.resolve()
+        candidate = (absolute_root / raw).resolve()
+    except (OSError, RuntimeError) as exc:
+        # `Path.resolve()` raises RuntimeError on a symlink loop and OSError on other
+        # filesystem failures. Left uncaught, the call added here to *enforce* containment
+        # was itself a way to kill the gate before it could report NÃO DISPONÍVEL.
+        raise ValueError(f"input path could not be resolved: {exc}") from exc
     try:
         candidate.relative_to(absolute_root)
     except ValueError as exc:
@@ -83,7 +99,8 @@ def validate_manifest(manifest_path: Path) -> dict:
     refused = False
     if input_type == "FASTQ":
         try:
-            r1 = resolve(root, manifest.get("r1")); r2 = resolve(root, manifest.get("r2"))
+            r1 = resolve(root, manifest.get("r1"))
+            r2 = resolve(root, manifest.get("r2"))
         except ValueError as exc:
             r1 = r2 = None
             refused = True
@@ -92,10 +109,14 @@ def validate_manifest(manifest_path: Path) -> dict:
             if not refused:
                 errors.append("FASTQ requires r1 and r2")
         else:
-            ok1, d1 = fastq_probe(r1); ok2, d2 = fastq_probe(r2)
-            inputs["r1"] = d1; inputs["r2"] = d2
-            if not ok1: errors.append("R1 integrity probe failed")
-            if not ok2: errors.append("R2 integrity probe failed")
+            ok1, d1 = fastq_probe(r1)
+            ok2, d2 = fastq_probe(r2)
+            inputs["r1"] = d1
+            inputs["r2"] = d2
+            if not ok1:
+                errors.append("R1 integrity probe failed")
+            if not ok2:
+                errors.append("R2 integrity probe failed")
     elif input_type in {"BAM", "CRAM"}:
         try:
             alignment = resolve(root, manifest.get("alignment"))

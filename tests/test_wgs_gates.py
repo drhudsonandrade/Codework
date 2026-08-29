@@ -130,6 +130,41 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 resolve(root, "r1.fastq")
 
+    def test_a_symlink_loop_is_a_domain_refusal_not_a_traceback(self):
+        """`Path.resolve()` raises RuntimeError on a loop, which is not this gate's error.
+
+        A sample directory containing a symlink loop killed the gate with an unhandled
+        RuntimeError, so `workflows/wgs.nf` never got the NÃO DISPONÍVEL it stops on — the
+        opposite of fail-closed, reached through the very call added to enforce containment.
+        """
+        from scripts.wgs_input_gate import resolve
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td).resolve()
+            (root / "loop").symlink_to(root / "loop2")
+            (root / "loop2").symlink_to(root / "loop")
+            with self.assertRaises(ValueError):
+                resolve(root, "loop/r1.fastq")
+
+    def test_a_non_string_input_is_a_domain_refusal_not_a_traceback(self):
+        """A manifest is JSON, so a path field can arrive as a number, bool, list or object."""
+        from scripts.wgs_input_gate import resolve
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td).resolve()
+            for value in (123, True, ["r1.fastq"], {"path": "r1.fastq"}, 1.5):
+                with self.subTest(value=value):
+                    with self.assertRaises(ValueError):
+                        resolve(root, value)
+
+    def test_a_non_string_fastq_field_fails_closed_end_to_end(self):
+        from scripts.wgs_input_gate import validate_manifest
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td).resolve()
+            (root / "r2.fastq").write_text("@r1/2\nTGCA\n+\nIIII\n", encoding="utf-8")
+            result = validate_manifest(self._manifest(root, r1=123))
+            self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+            self.assertTrue(result["errors"])
+            self.assertNotIn("r1", result["inputs"])
+
     def test_contained_relative_path_still_resolves(self):
         from scripts.wgs_input_gate import resolve
         with tempfile.TemporaryDirectory() as td:
