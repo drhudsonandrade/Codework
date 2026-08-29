@@ -17,10 +17,25 @@ def sha256_file(path: Path) -> str:
 
 
 def resolve(root: Path, value: str | None) -> Path | None:
+    """Resolve a manifest-declared input without granting ambient filesystem authority.
+
+    The manifest is sample-supplied, so an absolute path or a `../` chain must not let it
+    name a file outside the sample directory that the gate would then hash and record as a
+    verified input. Symlinks are followed before the containment check, so a link planted
+    inside the sample directory cannot reach out either.
+    """
     if not value:
         return None
-    path = Path(value)
-    return path if path.is_absolute() else root / path
+    raw = Path(value)
+    if raw.is_absolute():
+        raise ValueError("absolute input paths are not allowed in sample-manifest.json")
+    absolute_root = root.resolve()
+    candidate = (absolute_root / raw).resolve()
+    try:
+        candidate.relative_to(absolute_root)
+    except ValueError as exc:
+        raise ValueError("input path escapes the sample directory") from exc
+    return candidate
 
 
 def fastq_probe(path: Path) -> tuple[bool, dict]:
@@ -45,7 +60,7 @@ def fastq_probe(path: Path) -> tuple[bool, dict]:
 
 
 def validate_manifest(manifest_path: Path) -> dict:
-    root = manifest_path.parent
+    root = manifest_path.parent.resolve()
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     errors: list[str] = []
     sample_id = str(manifest.get("sample_id") or "").strip()
@@ -63,19 +78,34 @@ def validate_manifest(manifest_path: Path) -> dict:
         errors.append("read_group.sample must equal sample_id")
 
     inputs: dict[str, dict] = {}
+    # A refused path is already a reported error; re-reporting it as "missing" would
+    # describe a containment breach as an absent file.
+    refused = False
     if input_type == "FASTQ":
-        r1 = resolve(root, manifest.get("r1")); r2 = resolve(root, manifest.get("r2"))
+        try:
+            r1 = resolve(root, manifest.get("r1")); r2 = resolve(root, manifest.get("r2"))
+        except ValueError as exc:
+            r1 = r2 = None
+            refused = True
+            errors.append(str(exc))
         if r1 is None or r2 is None:
-            errors.append("FASTQ requires r1 and r2")
+            if not refused:
+                errors.append("FASTQ requires r1 and r2")
         else:
             ok1, d1 = fastq_probe(r1); ok2, d2 = fastq_probe(r2)
             inputs["r1"] = d1; inputs["r2"] = d2
             if not ok1: errors.append("R1 integrity probe failed")
             if not ok2: errors.append("R2 integrity probe failed")
     elif input_type in {"BAM", "CRAM"}:
-        alignment = resolve(root, manifest.get("alignment"))
+        try:
+            alignment = resolve(root, manifest.get("alignment"))
+        except ValueError as exc:
+            alignment = None
+            refused = True
+            errors.append(str(exc))
         if alignment is None or not alignment.is_file() or alignment.stat().st_size == 0:
-            errors.append(f"{input_type} alignment missing_or_empty")
+            if not refused:
+                errors.append(f"{input_type} alignment missing_or_empty")
         else:
             inputs["alignment"] = {"path": str(alignment), "size_bytes": alignment.stat().st_size, "sha256": sha256_file(alignment)}
 
