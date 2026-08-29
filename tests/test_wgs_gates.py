@@ -13,6 +13,7 @@ from pathlib import Path
 
 class WgsGateTest(unittest.TestCase):
     def _runtime(self):
+        """A runtime-gate fixture whose checks all pass, so a test can vary one thing."""
         checks = {}
         for key in (
             "executables_and_versions", "reference_build_and_contigs", "fasta_fai_dictionary",
@@ -97,6 +98,11 @@ class WgsInputPathContainmentTest(unittest.TestCase):
     """
 
     def _manifest(self, root: Path, **overrides) -> Path:
+        """Write a valid FASTQ manifest, with `overrides` replacing individual fields.
+
+        Valid by default so each test states only the one thing it is about; a test that
+        built its own manifest from scratch would restate the schema and drift from it.
+        """
         payload = {
             "sample_id": "S1",
             "input_type": "FASTQ",
@@ -536,6 +542,11 @@ printf 'ALIGNED\\n'
 
 
 def _tools_available() -> bool:
+    """Whether the executable script tests can run at all.
+
+    They drive the real `wgs_align_or_stage.sh`, so bash, jq and sha256sum have to exist.
+    Skipping is honest where they do not; asserting on a script that cannot run is not.
+    """
     return all(shutil.which(tool) for tool in ("bash", "jq", "sha256sum"))
 
 
@@ -611,6 +622,7 @@ class WgsAlignConsumesVerifiedInputsTest(unittest.TestCase):
         return {"manifest": manifest, "ref": ref, "out": root / "out" / "sample.bam", "qc": input_qc, "r1": r1}, env
 
     def _run(self, paths, env):
+        """Run the real alignment script against the stub toolchain and capture everything."""
         return subprocess.run(
             [
                 "bash",
@@ -627,6 +639,11 @@ class WgsAlignConsumesVerifiedInputsTest(unittest.TestCase):
         )
 
     def _assert_no_tool_ran(self, env):
+        """Assert the refusal happened *before* bwa-mem2 or samtools were reached.
+
+        A non-zero exit alone would also be satisfied by a script that ran the aligner and
+        then failed, which is the opposite of the property under test.
+        """
         log = Path(env["STUB_LOG"])
         self.assertFalse(log.exists() and log.read_text(encoding="utf-8").strip(),
                          f"alignment tools ran: {log.read_text(encoding='utf-8') if log.exists() else ''}")

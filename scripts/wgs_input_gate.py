@@ -222,6 +222,18 @@ def fastq_probe(root: Path, path: Path) -> tuple[bool, dict]:
 
 
 def validate_manifest(manifest_path: Path) -> dict:
+    """Turn one sample manifest into the gate's verdict, never into a traceback.
+
+    Every refusal the helpers raise is caught here and reported as an entry in `errors`, so
+    the caller always receives a status document. That matters because `workflows/wgs.nf`
+    gates the whole WGS lane on this file reading VERIFICADO: a process that dies without
+    writing `input-qc.json` leaves the lane waiting on a verdict that never arrives, which is
+    not the same thing as refusing.
+
+    `root` is resolved once. A sample directory reached through a symlink (a `/tmp` staging
+    root, say) would otherwise compare against its logical path and refuse every legitimate
+    input in it.
+    """
     root = manifest_path.parent.resolve()
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     errors: list[str] = []
@@ -315,6 +327,12 @@ def validate_manifest(manifest_path: Path) -> dict:
 
 
 def main() -> int:
+    """Write `input-qc.json` and exit 0 only when the sample verified.
+
+    The exit status and the file say the same thing on purpose: the workflow reads the file,
+    a human reads the stream, and a disagreement between the two would be the gate arguing
+    with itself.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--output", required=True)
