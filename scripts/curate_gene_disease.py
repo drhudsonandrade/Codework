@@ -332,17 +332,22 @@ def fetch_clinvar_conditions(rsid: str) -> dict[str, Any]:
             break
         if retstart < count:
             time.sleep(REQUEST_INTERVAL_SECONDS)
+    # Completeness is decided before anything is concluded about the content. With the order
+    # reversed, an esearch reporting count > 0 whose first page came back with an empty
+    # idlist — the partial response NCBI returns under load — broke the loop, left `uids`
+    # empty, and returned "ClinVar não retorna registro". That sentence asserts absence; the
+    # fact was an incomplete collection, and the locus entered the record as a verified gap.
+    if count is not None and len(uids) < count:
+        raise CurationError(
+            f"{rsid}: ClinVar returned {len(uids)} of {count} record ids; "
+            "refusing partial curation"
+        )
     if not uids:
         return {
             "status": UNAVAILABLE,
             "reason": f"ClinVar não retorna registro para {rsid}",
             "records": [],
         }
-    if count is not None and len(uids) < count:
-        raise CurationError(
-            f"{rsid}: ClinVar returned {len(uids)} of {count} record ids; "
-            "refusing partial curation"
-        )
 
     result: dict[str, Any] = {"uids": []}
     for start in range(0, len(uids), 50):

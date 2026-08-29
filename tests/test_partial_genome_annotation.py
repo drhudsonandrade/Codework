@@ -42,6 +42,39 @@ class PartialGenomeAnnotationTest(unittest.TestCase):
             },
         })
 
+    def test_an_attestation_for_another_assembly_does_not_unlock_interpretation(self):
+        """Only matching values were ever exercised, so the comparison was untested.
+
+        If `inspect_array` stopped comparing `asserted_value` against the declared build or
+        strand, every existing case here would still pass — and an attestation about GRCh38
+        would release interpretation of an array declared GRCh37.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            array = self._fixture(root)
+            qc = inspect_array(
+                array,
+                case_id="SYN",
+                build="GRCh37",
+                strand="forward",
+                build_evidence=self._evidence(array, asserted_value="GRCh38"),
+                strand_evidence=self._evidence(array, asserted_value="forward"),
+            )
+            self.assertEqual(qc["gates"]["BUILD_STRAND_GATE"]["state"], "BLOCKED")
+            self.assertEqual(qc["gates"]["LIMITED_INTERPRETATION_GATE"]["state"], "BLOCKED")
+
+            # The same fixture with a matching attestation must clear the gate, so the
+            # assertion above is about the mismatch and not about the fixture being unusable.
+            agreeing = inspect_array(
+                array,
+                case_id="SYN",
+                build="GRCh37",
+                strand="forward",
+                build_evidence=self._evidence(array, asserted_value="GRCh37"),
+                strand_evidence=self._evidence(array, asserted_value="forward"),
+            )
+            self.assertEqual(agreeing["gates"]["BUILD_STRAND_GATE"]["state"], "PASS")
+
     def test_plan_only_is_target_first_and_not_verified_evidence(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

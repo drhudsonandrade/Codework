@@ -52,7 +52,12 @@ def _verified_coordinate_manifest(template_dir: Path) -> tuple[dict[str, Any], d
         detail_result = _template_v3.verify_coordinate_detail(
             detail_path, detail_meta, manifest_bytes
         )
-        actual_detail = detail_result.get("content_sha256") or detail_result["container_sha256"]
+        # `content_sha256` is the SHA-256 of the *decoded* detail, and the decode is accepted
+        # only when it equals `manifest_bytes`, so that value is always the manifest's hash.
+        # Preferring it wrote `coordinate_manifest_sha256 = {"manifest": X, "detail": X}` — the
+        # detail field stopped identifying the installed detail file at all. The container
+        # hash is the artifact's identity; the content hash stays proof of the binding.
+        actual_detail = detail_result["container_sha256"]
         try:
             detailed = json.loads(manifest_bytes.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -95,6 +100,11 @@ class UnapprovedRendererError(RuntimeError):
     """A FINAL report was about to be produced without the approved v3.0 template pack."""
 
 
+#: Written into the Execution Manifest, and read back to recognise an already-disclosed
+#: payload. One constant so the writer and the recogniser cannot drift.
+_PROGRAMMATIC_RENDERER = "aproximação programática (fora do pacote de modelos aprovado)"
+
+
 def _disclose_programmatic_render(
     rendered: dict[str, Any], *, final_authorization: str | None = None
 ) -> dict[str, Any]:
@@ -115,6 +125,19 @@ def _disclose_programmatic_render(
         disclosed["data"] = data
 
     final_mode = str(metadata.get("mode", "")).upper() == "FINAL"
+
+    # Both `generate_report.py` and `write_editorial_bundle` call `prepare_editorial_render`,
+    # so the same payload reaches this function twice. The second call does not receive the
+    # caller's `programmatic_final_authorization`, which made an authorized FINAL render fail
+    # with UnapprovedRendererError on the way to disk. Disclosure is therefore idempotent —
+    # but only over a payload that is *completely* disclosed: in FINAL mode the recorded
+    # authorization must already be there, so a caller cannot skip the gate by pre-setting
+    # the RENDERER marker on a payload it supplies.
+    existing = data.get("execution_manifest")
+    if isinstance(existing, dict) and existing.get("RENDERER") == _PROGRAMMATIC_RENDERER:
+        recorded = existing.get("PROGRAMMATIC_FINAL_AUTHORIZATION")
+        if not final_mode or (isinstance(recorded, str) and recorded.strip()):
+            return disclosed
     if final_mode and (
         not isinstance(final_authorization, str) or not final_authorization.strip()
     ):
@@ -127,13 +150,45 @@ def _disclose_programmatic_render(
     manifest = data.get("execution_manifest")
     if not isinstance(manifest, dict):
         manifest = {"status": str(manifest) if manifest else "NÃO DISPONÍVEL"}
-    manifest["RENDERER"] = "aproximação programática (fora do pacote de modelos aprovado)"
+    manifest["RENDERER"] = _PROGRAMMATIC_RENDERER
     manifest["TEMPLATE_PACK_V3"] = "NÃO DISPONÍVEL"
     manifest["PARIDADE_VISUAL"] = "NÃO DISPONÍVEL"
     if final_mode:
         manifest["PROGRAMMATIC_FINAL_AUTHORIZATION"] = final_authorization.strip()
     data["execution_manifest"] = manifest
+    # `render_document` built `markdown` and `html` from `data` before this function ran, and
+    # this function only edits `data`. `write_bundle` then wrote the updated data into the
+    # JSON while writing the *pre-disclosure* Markdown and HTML — so an authorized
+    # programmatic FINAL bundle declared RENDERER and PROGRAMMATIC_FINAL_AUTHORIZATION in the
+    # JSON, and the two artifacts a reader actually opens said nothing about the
+    # approximation. The derived views are rebuilt from the disclosed payload so all three
+    # agree.
+    _rerender_derived_views(disclosed)
     return disclosed
+
+
+def _rerender_derived_views(disclosed: dict[str, Any]) -> None:
+    """Rebuild `markdown`/`html` from the disclosed data, in place.
+
+    Imported here rather than at module scope: `reporting.engine` imports this module, so a
+    top-level import would close the cycle.
+    """
+    from . import engine as _engine
+
+    metadata = disclosed.get("metadata")
+    if not isinstance(metadata, dict) or "markdown" not in disclosed:
+        return
+    report_id = str(metadata.get("report_id") or "")
+    catalog = _engine.load_catalog()
+    model = catalog.get(report_id)
+    if model is None:
+        return
+    if str(metadata.get("mode", "")).upper() == "FINAL":
+        markdown = _engine._final_markdown(report_id, model, disclosed["data"])
+    else:
+        markdown = _engine._model_markdown(report_id, model)
+    disclosed["markdown"] = markdown
+    disclosed["html"] = _engine._to_html(markdown, model["title"])
 
 
 def prepare_editorial_render(

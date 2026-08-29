@@ -236,6 +236,9 @@ def _observation_status(rows: list[dict[str, Any]]) -> str:
         return "INFERIDO"
     if row.get("coordinate_reason_code") in {
         "REGISTRY_COORDINATES_UNAVAILABLE",
+        # No verified build means there is no canonical block to compare against, so the
+        # file has not been contradicted — the same category as the entries around it.
+        "BUILD_UNVERIFIED",
         "BUILD_COORDINATE_MISSING",
         "EXPECTED_POSITION_INVALID",
         # Its twin. Both mean our registry lacks half the coordinate, which is a gap in our

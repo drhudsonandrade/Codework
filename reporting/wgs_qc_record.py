@@ -173,11 +173,18 @@ def validate_record(
             continue
         if _is_unavailable(value):
             continue
-        if (
-            isinstance(value, bool)
-            or not isinstance(value, (int, float))
-            or not math.isfinite(value)
-        ):
+        # JSON integers are arbitrary precision, so a metric can arrive as an int too large
+        # to convert to float — `math.isfinite(10**400)` raises OverflowError. Uncaught, that
+        # killed the QC record instead of recording the value as not finite, which is exactly
+        # the outcome this branch exists to produce.
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            finite = False
+        else:
+            try:
+                finite = math.isfinite(value)
+            except OverflowError:
+                finite = False
+        if not finite:
             problems.append(f"metrics.{key} ({label}): {value!r} não é um número finito")
             continue
         if low is not None and value < low:

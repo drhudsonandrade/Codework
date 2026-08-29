@@ -60,6 +60,30 @@ class SharedHttpRetryPolicyTest(unittest.TestCase):
         self.assertEqual(fetched.call_count, 1)
         slept.assert_not_called()
 
+    def test_transient_dbsnp_error_is_retried_and_then_succeeds(self):
+        """The retry branch itself had no coverage.
+
+        The suite pinned only the permanent-error path and the invalid rsid, so a regression
+        that propagated every MarkerVerificationError immediately — losing the retry that
+        exists for 429/5xx/URLError — would have left both existing tests green.
+        """
+        payload = {"refsnp_id": "1"}
+        for transient in (429, 503):
+            with self.subTest(transient=transient):
+                with patch.object(
+                    verify_provenance_markers,
+                    "fetch_refsnp",
+                    side_effect=[self._marker_error(transient), payload],
+                ) as fetched, patch.object(
+                    verify_provenance_markers.time, "sleep"
+                ) as slept:
+                    result = verify_provenance_markers._fetch_with_retries(
+                        "rs1", attempts=4
+                    )
+                self.assertEqual(result, payload)
+                self.assertEqual(fetched.call_count, 2)
+                self.assertEqual(slept.call_count, 1)
+
     def test_invalid_dbsnp_identifier_fails_before_fetch(self):
         with patch.object(verify_provenance_markers, "fetch_refsnp") as fetched:
             with self.assertRaises(

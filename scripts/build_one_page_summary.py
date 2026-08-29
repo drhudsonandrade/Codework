@@ -116,8 +116,15 @@ def build_payload(
     compiler.register(matrix)
     if passport:
         compiler.register(passport)
-        if passport.payload.get("input_sha256") != matrix.payload.get("input_sha256"):
-            raise ValueError("passport and completeness matrix describe different inputs")
+        # `None != None` is false, so two artifacts that both omit `input_sha256` used to
+        # pass this check and be compiled as describing the same array. Report 06 already
+        # requires both to be present and equal; the one-page summary now does the same.
+        passport_input = str(passport.payload.get("input_sha256") or "").strip()
+        matrix_input = str(matrix.payload.get("input_sha256") or "").strip()
+        if not passport_input or not matrix_input or passport_input != matrix_input:
+            raise ValueError(
+                "passport and completeness matrix must describe the same non-empty input_sha256"
+            )
 
     verified = matrix.payload.get("operational_status") == "VERIFICADO"
     status = "VERIFICADO" if verified else UNAVAILABLE

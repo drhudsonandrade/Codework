@@ -92,6 +92,17 @@ def _get(url: str, *, attempts: int = 4) -> dict[str, Any]:
         try:
             with urllib.request.urlopen(request, timeout=45) as response:
                 return json.loads(response.read().decode("utf-8"))
+        # HTTPError subclasses URLError, so a permanent 400/404 used to fall into the retry
+        # loop and burn four attempts with 1s, 2s and 4s of waiting before failing anyway.
+        # `scripts/build_pgx_registry.py` already draws this line; the same policy applies.
+        except urllib.error.HTTPError as exc:
+            if exc.code != 429 and not 500 <= exc.code < 600:
+                raise CurationError(
+                    f"eutils fetch failed for {url} with non-retriable HTTP status {exc.code}"
+                ) from exc
+            last = exc
+            if attempt < attempts - 1:
+                time.sleep(2**attempt)
         except (urllib.error.URLError, TimeoutError, ConnectionError, json.JSONDecodeError) as exc:
             last = exc
             if attempt < attempts - 1:
@@ -531,6 +542,9 @@ def _apply_target_assessment(
     """Apply one curation result without separating an allele from its attestation."""
     if record and record["assessed_allele"]:
         target.pop("assessed_allele_reason", None)
+        # The refusal branch below drops this; the success branch did not, so a target could
+        # cite the references of a previous allele beside the new one.
+        target.pop("assessed_allele_references", None)
         target["assessed_allele"] = record["assessed_allele"]
         target["assessed_allele_status"] = "VERIFICADO"
         target["assessed_allele_source"] = record.get("source", "ClinVar")

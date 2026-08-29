@@ -260,6 +260,10 @@ class DecisionRuleTest(unittest.TestCase):
             "rsid": "rs1",
             "assessed_allele_status": "NÃO DISPONÍVEL",
             "assessed_allele_reason": "old refusal",
+            # Provenance of whatever this locus said before. The refusal branch drops it;
+            # the success branch did not, so a target could cite the references of a
+            # previous allele beside the new one.
+            "assessed_allele_references": {"clinvar": ["VCV000000001"]},
         }
         _apply_target_assessment(
             target,
@@ -274,6 +278,7 @@ class DecisionRuleTest(unittest.TestCase):
         self.assertEqual(target["assessed_allele"], "T")
         self.assertEqual(target["assessed_allele_status"], "VERIFICADO")
         self.assertNotIn("assessed_allele_reason", target)
+        self.assertNotIn("assessed_allele_references", target)
 
 
 class BcheFallbackTest(unittest.TestCase):

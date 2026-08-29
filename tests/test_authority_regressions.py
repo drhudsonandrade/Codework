@@ -39,6 +39,22 @@ class WgsQcSummaryValidationTest(unittest.TestCase):
         self.assertTrue(summary["problems"])
 
 
+    def test_an_unrepresentable_integer_metric_is_a_problem_not_a_crash(self):
+        """JSON integers are arbitrary precision; `math.isfinite` is not.
+
+        A metric arriving as an int too large to convert to float raised OverflowError out of
+        `audit_summary`, so the record died instead of reporting the value as not finite —
+        the very outcome the finiteness branch exists to produce.
+        """
+        record = wgs_qc_record(case_id="CASE")
+        record["metrics"]["mean_depth"] = 10**400
+        summary = audit_summary(record)
+        self.assertEqual(summary["status"], UNAVAILABLE)
+        self.assertTrue(
+            any("mean_depth" in problem for problem in summary["problems"]),
+            summary["problems"],
+        )
+
     def test_invalid_metric_is_not_counted_as_measured(self):
         record = wgs_qc_record(case_id="CASE")
         record["metrics"]["mean_depth"] = {"status": "DESCONHECIDO"}

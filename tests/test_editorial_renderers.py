@@ -88,6 +88,8 @@ class EditorialRendererTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             paths = write_bundle(rendered, Path(td), stem="disclosed")
             payload = json.loads(paths["json"].read_text(encoding="utf-8"))
+            markdown = paths["markdown"].read_text(encoding="utf-8")
+            html = paths["html"].read_text(encoding="utf-8")
         manifest = payload["data"]["execution_manifest"]
         for key in (
             "RENDERER",
@@ -96,6 +98,47 @@ class EditorialRendererTest(unittest.TestCase):
             "PROGRAMMATIC_FINAL_AUTHORIZATION",
         ):
             self.assertIn(key, manifest)
+        # The JSON was never the problem. `render_document` builds markdown and html from
+        # `data` *before* disclosure, and disclosure only edits `data`, so the two artifacts
+        # a reader actually opens carried no trace of the programmatic approximation while
+        # the JSON beside them declared it. All three must agree.
+        for artifact, text in (("markdown", markdown), ("html", html)):
+            with self.subTest(artifact=artifact):
+                self.assertIn("aproximação programática", text)
+                self.assertIn("PROGRAMMATIC_FINAL_AUTHORIZATION", text)
+
+    def test_disclosure_is_idempotent_and_keeps_the_authorization(self):
+        """Two callers prepare the same payload; the second must not lose the opt-in.
+
+        `generate_report.py` calls `prepare_editorial_render` and then `write_editorial_bundle`
+        calls it again on the same payload, without the caller's authorization. The second
+        pass therefore refused an already-authorized FINAL render with UnapprovedRendererError.
+        """
+        from reporting.engine import render_document
+        from reporting.editorial_v3 import prepare_editorial_render
+
+        rendered = render_document("01", final_data(), mode="FINAL")
+        once = prepare_editorial_render(
+            rendered, programmatic_final_authorization="unit-test visual QA"
+        )
+        twice = prepare_editorial_render(once)
+        self.assertEqual(
+            twice["data"]["execution_manifest"]["PROGRAMMATIC_FINAL_AUTHORIZATION"],
+            "unit-test visual QA",
+        )
+        self.assertEqual(once["data"]["execution_manifest"], twice["data"]["execution_manifest"])
+
+    def test_idempotency_is_not_a_way_around_the_final_opt_in(self):
+        """A payload that pre-sets the marker must not skip the authorization gate."""
+        from reporting.engine import render_document
+        from reporting.editorial_v3 import prepare_editorial_render, UnapprovedRendererError
+
+        rendered = render_document("01", final_data(), mode="FINAL")
+        rendered["data"]["execution_manifest"] = {
+            "RENDERER": "aproximação programática (fora do pacote de modelos aprovado)"
+        }
+        with self.assertRaises(UnapprovedRendererError):
+            prepare_editorial_render(rendered)
 
     def test_final_report_writes_real_pdf_and_editable_docx(self):
         from reporting.engine import render_document

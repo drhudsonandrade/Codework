@@ -93,6 +93,12 @@ class ClinvarCoordinateIdentityTests(unittest.TestCase):
         self.assertEqual(result["status"], "VERIFICADO")
         self.assertEqual(len(result["records"]), 21)
         self.assertEqual(fetched.call_count, 3)
+        # The mock hands back the next page whatever URL it is asked for, so a regression
+        # that sent retstart=0 on every iteration would consume all three responses and pass
+        # on the count alone. The offsets are what prove the loop actually paginates.
+        urls = [call.args[0] for call in fetched.call_args_list]
+        self.assertIn("retstart=0", urls[0])
+        self.assertIn("retstart=20", urls[1])
 
     def test_clinvar_fetch_failure_is_local_to_one_locus(self):
         with patch.object(

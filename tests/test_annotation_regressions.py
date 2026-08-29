@@ -99,8 +99,8 @@ class AnnotationRegressionTest(unittest.TestCase):
         self.assertEqual(missing, "INFERIDO")
         self.assertEqual(divergent, "NÃO DISPONÍVEL")
 
-    def test_a_registry_gap_is_inferido_whichever_half_of_the_coordinate_is_missing(self):
-        """The two halves of a coordinate must be graded alike.
+    def test_a_registry_gap_grades_inferido_not_unavailable(self):
+        """A gap in our reference data is not a finding against the patient's file.
 
         `EXPECTED_CHROMOSOME_INVALID` was added so that a registry with no chromosome would
         stop being published as a mismatch blamed on the patient's file. It was not added to
@@ -109,7 +109,14 @@ class AnnotationRegressionTest(unittest.TestCase):
         reference data produced two different verdicts about the sample, decided only by
         which field the registry happened to be missing.
         """
-        for code in ("EXPECTED_POSITION_INVALID", "EXPECTED_CHROMOSOME_INVALID"):
+        for code in (
+            "EXPECTED_POSITION_INVALID",
+            "EXPECTED_CHROMOSOME_INVALID",
+            # No verified build means no canonical block to compare against, so the file has
+            # not been contradicted — same category, and it graded NÃO DISPONÍVEL alongside
+            # COORDINATE_MISMATCH, which *is* a finding against the file.
+            "BUILD_UNVERIFIED",
+        ):
             with self.subTest(code=code):
                 self.assertEqual(
                     _observation_status([{

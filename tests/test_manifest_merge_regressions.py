@@ -78,6 +78,13 @@ class ManifestIdentityMergeTest(unittest.TestCase):
             payload["assessed_allele_conflicts"][0]["assessed_alleles"],
             ["A", "G", "T"],
         )
+        # Listing the conflicting values is not the same as refusing the locus. Asserting
+        # only the list, a regression where the already-conflicted branch copied
+        # `assessed_allele` back from the third registry would still have passed here, and
+        # the manifest would ship an arbitrated allele beside the record of the conflict.
+        self.assertNotIn("assessed_allele", target)
+        self.assertNotIn("assessed_allele_evidence", target)
+        self.assertNotIn("assessed_allele_source", target)
 
     def test_version_is_bound_to_input_content(self):
         with tempfile.TemporaryDirectory() as td:
