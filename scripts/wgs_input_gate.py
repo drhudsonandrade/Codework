@@ -4,16 +4,46 @@ from __future__ import annotations
 import argparse
 import gzip
 import hashlib
+import io
 import json
+import os
 from pathlib import Path
 
 
-def sha256_file(path: Path) -> str:
+def _sha256_stream(handle) -> str:
+    """Hash an already-open handle from its start, leaving it rewound."""
+    handle.seek(0)
     h = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            h.update(chunk)
+    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+        h.update(chunk)
+    handle.seek(0)
     return h.hexdigest()
+
+
+def sha256_file(path: Path) -> str:
+    with open_contained(path) as handle:
+        return _sha256_stream(handle)
+
+
+def open_contained(path: Path):
+    """Open a validated input once, refusing a symlink at the final component.
+
+    Containment is checked against a path, and every later step used to reopen that path *by
+    name* — `fastq_probe` to read it, `sha256_file` to hash it, `stat` to size it. Between the
+    check and each of those opens the name could be repointed, so the bytes probed, hashed and
+    recorded were not provably the bytes that passed containment. One handle is opened here
+    and carried through all three, so there is no second lookup to race.
+
+    `O_NOFOLLOW` refuses a symlink at the final component; the containment check in `resolve`
+    already resolved the parent components. A fully race-free walk would open each component
+    with `dir_fd`, which this does not do — what it removes is the reopen-by-name window that
+    every consumer of a validated path had.
+    """
+    try:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError as exc:
+        raise ValueError(f"input could not be opened: {exc}") from exc
+    return os.fdopen(descriptor, "rb")
 
 
 def resolve(root: Path, value: str | None) -> Path | None:
@@ -27,15 +57,16 @@ def resolve(root: Path, value: str | None) -> Path | None:
     Every refusal is a ValueError, so `validate_manifest` has one exception type to catch and
     the gate always answers with a status rather than a traceback.
     """
-    if not value:
+    # Type before emptiness, in that order. The manifest is JSON, so a path field can arrive
+    # as a number, a bool, a list or an object, and `Path()` raises TypeError on all of them.
+    # Testing `not value` first also swallowed every *falsy* non-string — False, 0, 0.0, [],
+    # {} — as though the field had been left out, which reports "FASTQ requires r1 and r2"
+    # for a manifest that did supply r1, just not as text. A missing field and a wrong type
+    # are different facts and the gate now says which one it found.
+    if value is None or value == "":
         return None
-    # The manifest is JSON, so a path field can arrive as a number, a bool, a list or an
-    # object, and `Path()` raises TypeError on all of them — an unhandled crash where the
-    # contract is a reported error.
     if not isinstance(value, str):
-        raise ValueError(
-            f"input path must be a string, got {type(value).__name__}"
-        )
+        raise ValueError(f"input path must be a string, got {type(value).__name__}")
     raw = Path(value)
     if raw.is_absolute():
         raise ValueError("absolute input paths are not allowed in sample-manifest.json")
@@ -55,11 +86,21 @@ def resolve(root: Path, value: str | None) -> Path | None:
 
 
 def fastq_probe(path: Path) -> tuple[bool, dict]:
-    if not path.is_file() or path.stat().st_size == 0:
-        return False, {"path": str(path), "reason": "missing_or_empty"}
-    opener = gzip.open if path.suffix == ".gz" else open
+    """Probe and hash one FASTQ through a single open handle.
+
+    The probe and the hash used to open the path separately, so the bytes recorded as this
+    sample's input were not provably the bytes the probe accepted.
+    """
     try:
-        with opener(path, "rt", encoding="utf-8", errors="strict") as handle:
+        raw = open_contained(path)
+    except ValueError:
+        return False, {"path": str(path), "reason": "missing_or_empty"}
+    try:
+        with raw:
+            if os.fstat(raw.fileno()).st_size == 0:
+                return False, {"path": str(path), "reason": "missing_or_empty"}
+            stream = gzip.GzipFile(fileobj=raw) if path.suffix == ".gz" else raw
+            handle = io.TextIOWrapper(stream, encoding="utf-8", errors="strict")
             records = []
             for _ in range(128):
                 row = [handle.readline() for __ in range(4)]
@@ -68,10 +109,15 @@ def fastq_probe(path: Path) -> tuple[bool, dict]:
                 if any(part == "" for part in row) or not row[0].startswith("@") or not row[2].startswith("+") or len(row[1].strip()) != len(row[3].strip()):
                     return False, {"path": str(path), "reason": "malformed_fastq_probe"}
                 records.append(row[0].strip().split()[0])
-        if not records:
-            return False, {"path": str(path), "reason": "no_records"}
-        return True, {"path": str(path), "probe_records": len(records), "sha256": sha256_file(path)}
-    except (OSError, UnicodeError) as exc:
+            if not records:
+                return False, {"path": str(path), "reason": "no_records"}
+            handle.detach()
+            return True, {
+                "path": str(path),
+                "probe_records": len(records),
+                "sha256": _sha256_stream(raw),
+            }
+    except (OSError, EOFError, UnicodeError, gzip.BadGzipFile) as exc:
         return False, {"path": str(path), "reason": type(exc).__name__}
 
 
@@ -124,11 +170,25 @@ def validate_manifest(manifest_path: Path) -> dict:
             alignment = None
             refused = True
             errors.append(str(exc))
-        if alignment is None or not alignment.is_file() or alignment.stat().st_size == 0:
+        # Size and hash from one handle, for the same reason as the FASTQ path: `stat` then
+        # `open` is two lookups of a name that was validated once.
+        alignment_size = None
+        if alignment is not None:
+            try:
+                with open_contained(alignment) as handle:
+                    alignment_size = os.fstat(handle.fileno()).st_size
+                    alignment_sha = _sha256_stream(handle) if alignment_size else None
+            except (ValueError, OSError):
+                alignment_size = None
+        if alignment is None or not alignment_size:
             if not refused:
                 errors.append(f"{input_type} alignment missing_or_empty")
         else:
-            inputs["alignment"] = {"path": str(alignment), "size_bytes": alignment.stat().st_size, "sha256": sha256_file(alignment)}
+            inputs["alignment"] = {
+                "path": str(alignment),
+                "size_bytes": alignment_size,
+                "sha256": alignment_sha,
+            }
 
     return {
         "schema": "genoma-wgs-input-gate-v1",

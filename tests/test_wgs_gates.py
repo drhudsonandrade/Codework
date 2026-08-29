@@ -155,6 +155,54 @@ class WgsInputPathContainmentTest(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         resolve(root, value)
 
+    def test_a_falsy_non_string_is_a_wrong_type_not_a_missing_field(self):
+        """`not value` swallowed every falsy non-string as though the field were absent.
+
+        A manifest declaring `"r1": 0` did supply r1 — just not as text. Reporting "FASTQ
+        requires r1 and r2" names the wrong fact, and the type error it actually is went
+        unsaid.
+        """
+        from scripts.wgs_input_gate import resolve
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td).resolve()
+            for value in (False, 0, 0.0, [], {}):
+                with self.subTest(value=value):
+                    with self.assertRaises(ValueError) as caught:
+                        resolve(root, value)
+                    self.assertIn("must be a string", str(caught.exception))
+            # Genuinely absent stays absent, and is not turned into a type error.
+            self.assertIsNone(resolve(root, None))
+            self.assertIsNone(resolve(root, ""))
+
+    def test_the_probe_and_the_hash_read_one_handle(self):
+        """Reopening the validated path by name left a window between check and read.
+
+        `fastq_probe` opened the file to probe it and `sha256_file` opened it again to hash
+        it, so the bytes recorded as this sample's input were not provably the bytes the
+        probe accepted. Both now come from a single handle, and the final component is
+        opened with O_NOFOLLOW.
+        """
+        from scripts.wgs_input_gate import fastq_probe, open_contained
+        import hashlib
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td).resolve()
+            fastq = root / "r1.fastq"
+            body = "@r1/1\nACGT\n+\nIIII\n"
+            fastq.write_text(body, encoding="utf-8")
+            ok, detail = fastq_probe(fastq)
+            self.assertTrue(ok, detail)
+            self.assertEqual(
+                detail["sha256"], hashlib.sha256(body.encode("utf-8")).hexdigest()
+            )
+
+            # A symlink at the final component is refused by the opener itself, even when
+            # the target is inside the sample directory.
+            link = root / "link.fastq"
+            link.symlink_to(fastq)
+            with self.assertRaises(ValueError):
+                open_contained(link)
+
     def test_a_non_string_fastq_field_fails_closed_end_to_end(self):
         from scripts.wgs_input_gate import validate_manifest
         with tempfile.TemporaryDirectory() as td:
