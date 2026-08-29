@@ -1,4 +1,8 @@
+import hashlib
 import json
+import os
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -300,42 +304,241 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             self.assertNotIn("alignment", result["inputs"])
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+ALIGN_SCRIPT = REPO_ROOT / "scripts" / "wgs_align_or_stage.sh"
+
+SAMTOOLS_STUB = """#!/usr/bin/env bash
+echo "samtools $*" >> "$STUB_LOG"
+sub="$1"; shift
+case "$sub" in
+  sort)
+    out=""; src=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        -@) shift 2 ;;
+        -o) out="$2"; shift 2 ;;
+        *) src="$1"; shift ;;
+      esac
+    done
+    if [[ -z "$src" || "$src" == "-" ]]; then cat > "$out"; else cat "$src" > "$out"; fi
+    ;;
+  view)
+    if [[ " $* " == *" -H "* ]]; then
+      printf '@HD\\tVN:1.6\\n@RG\\tID:RG1\\tSM:%s\\n' "$STUB_SAMPLE"
+    else
+      cat "${@: -1}"
+    fi
+    ;;
+  index|quickcheck) : ;;
+  *) echo "unexpected samtools subcommand: $sub" >&2; exit 90 ;;
+esac
+"""
+
+BWA_STUB = """#!/usr/bin/env bash
+echo "bwa-mem2 $*" >> "$STUB_LOG"
+# A hostile agent that owns the sample directory acts here: between the digest check and
+# the read, it repoints the verified name at content of its choosing.
+if [[ -n "${STUB_SWAP_TARGET:-}" ]]; then
+  rm -f "$STUB_SWAP_TARGET"
+  printf 'SWAPPED-BY-THE-ATTACKER\\n' > "$STUB_SWAP_TARGET"
+fi
+cat "${@: -2:1}" > "$STUB_R1_SEEN"
+cat "${@: -1}" > "$STUB_R2_SEEN"
+printf 'ALIGNED\\n'
+"""
+
+
+def _tools_available() -> bool:
+    return all(shutil.which(tool) for tool in ("bash", "jq", "sha256sum"))
+
+
+@unittest.skipUnless(_tools_available(), "bash, jq and sha256sum are required")
 class WgsAlignConsumesVerifiedInputsTest(unittest.TestCase):
     """Containment that stops at the gate's process boundary contains nothing.
 
     `wgs_align_or_stage.sh` re-read the raw manifest with `jq`, explicitly honoured an
     absolute path (`[[ "$r1" = /* ]] || r1="$sample_dir/$r1"`) and checked no digest, so the
     path alignment consumed was never the path the gate verified.
+
+    Reading the script's source text cannot show any of that: an assertion that the string
+    `sha256sum` appears still passes when the digest is compared against itself, and one that
+    a refusal message exists still passes when nothing reaches it. So the script is *run*
+    here, against stubbed `bwa-mem2` and `samtools` that record every invocation, and each
+    refusal is asserted to happen before either tool is called.
     """
 
-    def setUp(self):
-        root = Path(__file__).resolve().parents[1]
-        self.script = (root / "scripts" / "wgs_align_or_stage.sh").read_text(encoding="utf-8")
-        self.workflow = (root / "workflows" / "wgs.nf").read_text(encoding="utf-8")
+    def _fixture(self, root: Path, *, status="VERIFICADO", r1_path=None, r1_digest=None):
+        """Lay out a sample directory plus the stub toolchain; return (paths, env)."""
+        sample_dir = root / "sample"
+        sample_dir.mkdir()
+        r1 = sample_dir / "r1.fastq"
+        r2 = sample_dir / "r2.fastq"
+        r1.write_bytes(b"@read1\nACGT\n+\nIIII\n")
+        r2.write_bytes(b"@read1\nTGCA\n+\nIIII\n")
+        ref = root / "ref.fasta"
+        ref.write_text(">chr1\nACGT\n", encoding="utf-8")
 
-    def test_paths_come_from_the_verified_record_not_the_raw_manifest(self):
-        for key in (".r1", ".alignment"):
-            with self.subTest(key=key):
-                self.assertNotIn(f"jq -r '{key}' \"$manifest\"", self.script)
-        self.assertIn("verified_input r1", self.script)
-        self.assertIn("verified_input r2", self.script)
-        self.assertIn("verified_input alignment", self.script)
+        manifest = sample_dir / "sample-manifest.json"
+        manifest.write_text(
+            json.dumps(
+                {
+                    "sample_id": "S1",
+                    "input_type": "FASTQ",
+                    "r1": "r1.fastq",
+                    "r2": "r2.fastq",
+                    "read_group": {"id": "RG1", "sample": "S1", "library": "L1", "platform": "ILLUMINA"},
+                }
+            ),
+            encoding="utf-8",
+        )
+        digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()  # noqa: E731
+        input_qc = root / "input-qc.json"
+        input_qc.write_text(
+            json.dumps(
+                {
+                    "status": status,
+                    "inputs": {
+                        "r1": {"path": r1_path or str(r1), "sha256": r1_digest or digest(r1)},
+                        "r2": {"path": str(r2), "sha256": digest(r2)},
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        stub_dir = root / "bin"
+        stub_dir.mkdir()
+        for name, body in (("samtools", SAMTOOLS_STUB), ("bwa-mem2", BWA_STUB)):
+            stub = stub_dir / name
+            stub.write_text(body, encoding="utf-8")
+            stub.chmod(0o755)
+
+        env = dict(os.environ)
+        env.update(
+            PATH=f"{stub_dir}{os.pathsep}{env['PATH']}",
+            STUB_LOG=str(root / "tools.log"),
+            STUB_SAMPLE="S1",
+            STUB_R1_SEEN=str(root / "r1.seen"),
+            STUB_R2_SEEN=str(root / "r2.seen"),
+        )
+        return {"manifest": manifest, "ref": ref, "out": root / "out" / "sample.bam", "qc": input_qc, "r1": r1}, env
+
+    def _run(self, paths, env):
+        return subprocess.run(
+            [
+                "bash",
+                str(ALIGN_SCRIPT),
+                str(paths["manifest"]),
+                str(paths["ref"]),
+                str(paths["out"]),
+                str(paths["qc"]),
+            ],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=120,
+        )
+
+    def _assert_no_tool_ran(self, env):
+        log = Path(env["STUB_LOG"])
+        self.assertFalse(log.exists() and log.read_text(encoding="utf-8").strip(),
+                         f"alignment tools ran: {log.read_text(encoding='utf-8') if log.exists() else ''}")
+
+    def test_a_gate_verdict_short_of_verificado_stops_before_any_tool_runs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths, env = self._fixture(Path(tmp), status="NÃO DISPONÍVEL")
+            result = self._run(paths, env)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("input gate did not verify this sample", result.stderr)
+            self._assert_no_tool_ran(env)
+
+    def test_a_recorded_path_outside_the_sample_directory_stops_before_any_tool_runs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            outside = root / "outside.fastq"
+            outside.write_bytes(b"@evil\nACGT\n+\nIIII\n")
+            paths, env = self._fixture(
+                root,
+                r1_path=str(outside),
+                r1_digest=hashlib.sha256(outside.read_bytes()).hexdigest(),
+            )
+            result = self._run(paths, env)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("outside the sample directory", result.stderr)
+            self._assert_no_tool_ran(env)
+
+    def test_a_digest_that_no_longer_matches_stops_before_any_tool_runs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths, env = self._fixture(Path(tmp))
+            paths["r1"].write_bytes(b"@read1\nTTTT\n+\nIIII\n")  # changed after the gate ran
+            result = self._run(paths, env)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("changed after the gate verified it", result.stderr)
+            self._assert_no_tool_ran(env)
+
+    def test_an_input_the_record_does_not_cover_stops_before_any_tool_runs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths, env = self._fixture(Path(tmp))
+            record = json.loads(paths["qc"].read_text(encoding="utf-8"))
+            del record["inputs"]["r1"]["sha256"]
+            paths["qc"].write_text(json.dumps(record), encoding="utf-8")
+            result = self._run(paths, env)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("records no verified r1", result.stderr)
+            self._assert_no_tool_ran(env)
+
+    def test_verified_inputs_reach_the_aligner(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths, env = self._fixture(Path(tmp))
+            result = self._run(paths, env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(Path(env["STUB_R1_SEEN"]).read_bytes(), b"@read1\nACGT\n+\nIIII\n")
+            self.assertEqual(Path(env["STUB_R2_SEEN"]).read_bytes(), b"@read1\nTGCA\n+\nIIII\n")
+
+    def test_the_aligner_reads_the_verified_bytes_even_if_the_name_is_repointed(self):
+        """The digest and the read must be bound to one inode, not to one name.
+
+        `sha256sum "$path"` certifies the bytes at that instant and then hands the *name* on;
+        anything able to write in the sample directory replaces the file before bwa-mem2
+        opens it and the aligner consumes bytes no gate ever saw, with the run still
+        reported as VERIFICADO. The stub performs exactly that swap at the moment of the
+        read, so this test fails against any implementation that passes a name.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            paths, env = self._fixture(Path(tmp))
+            env["STUB_SWAP_TARGET"] = str(paths["r1"])
+            result = self._run(paths, env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(paths["r1"].read_bytes(), b"SWAPPED-BY-THE-ATTACKER\n")
+            self.assertEqual(Path(env["STUB_R1_SEEN"]).read_bytes(), b"@read1\nACGT\n+\nIIII\n")
+
+    def test_a_symlinked_sample_directory_does_not_break_containment(self):
+        """The gate records physical paths, so the containment test needs a physical root.
+
+        A logical `pwd` prints the symlink the run was launched through, no recorded input
+        is a prefix match against it, and every legitimate sample reached that way is
+        refused — a gate that refuses everything teaches operators to route around it.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths, env = self._fixture(root)
+            link = root / "sample-link"
+            link.symlink_to(paths["manifest"].parent, target_is_directory=True)
+            paths["manifest"] = link / "sample-manifest.json"
+            result = self._run(paths, env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(Path(env["STUB_R1_SEEN"]).read_bytes(), b"@read1\nACGT\n+\nIIII\n")
 
     def test_an_absolute_path_is_no_longer_honoured(self):
-        self.assertNotIn('= /* ]] ||', self.script)
-
-    def test_the_recorded_digest_is_rechecked_before_use(self):
-        self.assertIn("sha256sum", self.script)
-        self.assertIn("changed after the gate verified it", self.script)
-
-    def test_containment_is_rechecked_at_the_point_of_use(self):
-        self.assertIn("outside the sample directory", self.script)
-
-    def test_the_gate_verdict_gates_the_alignment(self):
-        self.assertIn('jq -r \'.status\' "$input_qc"', self.script)
+        script = ALIGN_SCRIPT.read_text(encoding="utf-8")
+        self.assertNotIn('= /* ]] ||', script)
+        for key in (".r1", ".alignment"):
+            with self.subTest(key=key):
+                self.assertNotIn(f"jq -r '{key}' \"$manifest\"", script)
 
     def test_the_workflow_hands_the_verified_record_to_the_script(self):
-        self.assertIn("aligned/sample.bam \\\n        '${input_qc}'", self.workflow)
+        workflow = (REPO_ROOT / "workflows" / "wgs.nf").read_text(encoding="utf-8")
+        self.assertIn("aligned/sample.bam \\\n        '${input_qc}'", workflow)
 
 
 if __name__ == "__main__":
