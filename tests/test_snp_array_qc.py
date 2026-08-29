@@ -163,6 +163,63 @@ class ArrayQCTest(unittest.TestCase):
             )
         self.assertEqual(result["metrics"]["strand_markers_minus_only"], 1)
         self.assertEqual(result["gates"]["BUILD_STRAND_GATE"]["state"], "PASS")
+        self.assertEqual(result["metrics"]["strand_contradiction_check"], "EXECUTADO")
+
+    def test_an_unreadable_marker_table_blocks_instead_of_disappearing(self):
+        """The one check against a lying attestation must not vanish with its data file.
+
+        `_strand_marker_alleles` swallowed OSError/JSONDecodeError and returned `{}`. The
+        gate then found zero votes on both sides, which is the same reading as a file with
+        too few informative markers, and reported PASS. Deleting or corrupting
+        `config/array_provenance_markers.json` therefore silently removed the only automated
+        control against a well-formed, correctly bound attestation that asserts `forward`
+        about a reverse-strand file — the exact case the check exists for.
+
+        Both failure modes are covered because they arrive by different exceptions.
+        """
+        p = self._write("RSID,CHROMOSOME,POSITION,RESULT\nrs1,1,100,TC\n")
+        build_evidence = self._verified_evidence(p, asserted_value="GRCh37")
+        strand_evidence = self._verified_evidence(p, asserted_value="forward")
+        for label, failure in (
+            ("table missing", OSError(2, "No such file or directory")),
+            ("table corrupt", json.JSONDecodeError("Expecting value", "", 0)),
+        ):
+            with self.subTest(case=label):
+                with patch(
+                    "array_pipeline.qc.STRAND_MARKERS_PATH"
+                ) as marker_path:
+                    marker_path.read_text.side_effect = failure
+                    marker_path.name = "array_provenance_markers.json"
+                    result = inspect_array(
+                        p,
+                        case_id="T",
+                        build="GRCh37",
+                        strand="forward",
+                        build_evidence=build_evidence,
+                        strand_evidence=strand_evidence,
+                    )
+                self.assertEqual(result["gates"]["BUILD_STRAND_GATE"]["state"], "BLOCKED")
+                self.assertTrue(
+                    any(
+                        "não pôde ser executada" in reason
+                        for reason in result["gates"]["BUILD_STRAND_GATE"]["reasons"]
+                    ),
+                    result["gates"]["BUILD_STRAND_GATE"]["reasons"],
+                )
+                # The record has to distinguish "no contradiction found" from "no
+                # contradiction could be found"; the vote counts alone cannot.
+                self.assertEqual(
+                    result["metrics"]["strand_contradiction_check"], "NÃO DISPONÍVEL"
+                )
+                self.assertIn(
+                    "array_provenance_markers.json",
+                    result["metrics"]["strand_contradiction_check_reason"],
+                )
+                # And nothing downstream may read this file as interpretable.
+                self.assertEqual(
+                    result["gates"]["LIMITED_INTERPRETATION_GATE"]["state"], "BLOCKED"
+                )
+                self.assertEqual(result["operational_status"], "NÃO DISPONÍVEL")
 
 
 class ZipSourceHandleTest(unittest.TestCase):

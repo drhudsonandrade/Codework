@@ -156,5 +156,57 @@ class AncestryRegressionTest(unittest.TestCase):
                 namespace["load_panel"](path)
 
 
+class AncestryOptionalNumpyTest(unittest.TestCase):
+    """NumPy is an optional adapter here, and absence must be a status, not an ImportError.
+
+    `array_pipeline/ancestry.py` imported NumPy at module scope while it was declared in
+    neither `environment.yml`, `reporting/requirements.txt` nor `locks/runtime-lock.json` —
+    an undeclared, unpinned core runtime dependency. Importing the module at all failed
+    wherever it was missing, so a caller died at import time instead of reading a refusal,
+    and the rest of the array pipeline went down with the optional part. The helper above
+    exists precisely because NumPy is not in the CI image, which is the evidence that the
+    absence is the real case and not a hypothetical one.
+    """
+
+    def test_the_module_imports_with_numpy_absent(self):
+        real_import = __builtins__["__import__"] if isinstance(__builtins__, dict) else __builtins__.__import__
+
+        def refuse_numpy(name, *args, **kwargs):
+            if name == "numpy" or name.startswith("numpy."):
+                raise ImportError("No module named 'numpy'")
+            return real_import(name, *args, **kwargs)
+
+        with patch.dict(sys.modules), patch("builtins.__import__", side_effect=refuse_numpy):
+            sys.modules.pop("numpy", None)
+            namespace = runpy.run_path(
+                str(Path(__file__).resolve().parents[1] / "array_pipeline" / "ancestry.py")
+            )
+        self.assertIsNone(namespace["np"])
+
+    def test_projection_refuses_with_a_reason_instead_of_raising(self):
+        namespace = _load_without_optional_numpy()
+        # `runpy.run_path` hands back a *copy* of the module globals, while the functions it
+        # created still close over the original dict. Assigning into the copy changes
+        # nothing, so the binding has to be replaced where `project_case` actually reads it.
+        globals_of_module = namespace["project_case"].__globals__
+        self.addCleanup(globals_of_module.__setitem__, "np", globals_of_module["np"])
+        globals_of_module["np"] = None
+        panel = {
+            "id": "panel", "version": "1", "sha256": "0" * 64, "build": "GRCh37",
+            "markers": [_marker(f"rs{i}", [0.1, 0.2]) for i in range(10)],
+            "population_counts": {}, "sources": ["fixture"], "limitations": [],
+            "population_centroids": {"EUR": [0.0, 0.0]},
+        }
+        result = namespace["project_case"](panel, {}, case_build="GRCh37")
+        self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+        self.assertIn("NumPy", result["reason"])
+        self.assertIsNone(result["proportions"])
+        self.assertIsNone(result["coordinates"])
+        self.assertEqual(result["affinity"], [])
+        # The refusal keeps the same shape as every other refusal here, so a caller does not
+        # need a special case for this one.
+        self.assertEqual(result["panel"]["build"], "GRCh37")
+
+
 if __name__ == "__main__":
     unittest.main()

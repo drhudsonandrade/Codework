@@ -31,7 +31,10 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any
 
-import numpy as np
+try:  # NumPy is an optional adapter here, never a core runtime dependency.
+    import numpy as np
+except ImportError:  # pragma: no cover - the absence is what the regression exercises
+    np = None
 
 from array_pipeline import assembly
 
@@ -313,6 +316,27 @@ def project_case(
         "overlap_fraction": round(overlap, 4),
         "limitations": panel.get("limitations", []),
     }
+
+    if np is None:
+        # The projection is linear algebra and there is no honest way to do it without the
+        # library. Importing NumPy at module scope made it a *core* runtime dependency —
+        # unpinned, absent from environment.yml, requirements.txt and the runtime lock — so
+        # merely importing `array_pipeline.ancestry` failed wherever it was missing, and any
+        # caller died at import time rather than reading a status. It is an optional adapter:
+        # absent, this refuses in the same shape as every other refusal here, and the rest of
+        # the pipeline keeps working without ancestry.
+        return {
+            **base,
+            "status": UNAVAILABLE,
+            "coordinates": None,
+            "affinity": [],
+            "proportions": None,
+            "reason": (
+                "NumPy não está disponível neste runtime e a projeção em componentes "
+                "principais não pode ser calculada sem ela. Ancestralidade é um adaptador "
+                "opcional: sua ausência não é estimada por aproximação nem silenciada."
+            ),
+        }
 
     if len(used) < MIN_MARKERS:
         return {

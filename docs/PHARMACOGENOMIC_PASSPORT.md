@@ -127,6 +127,10 @@ render time rather than published.
 
 ## Worked example
 
+**Illustrative, not verified.** There is no output artifact, input SHA-256 or pinned command
+in `docs/evidence/` behind these numbers; they are not release evidence. The shape of the
+output is the point, not the counts.
+
 A demonstration array carrying 8 of the 19 pharmacogenomic loci produces:
 
 ```text

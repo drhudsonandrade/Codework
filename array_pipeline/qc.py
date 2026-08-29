@@ -149,18 +149,40 @@ BASELINE_RSIDS = [
 STRAND_MARKERS_PATH = Path(__file__).resolve().parents[1] / "config/array_provenance_markers.json"
 
 
+class StrandMarkerTableError(RuntimeError):
+    """The strand marker table could not be loaded, so its check cannot run."""
+
+
 def _strand_marker_alleles() -> dict[str, set[str]]:
     """rsid → plus-strand allele set, for the non-palindromic markers only.
 
-    Returns an empty mapping when the table is unreadable: the check this feeds can only
-    ever *contradict* a declared strand, so having no table means having no contradiction,
-    never a licence. Palindromic markers are excluded because they read identically on both
-    strands and would vote for whatever they were asked.
+    This used to swallow OSError and JSONDecodeError and return `{}`, reasoning that the
+    check it feeds can only ever *contradict* a declared strand, so no table means no
+    contradiction rather than a licence. That reasoning is right about the gate's logic and
+    wrong about what the check is for. It exists because a well-formed, correctly bound,
+    human-signed attestation can still assert `forward` about a file that is on the reverse
+    strand — it is the only automated check against exactly that. Deleting or corrupting
+    `config/array_provenance_markers.json` therefore removed the one control covering the
+    case it was written for, and nothing in the record said so: the gate reported PASS with
+    zero votes on both sides, which is indistinguishable from a file that simply carried too
+    few informative markers.
+
+    So a table that cannot be read is now a refusal, not an empty mapping. The caller turns
+    it into a blocked BUILD_STRAND_GATE with an explicit reason. Palindromic markers stay
+    excluded because they read identically on both strands and would vote for whatever they
+    were asked.
     """
     try:
         payload = json.loads(STRAND_MARKERS_PATH.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
+    except (OSError, json.JSONDecodeError) as exc:
+        raise StrandMarkerTableError(
+            f"tabela de marcadores de fita ilegível ({STRAND_MARKERS_PATH.name}): {exc}"
+        ) from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("markers"), list):
+        raise StrandMarkerTableError(
+            f"tabela de marcadores de fita inválida ({STRAND_MARKERS_PATH.name}): "
+            "o schema esperado é um objeto com a lista 'markers'"
+        )
     out: dict[str, set[str]] = {}
     for marker in payload.get("markers") or []:
         if not isinstance(marker, dict) or marker.get("palindromic"):
@@ -595,7 +617,12 @@ def inspect_array(
 
         # The file's own vote on its orientation. An attestation is a claim; these markers
         # are the data, and the data is allowed to contradict the claim.
-        strand_markers = _strand_marker_alleles()
+        strand_marker_failure: str | None = None
+        try:
+            strand_markers = _strand_marker_alleles()
+        except StrandMarkerTableError as exc:
+            strand_markers = {}
+            strand_marker_failure = str(exc)
         strand_votes_by_rsid: dict[str, set[str]] = {}
 
         for row in reader:
@@ -821,6 +848,16 @@ def inspect_array(
         build_reasons.append("strand convention not explicitly verified")
     elif not strand_evidence_verified:
         build_reasons.append("strand provenance is not a structured VERIFICADO/SATISFIED attestation bound to input SHA-256")
+    elif strand_marker_failure:
+        # The contradiction check below is the only automated control against an attestation
+        # that is well-formed, correctly bound and simply wrong about the orientation. With
+        # the table gone it cannot run, and a gate that cannot run its check does not get to
+        # report PASS: that is the difference between "no contradiction was found" and "no
+        # contradiction could have been found", and only the first is evidence.
+        build_reasons.append(
+            f"a verificação de contradição de fita não pôde ser executada: {strand_marker_failure}"
+        )
+        strand_evidence_verified = False
     elif strand_votes_minus >= MIN_STRAND_CONTRADICTION_MARKERS and strand_votes_plus == 0:
         # An attestation is a claim about the file; the file is the evidence. A well-formed,
         # correctly bound, human-signed attestation asserting `forward` used to be the end of
@@ -924,6 +961,13 @@ def inspect_array(
             "strand_markers_plus_only": strand_votes_plus,
             "strand_markers_minus_only": strand_votes_minus,
             "strand_contradiction_threshold": MIN_STRAND_CONTRADICTION_MARKERS,
+            # Zero votes on both sides has two very different causes — a file with too few
+            # informative markers, or a marker table that could not be read at all — and the
+            # counts alone cannot tell them apart. This names which one happened.
+            "strand_contradiction_check": (
+                "NÃO DISPONÍVEL" if strand_marker_failure else "EXECUTADO"
+            ),
+            "strand_contradiction_check_reason": strand_marker_failure,
             "chromosome_counts": dict(sorted(chromosome_counts.items())),
             "status_counts": dict(status_counts),
             "source_counts": dict(source_counts),

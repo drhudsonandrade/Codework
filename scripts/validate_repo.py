@@ -383,6 +383,54 @@ def _missing_path_error(relative: str) -> str:
     return f"missing required path: {relative}"
 
 
+#: The surfaces the "core has no external runtime dependency" claim is about. `reporting` and
+#: `scripts` deliberately carry pinned renderer dependencies (python-docx, reportlab, pypdf,
+#: PyMuPDF); the scientific core does not, and that is the property checked below.
+CORE_PACKAGES = ("array_pipeline", "normative")
+
+
+def validate_core_runtime_dependencies(root: Path, errors: list[str]) -> None:
+    """Check the claim `main()` used to simply print.
+
+    `PASS optional_adapters core has no external runtime dependency` was a literal print with
+    nothing behind it, and `array_pipeline/ancestry.py` imported NumPy at module scope —
+    unpinned, absent from environment.yml, reporting/requirements.txt and the runtime lock —
+    for as long as that line claimed otherwise. A validator that asserts a property it never
+    evaluates is worse than one that stays quiet: every run of it published the assurance.
+
+    An import inside `try`/`except ImportError` is an optional adapter and passes; one at
+    module scope makes the package unimportable without the library and does not.
+    """
+    local_modules = {p.stem for p in root.glob("*.py")}
+    local_modules |= {p.name for p in root.iterdir() if p.is_dir() and (p / "__init__.py").is_file()}
+    local_modules |= {"array_pipeline", "reporting", "scripts", "normative", "tests"}
+    allowed = set(sys.stdlib_module_names) | local_modules
+
+    for package in CORE_PACKAGES:
+        for path in sorted((root / package).rglob("*.py")):
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+            except (OSError, SyntaxError) as exc:
+                errors.append(f"core module could not be parsed: {path.relative_to(root)}: {exc}")
+                continue
+            # Only `tree.body`: an import nested in a `try` is guarded by construction.
+            for node in tree.body:
+                if isinstance(node, ast.Import):
+                    names = [alias.name.split(".")[0] for alias in node.names]
+                elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                    names = [node.module.split(".")[0]]
+                else:
+                    continue
+                for name in names:
+                    if name not in allowed:
+                        errors.append(
+                            f"core module {path.relative_to(root)} imports {name!r} at module "
+                            "scope; the scientific core must have no external runtime "
+                            "dependency. Guard it with try/except ImportError and refuse "
+                            "NÃO DISPONÍVEL, or declare and pin it and change this contract."
+                        )
+
+
 def validate(root: Path) -> list[str]:
     errors: list[str] = []
     errors.extend(
@@ -396,6 +444,7 @@ def validate(root: Path) -> list[str]:
         if (root / relative).exists()
     )
     validate_superseded_identity_locations(root, errors)
+    validate_core_runtime_dependencies(root, errors)
 
     active = []
     for candidate in root.rglob("REGRAS_PROJETO_GENOMA*.txt"):

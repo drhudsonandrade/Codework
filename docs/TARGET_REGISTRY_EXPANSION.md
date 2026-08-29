@@ -13,9 +13,10 @@
 | **`targets_merged_panel_1star.json.gz`** | **124.621** | união com o corte de 1★ — **o padrão** |
 
 O padrão passou a ser o registro de 1★ porque a interpretação classifica por nível de
-revisão, não por pertencimento: num array representativo o resultado sai **93 ACHADO
-PRELIMINAR contra 20 ACHADO ACIONÁVEL**, ou seja, o nível fica visível no laudo em vez de
-diluído nele. O par de 2★ continua selecionável com `--targets`/`--evidence` para uma execução
+revisão, não por pertencimento: o nível fica visível no laudo em vez de diluído nele. Numa
+execução de demonstração o resultado saiu 93 ACHADO PRELIMINAR contra 20 ACHADO ACIONÁVEL —
+número **ilustrativo, não verificado**, sem artefato de saída, SHA-256 de entrada ou comando
+pinado em `docs/evidence/` que o sustente. O par de 2★ continua selecionável com `--targets`/`--evidence` para uma execução
 que só deva ver consenso curado.
 
 No corte de 1★: **4.408 genes**, dos quais **3.895** com relação gene-doença estabelecida —
@@ -211,14 +212,21 @@ o alelo do **seu** registro (CPIC), não contra o `assessed_allele` do alvo. Só
 NÃO DETECTADO da matriz de completude é retida naquele locus — que é o certo, já que "não
 detectado" é ambíguo quando duas variantes clinicamente distintas ocupam uma posição.
 
-## Escala medida
+## Escala observada numa execução de demonstração
+
+**Ilustrativo, não verificado.** Os números abaixo vieram de uma execução local que não está
+versionada: não há artefato de saída, SHA-256 de entrada, comando pinado nem versões de
+ambiente em `docs/evidence/` que os sustentem, e nenhum teste ou gate os valida. Não são
+evidência de release, e não devem ser citados como desempenho garantido. O que a seção
+documenta e permanece verdadeiro são os três defeitos que a escala expôs e as correções que
+entraram no código — essas, sim, com teste.
 
 Cadeia completa — QC, matriz de completude, passaporte PGx, junção clínica e os dez payloads
 — sobre um array de 700.000 SNPs contra o painel de 55.916 alvos, com o registro expandido
 como padrão:
 
 ```text
-14 de 14 etapas OK, nenhuma bloqueada
+14 de 14 etapas OK, nenhuma bloqueada      (observação não verificada)
 tempo: 20,5 s   |   pico de memória: 676 MB
 matriz de completude: 23 MB   |   junção clínica: 59 MB
 ```
@@ -252,7 +260,11 @@ no arquivo de evidência, citado por SHA-256, e a omissão é declarada em cada 
 
 ## Taxa de detecção, que era o objetivo
 
-O relatório 03 citava um denominador sem poder interrogá-lo. Agora:
+O relatório 03 citava um denominador sem poder interrogá-lo. Agora consegue, e emite a taxa
+a cada execução. A citação abaixo é a saída de uma execução de demonstração —
+**ilustrativa, não verificada**, sem artefato, SHA-256 ou comando pinado em `docs/evidence/`
+por trás dela. O que é contratual é o formato e o denominador serem interrogáveis, não estes
+valores:
 
 > 2.236 de 162.943 variantes classificadas P/LP no ClinVar foram interrogadas, em 732 genes
 > recessivos curados. Genes mais cobertos: ATM 58/3864; BRCA1 48/4302; BRCA2 44/5744;
