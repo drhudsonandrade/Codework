@@ -287,3 +287,25 @@ python3 scripts/merge_target_manifests.py \
     config/targets_gwas_traits.json \
     --output config/targets_merged_panel_1star.json.gz
 ```
+
+## Procedência das contagens publicadas
+
+As URLs acima **não fixam release nem digest**. ClinVar, ClinGen, gnomAD e PanelApp são fontes
+mutáveis: executar o bloco em outra data produz registros e contagens diferentes das
+publicadas aqui, e isso não é um defeito da reprodução — é a natureza das fontes.
+
+O que fica fixo é o outro lado. Toda contagem deste documento foi lida dos artefatos abaixo,
+como versionados neste commit. Recontar a partir deles é determinístico; recoletar das fontes
+não é.
+
+| Artefato | SHA-256 |
+| --- | --- |
+| `config/targets_clinvar_plp.json.gz` | `8afcfa91ffe98407ca16685a2d85a2794bf54984c9120aa46c38307b462e97fd` |
+| `config/targets_clinvar_plp_1star.json.gz` | `dfee157e673bad8611076ea5d3f57037fc7cc38b8dc4731f8be918e1d2b852f8` |
+| `config/targets_merged_panel.json.gz` | `955cfe674d02c85eb9b5f18a726f1a60f392caf4f26f138d9d218699d903dbc9` |
+| `config/targets_merged_panel_1star.json.gz` | `d9d57f109c212c5248bd680e5044e093dee352a13fa11c0731cf731e35e2c40a` |
+| `config/targets_gwas_traits.json` | `920ee4ad18ca5c17546a240ba89b1e226d20d18ee280352d37ee1879c6cd18e9` |
+| `docs/evidence/PANELAPP_CURATION.json.gz` | `ed5d495c68ec50782848873f5c7960d8532db30cd3045605157aea4c9449d54c` |
+
+Para comparar uma nova coleta com o publicado, gere os artefatos, confira o SHA-256 contra a
+tabela e trate qualquer divergência como fonte atualizada, não como erro de reprodução.

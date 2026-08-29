@@ -53,6 +53,36 @@ class AssessedAlleleEvidenceTest(unittest.TestCase):
                     self.assertEqual(record["status"], "NÃO DISPONÍVEL")
                     self.assertTrue(target["assessed_allele_reason"])
 
+    def test_every_recorded_assertion_flag_is_recomputable_from_its_classification(self):
+        """The artifact must agree with the rule that defines the field it carries.
+
+        `asserts_clinical_relevance` is derived, not observed: it is whatever
+        `_is_asserting_classification` says about the record's classification. Three records
+        had been produced by an earlier rule that matched substrings, so "Conflicting
+        classifications of pathogenicity" and "Benign; drug response" were recorded as
+        asserting while the shipped rule — exact terms, and any NON_ASSERTING term vetoes —
+        says they are not. Nothing compared the two, so the drift shipped.
+        """
+        from scripts.curate_assessed_alleles import _is_asserting_classification
+
+        checked = 0
+        for result in self.evidence["results"]:
+            for key in ("clinvar_records_at_this_coordinate", "clinvar_records_considered"):
+                entries = result.get(key)
+                if not isinstance(entries, list):
+                    continue
+                for entry in entries:
+                    if not isinstance(entry, dict) or "asserts_clinical_relevance" not in entry:
+                        continue
+                    checked += 1
+                    with self.subTest(rsid=result.get("rsid"), key=key):
+                        self.assertEqual(
+                            bool(entry["asserts_clinical_relevance"]),
+                            _is_asserting_classification(entry.get("classification", "")),
+                            f"{result.get('rsid')}: {entry.get('classification')!r}",
+                        )
+        self.assertGreater(checked, 0, "no assertion flags found; the invariant never ran")
+
     def test_an_assessed_allele_is_never_the_reference_base(self):
         """Declaring the reference as the thing being looked for would invert every verdict."""
         for record in self.evidence["results"]:

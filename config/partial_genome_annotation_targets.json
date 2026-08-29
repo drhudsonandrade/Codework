@@ -1,7 +1,7 @@
 {
   "assessed_allele_curation": {
     "curated_at": "2026-08-19T13:35:30.461122Z",
-    "established": 28,
+    "established": 27,
     "evidence": "docs/evidence/ASSESSED_ALLELES_CLINVAR.json",
     "sources": [
       "NCBI dbSNP RefSNP API (api.ncbi.nlm.nih.gov/variation/v0/refsnp) — reference base",
@@ -926,9 +926,7 @@
       "assessed_allele_status": "VERIFICADO"
     },
     {
-      "assessed_allele": "G",
-      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json",
-      "assessed_allele_source": "ClinVar",
+      "assessed_allele_reason": "published studies disagree on the risk allele — the GWAS Catalogue reports C (34 record(s)), G (30 record(s)) for this variant. This is a documented contradiction in the literature, not a gap in the data, and choosing a side would manufacture agreement",
       "coordinates": {
         "GRCh37": {
           "alternate_allele": "G",
@@ -972,7 +970,7 @@
       },
       "rsid": "rs1799945",
       "scope": "CLINICO",
-      "assessed_allele_status": "VERIFICADO"
+      "assessed_allele_status": "NÃO DISPONÍVEL"
     },
     {
       "assessed_allele": "T",

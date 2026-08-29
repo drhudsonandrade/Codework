@@ -12,10 +12,11 @@ changes, a curated judgement whose `rule_sha256` no longer matches is refused by
 rather than carried forward: a judgement made about different words is not a judgement about
 these words.
 
-What this module does *not* do is fabricate the missing ones. An external audit reached
-`ready_for_requested_operation: true` by attesting all 263 rules NOT_APPLICABLE with one
-boilerplate justification; the engine now refuses that shape outright, and the point survives
-independently of the check. A section with no curated entry is reported as pending, by number
+What this module does *not* do is fabricate the missing ones. The shape it refuses outright is
+a blanket attestation: all 263 rules marked NOT_APPLICABLE behind one boilerplate
+justification, which would reach `ready_for_requested_operation: true` while establishing
+nothing. That refusal is enforced and tested here; no external audit result is cited for it,
+because none in this repository is bound to an artifact or a reproducible procedure. A section with no curated entry is reported as pending, by number
 and title, and the gate refuses — which is the honest state of a partially curated ruleset.
 
 The trace is bound at run time, never stored: `input_sha256` is the file actually analysed and

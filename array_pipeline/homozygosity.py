@@ -449,8 +449,15 @@ def read_autosomal_genotypes(input_path: Any) -> tuple[list[tuple[str, int, str]
     return markers, total
 
 
-def analyse_array(input_path: Any, *, build: str = "GRCh37") -> dict[str, Any]:
-    """Runs of homozygosity for one array file under the verified reference build."""
+def analyse_array(input_path: Any, *, build: str) -> dict[str, Any]:
+    """Runs of homozygosity for one array file under the verified reference build.
+
+    `build` is required. It used to default to GRCh37, and there is no caller in this
+    repository to have been relying on that: a GRCh38 file handed over without the argument
+    would have been analysed against GRCh37 coordinates and returned a wrong answer with no
+    sign that anything was assumed. The build is a property of the file, so the caller states
+    it.
+    """
     markers, total = read_autosomal_genotypes(input_path)
     result = analyse(markers, total_autosomal_markers=total, build=build)
     result["autosomal_rows"] = total

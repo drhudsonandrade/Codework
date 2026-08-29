@@ -1,5 +1,5 @@
 {
-  "assessed_alleles_established": 28,
+  "assessed_alleles_established": 27,
   "curated_at": "2026-08-19T13:35:30.461122Z",
   "method": "dbSNP supplies the plus-strand reference base from the SPDI deleted_sequence; ClinVar or CPIC supplies clinically asserted alternates. Records are joined by coordinate, never by rsid text alone. When more than one asserted alternate is present, one is selected only if dbSNP population frequency supports exactly one candidate and every competing candidate has zero recorded population frequency; otherwise the target remains without an assessed allele and the reason is recorded.",
   "results": [
@@ -60,7 +60,7 @@
         {
           "accession": "VCV000013220",
           "alternate": "T",
-          "asserts_clinical_relevance": true,
+          "asserts_clinical_relevance": false,
           "canonical_spdi": "NC_000003.12:165773491:C:T",
           "classification": "Conflicting classifications of pathogenicity",
           "title": "NM_000055.2(BCHE):c.1699G>A (p.Ala567Thr)"
@@ -607,7 +607,7 @@
         {
           "accession": "VCV000000722",
           "alternate": "A",
-          "asserts_clinical_relevance": true,
+          "asserts_clinical_relevance": false,
           "canonical_spdi": "NC_000008.11:18400592:G:A",
           "classification": "Benign; drug response",
           "title": "NM_000015.3(NAT2):c.590G>A (p.Arg197Gln)"
@@ -1015,12 +1015,12 @@
       "status": "VERIFICADO"
     },
     {
-      "assessed_allele": "G",
+      "assessed_allele": null,
       "clinvar_records_at_this_coordinate": [
         {
           "accession": "VCV000000010",
           "alternate": "G",
-          "asserts_clinical_relevance": true,
+          "asserts_clinical_relevance": false,
           "canonical_spdi": "NC_000006.12:26090950:C:G",
           "classification": "Conflicting classifications of pathogenicity; other",
           "title": "NM_000410.4(HFE):c.187C>G (p.His63Asp)"
@@ -1037,7 +1037,7 @@
         "chromosome": "6",
         "position": 26090951
       },
-      "reason": "ClinVar carries exactly one clinically asserted alternate at the dbSNP GRCh38 coordinate for this rsid",
+      "reason": "published studies disagree on the risk allele — the GWAS Catalogue reports C (34 record(s)), G (30 record(s)) for this variant. This is a documented contradiction in the literature, not a gap in the data, and choosing a side would manufacture agreement",
       "reference_allele": "C",
       "references": {
         "clinvar_accessions": [
@@ -1058,8 +1058,46 @@
         "cpic_pubmed": []
       },
       "rsid": "rs1799945",
-      "source": "ClinVar",
-      "status": "VERIFICADO"
+      "source": "GWAS Catalog",
+      "status": "NÃO DISPONÍVEL",
+      "gwas_catalog": {
+        "available": true,
+        "risk_alleles": {
+          "C": 34,
+          "G": 30
+        },
+        "evidence": {
+          "C": [
+            {
+              "p_value": "3e-9",
+              "risk_frequency": "0.83"
+            },
+            {
+              "p_value": "2e-15",
+              "risk_frequency": "0.85"
+            },
+            {
+              "p_value": "3e-47",
+              "risk_frequency": "0.8566"
+            }
+          ],
+          "G": [
+            {
+              "p_value": "8e-12",
+              "risk_frequency": "0.14"
+            },
+            {
+              "p_value": "2e-10",
+              "risk_frequency": "0.14"
+            },
+            {
+              "p_value": "2e-15",
+              "risk_frequency": "0.14"
+            }
+          ]
+        },
+        "studies": 68
+      }
     },
     {
       "assessed_allele": "T",

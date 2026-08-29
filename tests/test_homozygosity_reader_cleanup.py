@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from array_pipeline.homozygosity import read_autosomal_genotypes
+from array_pipeline.homozygosity import analyse_array, read_autosomal_genotypes
 
 
 class HomozygosityReaderCleanupTest(unittest.TestCase):
@@ -67,3 +67,60 @@ class HomozygosityReaderCleanupTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AnalyseArrayBuildContractTest(unittest.TestCase):
+    """The build is a property of the file, so it cannot be assumed.
+
+    `analyse_array` defaulted to GRCh37 and has no caller in this repository, so nothing was
+    relying on the default — but a GRCh38 file handed over without the argument would have
+    been analysed against GRCh37 coordinates and returned a wrong answer silently.
+    """
+
+    def test_build_has_no_default(self):
+        import inspect
+
+        parameter = inspect.signature(analyse_array).parameters["build"]
+        self.assertIs(parameter.default, inspect.Parameter.empty)
+        with self.assertRaises(TypeError):
+            analyse_array(Path("unused.txt"))
+
+    @staticmethod
+    def _homozygous_run(count: int = 100_001, step: int = 2_000):
+        """A run dense enough to clear the density guard, so the success path is reached.
+
+        The analyser refuses below 100,000 called autosomal markers, so a smaller fixture
+        never reaches the code that records `reference_build` and the build would go
+        unexercised.
+        """
+
+        def generator():
+            for i in range(count):
+                yield "raw_snp_array_v1", {
+                    "RSID": f"rs{i}",
+                    "CHROMOSOME": "1",
+                    "POSITION": str(1_000_000 + i * step),
+                    "RESULT": "AA",
+                }
+
+        return generator()
+
+    def test_the_grch38_path_is_exercised(self):
+        with patch(
+            "array_pipeline.completeness._row_reader",
+            return_value=self._homozygous_run(),
+        ):
+            result = analyse_array(Path("unused.txt"), build="GRCh38")
+        self.assertEqual(result["reference_build"], "GRCh38")
+        self.assertEqual(result["autosomal_rows"], 100_001)
+
+    def test_an_unsupported_build_is_refused_rather_than_assumed(self):
+        with patch(
+            "array_pipeline.completeness._row_reader",
+            return_value=self._homozygous_run(),
+        ):
+            result = analyse_array(Path("unused.txt"), build="GRCh36")
+        self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+        self.assertTrue(any("GRCh36" in r for r in result["refusals"]), result["refusals"])
+
+

@@ -32,6 +32,26 @@ class CaseDossierExampleTest(unittest.TestCase):
         self.assertEqual(dossier["consent"], {})
 
 
+class OnePageSummaryIdentityTest(unittest.TestCase):
+    def test_two_artifacts_without_input_identity_are_refused(self):
+        """`None != None` is false, so absence used to satisfy the equality check.
+
+        A passport and a matrix that both omit `input_sha256` were compiled as describing the
+        same array — the one thing this comparison exists to establish.
+        """
+        from scripts.build_one_page_summary import build_payload
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            matrix = root / "matrix.json"
+            passport = root / "passport.json"
+            matrix.write_text(json.dumps({"operational_status": "VERIFICADO"}), encoding="utf-8")
+            passport.write_text(json.dumps({"case_id": "CASE"}), encoding="utf-8")
+            with self.assertRaises(ValueError) as caught:
+                build_payload(matrix_path=matrix, passport_path=passport)
+            self.assertIn("input_sha256", str(caught.exception))
+
+
 class WgsQcSummaryValidationTest(unittest.TestCase):
     def test_invalid_record_cannot_claim_verified(self):
         summary = audit_summary({"schema": "wrong"})

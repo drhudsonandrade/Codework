@@ -374,9 +374,18 @@ def _diplotype_for(
     if len(heterozygous) > 1:
         # Two or more het positions in one gene are consistent with more than one diplotype
         # and an array carries no read-level evidence to resolve the phase.
+        #
+        # Scope note, stated in the refusal rather than left implicit: `loci` is the gene's
+        # whole curated panel, which may include positions no CPIC allele uses as defining.
+        # `_heterozygous_defining_positions` deliberately narrows to the defining set, and
+        # the two rules live in this module with different scopes. Widening this refusal is
+        # the fail-closed direction, so it stands; what was wrong is publishing a reason that
+        # reads as though the positions named were the gene's defining ones.
         reasons.append(
             f"fase não resolvida: {len(heterozygous)} posições heterozigotas "
-            f"({', '.join(sorted(heterozygous))}) admitem mais de um diplótipo"
+            f"({', '.join(sorted(heterozygous))}) admitem mais de um diplótipo; "
+            "o escopo desta contagem é o painel curado deste gene, não apenas as posições "
+            "definidoras do registro"
         )
     if uncalled:
         # Stated as its own refusal rather than folded into the panel-gap count, because
@@ -386,9 +395,11 @@ def _diplotype_for(
         sample = ", ".join(uncalled[:5])
         more = f" (+{len(uncalled) - 5})" if len(uncalled) > 5 else ""
         reasons.append(
-            f"{len(uncalled)} posição(ões) do painel deste gene sem genótipo interpretável "
-            f"({sample}{more}); presumir a base de referência nelas é justamente a hipótese "
-            "de mundo fechado que um diplótipo não pode assumir em silêncio"
+            f"{len(uncalled)} posição(ões) do painel curado deste gene sem genótipo "
+            f"interpretável ({sample}{more}); o escopo é o painel curado e não apenas as "
+            "posições definidoras do registro, e presumir a base de referência nelas é "
+            "justamente a hipótese de mundo fechado que um diplótipo não pode assumir em "
+            "silêncio"
         )
 
     if reasons:

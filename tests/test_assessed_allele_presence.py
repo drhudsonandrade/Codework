@@ -6,16 +6,20 @@
   present;
 * the registry named none, so nothing could be compared — the locus was merely called.
 
-`clinical_findings._interpretation` read the class alone and graded both as presence. On the
-first real consumer array that produced 3.152 of 3.153 reported GENÓTIPO DE RISCO findings,
-including "homozigoto para variante patogênica" in APC — familial adenomatous polyposis —
-from a plain `TT` reference call in a person carrying nothing.
+`clinical_findings._interpretation` read the class alone and graded both as presence, so a
+plain reference call could be reported as GENÓTIPO DE RISCO — "homozigoto para variante
+patogênica" in APC, familial adenomatous polyposis, in a person carrying nothing.
+
+This docstring used to quantify that over a real consumer array. The counts are removed: no
+artifact, hash or reproducible procedure in this repository supports them, and the synthetic
+fixtures below do not demonstrate them. The defect and the defences are what the tests
+establish; the scale of one historical run is not something this file can attest.
 
 The cause was upstream: when ClinVar asserts more than one alternate base at a coordinate the
 expander declines to name a single `assessed_allele` and records them all under
 `clinvar_alternate_alleles`, which the classifier never read. At one coordinate a single
 alternate base *is* a single variant, so the genotype answers presence for each of them
-independently — 3.412 of those loci are real NÃO DETECTADO once the whole set is compared.
+independently, and such a locus is NÃO DETECTADO once the whole set is compared.
 
 Two defences, tested separately, because either alone leaves a hole: the classifier tests the
 full set, and the interpreter refuses to grade a locus where nothing could be tested.
