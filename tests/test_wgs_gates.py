@@ -177,31 +177,82 @@ class WgsInputPathContainmentTest(unittest.TestCase):
     def test_the_probe_and_the_hash_read_one_handle(self):
         """Reopening the validated path by name left a window between check and read.
 
-        `fastq_probe` opened the file to probe it and `sha256_file` opened it again to hash
-        it, so the bytes recorded as this sample's input were not provably the bytes the
-        probe accepted. Both now come from a single handle, and the final component is
-        opened with O_NOFOLLOW.
+        `fastq_probe` opened the file to probe it and hashed it through a second open, so the
+        bytes recorded as this sample's input were not provably the bytes the probe accepted.
+        The count is asserted, not assumed: a regression that reopens the path would raise
+        the number of opens even though the hash still matched.
         """
-        from scripts.wgs_input_gate import fastq_probe, open_contained
         import hashlib
+        from unittest.mock import patch
+
+        from scripts import wgs_input_gate
 
         with tempfile.TemporaryDirectory() as td:
             root = Path(td).resolve()
             fastq = root / "r1.fastq"
             body = "@r1/1\nACGT\n+\nIIII\n"
             fastq.write_text(body, encoding="utf-8")
-            ok, detail = fastq_probe(fastq)
+
+            real = wgs_input_gate.open_contained
+            calls = []
+
+            def counting(root_arg, path_arg):
+                calls.append(path_arg)
+                return real(root_arg, path_arg)
+
+            with patch.object(wgs_input_gate, "open_contained", counting):
+                ok, detail = wgs_input_gate.fastq_probe(root, fastq)
             self.assertTrue(ok, detail)
             self.assertEqual(
                 detail["sha256"], hashlib.sha256(body.encode("utf-8")).hexdigest()
             )
+            self.assertEqual(len(calls), 1, f"opened {len(calls)} times: {calls}")
 
-            # A symlink at the final component is refused by the opener itself, even when
-            # the target is inside the sample directory.
+    def test_a_symlink_final_component_is_refused_by_the_probe_itself(self):
+        """Not only by the opener called directly — the probe must refuse it too."""
+        from scripts.wgs_input_gate import fastq_probe, open_contained
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td).resolve()
+            fastq = root / "r1.fastq"
+            fastq.write_text("@r1/1\nACGT\n+\nIIII\n", encoding="utf-8")
             link = root / "link.fastq"
             link.symlink_to(fastq)
             with self.assertRaises(ValueError):
-                open_contained(link)
+                open_contained(root, link)
+            ok, detail = fastq_probe(root, link)
+            self.assertFalse(ok, detail)
+
+    def test_a_swapped_parent_directory_cannot_redirect_the_open(self):
+        """O_NOFOLLOW on the last component alone leaves the parents swappable.
+
+        Given `nested/r1.fastq`, `nested` can be replaced with a link to somewhere else after
+        containment accepted the path, and the final open then lands on an outside file that
+        is a perfectly ordinary regular file. Every component is opened with O_NOFOLLOW from
+        the root, so the walk refuses at `nested`.
+        """
+        from scripts.wgs_input_gate import open_contained
+
+        with tempfile.TemporaryDirectory() as outer:
+            outer_root = Path(outer).resolve()
+            elsewhere = outer_root / "elsewhere"
+            elsewhere.mkdir()
+            (elsewhere / "r1.fastq").write_text("@x/1\nACGT\n+\nIIII\n", encoding="utf-8")
+
+            root = outer_root / "sample"
+            root.mkdir()
+            nested = root / "nested"
+            nested.mkdir()
+            (nested / "r1.fastq").write_text("@r1/1\nTGCA\n+\nIIII\n", encoding="utf-8")
+            contained = nested / "r1.fastq"
+
+            # The swap happens after the path was accepted.
+            import shutil
+
+            shutil.rmtree(nested)
+            nested.symlink_to(elsewhere)
+            with self.assertRaises(ValueError):
+                open_contained(root, contained)
 
     def test_a_non_string_fastq_field_fails_closed_end_to_end(self):
         from scripts.wgs_input_gate import validate_manifest

@@ -21,29 +21,47 @@ def _sha256_stream(handle) -> str:
     return h.hexdigest()
 
 
-def sha256_file(path: Path) -> str:
-    with open_contained(path) as handle:
-        return _sha256_stream(handle)
+def open_contained(root: Path, path: Path):
+    """Open a validated input by walking down from the root, one component at a time.
 
+    Containment is checked against a *path*, and every later step used to reopen that path by
+    name — probe it, hash it, size it. Between the check and each of those opens the name can
+    be repointed, so the bytes recorded as this sample's input were not provably the bytes
+    that passed containment.
 
-def open_contained(path: Path):
-    """Open a validated input once, refusing a symlink at the final component.
-
-    Containment is checked against a path, and every later step used to reopen that path *by
-    name* — `fastq_probe` to read it, `sha256_file` to hash it, `stat` to size it. Between the
-    check and each of those opens the name could be repointed, so the bytes probed, hashed and
-    recorded were not provably the bytes that passed containment. One handle is opened here
-    and carried through all three, so there is no second lookup to race.
-
-    `O_NOFOLLOW` refuses a symlink at the final component; the containment check in `resolve`
-    already resolved the parent components. A fully race-free walk would open each component
-    with `dir_fd`, which this does not do — what it removes is the reopen-by-name window that
-    every consumer of a validated path had.
+    Opening the final component with `O_NOFOLLOW` is not enough on its own: given
+    `nested/r1.fastq`, `nested` itself can be swapped for a link to somewhere else after
+    `resolve` accepted the path, and the final open then lands on an outside file that is a
+    perfectly ordinary regular file. So the walk starts at the trusted root and opens each
+    component relative to the previous one with `dir_fd`, refusing a symlink at every step,
+    directories included. The descriptor that comes back is the one every consumer uses;
+    nothing re-looks-up a name afterwards.
     """
     try:
-        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        relative = path.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("input path escapes the sample directory") from exc
+    parts = relative.parts
+    if not parts:
+        raise ValueError("input path names no file")
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    open_fds: list[int] = []
+    try:
+        parent = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        open_fds.append(parent)
+        for component in parts[:-1]:
+            parent = os.open(
+                component,
+                os.O_RDONLY | os.O_DIRECTORY | nofollow,
+                dir_fd=parent,
+            )
+            open_fds.append(parent)
+        descriptor = os.open(parts[-1], os.O_RDONLY | nofollow, dir_fd=parent)
     except OSError as exc:
         raise ValueError(f"input could not be opened: {exc}") from exc
+    finally:
+        for fd in open_fds:
+            os.close(fd)
     return os.fdopen(descriptor, "rb")
 
 
@@ -97,14 +115,14 @@ def resolve(root: Path, value: str | None) -> Path | None:
     return candidate
 
 
-def fastq_probe(path: Path) -> tuple[bool, dict]:
+def fastq_probe(root: Path, path: Path) -> tuple[bool, dict]:
     """Probe and hash one FASTQ through a single open handle.
 
     The probe and the hash used to open the path separately, so the bytes recorded as this
     sample's input were not provably the bytes the probe accepted.
     """
     try:
-        raw = open_contained(path)
+        raw = open_contained(root, path)
     except ValueError:
         return False, {"path": str(path), "reason": "missing_or_empty"}
     try:
@@ -167,8 +185,8 @@ def validate_manifest(manifest_path: Path) -> dict:
             if not refused:
                 errors.append("FASTQ requires r1 and r2")
         else:
-            ok1, d1 = fastq_probe(r1)
-            ok2, d2 = fastq_probe(r2)
+            ok1, d1 = fastq_probe(root, r1)
+            ok2, d2 = fastq_probe(root, r2)
             inputs["r1"] = d1
             inputs["r2"] = d2
             if not ok1:
@@ -187,7 +205,7 @@ def validate_manifest(manifest_path: Path) -> dict:
         alignment_size = None
         if alignment is not None:
             try:
-                with open_contained(alignment) as handle:
+                with open_contained(root, alignment) as handle:
                     alignment_size = os.fstat(handle.fileno()).st_size
                     alignment_sha = _sha256_stream(handle) if alignment_size else None
             except (ValueError, OSError):
