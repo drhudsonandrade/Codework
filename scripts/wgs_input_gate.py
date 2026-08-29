@@ -11,6 +11,35 @@ import os
 from pathlib import Path
 
 
+class InputRefused(ValueError):
+    """Containment said no: an escape, a symlink, or a platform that cannot refuse one."""
+
+
+class InputMissing(ValueError):
+    """Nothing is at that path. Not a refusal — the sample did not deliver the file."""
+
+
+class InputUnreadable(ValueError):
+    """The path exists and is contained, but the open failed for some other reason."""
+
+
+def _open_failure(exc: OSError) -> ValueError:
+    """Name what actually went wrong, instead of calling everything a refusal.
+
+    `open_contained` reports every failure as a ValueError so callers have one type to
+    catch, and flattening all of them into `refused` traded one conflation for its mirror
+    image: an absent FASTQ became evidence that something tried to escape the sample
+    directory. These are three different operational facts and the Evidence Plane has to
+    keep them apart — ELOOP here is the O_NOFOLLOW refusal of a symlinked component, not a
+    missing file, and EACCES is neither.
+    """
+    if exc.errno in (errno.ENOENT, errno.ENOTDIR):
+        return InputMissing(f"input is not present: {exc}")
+    if exc.errno == errno.ELOOP:
+        return InputRefused(f"input could not be opened: {exc}")
+    return InputUnreadable(f"input could not be opened: {exc}")
+
+
 def _sha256_stream(handle) -> str:
     """Hash an already-open handle from its start, leaving it rewound."""
     handle.seek(0)
@@ -40,23 +69,23 @@ def open_contained(root: Path, path: Path):
     try:
         relative = path.relative_to(root)
     except ValueError as exc:
-        raise ValueError("input path escapes the sample directory") from exc
+        raise InputRefused("input path escapes the sample directory") from exc
     parts = relative.parts
     if not parts:
-        raise ValueError("input path names no file")
+        raise InputRefused("input path names no file")
     # `relative_to` does not normalise: for root=/s and path=/s/../outside.fastq it returns
     # `../outside.fastq`, and the walk below would then open `..` with dir_fd and step
     # straight out of the root — no symlink anywhere, so O_NOFOLLOW never fires. Today's
     # callers hand over paths `resolve` already normalised, but this function *is* the
     # containment boundary and is called directly, so it has to hold on its own.
     if any(component in ("..", ".", "") for component in parts):
-        raise ValueError("input path escapes the sample directory")
+        raise InputRefused("input path escapes the sample directory")
     nofollow = getattr(os, "O_NOFOLLOW", 0)
     if not nofollow:
         # Defaulting the flag to 0 would turn a platform that cannot refuse symlinks into
         # one that silently follows them. A gate that quietly weakens itself is worse than
         # one that stops.
-        raise ValueError("input could not be opened: O_NOFOLLOW unavailable")
+        raise InputRefused("input could not be opened: O_NOFOLLOW unavailable")
     open_fds: list[int] = []
     try:
         parent = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
@@ -70,7 +99,7 @@ def open_contained(root: Path, path: Path):
             open_fds.append(parent)
         descriptor = os.open(parts[-1], os.O_RDONLY | nofollow, dir_fd=parent)
     except OSError as exc:
-        raise ValueError(f"input could not be opened: {exc}") from exc
+        raise _open_failure(exc) from exc
     finally:
         for fd in open_fds:
             os.close(fd)
@@ -135,11 +164,15 @@ def fastq_probe(root: Path, path: Path) -> tuple[bool, dict]:
     """
     try:
         raw = open_contained(root, path)
-    except ValueError as exc:
+    except InputMissing:
+        return False, {"path": str(path), "reason": "missing_or_empty"}
+    except InputRefused as exc:
         # Escape, symlink and swapped-parent refusals all used to be flattened into
         # "missing_or_empty", so input-qc.json described a containment breach as a file the
         # sample forgot to upload — and `errors` said only "R1 integrity probe failed".
         return False, {"path": str(path), "reason": f"refused: {exc}"}
+    except InputUnreadable as exc:
+        return False, {"path": str(path), "reason": f"unreadable: {exc}"}
     try:
         with raw:
             if os.fstat(raw.fileno()).st_size == 0:
@@ -226,12 +259,17 @@ def validate_manifest(manifest_path: Path) -> dict:
                 with open_contained(root, alignment) as handle:
                     alignment_size = os.fstat(handle.fileno()).st_size
                     alignment_sha = _sha256_stream(handle) if alignment_size else None
-            except ValueError as exc:
+            except InputMissing:
+                alignment_size = None
+            except InputRefused as exc:
                 alignment_size = None
                 alignment_refusal = f"refused: {exc}"
+            except InputUnreadable as exc:
+                alignment_size = None
+                alignment_refusal = f"unreadable: {exc}"
             except OSError as exc:
                 alignment_size = None
-                alignment_refusal = f"refused: {type(exc).__name__}"
+                alignment_refusal = f"unreadable: {type(exc).__name__}"
         if alignment is None or not alignment_size:
             if not refused:
                 errors.append(f"{input_type} alignment {alignment_refusal or 'missing_or_empty'}")

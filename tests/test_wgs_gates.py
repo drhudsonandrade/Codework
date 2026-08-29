@@ -157,6 +157,65 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             self.assertFalse(ok)
             self.assertEqual(detail["reason"], "missing_or_empty")
 
+    def test_a_file_that_is_simply_absent_is_not_called_a_refusal(self):
+        """The mirror of the previous bug, and just as wrong.
+
+        `open_contained` turns ENOENT into a ValueError like every other failure, so
+        reporting all of them as `refused` made a FASTQ the sample never delivered into
+        evidence that something tried to escape the sample directory. Absent, refused and
+        unreadable are three different facts about the run and each gets its own word.
+        """
+        from scripts.wgs_input_gate import fastq_probe
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td).resolve()
+            for label, missing in (
+                ("no file", root / "r1.fastq"),
+                ("no parent directory", root / "nested" / "r1.fastq"),
+            ):
+                with self.subTest(case=label):
+                    ok, detail = fastq_probe(root, missing)
+                    self.assertFalse(ok)
+                    self.assertEqual(detail["reason"], "missing_or_empty")
+
+    def test_an_absent_alignment_is_not_called_a_refusal(self):
+        """Same distinction on the BAM/CRAM path, which had the same flattening."""
+        from scripts.wgs_input_gate import validate_manifest
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td).resolve()
+            result = validate_manifest(
+                self._manifest(root, input_type="BAM", alignment="sample.bam", r1=None, r2=None)
+            )
+            self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+            self.assertIn("BAM alignment missing_or_empty", result["errors"])
+            self.assertFalse(
+                any("refused" in error for error in result["errors"]), result["errors"]
+            )
+
+    def test_a_refused_alignment_is_not_called_absent(self):
+        """And the distinction has to cut both ways, or it is just the old bug renamed."""
+        from scripts.wgs_input_gate import validate_manifest
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td).resolve()
+            outside = root / "outside.bam"
+            outside.write_bytes(b"BAM\x01outside")
+            sample = root / "sample"
+            sample.mkdir()
+            (sample / "sample.bam").symlink_to(outside)
+            result = validate_manifest(
+                self._manifest(
+                    sample, input_type="BAM", alignment="sample.bam", r1=None, r2=None
+                )
+            )
+            self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+            self.assertTrue(
+                any("escapes the sample directory" in error for error in result["errors"]),
+                result["errors"],
+            )
+            self.assertFalse(
+                any("missing_or_empty" in error for error in result["errors"]),
+                result["errors"],
+            )
+
     def test_relative_path_cannot_escape_the_sample_root(self):
         from scripts.wgs_input_gate import resolve
         with tempfile.TemporaryDirectory() as td:
