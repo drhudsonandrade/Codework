@@ -99,6 +99,27 @@ class AnnotationRegressionTest(unittest.TestCase):
         self.assertEqual(missing, "INFERIDO")
         self.assertEqual(divergent, "NÃO DISPONÍVEL")
 
+    def test_a_registry_gap_is_inferido_whichever_half_of_the_coordinate_is_missing(self):
+        """The two halves of a coordinate must be graded alike.
+
+        `EXPECTED_CHROMOSOME_INVALID` was added so that a registry with no chromosome would
+        stop being published as a mismatch blamed on the patient's file. It was not added to
+        the set of reason codes that grade INFERIDO, so it fell through to NÃO DISPONÍVEL —
+        while its twin `EXPECTED_POSITION_INVALID` graded INFERIDO. The same gap in our own
+        reference data produced two different verdicts about the sample, decided only by
+        which field the registry happened to be missing.
+        """
+        for code in ("EXPECTED_POSITION_INVALID", "EXPECTED_CHROMOSOME_INVALID"):
+            with self.subTest(code=code):
+                self.assertEqual(
+                    _observation_status([{
+                        "orientation_operational_status": "VERIFICADO",
+                        "coordinate_operational_status": "NÃO DISPONÍVEL",
+                        "coordinate_reason_code": code,
+                    }]),
+                    "INFERIDO",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

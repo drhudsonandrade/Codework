@@ -238,6 +238,10 @@ def _observation_status(rows: list[dict[str, Any]]) -> str:
         "REGISTRY_COORDINATES_UNAVAILABLE",
         "BUILD_COORDINATE_MISSING",
         "EXPECTED_POSITION_INVALID",
+        # Its twin. Both mean our registry lacks half the coordinate, which is a gap in our
+        # own reference data rather than a finding about the file. Grading one INFERIDO and
+        # the other NÃO DISPONÍVEL would decide the locus by which field we happen to lack.
+        "EXPECTED_CHROMOSOME_INVALID",
         "AMBIGUOUS_COORDINATE",
     }:
         return "INFERIDO"
