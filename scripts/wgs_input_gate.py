@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import gzip
 import hashlib
 import io
@@ -82,6 +83,17 @@ def resolve(root: Path, value: str | None) -> Path | None:
         candidate.relative_to(absolute_root)
     except ValueError as exc:
         raise ValueError("input path escapes the sample directory") from exc
+    # Version-independent loop detection. `Path.resolve()` raises RuntimeError on a symlink
+    # loop up to Python 3.12; from 3.13 the non-strict form raises nothing and returns a
+    # partially resolved path instead, so the handler above would never fire and the loop
+    # would only surface later, as an ELOOP at open time. `stat` reports ELOOP on every
+    # supported version, and a path that simply does not exist yet is not this check's
+    # business — the probe reports that separately.
+    try:
+        candidate.stat()
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise ValueError(f"input path could not be resolved: {exc}") from exc
     return candidate
 
 

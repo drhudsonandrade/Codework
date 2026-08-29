@@ -249,5 +249,43 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             self.assertNotIn("alignment", result["inputs"])
 
 
+class WgsAlignConsumesVerifiedInputsTest(unittest.TestCase):
+    """Containment that stops at the gate's process boundary contains nothing.
+
+    `wgs_align_or_stage.sh` re-read the raw manifest with `jq`, explicitly honoured an
+    absolute path (`[[ "$r1" = /* ]] || r1="$sample_dir/$r1"`) and checked no digest, so the
+    path alignment consumed was never the path the gate verified.
+    """
+
+    def setUp(self):
+        root = Path(__file__).resolve().parents[1]
+        self.script = (root / "scripts" / "wgs_align_or_stage.sh").read_text(encoding="utf-8")
+        self.workflow = (root / "workflows" / "wgs.nf").read_text(encoding="utf-8")
+
+    def test_paths_come_from_the_verified_record_not_the_raw_manifest(self):
+        for key in (".r1", ".alignment"):
+            with self.subTest(key=key):
+                self.assertNotIn(f"jq -r '{key}' \"$manifest\"", self.script)
+        self.assertIn("verified_input r1", self.script)
+        self.assertIn("verified_input r2", self.script)
+        self.assertIn("verified_input alignment", self.script)
+
+    def test_an_absolute_path_is_no_longer_honoured(self):
+        self.assertNotIn('= /* ]] ||', self.script)
+
+    def test_the_recorded_digest_is_rechecked_before_use(self):
+        self.assertIn("sha256sum", self.script)
+        self.assertIn("changed after the gate verified it", self.script)
+
+    def test_containment_is_rechecked_at_the_point_of_use(self):
+        self.assertIn("outside the sample directory", self.script)
+
+    def test_the_gate_verdict_gates_the_alignment(self):
+        self.assertIn('jq -r \'.status\' "$input_qc"', self.script)
+
+    def test_the_workflow_hands_the_verified_record_to_the_script(self):
+        self.assertIn("aligned/sample.bam \\\n        '${input_qc}'", self.workflow)
+
+
 if __name__ == "__main__":
     unittest.main()
