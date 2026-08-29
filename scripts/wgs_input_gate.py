@@ -10,6 +10,7 @@ import io
 import json
 import os
 import stat
+import zlib
 from pathlib import Path
 
 
@@ -217,7 +218,12 @@ def fastq_probe(root: Path, path: Path) -> tuple[bool, dict]:
                 "probe_records": len(records),
                 "sha256": _sha256_stream(raw),
             }
-    except (OSError, EOFError, UnicodeError, gzip.BadGzipFile) as exc:
+    except (OSError, EOFError, UnicodeError, gzip.BadGzipFile, zlib.error) as exc:
+        # `zlib.error` is not an OSError, so a FASTQ with a valid gzip header and a corrupt
+        # deflate body escaped every handler here and killed the gate: no `input-qc.json`,
+        # no status, and the WGS lane left waiting on a verdict that never comes. A
+        # truncated or damaged upload is an ordinary thing for a sample to arrive as, and it
+        # has to produce a refusal like any other.
         return False, {"path": str(path), "reason": type(exc).__name__}
 
 

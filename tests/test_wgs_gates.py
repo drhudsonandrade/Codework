@@ -1,4 +1,5 @@
 import errno
+import gzip
 import hashlib
 import json
 import os
@@ -9,6 +10,35 @@ import threading
 import unittest
 import unittest.mock
 from pathlib import Path
+
+
+def _tools_available() -> bool:
+    """Whether the executable script tests can run at all.
+
+    They drive the real `wgs_align_or_stage.sh`, so bash, jq and sha256sum have to exist —
+    and so does `/dev/fd`, because the script refuses outright without it rather than
+    falling back to consuming a path by name. Skipping is honest where a precondition is
+    absent; asserting on a script that cannot run there is not, and a suite that fails on
+    the environment instead of on the code teaches readers to ignore it.
+    """
+    if not os.path.isdir("/dev/fd"):
+        return False
+    return all(shutil.which(tool) for tool in ("bash", "jq", "sha256sum"))
+
+
+def _can_mkfifo() -> bool:
+    """Whether this filesystem and sandbox permit creating a FIFO.
+
+    Some sandboxes deny `mknod`/`mkfifo` outright. The property under test is about the
+    gate, not about the runner's permissions, so a refusal to create the fixture is a skip.
+    """
+    try:
+        with tempfile.TemporaryDirectory() as probe:
+            os.mkfifo(Path(probe) / "fifo")
+    except (OSError, NotImplementedError, AttributeError):
+        return False
+    return True
+
 
 
 class WgsGateTest(unittest.TestCase):
@@ -156,6 +186,33 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             self.assertNotEqual(detail["reason"], "missing_or_empty")
             self.assertIn("refused", detail["reason"])
 
+    def test_a_corrupt_gzip_body_is_a_refusal_not_a_dead_gate(self):
+        """`zlib.error` is not an `OSError`, so it escaped every handler in the probe.
+
+        A FASTQ with a valid gzip header and a damaged deflate body — a truncated or
+        interrupted upload, which is an ordinary way for a sample to arrive — raised
+        `zlib.error` straight out of `fastq_probe`, through `validate_manifest`, and killed
+        the gate. No `input-qc.json`, no status, and the WGS lane left waiting on a verdict
+        that never comes. Same failure mode as the FIFO: not a refusal, an absence.
+        """
+        from scripts.wgs_input_gate import fastq_probe, validate_manifest
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td).resolve()
+            good = gzip.compress(b"@r1\nACGT\n+\nIIII\n")
+            corrupt = good[:12] + b"\xff" * 8 + good[-8:]
+            (root / "r1.fastq.gz").write_bytes(corrupt)
+            (root / "r2.fastq.gz").write_bytes(corrupt)
+            ok, detail = fastq_probe(root, root / "r1.fastq.gz")
+            self.assertFalse(ok)
+            self.assertIn("error", detail["reason"].lower())
+
+            # And end to end: the gate answers with a document rather than dying.
+            result = validate_manifest(
+                self._manifest(root, r1="r1.fastq.gz", r2="r2.fastq.gz")
+            )
+            self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+            self.assertTrue(result["errors"])
+
     def test_an_empty_file_is_still_reported_as_empty(self):
         """The refusal reason must not swallow the ordinary case it sits next to."""
         from scripts.wgs_input_gate import fastq_probe
@@ -200,6 +257,7 @@ class WgsInputPathContainmentTest(unittest.TestCase):
                 any("refused" in error for error in result["errors"]), result["errors"]
             )
 
+    @unittest.skipUnless(_can_mkfifo(), "this sandbox does not permit mkfifo")
     def test_a_fifo_input_is_refused_instead_of_parking_the_gate(self):
         """A gate that never returns is not fail-closed — it is just gone.
 
@@ -541,16 +599,8 @@ printf 'ALIGNED\\n'
 """
 
 
-def _tools_available() -> bool:
-    """Whether the executable script tests can run at all.
 
-    They drive the real `wgs_align_or_stage.sh`, so bash, jq and sha256sum have to exist.
-    Skipping is honest where they do not; asserting on a script that cannot run is not.
-    """
-    return all(shutil.which(tool) for tool in ("bash", "jq", "sha256sum"))
-
-
-@unittest.skipUnless(_tools_available(), "bash, jq and sha256sum are required")
+@unittest.skipUnless(_tools_available(), "bash, jq, sha256sum and /dev/fd are required")
 class WgsAlignConsumesVerifiedInputsTest(unittest.TestCase):
     """Containment that stops at the gate's process boundary contains nothing.
 
