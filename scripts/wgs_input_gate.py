@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import argparse
 import errno
+import fcntl
 import gzip
 import hashlib
 import io
 import json
 import os
+import stat
 from pathlib import Path
 
 
@@ -97,12 +99,32 @@ def open_contained(root: Path, path: Path):
                 dir_fd=parent,
             )
             open_fds.append(parent)
-        descriptor = os.open(parts[-1], os.O_RDONLY | nofollow, dir_fd=parent)
+        # O_NONBLOCK because a FIFO sitting at this path would otherwise park `os.open`
+        # until some writer showed up, and the gate would hang instead of answering. A gate
+        # that never returns is not fail-closed: nothing downstream ever reads a status, and
+        # `input-qc.json` is never written at all.
+        descriptor = os.open(
+            parts[-1], os.O_RDONLY | nofollow | getattr(os, "O_NONBLOCK", 0), dir_fd=parent
+        )
     except OSError as exc:
         raise _open_failure(exc) from exc
     finally:
         for fd in open_fds:
             os.close(fd)
+    # Having opened it without blocking, refuse anything that is not a plain file — a FIFO,
+    # a device, a socket. `fstat` on the descriptor we already hold, not another look at the
+    # name. A sample input is a file; the rest are ways to make the gate read something that
+    # is not one.
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise InputRefused("input is not a regular file")
+        # Regular files ignore O_NONBLOCK on read, but clear it anyway so the descriptor
+        # handed to the probe and the hash behaves exactly as an ordinary open would.
+        flags = fcntl.fcntl(descriptor, fcntl.F_GETFL)
+        fcntl.fcntl(descriptor, fcntl.F_SETFL, flags & ~getattr(os, "O_NONBLOCK", 0))
+    except BaseException:
+        os.close(descriptor)
+        raise
     return os.fdopen(descriptor, "rb")
 
 

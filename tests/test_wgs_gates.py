@@ -1,10 +1,13 @@
+import errno
 import hashlib
 import json
 import os
 import shutil
 import subprocess
 import tempfile
+import threading
 import unittest
+import unittest.mock
 from pathlib import Path
 
 
@@ -190,6 +193,80 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             self.assertFalse(
                 any("refused" in error for error in result["errors"]), result["errors"]
             )
+
+    def test_a_fifo_input_is_refused_instead_of_parking_the_gate(self):
+        """A gate that never returns is not fail-closed — it is just gone.
+
+        `os.open(fifo, O_RDONLY)` blocks until a writer appears. A manifest naming a FIFO
+        inside the sample directory therefore parked the gate: nothing downstream ever read
+        a status, and `input-qc.json` was never written at all. The open is now
+        non-blocking and anything that is not a regular file is refused on the descriptor
+        already held.
+
+        Run on a daemon thread with a join timeout so a regression reports a failure here
+        rather than hanging CI.
+        """
+        from scripts.wgs_input_gate import fastq_probe
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td).resolve()
+            os.mkfifo(root / "r1.fastq")
+            outcome = {}
+
+            def probe():
+                outcome["result"] = fastq_probe(root, root / "r1.fastq")
+
+            worker = threading.Thread(target=probe, daemon=True)
+            worker.start()
+            worker.join(timeout=10)
+            self.assertFalse(worker.is_alive(), "the gate blocked on a FIFO input")
+            ok, detail = outcome["result"]
+            self.assertFalse(ok)
+            self.assertIn("not a regular file", detail["reason"])
+
+    def test_an_open_that_fails_for_any_other_reason_is_unreadable(self):
+        """EACCES is neither an absence nor a containment refusal, and says so.
+
+        Forced through the syscall rather than through `chmod`, so the test states the same
+        fact whatever user it runs as — root ignores the permission bits entirely.
+        """
+        import scripts.wgs_input_gate as gate
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td).resolve()
+            (root / "r1.fastq").write_bytes(b"@r\nACGT\n+\nIIII\n")
+            (root / "sample.bam").write_bytes(b"BAM\x01")
+            real_open = os.open
+
+            def deny_the_file(path, flags, *args, **kwargs):
+                if path in ("r1.fastq", "sample.bam"):
+                    raise OSError(errno.EACCES, "Permission denied")
+                return real_open(path, flags, *args, **kwargs)
+
+            with unittest.mock.patch.object(gate.os, "open", side_effect=deny_the_file):
+                ok, detail = gate.fastq_probe(root, root / "r1.fastq")
+                self.assertFalse(ok)
+                self.assertIn("unreadable", detail["reason"])
+                self.assertNotIn("missing_or_empty", detail["reason"])
+                self.assertNotIn("refused", detail["reason"])
+
+                for input_type in ("BAM", "CRAM"):
+                    with self.subTest(input_type=input_type):
+                        result = gate.validate_manifest(
+                            self._manifest(
+                                root,
+                                input_type=input_type,
+                                alignment="sample.bam",
+                                r1=None,
+                                r2=None,
+                            )
+                        )
+                        self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+                        self.assertTrue(
+                            any(
+                                f"{input_type} alignment unreadable" in error
+                                for error in result["errors"]
+                            ),
+                            result["errors"],
+                        )
 
     def test_a_refused_alignment_is_not_called_absent(self):
         """And the distinction has to cut both ways, or it is just the old bug renamed."""
