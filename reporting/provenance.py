@@ -989,6 +989,24 @@ class PayloadCompiler:
                 basis=post_deployment["basis"],
                 status="VERIFICADO",
             )
+
+        # `template_fill` prints the execution manifest — workflow logs, tool versions, the
+        # QC reference — and it used to be serialised straight into the payload as
+        # `dict(execution_manifest or {})`, bound to nothing. Every other printed value is
+        # anchored, so an edit to it is caught by `provenance_blockers`; an edit to a tool
+        # version or a log locator here was invisible, and the document went on presenting
+        # it as the record of how the report was produced. Each key is anchored the way one
+        # finding field is: run context, never an executed measurement.
+        execution_manifest_values = dict(execution_manifest or {})
+        for key in sorted(execution_manifest_values, key=str):
+            self.state(
+                _anchor_name_for_execution_manifest(str(key)),
+                execution_manifest_values[key],
+                kind="case_control",
+                basis="registrado no manifesto de execução desta corrida",
+                status="VERIFICADO",
+            )
+
         data: dict[str, Any] = {
             "case_id": self.case_id,
             "report_id": self.report_id,
@@ -1006,7 +1024,7 @@ class PayloadCompiler:
             "consent": dict(consent),
             "sections": dict(self._sections),
             "findings": [dict(x) for x in self._findings],
-            "execution_manifest": dict(execution_manifest or {}),
+            "execution_manifest": execution_manifest_values,
             "sources": self.value("sources"),
             "limitations": self.value("limitations"),
             "operational_status": self.status_floor(),
@@ -1040,6 +1058,15 @@ class PayloadCompiler:
                     f"extra may not supply derived blocks {reserved}; they are read from the "
                     "artifacts registered on this compiler, and a caller that writes them is "
                     "granting itself the verdict those artifacts exist to withhold"
+                )
+            # The anchors above are named `execution_manifest[key]`, not
+            # `execution_manifest`, so the whole-block name is not in `self._anchors` and the
+            # refusal above would let `extra` replace the block wholesale — anchoring each
+            # key and then permitting the container to be swapped would close nothing.
+            if "execution_manifest" in extra:
+                raise ProvenanceError(
+                    "extra may not replace execution_manifest; pass it to compile(), which "
+                    "anchors each key, so the payload and its provenance cannot disagree"
                 )
             data.update(extra)
         data["provenance"] = provenance_block(self._anchors)
@@ -1143,6 +1170,10 @@ def _anchor_name_for_section(title: str) -> str:
 
 def _anchor_name_for_finding(finding_id: str, key: str) -> str:
     return f"findings[{finding_id}].{key}"
+
+
+def _anchor_name_for_execution_manifest(key: str) -> str:
+    return f"execution_manifest[{key}]"
 
 
 def fixture_payload(
@@ -1313,6 +1344,17 @@ def provenance_blockers(data: dict[str, Any]) -> list[str]:
     for title, value in sections.items():
         check(_anchor_name_for_section(str(title)), value)
 
+    # `template_fill` prints this block as the record of how the report was produced —
+    # workflow logs, tool versions, the QC reference. Unanchored, a post-compilation edit to
+    # any of it passed every check here.
+    execution_manifest = (
+        data.get("execution_manifest")
+        if isinstance(data.get("execution_manifest"), dict)
+        else {}
+    )
+    for key, value in execution_manifest.items():
+        check(_anchor_name_for_execution_manifest(str(key)), value)
+
     findings = data.get("findings") if isinstance(data.get("findings"), list) else []
     present_finding_anchors: set[str] = set()
     for index, finding in enumerate(findings):
@@ -1336,10 +1378,20 @@ def provenance_blockers(data: dict[str, Any]) -> list[str]:
     present_section_anchors = {
         _anchor_name_for_section(str(title)) for title in sections
     }
+    present_execution_manifest_anchors = {
+        _anchor_name_for_execution_manifest(str(key)) for key in execution_manifest
+    }
     for name in fields:
         if name.startswith("sections[") and name not in present_section_anchors:
             blockers.append(f"provenance:missing_value:{name}")
         elif name.startswith("findings[") and name not in present_finding_anchors:
+            blockers.append(f"provenance:missing_value:{name}")
+        elif (
+            name.startswith("execution_manifest[")
+            and name not in present_execution_manifest_anchors
+        ):
+            # A deleted key leaves its anchor behind; checking only what `data` still carries
+            # made the deletion invisible, and the reader loses a tool version without a word.
             blockers.append(f"provenance:missing_value:{name}")
 
     # The floor and the distribution are both derived from the same anchors, so they are
