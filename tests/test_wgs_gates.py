@@ -106,6 +106,57 @@ class WgsInputPathContainmentTest(unittest.TestCase):
         path.write_text(json.dumps(payload), encoding="utf-8")
         return path
 
+    def test_a_dotdot_component_cannot_walk_out_of_the_root(self):
+        """`relative_to` does not normalise, so the walk itself must refuse `..`.
+
+        For `root=/s` and `path=/s/../outside.fastq`, `relative_to` returns
+        `../outside.fastq` and `parts` is `('..', 'outside.fastq')`. The component-wise walk
+        then opens `..` with `dir_fd` and is outside the root with no symlink involved at
+        all — `O_NOFOLLOW` never fires because nothing is a link. Today's callers pass paths
+        `resolve` already normalised, but `open_contained` is the containment boundary and is
+        called directly, so it has to hold on its own.
+        """
+        from scripts.wgs_input_gate import open_contained
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td).resolve() / "sample"
+            root.mkdir()
+            (Path(td).resolve() / "outside.fastq").write_bytes(b"@outside\nACGT\n+\nIIII\n")
+            for escape in ("..", "nested/../.."):
+                with self.subTest(escape=escape):
+                    with self.assertRaises(ValueError) as caught:
+                        open_contained(root, root.joinpath(escape, "outside.fastq"))
+                    self.assertIn("escapes the sample directory", str(caught.exception))
+
+    def test_a_containment_refusal_is_not_recorded_as_a_missing_file(self):
+        """The Evidence Plane must not describe a containment breach as an absent file.
+
+        Every `open_contained` refusal — escape, symlink, swapped parent — was flattened to
+        `reason: "missing_or_empty"`, which reads as "the sample forgot to upload R1" rather
+        than "something tried to redirect this read outside the sample directory".
+        """
+        from scripts.wgs_input_gate import fastq_probe
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td).resolve()
+            outside = root / "outside.fastq"
+            outside.write_bytes(b"@outside\nACGT\n+\nIIII\n")
+            sample = root / "sample"
+            sample.mkdir()
+            (sample / "r1.fastq").symlink_to(outside)
+            ok, detail = fastq_probe(sample, sample / "r1.fastq")
+            self.assertFalse(ok)
+            self.assertNotEqual(detail["reason"], "missing_or_empty")
+            self.assertIn("refused", detail["reason"])
+
+    def test_an_empty_file_is_still_reported_as_empty(self):
+        """The refusal reason must not swallow the ordinary case it sits next to."""
+        from scripts.wgs_input_gate import fastq_probe
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td).resolve()
+            (root / "r1.fastq").write_bytes(b"")
+            ok, detail = fastq_probe(root, root / "r1.fastq")
+            self.assertFalse(ok)
+            self.assertEqual(detail["reason"], "missing_or_empty")
+
     def test_relative_path_cannot_escape_the_sample_root(self):
         from scripts.wgs_input_gate import resolve
         with tempfile.TemporaryDirectory() as td:

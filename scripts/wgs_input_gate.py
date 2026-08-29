@@ -44,7 +44,19 @@ def open_contained(root: Path, path: Path):
     parts = relative.parts
     if not parts:
         raise ValueError("input path names no file")
+    # `relative_to` does not normalise: for root=/s and path=/s/../outside.fastq it returns
+    # `../outside.fastq`, and the walk below would then open `..` with dir_fd and step
+    # straight out of the root — no symlink anywhere, so O_NOFOLLOW never fires. Today's
+    # callers hand over paths `resolve` already normalised, but this function *is* the
+    # containment boundary and is called directly, so it has to hold on its own.
+    if any(component in ("..", ".", "") for component in parts):
+        raise ValueError("input path escapes the sample directory")
     nofollow = getattr(os, "O_NOFOLLOW", 0)
+    if not nofollow:
+        # Defaulting the flag to 0 would turn a platform that cannot refuse symlinks into
+        # one that silently follows them. A gate that quietly weakens itself is worse than
+        # one that stops.
+        raise ValueError("input could not be opened: O_NOFOLLOW unavailable")
     open_fds: list[int] = []
     try:
         parent = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
@@ -123,8 +135,11 @@ def fastq_probe(root: Path, path: Path) -> tuple[bool, dict]:
     """
     try:
         raw = open_contained(root, path)
-    except ValueError:
-        return False, {"path": str(path), "reason": "missing_or_empty"}
+    except ValueError as exc:
+        # Escape, symlink and swapped-parent refusals all used to be flattened into
+        # "missing_or_empty", so input-qc.json described a containment breach as a file the
+        # sample forgot to upload — and `errors` said only "R1 integrity probe failed".
+        return False, {"path": str(path), "reason": f"refused: {exc}"}
     try:
         with raw:
             if os.fstat(raw.fileno()).st_size == 0:
@@ -203,16 +218,23 @@ def validate_manifest(manifest_path: Path) -> dict:
         # Size and hash from one handle, for the same reason as the FASTQ path: `stat` then
         # `open` is two lookups of a name that was validated once.
         alignment_size = None
+        # Same distinction as the FASTQ path: a refused open is a containment fact, not an
+        # absent file, and the Evidence Plane has to be able to tell them apart.
+        alignment_refusal = None
         if alignment is not None:
             try:
                 with open_contained(root, alignment) as handle:
                     alignment_size = os.fstat(handle.fileno()).st_size
                     alignment_sha = _sha256_stream(handle) if alignment_size else None
-            except (ValueError, OSError):
+            except ValueError as exc:
                 alignment_size = None
+                alignment_refusal = f"refused: {exc}"
+            except OSError as exc:
+                alignment_size = None
+                alignment_refusal = f"refused: {type(exc).__name__}"
         if alignment is None or not alignment_size:
             if not refused:
-                errors.append(f"{input_type} alignment missing_or_empty")
+                errors.append(f"{input_type} alignment {alignment_refusal or 'missing_or_empty'}")
         else:
             inputs["alignment"] = {
                 "path": str(alignment),
