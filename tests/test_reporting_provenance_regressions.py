@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import unittest
 
+from reporting import provenance
 from reporting.provenance import (
     DERIVED_BLOCKS,
     FINDING_FIELDS,
@@ -114,6 +115,72 @@ class ReportingProvenanceRegressionTest(unittest.TestCase):
         )
         self.assertEqual("qc-metrics", artifact.name)
         self.assertIs(artifact, compiler.artifact("qc-metrics"))
+
+    def test_free_text_cannot_be_introduced_through_a_derived_kind(self):
+        """`state()` is the only way in for text, and it may not claim a measurement.
+
+        A derived kind asserts the value was read out of a registered artifact. Letting
+        `state()` carry one would let a caller type a number and label it measured, which is
+        the whole distinction this module draws.
+        """
+        for kind in provenance.DERIVED_KINDS:
+            with self.subTest(kind=kind):
+                compiler = PayloadCompiler(case_id="CASE-1", report_id="01")
+                with self.assertRaisesRegex(ProvenanceError, "derive"):
+                    compiler.state(
+                        "summary", "texto", kind=kind, basis="test", status="VERIFICADO"
+                    )
+
+    def test_derive_refuses_a_kind_that_is_not_derived(self):
+        """And the reverse door: `derive()` may not launder a stated kind through a read."""
+        compiler = _anchored_compiler()
+        compiler.register(Artifact.from_payload("qc-metrics", {"call_rate": 0.99}))
+        with self.assertRaisesRegex(ProvenanceError, "derived kind"):
+            compiler.derive(
+                "call_rate",
+                artifact="qc-metrics",
+                locator="call_rate",
+                kind="fixture",
+                basis="test",
+                status="VERIFICADO",
+            )
+
+    def test_a_restated_floor_or_distribution_is_recomputed_and_refused(self):
+        """The block cannot reassure about itself: both are derived from the same anchors.
+
+        A payload that simply *wrote* `operational_status_floor: VERIFICADO` over a floor of
+        NÃO DISPONÍVEL would otherwise present as verified while every value in it was a
+        fixture.
+        """
+        payload = fixture_payload(
+            case_id="CASE-1", report_id="01", summary="fixture", basis="fixture de regressão"
+        )
+        self.assertEqual([], provenance_blockers(payload))
+
+        edited = fixture_payload(
+            case_id="CASE-1", report_id="01", summary="fixture", basis="fixture de regressão"
+        )
+        edited["provenance"]["operational_status_floor"] = "VERIFICADO"
+        self.assertIn("provenance:floor_mismatch", provenance_blockers(edited))
+
+        edited = fixture_payload(
+            case_id="CASE-1", report_id="01", summary="fixture", basis="fixture de regressão"
+        )
+        edited["provenance"]["status_distribution"]["VERIFICADO"] += 5
+        self.assertIn("provenance:distribution_mismatch", provenance_blockers(edited))
+
+    def test_a_status_declared_above_the_floor_is_refused(self):
+        """The payload's own `operational_status` may not read stronger than its weakest value."""
+        payload = fixture_payload(
+            case_id="CASE-1", report_id="01", summary="fixture", basis="fixture de regressão"
+        )
+        self.assertEqual("NÃO DISPONÍVEL", payload["provenance"]["operational_status_floor"])
+        for declared in ("VERIFICADO", "EXECUTADO", "INFERIDO", "PROPOSTO"):
+            with self.subTest(declared=declared):
+                payload["operational_status"] = declared
+                self.assertIn("provenance:status_above_floor", provenance_blockers(payload))
+        payload["operational_status"] = "NÃO DISPONÍVEL"
+        self.assertEqual([], provenance_blockers(payload))
 
     def test_post_compile_publication_gate_edit_is_detected(self):
         payload = fixture_payload(

@@ -244,8 +244,11 @@ detectado" é ambíguo quando duas variantes clinicamente distintas ocupam uma p
 versionada: não há artefato de saída, SHA-256 de entrada, comando pinado nem versões de
 ambiente em `docs/evidence/` que os sustentem, e nenhum teste ou gate os valida. Não são
 evidência de release, e não devem ser citados como desempenho garantido. O que a seção
-documenta e permanece verdadeiro são os três defeitos que a escala expôs e as correções que
-entraram no código — essas, sim, com teste.
+documenta são os três defeitos que a escala expôs. **Só um dos três é verificável neste
+repositório neste SHA**, e a distinção está marcada em cada um abaixo — a afirmação anterior
+de que as três correções "entraram no código, essas sim com teste" não se sustentava: nenhum
+caminho de teste era citado, e ao procurá-los duas das três correções não foram localizadas
+aqui.
 
 Cadeia completa — QC, matriz de completude, passaporte PGx, junção clínica e os dez payloads
 — sobre um array de 700.000 SNPs contra o painel de 55.916 alvos, com o registro expandido
@@ -259,18 +262,35 @@ matriz de completude: 23 MB   |   junção clínica: 59 MB
 
 Chegar aí exigiu três correções que só a escala expôs, e as três eram defeitos reais:
 
-**O arquivo de evidência não era legível.** `build_clinical_findings` lia a evidência com
-`read_text`, e o arquivo em massa tem 88 MB e viaja comprimido. O erro era um
-`UnicodeDecodeError` sobre o byte `0x8b` — que não diz nada sobre a causa, e é a razão de o
-registro expandido nunca ter sido o padrão. Agora passa pelo mesmo leitor que decide
-compressão pelo número mágico do próprio arquivo.
+**O arquivo de evidência não era legível.** *(VERIFICÁVEL AQUI.)* `build_clinical_findings`
+lia a evidência com `read_text`, e o arquivo em massa tem 88 MB e viaja comprimido. O erro
+era um `UnicodeDecodeError` sobre o byte `0x8b` — que não diz nada sobre a causa, e é a razão
+de o registro expandido nunca ter sido o padrão. Agora passa pelo mesmo leitor que decide
+compressão pelo número mágico do próprio arquivo:
+`array_pipeline/clinical_findings.py`, chamada a `read_manifest_bytes`.
 
-**O relatório 05 estava bloqueado em toda execução orquestrada.** `probe_path` é posicional
-em `build_payload` e o orquestrador não o passava: um `TypeError` na chamada, lido como
-recusa do relatório. A sonda de proveniência é opcional — sua ausência é um relatório mais
-fraco, não um relatório bloqueado.
+O teste que sustenta esta correção é
+`tests/test_clinical_findings_regressions.py::test_the_gene_disease_evidence_may_arrive_compressed`,
+adicionado ao registrar esta errata — antes dela **não havia teste algum** exercitando o
+caminho comprimido, e a alegação de cobertura estava errada. Execute com:
 
-**O relatório 09 gerava 275 MB.** Ele emite um achado por locus não interpretável, e um array
+```bash
+python3 -m unittest discover -s tests -p test_clinical_findings_regressions.py
+```
+
+**O relatório 05 estava bloqueado em toda execução orquestrada.** *(NÃO VERIFICÁVEL AQUI.)*
+`probe_path` seria posicional em `build_payload` e o orquestrador não o passava: um
+`TypeError` na chamada, lido como recusa do relatório. Procurado neste SHA, o identificador
+`probe_path` não ocorre em nenhum arquivo do repositório, e não há construtor para o
+relatório 05 em `scripts/` — os únicos presentes são `build_one_page_summary.py` (relatório
+10) e `build_pharmacogenomic_report.py` (relatório 06). O parágrafo permanece como narrativa
+de uma execução de demonstração, sem código ou teste aqui que o sustente.
+
+**O relatório 09 gerava 275 MB.** *(NÃO VERIFICÁVEL AQUI.)* Como acima, não há construtor do
+relatório 09 neste repositório e nenhum limite de enumeração de 250 achados em
+`array_pipeline/` ou `reporting/` — os `250` presentes são o `max_targets` da anotação, que é
+outra coisa. Os números a seguir descrevem a execução de demonstração, não um comportamento
+verificável aqui. Ele emite um achado por locus não interpretável, e um array
 de consumo alcança ~4% de 55.916 alvos: são ~53.900 achados individuais, com 592.624 campos
 de proveniência. Um relatório que nomeia cada ponto cego não torna nenhum visível, e nenhum
 renderizador transforma isso num documento. Agora enumera 250, ordenados por escopo — do

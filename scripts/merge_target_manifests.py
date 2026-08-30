@@ -74,15 +74,31 @@ IDENTITY_FIELDS = ("coordinates", "grch38", "reference_allele")
 
 
 def merge(paths: list[Path]) -> dict[str, Any]:
-    """Combine target manifests without arbitrating any disagreement between them.
+    """Combine target manifests, refusing rather than arbitrating on the scientific claims.
 
-    Where two registries agree, the value carries. Where they disagree about the assessed
-    allele or about locus identity, the merge records the conflict and *removes* the
-    contested value rather than picking one: choosing would manufacture a consensus that
-    no source states. Refusals are made durable — `identity_conflict` deliberately sits
-    outside the `assessed_allele_` namespace so that clearing that namespace cannot erase
-    the record of why it was cleared, which is how a third registry used to restore an
-    allele the first two had refused.
+    The guarantee is specific, so state it specifically. Where two registries disagree about
+    the **assessed allele** or about **locus identity** (`ASSESSED_ALLELE_FIELDS` and
+    `IDENTITY_FIELDS`), the merge records the conflict and *removes* the contested value
+    rather than picking one: choosing would manufacture a consensus no source states.
+
+    Everything else is arbitrated, deliberately and by a stated rule:
+
+    * `scope` takes the strongest of the two by `SCOPE_RANK`, so a locus that one registry
+      calls clinical is not demoted by another that calls it a curiosity.
+    * Any other field absent or empty on the existing entry takes the incoming value, so a
+      coordinate or a citation is not lost by arriving second. The assessed-allele and
+      identity namespaces are excluded from that carry-over precisely because it would
+      undo the refusal above.
+
+    Refusals are made durable: `identity_conflict` sits outside the `assessed_allele_`
+    namespace so that clearing that namespace cannot erase the record of why it was cleared.
+    That durability is not a property of this text — it is asserted by
+    `tests/test_target_expansion.py::test_a_third_registry_cannot_restore_an_allele_refused_for_reference_conflict`,
+    which is the case that used to ship an arbitrated allele at rs3918290, and by
+    `::test_silence_is_not_disagreement` for the case that must *not* be treated as a
+    conflict. Run them with::
+
+        python3 -m unittest discover -s tests -p test_target_expansion.py
     """
     manifests = [(path, load_target_manifest(path)) for path in paths]
 

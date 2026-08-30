@@ -22,7 +22,9 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _verified_coordinate_manifest(template_dir: Path) -> tuple[dict[str, Any], dict[str, str]]:
+def _verified_coordinate_manifest(
+    template_dir: Path,
+) -> tuple[dict[str, Any], dict[str, str | bool]]:
     """Load coordinates only from a hash-pinned v3 coordinate pair.
 
     Prefer the historical approved external pair when installed. Otherwise accept the v2

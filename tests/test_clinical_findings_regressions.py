@@ -154,6 +154,50 @@ class ClinicalFindingsRegressionTest(unittest.TestCase):
             result = build_clinical_findings(matrix, evidence, assessed)
         self.assertEqual(result["qc_reservations"], reservations)
 
+    def test_the_gene_disease_evidence_may_arrive_compressed(self):
+        """The bulk evidence file ships gzipped, and reading it as text used to fail.
+
+        `build_clinical_findings` read the evidence with `read_text`, so the 88 MB compressed
+        file raised `UnicodeDecodeError` about byte 0x8b — an error that names the symptom and
+        not the cause, and the reason the expanded registry could not be made the default. It
+        now goes through `read_manifest_bytes`, which decides compression from the file's own
+        magic number.
+
+        `docs/TARGET_REGISTRY_EXPANSION.md` claimed that correction had a test. It did not:
+        every case in this file wrote plain JSON, so the compressed path — the only one the
+        correction is about — was never exercised. Both encodings are asserted here, from the
+        same content, so the reader is shown to be transparent rather than merely tolerant.
+        """
+        import gzip
+
+        payload = {
+            "schema": "genoma-gene-disease-validity-v1",
+            "sources": ["fixture"],
+            "gene_validity": {},
+            "loci": [],
+        }
+        raw = json.dumps(payload).encode("utf-8")
+        results = []
+        for label, body in (("plain", raw), ("gzip", gzip.compress(raw))):
+            with self.subTest(encoding=label):
+                with tempfile.TemporaryDirectory() as td:
+                    root = Path(td)
+                    matrix = root / "matrix.json"
+                    matrix.write_text(json.dumps({
+                        "schema": "genoma-genome-completeness-matrix-v1",
+                        "case_id": "CASE",
+                        "operational_status": "NÃO DISPONÍVEL",
+                        "entries": [],
+                    }), encoding="utf-8")
+                    evidence = root / "evidence.json"
+                    evidence.write_bytes(body)
+                    assessed = root / "assessed.json"
+                    assessed.write_text(json.dumps({"results": []}), encoding="utf-8")
+                    results.append(build_clinical_findings(matrix, evidence, assessed))
+        plain, compressed = results
+        self.assertEqual(plain["case_id"], compressed["case_id"])
+        self.assertEqual(plain["findings"], compressed["findings"])
+
 
 if __name__ == "__main__":
     unittest.main()
