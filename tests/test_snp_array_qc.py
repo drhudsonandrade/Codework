@@ -268,6 +268,46 @@ class ArrayQCTest(unittest.TestCase):
                 )
                 self.assertEqual(result["operational_status"], "NÃO DISPONÍVEL")
 
+    def test_a_marker_table_that_is_not_valid_utf8_blocks_rather_than_aborting(self):
+        """A third way for the file to be unreadable, arriving by a third exception.
+
+        `load_markers` reads the table with `encoding="utf-8"`, so a file carrying invalid
+        bytes raises `UnicodeDecodeError` — a `ValueError`, not an `OSError`, and not a
+        `JSONDecodeError` either, so it matched none of the handled types and propagated out
+        of `inspect_array`, which only converts `StrandMarkerTableError`. A corrupt byte in
+        the marker table aborted the whole QC inspection instead of blocking the one gate
+        that depends on it: not fail-open like the original defect, but not fail-closed
+        either — an inspection that raises produces no record at all.
+
+        Written against a real file rather than a patched `side_effect`, because the point is
+        that the bytes on disk produce this, not that the exception type is handled.
+        """
+        p = self._write("RSID,CHROMOSOME,POSITION,RESULT\nrs1,1,100,TC\n")
+        build_evidence = self._verified_evidence(p, asserted_value="GRCh37")
+        strand_evidence = self._verified_evidence(p, asserted_value="forward")
+        with tempfile.TemporaryDirectory() as td:
+            table = Path(td) / "array_provenance_markers.json"
+            table.write_bytes(b'{"schema": "genoma-array-provenance-markers-v1", \xff\xfe}')
+            with patch("array_pipeline.qc.STRAND_MARKERS_PATH", table):
+                result = inspect_array(
+                    p,
+                    case_id="T",
+                    build="GRCh37",
+                    strand="forward",
+                    build_evidence=build_evidence,
+                    strand_evidence=strand_evidence,
+                )
+        self.assertEqual(result["gates"]["BUILD_STRAND_GATE"]["state"], "BLOCKED")
+        self.assertEqual(result["metrics"]["strand_contradiction_check"], "NÃO DISPONÍVEL")
+        self.assertIn(
+            "array_provenance_markers.json",
+            result["metrics"]["strand_contradiction_check_reason"],
+        )
+        self.assertEqual(
+            result["gates"]["LIMITED_INTERPRETATION_GATE"]["state"], "BLOCKED"
+        )
+        self.assertEqual(result["operational_status"], "NÃO DISPONÍVEL")
+
 
 class ZipSourceHandleTest(unittest.TestCase):
     """A rejected ZIP must not leave its archive handle open."""

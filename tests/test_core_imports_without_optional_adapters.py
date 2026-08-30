@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import builtins
 import importlib
+import io
 import sys
 import unittest
 from unittest.mock import patch
@@ -82,6 +83,74 @@ class CoreImportsWithoutAdaptersTest(unittest.TestCase):
                 with self.assertRaises(annotation.AdapterUnavailableError) as caught:
                     annotation._get_adapter("clinvar")
         self.assertIn("clinvar", str(caught.exception))
+
+
+class AdapterAbsenceReachesTheCallerAsARefusalTest(unittest.TestCase):
+    """Raising a named error is only half of it: someone has to be catching it.
+
+    `_get_adapter` converts the absent package into `AdapterUnavailableError` so retrieval can
+    degrade to NÃO DISPONÍVEL — but nothing on either path was catching it.
+    `_live_retrieve` loaded the adapter *before* the `try` that turns a failed retrieval into
+    a NÃO DISPONÍVEL record, and `scripts/annotate_partial_genome.py` caught only
+    `(ValueError, OSError, JSONDecodeError)`, so the error escaped as an unhandled traceback:
+    no `ANNOTATION BLOCKED` line, no exit code 2, no artifact. The import-time failure had
+    been moved to call time, not removed.
+    """
+
+    @staticmethod
+    def _adapters_absent():
+        """A context manager under which importing `evidence_adapters` fails."""
+        real_import = builtins.__import__
+
+        def refuse_adapters(name, *args, **kwargs):
+            if name == "evidence_adapters" or name.startswith("evidence_adapters."):
+                raise ImportError("No module named 'evidence_adapters'")
+            return real_import(name, *args, **kwargs)
+
+        return patch.object(builtins, "__import__", side_effect=refuse_adapters)
+
+    def test_live_retrieval_records_a_refusal_instead_of_raising(self):
+        """Live mode degrades: the retrieval is NÃO DISPONÍVEL and the run continues."""
+        from array_pipeline import annotation
+
+        with patch.dict(sys.modules):
+            sys.modules.pop("evidence_adapters", None)
+            with self._adapters_absent():
+                record = annotation._live_retrieve(
+                    "clinvar", {"term": "rs1799945"}, "2026-08-30T00:00:00Z",
+                    max_payload_bytes=1000,
+                )
+        self.assertEqual("NÃO DISPONÍVEL", record["status"])
+        self.assertEqual("AdapterUnavailableError", record["error_class"])
+        self.assertEqual("clinvar", record["source"])
+        # The record still identifies what was attempted, so the refusal is auditable.
+        self.assertEqual({"term": "rs1799945"}, record["query"])
+        self.assertIn("clinvar", record["error"])
+
+    def test_the_cli_turns_the_refusal_into_its_documented_blocked_exit(self):
+        """Plan-only mode cannot degrade — the locator comes from the adapter — so it blocks.
+
+        `annotate_partial_genome` raises, and the CLI's job is to report that in the shape it
+        reports every other blocked run: a named message on stderr and exit 2, rather than a
+        traceback that says nothing about which contract stopped the run.
+        """
+        import importlib
+
+        from array_pipeline.annotation import AdapterUnavailableError
+
+        cli = importlib.import_module("scripts.annotate_partial_genome")
+        argv = [
+            "annotate_partial_genome", "--input", "in.csv", "--qc", "qc.json",
+            "--output", "out.json", "--mode", "plan-only",
+        ]
+        with patch.object(
+            cli, "annotate_partial_genome",
+            side_effect=AdapterUnavailableError("adaptador do Evidence Plane indisponível"),
+        ), patch.object(sys, "argv", argv), patch("sys.stderr", new=io.StringIO()) as err:
+            code = cli.main()
+        self.assertEqual(2, code)
+        self.assertIn("ANNOTATION BLOCKED", err.getvalue())
+        self.assertIn("indisponível", err.getvalue())
 
 
 if __name__ == "__main__":

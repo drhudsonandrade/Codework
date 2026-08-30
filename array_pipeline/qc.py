@@ -192,7 +192,20 @@ def _strand_marker_alleles() -> dict[str, set[str]]:
 
     try:
         payload = provenance_probe.load_markers(STRAND_MARKERS_PATH)
-    except (OSError, json.JSONDecodeError, provenance_probe.ProvenanceProbeError) as exc:
+    except (
+        OSError,
+        json.JSONDecodeError,
+        # `load_markers` decodes the table as UTF-8, so invalid bytes raise
+        # `UnicodeDecodeError` — a `ValueError`, matching neither of the types above. It
+        # escaped this conversion and landed in `inspect_array`'s own UnicodeDecodeError
+        # handler, which exists for the genotype file: the operator was told to re-export
+        # `<sample>.csv.gz` because a byte in `array_provenance_markers.json` was corrupt,
+        # and the inspection aborted instead of blocking BUILD_STRAND_GATE. A wrong name in
+        # a refusal is worse than a crash, because it is actionable and points at the wrong
+        # file.
+        UnicodeDecodeError,
+        provenance_probe.ProvenanceProbeError,
+    ) as exc:
         raise StrandMarkerTableError(
             f"tabela de marcadores de fita inutilizável ({STRAND_MARKERS_PATH.name}): {exc}"
         ) from exc

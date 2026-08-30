@@ -10,7 +10,11 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from array_pipeline.annotation import annotate_partial_genome, write_annotation
+from array_pipeline.annotation import (
+    AdapterUnavailableError,
+    annotate_partial_genome,
+    write_annotation,
+)
 
 
 def main() -> int:
@@ -35,7 +39,12 @@ def main() -> int:
             max_queries=args.max_queries,
             max_payload_bytes=args.max_payload_bytes,
         )
-    except (ValueError, OSError, json.JSONDecodeError) as exc:
+    # `AdapterUnavailableError` is a RuntimeError, so it matched none of the others and left
+    # here as an unhandled traceback: no ANNOTATION BLOCKED line and no exit 2, on the one
+    # failure the optional-adapter contract exists to make survivable. In `live` mode each
+    # retrieval degrades to NÃO DISPONÍVEL and never reaches this; `plan-only` builds its
+    # locator from the adapter, so without it there is no plan to write and the run blocks.
+    except (ValueError, OSError, json.JSONDecodeError, AdapterUnavailableError) as exc:
         print(f"ANNOTATION BLOCKED: {exc}", file=sys.stderr)
         return 2
     write_annotation(result, Path(args.output))

@@ -280,19 +280,25 @@ def _live_retrieve(source: str, query: dict[str, Any], checked_at: str, *, max_p
     The payload is retained only when it is valid JSON and under a strict size cap.
     This is evidence capture, not automated clinical interpretation.
     """
-    adapter = _get_adapter(source)
-    request = adapter._request(query)  # request construction is centralized in the adapter
-    locator = request.full_url
     base: dict[str, Any] = {
         "id": f"{source}:{_query_key(source, query)[:16]}",
         "source": source,
         "status": "NÃO DISPONÍVEL",
         "checked_at": checked_at,
-        "locator": locator,
+        "locator": None,
         "query": query,
         "retrieval_evidence": {"method": "HTTPS"},
     }
     try:
+        # Loading the adapter is part of the retrieval, so it belongs inside the block that
+        # turns a failed retrieval into a NÃO DISPONÍVEL record. It used to sit above this
+        # `try`, so an absent `evidence_adapters` package raised `AdapterUnavailableError`
+        # straight out of this function — the point of naming that error was to let the
+        # caller record a refusal, and there was no caller catching it.
+        adapter = _get_adapter(source)
+        # Request construction is centralized in the adapter.
+        request = adapter._request(query)
+        base["locator"] = request.full_url
         payload, headers = adapter.transport(request)
         if len(payload) > max_payload_bytes:
             raise ValueError(f"provider payload exceeds cap: {len(payload)} > {max_payload_bytes}")
