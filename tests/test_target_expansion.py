@@ -931,5 +931,111 @@ class ClinvarCitationRetrievalTest(unittest.TestCase):
         self.assertEqual(result["pmids"], [])
 
 
+class MergeCarriesWhatItPublishesTest(unittest.TestCase):
+    """Three ways the merge published something it could not support.
+
+    The refusal logic is careful about *which allele*; these are about everything travelling
+    beside it — the evidence for the allele, the digest naming what was merged, and the scope
+    the loader accepted in one spelling and the ranking rejected in another.
+    """
+
+    def _merge(self, *manifests):
+        with tempfile.TemporaryDirectory() as td:
+            paths = [
+                _write(m, Path(td), f"m{i}.json") for i, m in enumerate(manifests)
+            ]
+            return MERGE.merge(paths)
+
+    def test_an_allele_arriving_second_brings_its_evidence_with_it(self):
+        """An allele without its provenance is a claim this project does not make.
+
+        When the first registry declares no allele and the second does, the "silence is not
+        disagreement" branch copies the allele in. It copied four keys by name —
+        `assessed_allele`, `_source`, `_status`, `_reason` — and `assessed_allele_evidence`
+        and `assessed_allele_references` were not among them. The generic carry-over below it
+        then skips everything in `ASSESSED_ALLELE_FIELDS` and everything prefixed
+        `assessed_allele_`, deliberately, so those two had no other way in. The merged panel
+        scored the locus against an allele while naming nothing that supported it.
+        """
+        first = {"rsid": "rs1", "scope": "CLINICO", "label": "a",
+                 "queries": {"clinvar": {"term": "rs1"}}}
+        second = {"rsid": "rs1", "scope": "CLINICO", "label": "b",
+                  "queries": {"clinvar": {"term": "rs1"}},
+                  "assessed_allele": "G",
+                  "assessed_allele_source": "clinvar",
+                  "assessed_allele_status": "VERIFICADO",
+                  "assessed_allele_evidence": {"review_status": "criteria provided"},
+                  "assessed_allele_references": {"clinvar": ["VCV1"]}}
+        merged = self._merge(_manifest("A", [first]), _manifest("B", [second]))["targets"][0]
+        self.assertEqual("G", merged["assessed_allele"])
+        self.assertEqual({"review_status": "criteria provided"},
+                         merged["assessed_allele_evidence"])
+        self.assertEqual({"clinvar": ["VCV1"]}, merged["assessed_allele_references"])
+
+    def test_a_refused_allele_does_not_drag_its_evidence_back_in(self):
+        """The carry must not become a second door around the refusal it sits beside."""
+        first = {"rsid": "rs1", "scope": "CLINICO", "label": "a",
+                 "queries": {"clinvar": {"term": "rs1"}},
+                 "assessed_allele": "T", "reference_allele": "A",
+                 "assessed_allele_evidence": {"from": "A"}}
+        second = {"rsid": "rs1", "scope": "CLINICO", "label": "b",
+                  "queries": {"clinvar": {"term": "rs1"}},
+                  "assessed_allele": "G", "reference_allele": "C",
+                  "assessed_allele_evidence": {"from": "B"}}
+        merged = self._merge(_manifest("A", [first]), _manifest("B", [second]))["targets"][0]
+        self.assertNotIn("assessed_allele", merged)
+        self.assertNotIn("assessed_allele_evidence", merged)
+        self.assertIn("reference_allele", merged["identity_conflict"])
+
+    def test_a_manifest_whose_declared_digest_is_wrong_is_refused(self):
+        """`merge_basis` and `merged_from` published `sha256` without ever checking it.
+
+        The panel's own version string is derived from `merge_basis`, so a manifest declaring
+        someone else's digest — or a typo — produced a panel whose provenance named content
+        that was not what got merged. The digest is a claim about bytes; it is now computed
+        from them.
+        """
+        target = {"rsid": "rs1", "scope": "CLINICO", "label": "a",
+                  "queries": {"clinvar": {"term": "rs1"}}}
+        manifest = _manifest("A", [target])
+        manifest["sha256"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "sha256"):
+            self._merge(manifest)
+
+    def test_a_manifest_declaring_its_real_digest_is_accepted(self):
+        """The accepting case, so the refusal above is a check and not a ban on the field."""
+        target = {"rsid": "rs1", "scope": "CLINICO", "label": "a",
+                  "queries": {"clinvar": {"term": "rs1"}}}
+        manifest = _manifest("A", [target])
+        manifest["sha256"] = MERGE.sha256_json(
+            {k: v for k, v in manifest.items() if k != "sha256"}
+        )
+        result = self._merge(manifest)
+        self.assertEqual(manifest["sha256"], result["merged_from"][0]["sha256"])
+
+    def test_a_scope_the_loader_accepts_is_a_scope_the_merge_can_rank(self):
+        """`load_target_manifest` validates `scope.upper()` and returns the original.
+
+        So `"clinico"` passed validation and then reached `_scope_rank`, which compares
+        against the canonical uppercase tuple and raised `ValueError` — on a manifest the
+        loader had just accepted. Loader and ranking must agree about what a scope is.
+        """
+        for spelling in ("clinico", "Clinico", "CLINICO", "predisposicao"):
+            with self.subTest(scope=spelling):
+                target = {"rsid": "rs1", "scope": spelling, "label": "a",
+                          "queries": {"clinvar": {"term": "rs1"}}}
+                merged = self._merge(_manifest("A", [target]))["targets"][0]
+                self.assertEqual(spelling.upper(), merged["scope"])
+
+    def test_the_stronger_scope_still_wins_across_spellings(self):
+        """Normalising must not flatten the ranking it exists to make possible."""
+        weak = {"rsid": "rs1", "scope": "curiosidade", "label": "a",
+                "queries": {"clinvar": {"term": "rs1"}}}
+        strong = {"rsid": "rs1", "scope": "CLINICO", "label": "b",
+                  "queries": {"clinvar": {"term": "rs1"}}}
+        merged = self._merge(_manifest("A", [weak]), _manifest("B", [strong]))["targets"][0]
+        self.assertEqual("CLINICO", merged["scope"])
+
+
 if __name__ == "__main__":
     unittest.main()

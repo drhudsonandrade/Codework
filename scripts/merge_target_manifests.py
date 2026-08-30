@@ -40,6 +40,29 @@ from array_pipeline.targets import load_target_manifest, sha256_json
 SCOPE_RANK = ("CLINICO", "PREDISPOSICAO", "PESQUISA", "CURIOSIDADE")
 
 
+def _verified_digest(path: Path, manifest: dict[str, Any]) -> str:
+    """The manifest's digest, computed from its content and refused if it disagrees.
+
+    `merge_basis` and `merged_from` published `manifest.get("sha256")` as read, and the
+    merged panel's own `version` is derived from `merge_basis`. So a manifest carrying
+    someone else's digest — or a typo — produced a panel whose provenance named content that
+    is not what was merged, and the version string encoded that wrong name. A digest is a
+    claim about bytes; it is checked against them or it is not published.
+
+    Computed over the manifest without its own `sha256` key, because a digest cannot cover
+    the field that holds it.
+    """
+    computed = sha256_json({key: value for key, value in manifest.items() if key != "sha256"})
+    declared = manifest.get("sha256")
+    if declared is not None and declared != computed:
+        raise ValueError(
+            f"{path}: declared sha256 {declared!r} does not match the content digest "
+            f"{computed!r}; the merged panel cites this value as the provenance of what it "
+            "merged, and publishing it unchecked would name content that was never read"
+        )
+    return computed
+
+
 def _scope_rank(target: dict, rsid: str) -> int:
     """Rank of this target's scope, refusing a value the ranking does not know.
 
@@ -101,6 +124,8 @@ def merge(paths: list[Path]) -> dict[str, Any]:
         python3 -m unittest discover -s tests -p test_target_expansion.py
     """
     manifests = [(path, load_target_manifest(path)) for path in paths]
+    for path, manifest in manifests:
+        _verified_digest(path, manifest)
 
     merged: dict[str, dict[str, Any]] = {}
     origin: dict[str, list[str]] = {}
@@ -114,6 +139,14 @@ def merge(paths: list[Path]) -> dict[str, Any]:
             rsid = str(target["rsid"]).lower()
             incoming = dict(target)
             incoming["rsid"] = rsid
+            # `load_target_manifest` validates `scope.upper()` against ALLOWED_SCOPES and
+            # returns the entry unchanged, so `"clinico"` passed validation and then reached
+            # `_scope_rank`, which compares against the canonical uppercase tuple and refused
+            # it — on a manifest the loader had just accepted. `targets_from_manifest`
+            # already normalises the same way; the merge did not. rsid is normalised on the
+            # line above for exactly this reason.
+            if incoming.get("scope") is not None:
+                incoming["scope"] = str(incoming["scope"]).upper()
             if rsid not in merged:
                 merged[rsid] = incoming
                 origin[rsid] = [registry]
@@ -178,12 +211,17 @@ def merge(paths: list[Path]) -> dict[str, Any]:
                 # out of the merge with an assessed allele anyway. `identity_conflict` is
                 # deliberately outside the `assessed_allele_` prefix so that clearing cannot
                 # erase it.
-                for key in (
-                    "assessed_allele",
-                    "assessed_allele_source",
-                    "assessed_allele_status",
-                    "assessed_allele_reason",
-                ):
+                # Every field in the namespace, not a hand-written four. The generic
+                # carry-over below deliberately skips this whole namespace, so a key omitted
+                # here has no other way in: `assessed_allele_evidence` and
+                # `assessed_allele_references` were left out, and the merged panel scored the
+                # locus against an allele while naming nothing that supported it. An allele
+                # without its provenance is a claim this project does not make.
+                #
+                # `assessed_allele_conflict` is excluded on purpose: it is the sentinel this
+                # branch's own guard reads, and copying a conflict marker from a registry
+                # that is not in conflict here would invent one.
+                for key in sorted(ASSESSED_ALLELE_FIELDS - {"assessed_allele_conflict"}):
                     if incoming.get(key) is not None:
                         existing[key] = incoming[key]
 
@@ -258,7 +296,11 @@ def merge(paths: list[Path]) -> dict[str, Any]:
             "path": str(path),
             "id": manifest.get("id"),
             "version": manifest.get("version"),
-            "sha256": manifest.get("sha256") or sha256_json(manifest),
+            # The verified digest, never the declared one. `_verified_digest` has already
+            # refused any manifest whose declaration disagrees with its bytes, so the two are
+            # equal here by construction — computing it is what makes that true rather than
+            # assumed, and a manifest that declared nothing still gets a real digest.
+            "sha256": _verified_digest(path, manifest),
         }
         for path, manifest in manifests
     ]
@@ -280,7 +322,7 @@ def merge(paths: list[Path]) -> dict[str, Any]:
                 "version": manifest.get("version"),
                 "path": str(path),
                 "targets": len(manifest["targets"]),
-                "sha256": manifest.get("sha256"),
+                "sha256": _verified_digest(path, manifest),
             }
             for path, manifest in manifests
         ],
