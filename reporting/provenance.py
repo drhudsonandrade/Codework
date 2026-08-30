@@ -90,12 +90,32 @@ POST_DEPLOYMENT_WITNESS_ARTIFACT = "post-deployment-witness"
 #: What the witness must show before the payload may carry anything but PENDENTE. Named
 #: individually because `all(...)` over a truncated dict is True, and this is the gate the
 #: project reserves for evidence it did not produce itself.
+#:
+#: These are the conditions `docs/PRODUCTION_CEREMONY.md` states: "The suite can report PASS
+#: only with `total=15`, `passed=15`, `critical_failures=0`, a verified ruleset-bootstrap
+#: attestation tied to the exact deployment Git SHA, authenticated evidence that the
+#: persistent Project Instructions are installed, `POST_DEPLOYMENT_GATE=PASS`, and
+#: `post_deployment_status=PASS`."
+#:
+#: Four of those seven were checked. The three that were not are the ones that say the suite
+#: actually *ran*: a witness declaring `post_deployment_status: "PASS"`, `all_pass: true`,
+#: `bootstrap_verified: true` and `critical_failures: 0` — with no `passed`, no `total` and
+#: no installed Project Instructions — was accepted and published as a POST-DEPLOYMENT PASS.
+#: The basis string beneath even printed `f"{payload.get('passed')}/{payload.get('total')}"`,
+#: so the verdict asserted "15/15 cases" while requiring neither number.
 WITNESS_REQUIRED = {
     "post_deployment_status": "PASS",
     "all_pass": True,
     "bootstrap_verified": True,
     "critical_failures": 0,
+    "passed": 15,
+    "total": 15,
+    "project_bootstrap_installed": True,
 }
+
+#: The gate the ceremony contract names, checked separately because it is nested rather than
+#: a flat key and `WITNESS_REQUIRED` compares scalars.
+WITNESS_REQUIRED_GATE = "POST_DEPLOYMENT_GATE"
 
 #: Payload blocks `compile` derives from registered artifacts rather than from its caller.
 #: `extra` merges into the payload after every anchor is fixed and refused only keys that
@@ -210,6 +230,18 @@ def witness_verdict(
             "basis": (
                 "a testemunha registrada não sustenta um veredicto: "
                 + ", ".join(f"{key}={payload.get(key)!r}" for key in unmet)
+            ),
+            "witness_sha256": sha256,
+        }
+    gate = payload.get("post_deployment_gate")
+    gate = gate if isinstance(gate, dict) else {}
+    if gate.get("gate") != WITNESS_REQUIRED_GATE or gate.get("state") != "PASS":
+        return {
+            "status": "PENDENTE",
+            "basis": (
+                f"a testemunha não registra {WITNESS_REQUIRED_GATE} em PASS "
+                f"(gate={gate.get('gate')!r}, state={gate.get('state')!r}); o contrato da "
+                "cerimônia de produção exige esse portão explicitamente"
             ),
             "witness_sha256": sha256,
         }
