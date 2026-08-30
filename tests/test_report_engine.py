@@ -174,5 +174,77 @@ class ReportEngineTest(unittest.TestCase):
             self.assertIn(RULESET["sha256"], markdown)
 
 
+class PayloadIsBoundToTheModelItAuthorisesTest(unittest.TestCase):
+    """A payload compiled for one report may not be rendered as another.
+
+    `render_document(report_id, data, mode="FINAL")` picked the catalog entry by its own
+    argument and never compared it to `data["report_id"]`. Every gate it runs was computed
+    for the payload's report: `PayloadCompiler.consent_scope` resolves the consent domain
+    through `reporting.consent.REPORT_DOMAINS[report_id]`, and `provenance_blockers` anchors
+    `report_id` as an identity field. Both agreed with each other and neither was compared
+    to the model actually being rendered.
+
+    So `render_document("02", payload_compiled_for_01, mode="FINAL")` produced the
+    Ancestralidade e Genealogia Genética document, with zero blockers, under a consent
+    verdict computed for the CLÍNICO domain — reports 01 and 02 sit in different domains
+    (`CLÍNICO` and `ANCESTRALIDADE`). That is a real consent, for the wrong thing, reading
+    as authorisation: the exact failure `consent_scope`'s docstring says it exists to
+    prevent, reintroduced one layer below it.
+    """
+
+    def _payload_for(self, report_id: str):
+        data = final_fixture(report_id=report_id)
+        return data
+
+    def test_rendering_a_payload_as_a_different_report_is_refused(self):
+        from reporting.engine import ReportReleaseError, render_document
+
+        data = self._payload_for("01")
+        with self.assertRaises(ReportReleaseError) as caught:
+            render_document("02", data, mode="FINAL")
+        message = str(caught.exception)
+        self.assertIn("report_id", message)
+        self.assertIn("01", message)
+        self.assertIn("02", message)
+
+    def test_every_other_model_is_refused_the_same_way(self):
+        """One pair proves the check exists; the sweep proves it is not special-cased."""
+        from reporting.engine import ReportReleaseError, load_catalog, render_document
+
+        data = self._payload_for("01")
+        for report_id in load_catalog():
+            if report_id == "01":
+                continue
+            with self.subTest(rendered_as=report_id):
+                with self.assertRaises(ReportReleaseError):
+                    render_document(report_id, data, mode="FINAL")
+
+    def test_the_matching_report_still_renders(self):
+        """The accepting case, so the refusal above is a binding and not a blanket no."""
+        from reporting.engine import render_document
+
+        rendered = render_document("01", self._payload_for("01"), mode="FINAL")
+        self.assertEqual("01", rendered["metadata"]["report_id"])
+        self.assertEqual("01", rendered["data"]["report_id"])
+
+    def test_a_payload_carrying_no_report_id_cannot_publish(self):
+        """Absence is not agreement: nothing may render FINAL without saying which report."""
+        from reporting.engine import ReportReleaseError, render_document
+
+        for value in (None, "", "1", 1):
+            with self.subTest(report_id=value):
+                data = self._payload_for("01")
+                data["report_id"] = value
+                with self.assertRaises(ReportReleaseError):
+                    render_document("01", data, mode="FINAL")
+
+    def test_model_mode_is_unaffected(self):
+        """MODEL renders the empty template and reads no payload, so it keeps working."""
+        from reporting.engine import render_document
+
+        result = render_document("02", {"report_id": "01"}, mode="MODEL")
+        self.assertIn("MODELO — NÃO É RESULTADO GENÉTICO", result["markdown"])
+
+
 if __name__ == "__main__":
     unittest.main()

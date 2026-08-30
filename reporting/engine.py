@@ -47,8 +47,25 @@ def load_catalog() -> dict[str, dict[str, Any]]:
     return catalog
 
 
-def _publication_blockers(data: dict[str, Any]) -> list[str]:
+def _publication_blockers(data: dict[str, Any], report_id: str) -> list[str]:
+    """Every reason this payload may not be published as `report_id`.
+
+    Reasons accumulate rather than raising at the first one, so a caller sees everything
+    wrong in a single run instead of fixing them one release at a time.
+    """
     blockers: list[str] = []
+    # Every other check here was computed for the payload's *own* report, and none of them
+    # looked at which model is being rendered. `PayloadCompiler.consent_scope` resolves the
+    # consent domain through `reporting.consent.REPORT_DOMAINS[report_id]`, and
+    # `provenance_blockers` anchors `report_id` as an identity field — so the two agreed with
+    # each other while agreeing with nothing here. `render_document("02", payload compiled
+    # for "01", mode="FINAL")` therefore published the Ancestralidade document with zero
+    # blockers under a consent verdict computed for the CLÍNICO domain: a real consent, for
+    # the wrong thing, reading as authorisation.
+    declared = data.get("report_id")
+    if declared != report_id:
+        blockers.append(f"report_id:mismatch:{declared!r}!={report_id!r}")
+
     ruleset = data.get("ruleset") if isinstance(data.get("ruleset"), dict) else {}
     for key, expected in EXPECTED_RULESET.items():
         if ruleset.get(key) != expected:
@@ -247,7 +264,7 @@ def render_document(report_id: str, data: dict[str, Any], *, mode: str = "MODEL"
     model = catalog[report_id]
     blockers: list[str] = []
     if mode == "FINAL":
-        blockers = _publication_blockers(data)
+        blockers = _publication_blockers(data, report_id)
         if blockers:
             raise ReportReleaseError("publication gate failed: " + ", ".join(blockers))
         markdown = _final_markdown(report_id, model, data)
