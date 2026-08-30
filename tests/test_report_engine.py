@@ -2,12 +2,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import normative
 from ruleset_test_support import RULESET
 
 
 def passing_policy_evaluation():
     return {
         "ready_for_requested_operation": True,
+        # `policy_verdict` binds the evaluation to the canonical ruleset, so a fixture
+        # without it is refused — which is the point of the binding.
+        "ruleset": {"sha256": normative.RAW_SHA256},
         "planes": {
             "policy_control": {"state": "PASS"},
             "scientific_data": {"state": "PASS"},

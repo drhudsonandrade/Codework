@@ -18,6 +18,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import normative
+
 
 def attestation(
     input_sha: str,
@@ -64,8 +66,15 @@ def provenance_for(path: Path, *, build: str = "GRCh37", strand: str = "forward"
 #: A policy-engine verdict, as the artifact `PayloadCompiler` reads it. Tests that render a
 #: FINAL document need one, because the builders can no longer grant themselves a PASS: the
 #: verdict is copied from a registered evaluation or the payload refuses.
+#:
+#: `ruleset` is not decoration. `policy_verdict` binds the evaluation to the canonical
+#: ruleset, so a verdict produced against a different one — or a fixture that names none —
+#: no longer authorises a report. The real `EvaluationReport.to_dict()` emits this block, so
+#: carrying it here makes the fixture resemble the artifact it stands in for rather than the
+#: minimum the consumer used to accept.
 POLICY_PASS = {
     "ready_for_requested_operation": True,
+    "ruleset": {"sha256": normative.RAW_SHA256},
     "planes": {
         name: {"state": "PASS"}
         for name in ("policy_control", "scientific_data", "evidence", "audit")
