@@ -165,15 +165,42 @@ line is a real stale citation. To check the method names instead of the files:
 
 ```bash
 python3 - <<'PY'
-import pathlib, re, subprocess
+import ast, pathlib, re
+
 doc = pathlib.Path("docs/PROVENANCE_GATE.md").read_text(encoding="utf-8")
-cited = set(re.findall(r"`(test_[a-z0-9_]+)`", doc))
-grep = subprocess.run(["grep", "-rho", "def test_[a-z0-9_]*", "tests/"],
-                      capture_output=True, text=True).stdout
-defined = {line.split()[1] for line in grep.splitlines()}
-print(sorted(cited - defined) or "every cited test method exists")
+
+# Which file each section says its methods live in: the nearest `tests/…py` named above the
+# citation. Comparing bare method names would pass a citation whose file is wrong, which is
+# the half of "does this reference resolve?" that actually goes stale.
+owner, expected = None, {}
+for line in doc.splitlines():
+    match = re.search(r"`(tests/test_[a-z0-9_]+\.py)", line)
+    if match:
+        owner = match.group(1)
+    for method in re.findall(r"`(test_[a-z0-9_]+)`", line):
+        expected.setdefault(method, owner)
+
+defined = {}
+for path in sorted(pathlib.Path("tests").glob("test_*.py")):
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.ClassDef):
+            for child in node.body:
+                if isinstance(child, ast.FunctionDef) and child.name.startswith("test_"):
+                    defined.setdefault(child.name, set()).add(str(path))
+
+problems = []
+for method, file in sorted(expected.items()):
+    where = defined.get(method)
+    if not where:
+        problems.append(f"{method}: not defined in tests/")
+    elif file is not None and file not in where:
+        problems.append(f"{method}: cited under {file}, defined in {sorted(where)}")
+print("\n".join(problems) or "every citation resolves to a method in the file it names")
 PY
 ```
+
+It reports both failure modes: a method that does not exist, and one that exists somewhere
+other than the file the section attributes it to.
 
 There is no coverage report committed to this repository, so "covered" here means "a named
 test asserts it", verifiable by running the commands above — not a measured coverage

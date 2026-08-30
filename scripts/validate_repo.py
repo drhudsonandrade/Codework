@@ -395,14 +395,25 @@ CORE_PACKAGES = ("array_pipeline", "normative")
 OPTIONAL_LOCAL_PACKAGES = frozenset({"evidence_adapters", "adapters", "mcp"})
 
 
+#: The only errors an optional-adapter guard may catch. `ModuleNotFoundError` is a subclass of
+#: `ImportError`, so naming either is enough; naming anything else is not a guard.
+_IMPORT_ERRORS = frozenset({"ImportError", "ModuleNotFoundError"})
+
+
 def _catches_import_error(handler: ast.ExceptHandler) -> bool:
-    """Does this `except` clause name ImportError (or ModuleNotFoundError) specifically?
+    """Does this `except` clause catch import errors and *nothing else*?
 
     A bare `except:` and `except Exception:` do catch it, and are deliberately not accepted:
     the contract is that an absent adapter degrades to a *stated* refusal, and a handler that
     also swallows a corrupt install or a failing module-level side effect cannot tell the
     caller which of those happened. Naming the error is what makes the guard a declaration
     that the dependency is optional rather than a blanket suppression.
+
+    The same argument applies to a tuple, which an earlier version of this check missed by
+    accepting any handler *containing* ImportError: under
+    ``except (ImportError, AttributeError)`` an `AttributeError` raised while the dependency
+    runs its own import-time code binds the fallback and reports a missing optional adapter
+    where there is a broken installed one. Every name in the clause has to be an import error.
     """
     if handler.type is None:
         return False
@@ -413,7 +424,11 @@ def _catches_import_error(handler: ast.ExceptHandler) -> bool:
             named.add(candidate.id)
         elif isinstance(candidate, ast.Attribute):
             named.add(candidate.attr)
-    return bool(named & {"ImportError", "ModuleNotFoundError"})
+        else:
+            # A computed exception class — a name this walk cannot resolve is not a
+            # declaration it can act on, so it does not qualify as a guard.
+            return False
+    return bool(named) and named <= _IMPORT_ERRORS
 
 
 def _import_time_statements(body: list[ast.stmt]) -> Iterator[ast.stmt]:

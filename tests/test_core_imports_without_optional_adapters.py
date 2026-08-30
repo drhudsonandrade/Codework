@@ -19,6 +19,7 @@ import importlib
 import io
 import sys
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 
@@ -127,30 +128,127 @@ class AdapterAbsenceReachesTheCallerAsARefusalTest(unittest.TestCase):
         self.assertEqual({"term": "rs1799945"}, record["query"])
         self.assertIn("clinvar", record["error"])
 
+    @staticmethod
+    def _real_run_inputs(root):
+        """A genotype file and a QC record good enough for a real plan-only run.
+
+        Built with the same sequence `tests/test_partial_genome_annotation.py` uses, because
+        the point of the CLI test below is that the refusal comes out of the actual code path
+        — not out of a patched stand-in that was told to raise.
+        """
+        import gzip
+        import hashlib
+        import json
+
+        from array_pipeline.qc import inspect_array
+
+        array = root / "array.csv.gz"
+        with gzip.open(array, "wt", encoding="utf-8", newline="") as handle:
+            handle.write(
+                "RSID,CHROMOSOME,POSITION,CONSENSUS_RESULT,STATUS,"
+                "GENERA_RESULT,MYHERITAGE_RESULT,SOURCES\n"
+            )
+            handle.write("rs1799807,3,165548529,CT,consensus,CT,CT,GM\n")
+            handle.write("rs999999,1,100,AA,consensus,AA,AA,GM\n")
+
+        digest = hashlib.sha256(array.read_bytes()).hexdigest()
+
+        def evidence(asserted_value: str) -> str:
+            return json.dumps({
+                "status": "VERIFICADO",
+                "decision": "SATISFIED",
+                "asserted_value": asserted_value,
+                "justification": "Synthetic fixture explicitly controls build and strand.",
+                "evidence_refs": ["synthetic-annotation-fixture"],
+                "trace": {
+                    "attestation_id": "adapter-absence-fixture",
+                    "created_at": "2026-08-17T00:00:00Z",
+                    "actor_type": "SOFTWARE",
+                    "actor_id": "tests.test_core_imports_without_optional_adapters",
+                    "method": "deterministic fixture",
+                    "run_id": "unit-test",
+                    "input_sha256": [digest],
+                    "output_sha256": [],
+                    "tool_versions": {"test": "1"},
+                },
+            })
+
+        qc = inspect_array(
+            array,
+            case_id="SYN",
+            build="GRCh37",
+            strand="forward",
+            build_evidence=evidence("GRCh37"),
+            strand_evidence=evidence("forward"),
+        )
+        qc_path = root / "qc.json"
+        qc_path.write_text(json.dumps(qc), encoding="utf-8")
+        targets = (
+            Path(__file__).resolve().parents[1]
+            / "config"
+            / "partial_genome_annotation_targets.json"
+        )
+        return array, qc_path, targets
+
     def test_the_cli_turns_the_refusal_into_its_documented_blocked_exit(self):
         """Plan-only mode cannot degrade — the locator comes from the adapter — so it blocks.
 
-        `annotate_partial_genome` raises, and the CLI's job is to report that in the shape it
-        reports every other blocked run: a named message on stderr and exit 2, rather than a
-        traceback that says nothing about which contract stopped the run.
+        Driven through the real path: valid inputs, `evidence_adapters` genuinely absent, and
+        `annotate_partial_genome` left unpatched, so the `AdapterUnavailableError` is raised
+        by `_get_adapter` where it really would be. Patching the function to raise would have
+        tested only that the CLI catches an exception someone handed it, and would keep
+        passing if the real path stopped producing one.
+
+        The CLI's job is to report it in the shape it reports every other blocked run: a
+        named message on stderr and exit 2, rather than a traceback that says nothing about
+        which contract stopped the run.
         """
         import importlib
-
-        from array_pipeline.annotation import AdapterUnavailableError
+        import tempfile
 
         cli = importlib.import_module("scripts.annotate_partial_genome")
-        argv = [
-            "annotate_partial_genome", "--input", "in.csv", "--qc", "qc.json",
-            "--output", "out.json", "--mode", "plan-only",
-        ]
-        with patch.object(
-            cli, "annotate_partial_genome",
-            side_effect=AdapterUnavailableError("adaptador do Evidence Plane indisponível"),
-        ), patch.object(sys, "argv", argv), patch("sys.stderr", new=io.StringIO()) as err:
-            code = cli.main()
-        self.assertEqual(2, code)
-        self.assertIn("ANNOTATION BLOCKED", err.getvalue())
-        self.assertIn("indisponível", err.getvalue())
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            array, qc_path, targets = self._real_run_inputs(root)
+            out = root / "out.json"
+            argv = [
+                "annotate_partial_genome",
+                "--input", str(array), "--qc", str(qc_path),
+                "--targets", str(targets), "--output", str(out),
+                "--mode", "plan-only",
+            ]
+            with patch.dict(sys.modules):
+                sys.modules.pop("evidence_adapters", None)
+                with self._adapters_absent(), patch.object(sys, "argv", argv), patch(
+                    "sys.stderr", new=io.StringIO()
+                ) as err:
+                    code = cli.main()
+            self.assertEqual(2, code)
+            self.assertIn("ANNOTATION BLOCKED", err.getvalue())
+            self.assertIn("adaptador do Evidence Plane", err.getvalue())
+            # Blocked means blocked: no artifact is written for a run that never retrieved.
+            self.assertFalse(out.exists())
+
+    def test_the_same_inputs_succeed_when_the_adapter_is_present(self):
+        """The control: without this, the test above could pass for any reason at all."""
+        import importlib
+        import tempfile
+
+        cli = importlib.import_module("scripts.annotate_partial_genome")
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            array, qc_path, targets = self._real_run_inputs(root)
+            out = root / "out.json"
+            argv = [
+                "annotate_partial_genome",
+                "--input", str(array), "--qc", str(qc_path),
+                "--targets", str(targets), "--output", str(out),
+                "--mode", "plan-only",
+            ]
+            with patch.object(sys, "argv", argv), patch("sys.stdout", new=io.StringIO()):
+                code = cli.main()
+            self.assertEqual(0, code)
+            self.assertTrue(out.exists())
 
 
 if __name__ == "__main__":

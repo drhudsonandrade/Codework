@@ -95,20 +95,33 @@ class CoreRuntimeDependencyCheckTest(unittest.TestCase):
                     f"try:\n    import numpy as np\n{clause}\n    np = None\n"
                 )
 
-    def test_a_tuple_of_handlers_counts_when_it_includes_importerror(self):
-        self.assertEqual(
-            [],
-            self._errors_for(
-                "try:\n    import numpy as np\n"
-                "except (ImportError, AttributeError):\n    np = None\n"
-            ),
-        )
-        self.assertEqual(
-            [],
-            self._errors_for(
-                "try:\n    import numpy as np\nexcept ModuleNotFoundError:\n    np = None\n"
-            ),
-        )
+    def test_a_tuple_naming_only_the_import_errors_is_accepted(self):
+        for clause in (
+            "except (ImportError, ModuleNotFoundError):",
+            "except ModuleNotFoundError:",
+            "except (ModuleNotFoundError, ImportError):",
+        ):
+            with self.subTest(clause=clause):
+                self.assertEqual(
+                    [],
+                    self._errors_for(f"try:\n    import numpy as np\n{clause}\n    np = None\n"),
+                )
+
+    def test_a_tuple_that_also_catches_something_else_is_not_a_guard(self):
+        """`except (ImportError, AttributeError)` does catch it, and hides more than absence.
+
+        This is the same argument that refuses `except Exception`, and the tuple form slipped
+        past a check that accepted any handler *containing* ImportError. An `AttributeError`
+        raised while the module executes its own import-time code is a defect in the
+        dependency, not its absence, and binding `np = None` for it reports a missing optional
+        adapter where there is a broken installed one.
+        """
+        for extra in ("AttributeError", "ValueError", "OSError", "Exception"):
+            with self.subTest(extra=extra):
+                self.assert_refused(
+                    f"try:\n    import numpy as np\n"
+                    f"except (ImportError, {extra}):\n    np = None\n"
+                )
 
     def test_an_import_in_else_or_finally_is_not_covered_by_the_handler(self):
         """Only the `try` body is protected; `else` and `finally` run outside it."""
