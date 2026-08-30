@@ -16,22 +16,41 @@ from array_pipeline.qc import (
     sha256_file,
 )
 from array_pipeline.targets import build_query_plan, load_target_manifest, sha256_json
-from evidence_adapters import get_adapter
+from array_pipeline import claims
 
 import normative
 
 RULESET = normative.ruleset_block()
 
-UNSUPPORTED_ARRAY_CLAIMS = [
-    "genome-wide negative/exclusion claims",
-    "CNV",
-    "SV",
-    "repeat expansions",
-    "HLA typing",
-    "CYP2D6 structural/hybrid/copy-number diplotyping",
-    "mosaicism from read-level evidence",
-    "deep intronic/non-assayed variation",
-]
+
+class AdapterUnavailableError(RuntimeError):
+    """The Evidence Plane adapter package is not installed in this runtime."""
+
+#: Re-exported so `annotation.UNSUPPORTED_ARRAY_CLAIMS` keeps working for existing callers.
+#: The definition moved to a dependency-free module: importing it from here used to pull
+#: `evidence_adapters` into the import graph of every module that wanted only the list.
+UNSUPPORTED_ARRAY_CLAIMS = claims.UNSUPPORTED_ARRAY_CLAIMS
+
+
+def _get_adapter(source: str):
+    """Load an Evidence Plane adapter at call time, not at import time.
+
+    `from evidence_adapters import get_adapter` at module scope made an optional adapter a
+    hard requirement for importing this module — and, through the constant above, for
+    importing `completeness` and everything downstream of it. The repository declares
+    `evidence_adapters/**` optional; a core module that cannot be imported without it
+    contradicts that, and `scripts/validate_repo.py` now fails on exactly this shape.
+
+    Absence is raised as `AdapterUnavailableError` so a caller can record NÃO DISPONÍVEL for
+    the retrieval instead of the process dying at import.
+    """
+    try:
+        from evidence_adapters import get_adapter
+    except ImportError as exc:  # pragma: no cover - exercised by the import regression
+        raise AdapterUnavailableError(
+            f"adaptador do Evidence Plane indisponível para {source!r}: {exc}"
+        ) from exc
+    return get_adapter(source)
 
 
 def _stable_json(value: Any) -> bytes:
@@ -261,7 +280,7 @@ def _live_retrieve(source: str, query: dict[str, Any], checked_at: str, *, max_p
     The payload is retained only when it is valid JSON and under a strict size cap.
     This is evidence capture, not automated clinical interpretation.
     """
-    adapter = get_adapter(source)
+    adapter = _get_adapter(source)
     request = adapter._request(query)  # request construction is centralized in the adapter
     locator = request.full_url
     base: dict[str, Any] = {
@@ -339,7 +358,7 @@ def annotate_partial_genome(
             if mode == "live":
                 retrievals[key] = _live_retrieve(item["source"], item["query"], now, max_payload_bytes=max_payload_bytes)
             else:
-                adapter = get_adapter(item["source"])
+                adapter = _get_adapter(item["source"])
                 request = adapter._request(item["query"])
                 retrievals[key] = {
                     "id": f"{item['source']}:{key[:16]}",

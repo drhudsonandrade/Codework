@@ -388,6 +388,11 @@ def _missing_path_error(relative: str) -> str:
 #: PyMuPDF); the scientific core does not, and that is the property checked below.
 CORE_PACKAGES = ("array_pipeline", "normative")
 
+#: Packages that live in this repository but are optional by contract — `.coderabbit.yaml`
+#: declares `evidence_adapters/**` an optional Evidence Plane component. The core must import
+#: without them, so they are excluded from the "local, therefore fine" allowance below.
+OPTIONAL_LOCAL_PACKAGES = frozenset({"evidence_adapters", "adapters", "mcp"})
+
 
 def validate_core_runtime_dependencies(root: Path, errors: list[str]) -> None:
     """Check the claim `main()` used to simply print.
@@ -405,6 +410,13 @@ def validate_core_runtime_dependencies(root: Path, errors: list[str]) -> None:
     local_modules |= {p.name for p in root.iterdir() if p.is_dir() and (p / "__init__.py").is_file()}
     local_modules |= {"array_pipeline", "reporting", "scripts", "normative", "tests"}
     allowed = set(sys.stdlib_module_names) | local_modules
+    # Present in this repository, yet declared optional by contract, so "is it local?" is
+    # the wrong question for these. `array_pipeline/annotation.py` imported
+    # `evidence_adapters` at module scope and `completeness.py` imported *annotation* for a
+    # single constant, which made an optional Evidence Plane adapter a hard requirement for
+    # importing the core — the same defect as the NumPy one, hidden because the package sits
+    # inside the repository and so counted as local.
+    allowed -= OPTIONAL_LOCAL_PACKAGES
 
     for package in CORE_PACKAGES:
         for path in sorted((root / package).rglob("*.py")):

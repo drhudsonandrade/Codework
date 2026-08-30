@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Any
 
 import normative
-from array_pipeline.annotation import UNSUPPORTED_ARRAY_CLAIMS
+from array_pipeline.claims import UNSUPPORTED_ARRAY_CLAIMS
 from array_pipeline.qc import (
     detect_schema,
     UNRESOLVED_OVERLAP_STATUSES,
