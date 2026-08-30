@@ -7,6 +7,7 @@ import csv
 import json
 import re
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -394,6 +395,60 @@ CORE_PACKAGES = ("array_pipeline", "normative")
 OPTIONAL_LOCAL_PACKAGES = frozenset({"evidence_adapters", "adapters", "mcp"})
 
 
+def _catches_import_error(handler: ast.ExceptHandler) -> bool:
+    """Does this `except` clause name ImportError (or ModuleNotFoundError) specifically?
+
+    A bare `except:` and `except Exception:` do catch it, and are deliberately not accepted:
+    the contract is that an absent adapter degrades to a *stated* refusal, and a handler that
+    also swallows a corrupt install or a failing module-level side effect cannot tell the
+    caller which of those happened. Naming the error is what makes the guard a declaration
+    that the dependency is optional rather than a blanket suppression.
+    """
+    if handler.type is None:
+        return False
+    candidates = handler.type.elts if isinstance(handler.type, ast.Tuple) else [handler.type]
+    named = set()
+    for candidate in candidates:
+        if isinstance(candidate, ast.Name):
+            named.add(candidate.id)
+        elif isinstance(candidate, ast.Attribute):
+            named.add(candidate.attr)
+    return bool(named & {"ImportError", "ModuleNotFoundError"})
+
+
+def _import_time_statements(body: list[ast.stmt]) -> Iterator[ast.stmt]:
+    """Yield the statements that run when the module is imported, minus the guarded ones.
+
+    The first version of the caller walked `tree.body` alone, reasoning that "an import
+    nested in a `try` is guarded by construction". `tree.body` holds the `ast.Try` node and
+    not the `ast.Import` inside it, so *every* `try` hid its imports from the walk —
+    ``try: import numpy`` / ``except ValueError:`` reported clean and still raised
+    `ModuleNotFoundError` at import time. What makes an import optional is the handler, so
+    the handler is read: the body of a `try` that catches ImportError is skipped, and
+    everything else that executes at import time is yielded, however deeply nested.
+
+    Function and class bodies are not import-time and are not descended into: a lazy import
+    inside a function is the pattern this contract exists to permit — `array_pipeline/
+    annotation.py` loads `evidence_adapters` that way so the core imports without it.
+    """
+    for node in body:
+        yield node
+        if isinstance(node, ast.Try):
+            if not any(_catches_import_error(handler) for handler in node.handlers):
+                yield from _import_time_statements(node.body)
+            for handler in node.handlers:
+                yield from _import_time_statements(handler.body)
+            # `else` runs only when the body did not raise and `finally` runs regardless;
+            # neither is covered by the handler that protects the body.
+            yield from _import_time_statements(node.orelse)
+            yield from _import_time_statements(node.finalbody)
+        elif isinstance(node, (ast.If, ast.For, ast.While)):
+            yield from _import_time_statements(node.body)
+            yield from _import_time_statements(node.orelse)
+        elif isinstance(node, (ast.With, ast.AsyncWith)):
+            yield from _import_time_statements(node.body)
+
+
 def validate_core_runtime_dependencies(root: Path, errors: list[str]) -> None:
     """Check the claim `main()` used to simply print.
 
@@ -425,8 +480,7 @@ def validate_core_runtime_dependencies(root: Path, errors: list[str]) -> None:
             except (OSError, SyntaxError) as exc:
                 errors.append(f"core module could not be parsed: {path.relative_to(root)}: {exc}")
                 continue
-            # Only `tree.body`: an import nested in a `try` is guarded by construction.
-            for node in tree.body:
+            for node in _import_time_statements(tree.body):
                 if isinstance(node, ast.Import):
                     names = [alias.name.split(".")[0] for alias in node.names]
                 elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:

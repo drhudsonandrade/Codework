@@ -27,6 +27,7 @@ as such.
 from __future__ import annotations
 
 import json
+import math
 from contextlib import closing
 from pathlib import Path
 from typing import Any
@@ -127,6 +128,19 @@ def read_case_genotypes(input_path: Path, rsids: set[str]) -> tuple[dict[str, st
 
 
 def load_panel(path: Path) -> dict[str, Any]:
+    """Read and validate a reference panel, using nothing NumPy provides.
+
+    Every check here is on a scalar the JSON already decoded, so `math.isfinite` does the
+    whole job. It used to be `np.isfinite`, which made the *validator* require the optional
+    adapter: with `np = None` this raised `AttributeError` on the first marker, before
+    `project_case` could return its NÃO DISPONÍVEL refusal — the import-time failure moved
+    one function along rather than removed. The tests exercising the validator did not see
+    it because their helper installs a stub `numpy` carrying `isfinite`; the real absence is
+    covered by `test_the_whole_load_then_project_path_runs_with_numpy_absent`.
+
+    NumPy stays required for the projection itself, which is linear algebra and is guarded
+    inside `project_case`.
+    """
     raw = Path(path).read_bytes()
     if raw[:2] == b"\x1f\x8b":
         raw = assembly.bounded_gunzip(raw, name=str(path))
@@ -166,7 +180,7 @@ def load_panel(path: Path) -> dict[str, Any]:
         if (
             isinstance(frequency, bool)
             or not isinstance(frequency, (int, float))
-            or not np.isfinite(frequency)
+            or not math.isfinite(frequency)
             or not 0.0 <= float(frequency) <= 1.0
         ):
             raise AncestryPanelError(
@@ -179,7 +193,7 @@ def load_panel(path: Path) -> dict[str, Any]:
             or any(
                 isinstance(value, bool)
                 or not isinstance(value, (int, float))
-                or not np.isfinite(value)
+                or not math.isfinite(value)
                 for value in loadings
             )
         ):
@@ -203,7 +217,7 @@ def load_panel(path: Path) -> dict[str, Any]:
             or any(
                 isinstance(value, bool)
                 or not isinstance(value, (int, float))
-                or not np.isfinite(value)
+                or not math.isfinite(value)
                 for value in centroid
             )
         ):

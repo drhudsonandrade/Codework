@@ -207,6 +207,67 @@ class AncestryOptionalNumpyTest(unittest.TestCase):
         # need a special case for this one.
         self.assertEqual(result["panel"]["build"], "GRCh37")
 
+    def test_the_whole_load_then_project_path_runs_with_numpy_absent(self):
+        """The refusal is only reachable if everything before it is NumPy-free.
+
+        The test above hands `project_case` a panel dict built inline, so it never touched
+        `load_panel` — and `load_panel` validated marker frequencies, loadings and centroids
+        with `np.isfinite`. With `np = None` that is `AttributeError: 'NoneType' object has
+        no attribute 'isfinite'`, raised before the projection's refusal can be reached: a
+        caller without NumPy got a crash from the validator instead of a status from the
+        projection, which is the import-time failure moved rather than removed.
+
+        The helper `_load_without_optional_numpy` installs a *stub* numpy carrying `isfinite`,
+        so every other test in this file exercised the validator with the attribute present.
+        This one runs the real entry sequence with the name bound to None.
+        """
+        namespace = _load_without_optional_numpy()
+        globals_of_module = namespace["load_panel"].__globals__
+        self.addCleanup(globals_of_module.__setitem__, "np", globals_of_module["np"])
+        globals_of_module["np"] = None
+
+        payload = _panel([_marker(f"rs{i}", [0.1, 0.2]) for i in range(10)])
+        payload["build"] = "GRCh37"
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "panel.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            panel = namespace["load_panel"](path)
+
+        self.assertEqual(10, len(panel["markers"]))
+        result = namespace["project_case"](panel, {}, case_build="GRCh37")
+        self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+        self.assertIn("NumPy", result["reason"])
+
+    def test_a_malformed_panel_is_still_refused_by_name_with_numpy_absent(self):
+        """Dropping NumPy out of the validator must not drop the validation with it."""
+        namespace = _load_without_optional_numpy()
+        globals_of_module = namespace["load_panel"].__globals__
+        self.addCleanup(globals_of_module.__setitem__, "np", globals_of_module["np"])
+        globals_of_module["np"] = None
+        error = namespace["AncestryPanelError"]
+
+        cases = {
+            "finite numeric loadings": lambda p: p["markers"][0].update(
+                {"loadings": [0.1, float("nan")]}
+            ),
+            "two distinct A/C/G/T alleles": lambda p: p["markers"][0].update(
+                {"effect_allele": "A"}
+            ),
+            "finite components": lambda p: p.update(
+                {"population_centroids": {"EUR": [0.1, float("inf")]}}
+            ),
+        }
+        for expected, mutate in cases.items():
+            with self.subTest(expected=expected):
+                payload = _panel([_marker(f"rs{i}", [0.1, 0.2]) for i in range(3)])
+                payload["build"] = "GRCh37"
+                mutate(payload)
+                with tempfile.TemporaryDirectory() as td:
+                    path = Path(td) / "panel.json"
+                    path.write_text(json.dumps(payload), encoding="utf-8")
+                    with self.assertRaisesRegex(error, expected):
+                        namespace["load_panel"](path)
+
 
 if __name__ == "__main__":
     unittest.main()
