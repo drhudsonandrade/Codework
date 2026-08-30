@@ -62,10 +62,12 @@ class WgsGateTest(unittest.TestCase):
         }
 
     def test_environment_scope_can_precede_fastq_alignment(self):
+        """Environment scope is satisfiable before any sample exists, by design."""
         from scripts.verify_runtime_gate_manifest import verify
         self.assertEqual(verify(self._runtime(), scope="environment"), [])
 
     def test_full_scope_blocks_until_sample_integrity_and_read_group_execute(self):
+        """Full scope names the two sample-level checks it is still waiting on."""
         from scripts.verify_runtime_gate_manifest import verify
         errors = verify(self._runtime(), scope="full")
         self.assertTrue(any("sample_read_group_integrity" in e for e in errors))
@@ -99,6 +101,7 @@ class WgsGateTest(unittest.TestCase):
         self.assertFalse(result["ready_for_first_dna_read"])
 
     def test_fastq_manifest_requires_declared_read_group(self):
+        """The happy path: a complete manifest verifies with no errors recorded."""
         from scripts.wgs_input_gate import validate_manifest
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -277,6 +280,7 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             outcome = {}
 
             def probe():
+                """Run the probe on the worker thread so a block shows up as a timeout."""
                 outcome["result"] = fastq_probe(root, root / "r1.fastq")
 
             worker = threading.Thread(target=probe, daemon=True)
@@ -301,6 +305,12 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             real_open = os.open
 
             def deny_the_file(path, flags, *args, **kwargs):
+                """Fail EACCES on the final component only, delegating every other open.
+
+                The walk opens the root and each parent directory through the same
+                `os.open`, so denying indiscriminately would fail the traversal instead of
+                the file and test a different branch than the one named here.
+                """
                 if path in ("r1.fastq", "sample.bam"):
                     raise OSError(errno.EACCES, "Permission denied")
                 return real_open(path, flags, *args, **kwargs)
@@ -358,6 +368,7 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             )
 
     def test_relative_path_cannot_escape_the_sample_root(self):
+        """Three shapes of `../` escape, including one that only escapes after joining."""
         from scripts.wgs_input_gate import resolve
         with tempfile.TemporaryDirectory() as td:
             root = Path(td).resolve()
@@ -367,6 +378,7 @@ class WgsInputPathContainmentTest(unittest.TestCase):
                         resolve(root, escape)
 
     def test_absolute_path_is_not_ambient_authority(self):
+        """A sample-supplied absolute path must not become a filesystem capability."""
         from scripts.wgs_input_gate import resolve
         with tempfile.TemporaryDirectory() as td:
             root = Path(td).resolve()
@@ -374,6 +386,7 @@ class WgsInputPathContainmentTest(unittest.TestCase):
                 resolve(root, "/etc/passwd")
 
     def test_symlink_out_of_the_sample_root_is_refused(self):
+        """Containment is judged after resolution, so a planted link cannot reach out."""
         from scripts.wgs_input_gate import resolve
         with tempfile.TemporaryDirectory() as outer:
             outer_root = Path(outer).resolve()
@@ -452,6 +465,12 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             calls = []
 
             def counting(root_arg, path_arg):
+                """Delegate to the real opener while recording each call.
+
+                A stub that returned its own handle would prove only that the wrapper ran;
+                delegating keeps the behaviour identical and still counts the opens, which
+                is the property under test.
+                """
                 calls.append(path_arg)
                 return real(root_arg, path_arg)
 
@@ -510,6 +529,7 @@ class WgsInputPathContainmentTest(unittest.TestCase):
                 open_contained(root, contained)
 
     def test_a_non_string_fastq_field_fails_closed_end_to_end(self):
+        """A wrong-typed field reaches a status document, not a TypeError traceback."""
         from scripts.wgs_input_gate import validate_manifest
         with tempfile.TemporaryDirectory() as td:
             root = Path(td).resolve()
@@ -520,6 +540,11 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             self.assertNotIn("r1", result["inputs"])
 
     def test_contained_relative_path_still_resolves(self):
+        """The other half of containment: a legitimate nested input must still be accepted.
+
+        A gate that refuses everything passes every escape test and is useless, so the
+        accepting case is pinned alongside the refusing ones.
+        """
         from scripts.wgs_input_gate import resolve
         with tempfile.TemporaryDirectory() as td:
             root = Path(td).resolve()
@@ -530,6 +555,7 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             self.assertIsNone(resolve(root, ""))
 
     def test_escaping_fastq_manifest_fails_closed_instead_of_raising(self):
+        """The helper's refusal has to survive as a NÃO DISPONÍVEL verdict, not an exception."""
         from scripts.wgs_input_gate import validate_manifest
         with tempfile.TemporaryDirectory() as outer:
             outer_root = Path(outer).resolve()
@@ -543,6 +569,7 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             self.assertNotIn("r1", result["inputs"])
 
     def test_absolute_alignment_manifest_fails_closed_instead_of_raising(self):
+        """Same guarantee on the BAM/CRAM branch, which resolves its input separately."""
         from scripts.wgs_input_gate import validate_manifest
         with tempfile.TemporaryDirectory() as td:
             root = Path(td).resolve()
@@ -742,6 +769,7 @@ class WgsAlignConsumesVerifiedInputsTest(unittest.TestCase):
             self._assert_no_tool_ran(env)
 
     def test_verified_inputs_reach_the_aligner(self):
+        """The accepting case for the script: verified bytes actually arrive at bwa-mem2."""
         with tempfile.TemporaryDirectory() as tmp:
             paths, env = self._fixture(Path(tmp))
             result = self._run(paths, env)
@@ -784,6 +812,12 @@ class WgsAlignConsumesVerifiedInputsTest(unittest.TestCase):
             self.assertEqual(Path(env["STUB_R1_SEEN"]).read_bytes(), b"@read1\nACGT\n+\nIIII\n")
 
     def test_an_absolute_path_is_no_longer_honoured(self):
+        """Source-text assertion, kept because it pins the *absence* of removed code.
+
+        The old `[[ "$r1" = /* ]] ||` branch and the raw-manifest `jq` reads cannot be
+        detected by running the script — nothing observable distinguishes a script that
+        never had them. Absence is exactly what text search is good for.
+        """
         script = ALIGN_SCRIPT.read_text(encoding="utf-8")
         self.assertNotIn('= /* ]] ||', script)
         for key in (".r1", ".alignment"):
@@ -791,6 +825,7 @@ class WgsAlignConsumesVerifiedInputsTest(unittest.TestCase):
                 self.assertNotIn(f"jq -r '{key}' \"$manifest\"", script)
 
     def test_the_workflow_hands_the_verified_record_to_the_script(self):
+        """The Nextflow wiring, which no Python-level test of the script can reach."""
         workflow = (REPO_ROOT / "workflows" / "wgs.nf").read_text(encoding="utf-8")
         self.assertIn("aligned/sample.bam \\\n        '${input_qc}'", workflow)
 
