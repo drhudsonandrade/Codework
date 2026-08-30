@@ -326,29 +326,44 @@ def witness_verdict(
     which decides what the policy engine is told. Two implementations of "is this witness
     good enough" would eventually disagree, and then the report and the engine would too.
     """
-    unmet = sorted(key for key, expected in WITNESS_REQUIRED.items() if not _exactly(payload.get(key), expected))
-    if unmet:
-        return {
-            "status": "PENDENTE",
-            "basis": (
-                "a testemunha registrada não sustenta um veredicto: "
-                + ", ".join(f"{key}={payload.get(key)!r}" for key in unmet)
-            ),
-            "witness_sha256": sha256,
-        }
-    gate = payload.get("post_deployment_gate")
-    gate = gate if isinstance(gate, dict) else {}
-    if gate.get("gate") != WITNESS_REQUIRED_GATE or gate.get("state") != "PASS":
-        return {
-            "status": "PENDENTE",
-            "basis": (
-                f"a testemunha não registra {WITNESS_REQUIRED_GATE} em PASS "
-                f"(gate={gate.get('gate')!r}, state={gate.get('state')!r}); o contrato da "
-                "cerimônia de produção exige esse portão explicitamente"
-            ),
-            "witness_sha256": sha256,
-        }
+    # Everything below describes what a *real* run must show, so none of it applies to the
+    # layout fixture, which shows nothing and says so. That exemption already existed for
+    # `_witness_binding_refusal`; when `WITNESS_REQUIRED` grew to the full seven conditions
+    # and the gate check was added beside it, they were applied to the fixture too — and its
+    # witness declares `passed: 0, total: 0` deliberately, because a fixture contacted nothing
+    # and writing 15 there would be the false statement it exists to avoid. The PASS face
+    # silently became unreachable and `fixture_payload(post_deployment_status="PASS")`
+    # rendered PENDENTE instead.
+    #
+    # What the exemption does not buy is authority: the fixture's anchor is `kind="fixture"`
+    # with status NÃO DISPONÍVEL, which floors the whole payload, so the PASS face can never
+    # read as a verified report.
     if not fixture:
+        unmet = sorted(
+            key for key, expected in WITNESS_REQUIRED.items()
+            if not _exactly(payload.get(key), expected)
+        )
+        if unmet:
+            return {
+                "status": "PENDENTE",
+                "basis": (
+                    "a testemunha registrada não sustenta um veredicto: "
+                    + ", ".join(f"{key}={payload.get(key)!r}" for key in unmet)
+                ),
+                "witness_sha256": sha256,
+            }
+        gate = payload.get("post_deployment_gate")
+        gate = gate if isinstance(gate, dict) else {}
+        if gate.get("gate") != WITNESS_REQUIRED_GATE or gate.get("state") != "PASS":
+            return {
+                "status": "PENDENTE",
+                "basis": (
+                    f"a testemunha não registra {WITNESS_REQUIRED_GATE} em PASS "
+                    f"(gate={gate.get('gate')!r}, state={gate.get('state')!r}); o contrato da "
+                    "cerimônia de produção exige esse portão explicitamente"
+                ),
+                "witness_sha256": sha256,
+            }
         refusal = _witness_binding_refusal(payload)
         if refusal is not None:
             return {"status": "PENDENTE", "basis": refusal, "witness_sha256": sha256}

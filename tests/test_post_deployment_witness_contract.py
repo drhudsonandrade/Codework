@@ -134,6 +134,93 @@ class WitnessContractTest(unittest.TestCase):
         self.assertIn("15/15", verdict["basis"])
 
 
+class LayoutFixtureCanStillRenderThePassFaceTest(unittest.TestCase):
+    """Tightening the contract must not take the PASS *face* away from layout QA.
+
+    `fixture_payload(post_deployment_status="PASS")` exists so visual QA can measure the
+    header in its PASS state without contacting anything. Its witness declares
+    `passed: 0, total: 0` on purpose — a fixture contacted nothing, and writing 15 there
+    would be the false statement the fixture exists to avoid.
+
+    Expanding `WITNESS_REQUIRED` to the full seven conditions, and adding the
+    POST_DEPLOYMENT_GATE check beside it, made both apply to that fixture too. It then failed
+    its own contract on `passed=0, total=0` and the PASS face became unreachable: the payload
+    silently rendered PENDENTE instead. `witness_verdict` already exempts the fixture from
+    `_witness_binding_refusal` for exactly this reason — a fixture asserts nothing about a
+    deployment, so the conditions describing what a real run must *show* do not apply to it.
+
+    What is not exempt is the consequence: the anchor stays `kind="fixture"` with status
+    NÃO DISPONÍVEL, which floors the whole payload, so a PASS face can never read as a
+    verified report. That is asserted here rather than assumed.
+    """
+
+    def test_the_fixture_renders_the_pass_face(self):
+        payload = provenance.fixture_payload(
+            case_id="CASE-1", report_id="01", summary="fixture",
+            basis="fixture de QA de layout", post_deployment_status="PASS",
+        )
+        self.assertEqual("PASS", payload["post_deployment_status"])
+        self.assertEqual("PASS", payload["post_deployment"]["status"])
+
+    def test_the_default_is_still_pendente(self):
+        payload = provenance.fixture_payload(
+            case_id="CASE-1", report_id="01", summary="fixture", basis="fixture",
+        )
+        self.assertEqual("PENDENTE", payload["post_deployment_status"])
+
+    def test_the_pass_face_is_anchored_as_a_fixture_and_floors_the_payload(self):
+        """The exemption buys the face, not the authority."""
+        payload = provenance.fixture_payload(
+            case_id="CASE-1", report_id="01", summary="fixture",
+            basis="fixture de QA de layout", post_deployment_status="PASS",
+        )
+        anchor = payload["provenance"]["fields"]["post_deployment_status"]
+        self.assertEqual("fixture", anchor["kind"])
+        self.assertEqual("NÃO DISPONÍVEL", anchor["operational_status"])
+        self.assertEqual("NÃO DISPONÍVEL", payload["provenance"]["operational_status_floor"])
+        self.assertEqual("NÃO DISPONÍVEL", payload["operational_status"])
+        self.assertEqual([], provenance.provenance_blockers(payload))
+
+    def test_the_pass_basis_says_nothing_was_contacted(self):
+        """A reader must not be able to mistake it for a real POST-DEPLOYMENT result."""
+        payload = provenance.fixture_payload(
+            case_id="CASE-1", report_id="01", summary="fixture",
+            basis="fixture de QA de layout", post_deployment_status="PASS",
+        )
+        basis = payload["post_deployment"]["basis"]
+        self.assertIn("nenhuma implantação foi contatada", basis)
+        self.assertNotIn("0/0", basis)
+        self.assertEqual("fixture", payload["post_deployment"]["origin"])
+
+    def test_a_real_witness_is_still_held_to_the_whole_contract(self):
+        """The exemption is keyed to `fixture`, not to a shape a real witness could take."""
+        verdict = provenance.witness_verdict(
+            {
+                "post_deployment_status": "PASS",
+                "all_pass": True,
+                "bootstrap_verified": True,
+                "critical_failures": 0,
+                "passed": 0,
+                "total": 0,
+                "project_bootstrap_installed": True,
+                "suite": "fixture",
+                "deployment_id": "fixture",
+                "classification": "fixture de QA de layout",
+            },
+            sha256="a" * 64,
+        )
+        self.assertEqual("PENDENTE", verdict["status"])
+
+    def test_only_the_two_documented_faces_are_offered(self):
+        for value in ("VERIFICADO", "FAIL", "", None, "pass"):
+            with self.subTest(post_deployment_status=value):
+                with self.assertRaises(provenance.ProvenanceError):
+                    provenance.fixture_payload(
+                        case_id="CASE-1", report_id="01", summary="fixture",
+                        basis="fixture", post_deployment_status=value,
+                    )
+
+
 class WitnessNamesTheDeploymentItVerifiedTest(unittest.TestCase):
     """`bootstrap_verified: true` is a claim; the commit it was verified against is a fact.
 
@@ -263,30 +350,67 @@ class WitnessNamesTheDeploymentItVerifiedTest(unittest.TestCase):
 
         Asserted against the source rather than by running the smoke, which needs a live
         deployment. What it establishes is that the new conditions read fields
-        `scripts/run_live_post_deployment_smoke.py` already emits — the binding reads
-        evidence that exists, rather than inventing a schema the producer would have to be
-        taught.
+        `scripts/run_live_post_deployment_smoke.py` already emits — the binding reads evidence
+        that exists, rather than inventing a schema the producer would have to be taught.
+
+        Read through the AST rather than by matching source text: an exact-string assertion
+        breaks on a reformat and passes on a coincidence in a comment, neither of which is
+        the fact being claimed. What is collected here is the set of literal keys the smoke
+        writes into a dict, which is the contract.
         """
+        import ast
         from pathlib import Path
 
-        source = (
-            Path(__file__).resolve().parents[1]
-            / "scripts"
-            / "run_live_post_deployment_smoke.py"
-        ).read_text(encoding="utf-8")
-        for field in (
-            '"bootstrap_verification": bootstrap_evidence,',
-            '"bootstrap_attestation_sha256": bootstrap_evidence["file_sha256"],',
-            '"project_instructions_verification": project_snapshot_evidence,',
-            '"project_instructions_attestation_sha256": project_snapshot_evidence["file_sha256"],',
-        ):
-            with self.subTest(field=field):
-                self.assertIn(field, source)
-        # And the commit itself comes from the attestation verifier, not from the CLI.
-        attestation = (
-            Path(__file__).resolve().parents[1] / "scripts" / "bootstrap_attestation.py"
-        ).read_text(encoding="utf-8")
-        self.assertIn('"source_commit_sha": recorded_source_revision,', attestation)
+        root = Path(__file__).resolve().parents[1]
+        tree = ast.parse(
+            (root / "scripts" / "run_live_post_deployment_smoke.py").read_text(encoding="utf-8")
+        )
+        written = {
+            key.value
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Dict)
+            for key in node.keys
+            if isinstance(key, ast.Constant) and isinstance(key.value, str)
+        }
+        self.assertLessEqual(
+            {
+                "bootstrap_verification",
+                "bootstrap_attestation_sha256",
+                "project_instructions_verification",
+                "project_instructions_attestation_sha256",
+            },
+            written,
+        )
+        # And the commit itself is recorded by the attestation verifier, not typed by a
+        # caller. `scripts/bootstrap_attestation.py` writes `source_commit_sha` in two
+        # places — the verifier's evidence and the builder's method block — and each must
+        # take a name that `_require_source_revision` produced, never a literal or a
+        # parameter passed straight through.
+        attestation = ast.parse(
+            (root / "scripts" / "bootstrap_attestation.py").read_text(encoding="utf-8")
+        )
+        resolved = {
+            target.id
+            for node in ast.walk(attestation)
+            if isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Name)
+            and node.value.func.id == "_require_source_revision"
+            for target in node.targets
+            if isinstance(target, ast.Name)
+        }
+        self.assertTrue(resolved, "no revision is resolved through _require_source_revision")
+        written_shas = [
+            value
+            for node in ast.walk(attestation)
+            if isinstance(node, ast.Dict)
+            for key, value in zip(node.keys, node.values)
+            if isinstance(key, ast.Constant) and key.value == "source_commit_sha"
+        ]
+        self.assertTrue(written_shas, "nothing writes source_commit_sha")
+        for value in written_shas:
+            self.assertIsInstance(value, ast.Name)
+            self.assertIn(value.id, resolved)
 
 
 WITNESS_REQUIRED_ITEMS = tuple(provenance.WITNESS_REQUIRED.items())
