@@ -1,0 +1,179 @@
+================================================================================
+RELATÓRIO DE PROBLEMAS - PULL REQUEST #30
+Repositório: drhudsonandrade/Codework
+Título: wip: partial extraction of PR #22 reference data and array pipeline
+Data: 29/08/2026
+================================================================================
+
+STATUS GERAL: INCOMPLETO - NÃO DEVE SER MESCLADO
+
+O PR foi empurrado para preservar o trabalho, mas não está pronto para ser
+mesclado. Contém 2 testes que passam em main mas falham aqui.
+
+================================================================================
+ESTATÍSTICAS DO PR
+================================================================================
+- Arquivos alterados: 102
+- Linhas adicionadas: 152.083
+- Linhas removidas: 293
+- Commits: 177
+- Status: DRAFT (aberto)
+- Criado há: 5 dias
+- Última atualização: 1 hora atrás
+
+================================================================================
+CONTEÚDO EXTRAÍDO DE PR #22 (genoma/audit-4lfdf1)
+================================================================================
+
+✓ Reference Data (Dados de Referência)
+  - config/ - Definições de alelos PgX, alvos de traços GWAS, 
+             alvos de painel, escopos de traços, atestações
+  - docs/evidence/ - Documentação de evidências
+
+✓ Array Pipeline (10 módulos que se aplicam limpos)
+  - allele_discrimination
+  - pharmacogenomics
+  - completeness
+  - ancestry
+  - assembly
+  - clinical_findings
+  - homozygosity
+  - provenance_probe
+  (+ 2 adicionais)
+
+✓ Reporting (13 módulos que se aplicam limpos)
+
+✓ Scripts de Construtor/Curadoria e Testes
+
+================================================================================
+CONFLITOS RESOLVIDOS MANUALMENTE (3 Arquivos)
+================================================================================
+
+1. array_pipeline/qc.py
+   - Manteve: _ZipBackedTextStream de main (libera o arquivo ao fechar)
+   - Integrou: guarda zip-bomb de PR #22
+   - Razão: São correções complementares
+   - Descartado: monkey-patch inline de PR #22 em favor da classe
+   - Manteve: strict decoding de PR #22 (escolha fail-closed documentada)
+
+2. scripts/sealed_ruleset.py
+   - Começou com: versão de main (valida parts/part-000.b64 through 
+                 part-012.b64 em ordem canônica)
+   - Adicionou: chave normative_identifier e referência LAST_SECTION de PR #22
+   - Reforço: endurecimento não presente em PR #22
+
+3. array_pipeline/annotation.py
+   - Única alteração de main: bump de versão v3.4
+   - PR #22: atinge v3.4 através do módulo normativo
+   - Verificado: normative.ruleset_block() retorna identidade v3.4 
+               byte-idêntica aos constantes que main hardcoda
+
+================================================================================
+TESTES - VALIDAÇÃO
+================================================================================
+
+✓ validate_repo.py: 12/12 testes PASSANDO (exit 0)
+✓ Crescimento da suite: 238 → 433 testes
+✓ Nenhuma falha crítica relatada nos checks do GitHub Actions
+
+================================================================================
+⚠️ REGRESSÕES CONHECIDAS (MOTIVO DO NÃO-MERGE)
+================================================================================
+
+TESTE COM FALHA:
+  test_snp_array_qc  LIMITED_INTERPRETATION_GATE  'BLOCKED' != 'PASS'
+
+ANÁLISE DO PROBLEMA:
+  - main e PR #22 modificaram tests/test_snp_array_qc.py independentemente
+  - Modificações de main: +102/-1
+  - Modificações de PR #22: +162/-4
+  - Arquivo está no conjunto de conflitos
+  - qc.py e seu teste são um par emparelhado em cada linha
+  - Os dois ramos divergiram em semântica de gate
+  - Cada ramo codificou sua própria expectativa
+
+PADRÃO REPETIDO (6 pares code+test):
+  1. editorial_renderers (código + teste)
+  2. report_engine (código + teste)
+  3. template_v3_contract (código + teste)
+  4. genoma_audit (código + teste)
+  5. sealed_ruleset_contract (código + teste)
+  6. Mais 13 arquivos da policy_engine não afetados aqui
+
+SEMÂNTICA DE GATE:
+  - Divergência em comportamento de gate entre main e PR #22
+  - main espera: 'PASS'
+  - PR #22 espera: 'BLOCKED'
+  - Diferença não é uma simples resolução de conflito de merge
+  - Requer decisão de política do projeto
+
+================================================================================
+🔴 O QUE PRECISA SER FEITO ANTES DA MESCLAGEM
+================================================================================
+
+1. DECISÃO POLÍTICA CRÍTICA:
+   - Decidir qual comportamento de gate é correto
+   - Não é um conflito de merge técnico
+   - É uma decisão de semântica de negócio/projeto
+   
+2. RESOLVER TESTES DIVERGENTES:
+   - Sincronizar expectativas de teste para os 6 pares code+test
+   - Aplicar mesma lógica de semântica de gate em todos os casos
+   
+3. VALIDAÇÃO PÓS-CORREÇÃO:
+   - Re-executar validate_repo.py
+   - Confirmar que todos os 433 testes passam
+   - Verificar integridade dos dados normalizados
+
+================================================================================
+VERIFICAÇÃO DE INTEGRIDADE
+================================================================================
+
+✓ normative.ruleset_block() retorna identidade v3.4 byte-idêntica
+✓ Centralização de constantes não altera valores
+✓ Merge manual não introduz inconsistências lógicas
+✓ Scripts de curadoria exercem dados adequadamente
+
+================================================================================
+NOTAS ADICIONAIS
+================================================================================
+
+- Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+- Claude-Session: https://claude.ai/code/session_01F8i6UeVmS7rNrp9xWe8MLT
+- Gerenciado por: CodeRabbit (resumo automático incluído)
+
+NOVOS RECURSOS ADICIONADOS:
+  • Análises de ancestralidade, homozigose e farmacogenômica
+  • Matriz de completude, achados clínicos integrados
+  • Riscos residuais com resultados condicionais
+  • Requisições priorizadas de sequenciamento
+  • Cartões genômicos
+
+MELHORIAS IMPLEMENTADAS:
+  • Validações reforçadas de coordenadas, montagem, orientação
+  • Compressão, hashes e integridade
+  • Controles de proveniência, consentimento, QC
+  • Bloqueio de publicação aprimorado
+
+DOCUMENTAÇÃO:
+  • Relatórios documentados
+  • Painéis documentados
+  • Evidências e limitações documentadas
+  • Fluxos de validação documentados
+
+================================================================================
+CONCLUSÃO
+================================================================================
+
+Este PR NÃO DEVE SER MESCLADO no estado atual. A razão fundamental é a
+divergência de semântica de gate entre main e PR #22, que afeta múltiplos
+arquivos de código e teste. A resolução requer uma decisão de política de
+projeto, não apenas uma correção técnica.
+
+Recomenda-se:
+1. Revisar a semântica de gate em ambas as versões
+2. Fazer a decisão política sobre o comportamento correto
+3. Atualizar todos os testes afetados de forma consistente
+4. Re-validar antes da mesclagem final
+
+================================================================================
