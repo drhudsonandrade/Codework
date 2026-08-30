@@ -103,6 +103,12 @@ POST_DEPLOYMENT_WITNESS_ARTIFACT = "post-deployment-witness"
 #: no installed Project Instructions — was accepted and published as a POST-DEPLOYMENT PASS.
 #: The basis string beneath even printed `f"{payload.get('passed')}/{payload.get('total')}"`,
 #: so the verdict asserted "15/15 cases" while requiring neither number.
+#: Two of these are booleans standing for conditions the contract states in more detail:
+#: `bootstrap_verified` for an attestation "tied to the exact deployment Git SHA", and
+#: `project_bootstrap_installed` for *authenticated* evidence. A boolean is the witness
+#: asserting its own conclusion, so `_witness_binding_refusal` additionally requires the
+#: structured evidence each one summarises — see `_attestation_refusal` there, and the limit
+#: recorded with it: this binds the witness to a named commit, it does not authenticate it.
 WITNESS_REQUIRED = {
     "post_deployment_status": "PASS",
     "all_pass": True,
@@ -154,16 +160,113 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+#: A full Git commit SHA as `scripts/bootstrap_attestation` resolves and records it. Short,
+#: uppercase and `UNKNOWN` are the spellings that turn up, and none of them names a commit
+#: this project can look up.
+_GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
+
+#: The digest of an attestation file, as the verifier records it.
+_SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _deployment_commit_sha(payload: dict[str, Any]) -> str | None:
+    """The commit the bootstrap attestation was verified against, or None if unstated."""
+    verification = payload.get("bootstrap_verification")
+    if not isinstance(verification, dict):
+        return None
+    recorded = verification.get("source_commit_sha")
+    if isinstance(recorded, bool) or not isinstance(recorded, str):
+        return None
+    return recorded if _GIT_SHA.match(recorded) else None
+
+
+def _attestation_refusal(
+    payload: dict[str, Any], *, block: str, digest_key: str, subject: str, flag: str
+) -> str | None:
+    """Require the structured evidence a `{flag}: true` claims to summarise.
+
+    `bootstrap_verified` and `project_bootstrap_installed` were checked as bare booleans,
+    which is the witness asserting its own conclusion. The live smoke already writes what
+    it actually verified — `verify_bootstrap_attestation` returns a status, the attestation
+    file's SHA-256 and the resolved `source_commit_sha`, and the smoke embeds the whole
+    record — so the boolean is required to agree with it rather than stand in for it.
+    """
+    verification = payload.get(block)
+    if not isinstance(verification, dict) or not verification:
+        return (
+            f"a testemunha declara {flag}=true sem registrar {block}: um booleano é a própria "
+            f"testemunha afirmando sua conclusão, não a verificação {subject} que ela resume"
+        )
+    if verification.get("status") != "VERIFICADO":
+        return (
+            f"a testemunha declara {flag}=true, mas {block}.status é "
+            f"{verification.get('status')!r}: o booleano e a evidência ao lado dele discordam"
+        )
+    declared = payload.get(digest_key)
+    observed = verification.get("file_sha256")
+    if not isinstance(observed, str) or not _SHA256_HEX.match(observed):
+        return (
+            f"{block}.file_sha256 não é um SHA-256 ({observed!r}); sem ele não há como saber "
+            f"qual arquivo de atestação {subject} foi verificado"
+        )
+    if declared != observed:
+        return (
+            f"a testemunha nomeia {digest_key}={declared!r} e verificou {observed!r}: dois "
+            "campos para o mesmo arquivo, e um deles descreve outro"
+        )
+    return None
+
+
 def _witness_binding_refusal(payload: dict[str, Any]) -> str | None:
     """Why this witness may not certify *this* payload, or None if it may.
 
-    The four `WITNESS_REQUIRED` keys say the smoke run succeeded. They say nothing about
-    *what* it ran against or *when*, so a witness satisfying them would certify every report
-    the project ever produces, including reports built on a ruleset it never saw.
+    The `WITNESS_REQUIRED` keys say the smoke run succeeded. They say nothing about *what* it
+    ran against or *when*, so a witness satisfying them would certify every report the project
+    ever produces, including reports built on a ruleset it never saw.
+
+    Two of those keys are the ones that were supposed to name the deployment —
+    `bootstrap_verified` and `project_bootstrap_installed` — and both arrived as bare
+    booleans. The ceremony contract asks for a bootstrap attestation "tied to the exact
+    deployment Git SHA" and authenticated evidence for the Project Instructions; `true` is
+    neither. So the structured evidence the smoke already writes is required here, and the
+    commit it resolved is carried onto the verdict.
+
+    This binds, it does not authenticate. A caller able to write the witness can write a
+    well-formed SHA into it, and this repository has no signing scheme that could tell a
+    witness a deployment produced from one composed afterwards; that is recorded as an open
+    design question rather than improvised. What it removes is the transfer — a witness taken
+    against one deployment certifying another, which the ruleset hash, the target class and
+    the freshness window could not separate on their own.
     """
     target = deployment_target.refusal(payload.get("target"))
     if target is not None:
         return target
+    for kwargs in (
+        {
+            "block": "bootstrap_verification",
+            "digest_key": "bootstrap_attestation_sha256",
+            "subject": "do bootstrap do ruleset",
+            "flag": "bootstrap_verified",
+        },
+        {
+            "block": "project_instructions_verification",
+            "digest_key": "project_instructions_attestation_sha256",
+            "subject": "das Project Instructions",
+            "flag": "project_bootstrap_installed",
+        },
+    ):
+        refusal = _attestation_refusal(payload, **kwargs)
+        if refusal is not None:
+            return refusal
+    if _deployment_commit_sha(payload) is None:
+        return (
+            "a testemunha não nomeia o commit implantado: "
+            f"bootstrap_verification.source_commit_sha="
+            f"{(payload.get('bootstrap_verification') or {}).get('source_commit_sha')!r} não é "
+            "um SHA de commit Git de 40 caracteres. Sem ele a testemunha descreve *uma* "
+            "implantação verificada e não *esta*, e serve a qualquer relatório com o mesmo "
+            "ruleset, a mesma classe de alvo e a mesma janela de validade"
+        )
     ruleset = payload.get("ruleset") if isinstance(payload.get("ruleset"), dict) else {}
     observed = ruleset.get("sha256")
     if observed != normative.RAW_SHA256:
@@ -264,12 +367,17 @@ def witness_verdict(
                 f"{payload.get('suite')!r} contra a implantação "
                 f"{payload.get('deployment_id')!r} — "
                 f"{deployment_target.describe(payload.get('target'))} —, bootstrap "
-                f"verificado ao vivo, {payload.get('critical_failures')} falhas críticas"
+                f"verificado ao vivo no commit {_deployment_commit_sha(payload)}, "
+                f"{payload.get('critical_failures')} falhas críticas"
             )
         ),
         "witness_sha256": sha256,
         "witness_path": path,
         "deployment_id": payload.get("deployment_id"),
+        # Which deployment this PASS is about. `deployment_id` is a label the operator chose;
+        # this is the commit the bootstrap attestation was verified against. The fixture has
+        # none, and must not borrow one.
+        "deployment_commit_sha": None if fixture else _deployment_commit_sha(payload),
         # What the run reached, carried beside the verdict. A PASS taken against a container
         # on a CI runner and a PASS taken against a deployed host are both real results and
         # certify different things; the reader has to be able to tell them apart without
@@ -525,15 +633,11 @@ class PayloadCompiler:
         parameters closed the door a builder used to grant itself a PASS — and left this one
         open: `register(Artifact.from_payload("policy-evaluation", {...ready: True...}))`
         installed an invented verdict under the reserved name and published FINAL with
-        `operational_status: VERIFICADO`.
+        `operational_status: VERIFICADO`. Verified by doing it.
 
         The verdict may only arrive through the constructor, which reads a file the policy
         engine wrote, or through the fixture path, which can only exist on a payload whose
         every value is a fixture.
-
-        Both reserved names are controlled by
-        `tests/test_reporting_provenance_regressions.py::test_the_reserved_verdict_artifacts_cannot_be_registered`,
-        beside the accepting case that keeps ordinary artifacts registrable.
         """
         if artifact.name == POLICY_EVALUATION_ARTIFACT:
             raise ProvenanceError(
@@ -1152,14 +1256,9 @@ class PayloadCompiler:
                     "cannot disagree"
                 )
             # Anchored fields were refused; the derived authority blocks were not, and those
-            # are the ones `reporting.engine._publication_blockers` reads to decide whether a
-            # FINAL document may be produced. `extra={"publication_gate": {"passed": True}}`
-            # published a report the policy engine had blocked.
-            #
-            # `tests/test_reporting_provenance_regressions.py` covers every name in
-            # DERIVED_BLOCKS, and separately shows this guard is the one refusing
-            # `publication_gate` — `policy_evaluation` is also an anchored field, so for that
-            # name the check above fires first and would hide the deletion of this one.
+            # are the ones `reporting.engine.render_blockers` reads to decide whether a FINAL
+            # document may be produced. `extra={"publication_gate": {"passed": True, ...}}`
+            # published a report the policy engine had blocked. Verified by doing it.
             reserved = sorted(key for key in extra if key in DERIVED_BLOCKS)
             if reserved:
                 raise ProvenanceError(
