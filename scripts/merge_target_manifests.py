@@ -74,6 +74,16 @@ IDENTITY_FIELDS = ("coordinates", "grch38", "reference_allele")
 
 
 def merge(paths: list[Path]) -> dict[str, Any]:
+    """Combine target manifests without arbitrating any disagreement between them.
+
+    Where two registries agree, the value carries. Where they disagree about the assessed
+    allele or about locus identity, the merge records the conflict and *removes* the
+    contested value rather than picking one: choosing would manufacture a consensus that
+    no source states. Refusals are made durable — `identity_conflict` deliberately sits
+    outside the `assessed_allele_` namespace so that clearing that namespace cannot erase
+    the record of why it was cleared, which is how a third registry used to restore an
+    allele the first two had refused.
+    """
     manifests = [(path, load_target_manifest(path)) for path in paths]
 
     merged: dict[str, dict[str, Any]] = {}

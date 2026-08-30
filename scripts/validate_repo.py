@@ -432,6 +432,13 @@ def validate_core_runtime_dependencies(root: Path, errors: list[str]) -> None:
 
 
 def validate(root: Path) -> list[str]:
+    """Run every static repository check and return the accumulated errors.
+
+    Errors accumulate rather than raising, so one run reports everything wrong instead of
+    stopping at the first problem. `main` prints its PASS banner only when this returns
+    empty — those printed lines are a summary of this function's verdict, not twelve
+    independent checks, and should not be quoted as if they were.
+    """
     errors: list[str] = []
     errors.extend(
         _missing_path_error(relative)

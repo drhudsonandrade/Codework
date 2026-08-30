@@ -391,12 +391,23 @@ def detect_schema(header: list[str]) -> str:
 
 
 def _is_called(value: str | None) -> bool:
+    """Whether the array reported anything at all at this locus.
+
+    A no-call is not a genotype and must never reach a comparison as one: absence of a
+    call and absence of the variant read identically downstream if this is got wrong.
+    """
     if value is None:
         return False
     return value.strip().upper() not in MISSING_GENOTYPES
 
 
 def _is_valid_consensus(value: str | None) -> bool:
+    """Whether a called value is a genotype this pipeline knows how to interpret.
+
+    Called but unparseable is its own category — counted as an invalid genotype rather
+    than silently treated as a no-call, because a file full of them is a malformed export,
+    not a sparse one.
+    """
     if not _is_called(value):
         return False
     v = value.strip().upper()
@@ -404,6 +415,11 @@ def _is_valid_consensus(value: str | None) -> bool:
 
 
 def _canonical_gt(value: str | None) -> str | None:
+    """One spelling per genotype, so AG and GA compare equal.
+
+    Diploid SNP alleles are sorted and the indel pair is normalised to DI. Without this,
+    the same genotype from two platforms reads as a cross-platform conflict.
+    """
     if not _is_called(value):
         return None
     v = value.strip().upper()
@@ -415,10 +431,22 @@ def _canonical_gt(value: str | None) -> str | None:
 
 
 def _gate(state: str, reasons: list[str], **extra: Any) -> dict[str, Any]:
+    """One shape for every gate: a state, the reasons behind it, and gate-specific fields.
+
+    Reasons travel with the state so a consumer never has to reconstruct why something
+    blocked from the state alone.
+    """
     return {"state": state, "reasons": reasons, **extra}
 
 
 def _metadata_attestation(kind: str, text: str, input_sha: str, asserted_value: str) -> str:
+    """Turn a self-declaration in the file's own header into a structured attestation.
+
+    The file saying "forward strand" in a comment line is a claim by the exporter, not
+    independent evidence, and this records it as exactly that: bound to the input SHA-256
+    and carrying `asserted_value`, so the gate can later check that the attestation agrees
+    with the value being declared instead of merely existing.
+    """
     payload = {
         "status": "VERIFICADO",
         "decision": "SATISFIED",
@@ -794,6 +822,11 @@ def inspect_array(
     structure_blocking: list[str] = []
 
     def _structural(reason: str, *, blocking: bool) -> None:
+        """Record a structural finding, and separately whether it blocks.
+
+        Severity is kept as data rather than inferred from the reason text, so a consumer
+        never has to pattern-match prose to decide whether a file is usable.
+        """
         structure_reasons.append(reason)
         if blocking:
             structure_blocking.append(reason)
