@@ -89,7 +89,7 @@ class CodacyApiReportTest(unittest.TestCase):
         )
         issue_row = next(line for line in report.splitlines() if line.startswith("| High"))
         self.assertIn(r"Sec\|urity", issue_row)
-        self.assertIn(r"src/a\`b.py \\| injected \\| row \\|", issue_row)
+        self.assertIn(r"src/a\`b.py \| injected \| row \|", issue_row)
         self.assertIn(r"P\|1\`x", issue_row)
         self.assertNotIn("\n", issue_row)
 
