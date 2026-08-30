@@ -1,0 +1,183 @@
+name: Codacy API Report
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    env:
+      CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+      CODACY_API_TOKEN: ${{ secrets.CODACY_API_TOKEN }}
+      CODACY_PROVIDER: gh
+      CODACY_ORG: drhudsonandrade
+      CODACY_REPO: Codework
+    steps:
+      - name: Check token availability
+        id: token
+        shell: bash
+        run: |
+          if [ -n "$CODACY_PROJECT_TOKEN" ]; then
+            echo "header=project-token" >> "$GITHUB_OUTPUT"
+            echo "value=$CODACY_PROJECT_TOKEN" >> "$GITHUB_OUTPUT"
+          elif [ -n "$CODACY_API_TOKEN" ]; then
+            echo "header=api-token" >> "$GITHUB_OUTPUT"
+            echo "value=$CODACY_API_TOKEN" >> "$GITHUB_OUTPUT"
+          else
+            echo "missing=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Explain missing token
+        if: steps.token.outputs.missing == 'true'
+        shell: bash
+        run: |
+          {
+            echo '## Codacy API report'
+            echo
+            echo 'NÃO DISPONÍVEL — no Codacy API token is configured.'
+            echo
+            echo 'Add repository secret `CODACY_PROJECT_TOKEN` (preferred) or `CODACY_API_TOKEN`, then rerun this workflow.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Query Codacy API and build report
+        if: steps.token.outputs.missing != 'true'
+        env:
+          TOKEN_HEADER: ${{ steps.token.outputs.header }}
+          TOKEN_VALUE: ${{ steps.token.outputs.value }}
+        shell: python
+        run: |
+          import json
+          import os
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from collections import Counter
+          from pathlib import Path
+
+          provider = os.environ["CODACY_PROVIDER"]
+          org = os.environ["CODACY_ORG"]
+          repo = os.environ["CODACY_REPO"]
+          header = os.environ["TOKEN_HEADER"]
+          token = os.environ["TOKEN_VALUE"]
+          base = f"https://app.codacy.com/api/v3/analysis/organizations/{provider}/{org}/repositories/{repo}/issues/search"
+
+          issues = []
+          cursor = None
+          while True:
+              url = base
+              if cursor:
+                  url += "?" + urllib.parse.urlencode({"cursor": cursor})
+              body = json.dumps({}).encode("utf-8")
+              req = urllib.request.Request(
+                  url,
+                  data=body,
+                  method="POST",
+                  headers={
+                      header: token,
+                      "Content-Type": "application/json",
+                      "Accept": "application/json",
+                      "User-Agent": "Codework-Codacy-API-Report/1.0",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as response:
+                      payload = json.load(response)
+              except urllib.error.HTTPError as exc:
+                  details = exc.read().decode("utf-8", "replace")
+                  raise SystemExit(f"Codacy API HTTP {exc.code}: {details[:1000]}")
+
+              issues.extend(payload.get("data", []))
+              pagination = payload.get("pagination") or {}
+              cursor = pagination.get("cursor")
+              if not cursor:
+                  break
+
+          Path("codacy-issues.json").write_text(
+              json.dumps({"data": issues}, ensure_ascii=False, indent=2), encoding="utf-8"
+          )
+
+          def pick(d, *paths, default=""):
+              for path in paths:
+                  cur = d
+                  ok = True
+                  for part in path.split("."):
+                      if not isinstance(cur, dict) or part not in cur:
+                          ok = False
+                          break
+                      cur = cur[part]
+                  if ok and cur not in (None, ""):
+                      return cur
+              return default
+
+          levels = Counter(str(pick(i, "patternInfo.level", "level", default="Unknown")) for i in issues)
+          categories = Counter(str(pick(i, "patternInfo.category", "category", default="Unknown")) for i in issues)
+
+          lines = [
+              "# Codacy API report",
+              "",
+              f"Repository: `{org}/{repo}`",
+              f"Issues returned by API: **{len(issues)}**",
+              "",
+              "## Severity",
+              "",
+          ]
+          for name, count in sorted(levels.items(), key=lambda item: (-item[1], item[0])):
+              lines.append(f"- {name}: {count}")
+          lines += ["", "## Categories", ""]
+          for name, count in sorted(categories.items(), key=lambda item: (-item[1], item[0])):
+              lines.append(f"- {name}: {count}")
+
+          lines += ["", "## Issues", "", "| Severity | Category | File | Pattern |", "|---|---|---|---|"]
+          for issue in issues[:200]:
+              severity = str(pick(issue, "patternInfo.level", "level", default="Unknown")).replace("|", "\\|")
+              category = str(pick(issue, "patternInfo.category", "category", default="Unknown")).replace("|", "\\|")
+              file_path = str(pick(issue, "filePath", default="")).replace("|", "\\|")
+              pattern = str(pick(issue, "patternInfo.id", "patternId", default="")).replace("|", "\\|")
+              lines.append(f"| {severity} | {category} | `{file_path}` | `{pattern}` |")
+          if len(issues) > 200:
+              lines += ["", f"Report truncated to the first 200 issues. Full JSON contains {len(issues)} issues."]
+
+          report = "\n".join(lines) + "\n"
+          Path("codacy-report.md").write_text(report, encoding="utf-8")
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a", encoding="utf-8") as fh:
+                  fh.write(report)
+
+      - name: Upload Codacy API report
+        if: steps.token.outputs.missing != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: codacy-api-report
+          path: |
+            codacy-report.md
+            codacy-issues.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish report on pull request
+        if: github.event_name == 'pull_request' && steps.token.outputs.missing != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- codacy-api-report -->';
+            const report = fs.readFileSync('codacy-report.md', 'utf8');
+            const body = `${marker}\n${report}`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100
+            });
+            const previous = comments.find(c => c.user.type === 'Bot' && c.body && c.body.includes(marker));
+            if (previous) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: previous.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
