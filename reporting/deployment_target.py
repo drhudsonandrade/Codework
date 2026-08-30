@@ -1,13 +1,26 @@
 """Classify what a POST-DEPLOYMENT smoke run actually talked to.
 
-Ruleset section 260 asks for a live smoke against a deployed service, and the ceremony
-workflow satisfied it by starting a container on the GitHub runner and pointing the smoke
-at ``127.0.0.1:8787``. The run is real — the HTTP requests happen, a real container answers
-them — but the thing certified is an ephemeral CI container that ceases to exist when the
-job ends, and the witness recorded the fixed string "live HTTP execution against a real
-container instance" no matter which address had been dialled. Nothing in the resulting
-evidence distinguished that from a certification taken against the host a laboratory will
-actually send samples to, so POST-DEPLOYMENT: VERIFICADO on a report meant either one.
+Section 260 of the ruleset asks for the fifteen cases to be run *live* — the clause is held
+in this repository as `scripts/bootstrap_attestation.py::BOOTSTRAP_CLAUSES`
+["post_deployment_requires_live_15_of_15_zero_critical"]: "executar ao vivo os 15 casos da
+seção 260, exigindo 15/15 sem falha crítica". The ceremony workflow satisfied it by starting
+a container on the GitHub runner and pointing the smoke at ``127.0.0.1:8787``
+(`.github/workflows/genoma-production-ceremony.yml`, the ``docker run -p 127.0.0.1:8787:8787``
+step and the ``--base-url http://127.0.0.1:8787`` the smoke is invoked with; the same pair
+appears in `genoma-production-witness.yml`).
+
+The run is real — the HTTP requests happen, a real container answers them — but the thing
+certified is an ephemeral CI container that ceases to exist when the job ends, while the
+witness recorded a fixed string, ``"classification": "live HTTP execution against a real
+container instance; not a unit fixture"``, assigned unconditionally in
+`scripts/run_live_post_deployment_smoke.py` and therefore identical whichever address had
+been dialled. Nothing in the resulting evidence distinguished that from a certification taken
+against the host a laboratory will actually send samples to, so POST-DEPLOYMENT: VERIFICADO
+on a report meant either one.
+
+Each statement above is a reading of files in this repository at the paths named, not a
+record of a deployment: this module makes no claim about what any past ceremony run reached.
+What that run reached is exactly what it now has to record.
 
 The distinction is therefore *measured*, not declared. A ``--deployment-kind deployed-host``
 flag would be one more self-declared field feeding the gate that reads it — the defect class
@@ -17,7 +30,8 @@ loopback, whatever its operator intended.
 
 `refusal` recomputes the class from the recorded addresses rather than believing the
 recorded class, so editing ``"network_class": "public-host"`` into a witness taken against
-127.0.0.1 does not survive being read.
+127.0.0.1 does not survive being read. `tests/test_post_deployment_target_binding.py` pins
+both halves: the classification of each address family, and that refusal.
 """
 from __future__ import annotations
 
