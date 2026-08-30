@@ -159,6 +159,35 @@ class CoreRuntimeDependencyCheckTest(unittest.TestCase):
             ),
         )
 
+    def test_an_except_star_group_is_walked_like_any_other_try(self):
+        """`try`/`except*` is a separate AST node, and the walk only knew `ast.Try`.
+
+        `ast.TryStar` (Python 3.11) is not an `ast.Try`, so an import inside one was invisible
+        to the walk exactly as every import was before the handler started being read. The
+        guard rule is the same, and `except* ImportError` does catch a plain
+        `ModuleNotFoundError` raised by the import, so it qualifies.
+        """
+        for handler in ("ValueError", "OSError", "Exception"):
+            with self.subTest(handler=handler):
+                self.assert_refused(
+                    f"try:\n    import numpy as np\nexcept* {handler}:\n    np = None\n"
+                )
+        for clause in ("except* ImportError:", "except* ModuleNotFoundError:"):
+            with self.subTest(clause=clause):
+                self.assertEqual(
+                    [],
+                    self._errors_for(f"try:\n    import numpy as np\n{clause}\n    np = None\n"),
+                )
+
+    def test_an_import_in_a_match_case_is_still_module_scope(self):
+        """A `case` body runs at import time like any other branch."""
+        self.assert_refused(
+            "x = 1\nmatch x:\n    case 1:\n        import numpy as np\n    case _:\n        np = None\n"
+        )
+        self.assert_refused(
+            "x = 1\nmatch x:\n    case 1:\n        pass\n    case _:\n        import numpy as np\n"
+        )
+
     def test_an_import_inside_a_function_is_not_a_module_scope_dependency(self):
         """A lazy import is the pattern this check exists to permit.
 

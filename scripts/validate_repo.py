@@ -445,10 +445,22 @@ def _import_time_statements(body: list[ast.stmt]) -> Iterator[ast.stmt]:
     Function and class bodies are not import-time and are not descended into: a lazy import
     inside a function is the pattern this contract exists to permit — `array_pipeline/
     annotation.py` loads `evidence_adapters` that way so the core imports without it.
+
+    `ast.TryStar` (`try`/`except*`, Python 3.11) is a distinct node from `ast.Try`, and
+    `ast.Match` is another, so imports inside either were invisible to this walk in exactly
+    the way every import was before the handler started being read. Both are traversed, and
+    `except*` follows the same guard rule: an `except* ImportError` group does catch the
+    plain `ModuleNotFoundError` the import raises.
     """
+    #: The `try` forms this walk understands. Both carry body/handlers/orelse/finalbody, so
+    #: the same reasoning applies; only the node class differs.
+    try_nodes: tuple[type[ast.stmt], ...] = (ast.Try,)
+    if hasattr(ast, "TryStar"):  # pragma: no branch - present from Python 3.11
+        try_nodes += (ast.TryStar,)
+
     for node in body:
         yield node
-        if isinstance(node, ast.Try):
+        if isinstance(node, try_nodes):
             if not any(_catches_import_error(handler) for handler in node.handlers):
                 yield from _import_time_statements(node.body)
             for handler in node.handlers:
@@ -462,6 +474,9 @@ def _import_time_statements(body: list[ast.stmt]) -> Iterator[ast.stmt]:
             yield from _import_time_statements(node.orelse)
         elif isinstance(node, (ast.With, ast.AsyncWith)):
             yield from _import_time_statements(node.body)
+        elif isinstance(node, ast.Match):
+            for case in node.cases:
+                yield from _import_time_statements(case.body)
 
 
 def validate_core_runtime_dependencies(root: Path, errors: list[str]) -> None:

@@ -183,10 +183,29 @@ class AdapterAbsenceReachesTheCallerAsARefusalTest(unittest.TestCase):
         )
         qc_path = root / "qc.json"
         qc_path.write_text(json.dumps(qc), encoding="utf-8")
-        targets = (
-            Path(__file__).resolve().parents[1]
-            / "config"
-            / "partial_genome_annotation_targets.json"
+
+        # A local, minimal manifest rather than `config/partial_genome_annotation_targets.json`.
+        # The contract under test is the absence of the adapter, not the size of the production
+        # catalogue: the CLI defaults to `--max-targets 250`, so once that file grows past the
+        # limit the *accepting* case below would start failing with exit 2 for a reason with
+        # nothing to do with optional adapters, and the control would stop controlling what it
+        # claims to. It also adds no coverage here — the synthetic array carries two rsids.
+        targets = root / "targets.json"
+        targets.write_text(
+            json.dumps({
+                "schema": "genoma-partial-genome-targets-v1",
+                "id": "ADAPTER-ABSENCE-FIXTURE",
+                "version": "1",
+                "targets": [
+                    {
+                        "rsid": "rs1799807",
+                        "scope": "CLINICO",
+                        "label": "fixture",
+                        "queries": {"clinvar": {"term": "rs1799807"}},
+                    }
+                ],
+            }),
+            encoding="utf-8",
         )
         return array, qc_path, targets
 

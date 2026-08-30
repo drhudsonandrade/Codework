@@ -355,8 +355,14 @@ class WitnessNamesTheDeploymentItVerifiedTest(unittest.TestCase):
 
         Read through the AST rather than by matching source text: an exact-string assertion
         breaks on a reformat and passes on a coincidence in a comment, neither of which is
-        the fact being claimed. What is collected here is the set of literal keys the smoke
-        writes into a dict, which is the contract.
+        the fact being claimed.
+
+        The collection is anchored to the dict that is actually *serialised*, found by
+        following the smoke's own chain — the name passed to `json.dumps` inside the
+        `write_text` call that produces the witness file, then the dict literal assigned to
+        that name. Walking every `ast.Dict` in the module would pass if the producer moved
+        a field into a helper, an error-message or a dead dict, which proves the literal
+        exists somewhere rather than that it reaches the object `witness_verdict` reads.
         """
         import ast
         from pathlib import Path
@@ -365,13 +371,40 @@ class WitnessNamesTheDeploymentItVerifiedTest(unittest.TestCase):
         tree = ast.parse(
             (root / "scripts" / "run_live_post_deployment_smoke.py").read_text(encoding="utf-8")
         )
-        written = {
-            key.value
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Dict)
-            for key in node.keys
-            if isinstance(key, ast.Constant) and isinstance(key.value, str)
-        }
+
+        serialised: set[str] = set()
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "write_text"
+            ):
+                for dumped in ast.walk(node):
+                    if (
+                        isinstance(dumped, ast.Call)
+                        and isinstance(dumped.func, ast.Attribute)
+                        and dumped.func.attr == "dumps"
+                        and dumped.args
+                        and isinstance(dumped.args[0], ast.Name)
+                    ):
+                        serialised.add(dumped.args[0].id)
+        self.assertTrue(serialised, "the smoke writes no json.dumps(<name>) to a file")
+
+        written: set[str] = set()
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict)):
+                continue
+            if not any(
+                isinstance(target, ast.Name) and target.id in serialised
+                for target in node.targets
+            ):
+                continue
+            written.update(
+                key.value
+                for key in node.value.keys
+                if isinstance(key, ast.Constant) and isinstance(key.value, str)
+            )
+        self.assertTrue(written, "the serialised witness is not a dict literal any more")
         self.assertLessEqual(
             {
                 "bootstrap_verification",
