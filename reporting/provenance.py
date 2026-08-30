@@ -291,17 +291,28 @@ def sha256_json(value: Any) -> str:
 
 
 def render_value(value: Any) -> str:
-    """Render a value exactly as `reporting.engine._safe` will print it.
+    """Render a value exactly as the FINAL document will print it.
 
-    The gate compares printed text against the anchor, so the two renderings must agree
-    character for character or a correct payload would fail the gate for a formatting
-    reason. Keeping this function beside the anchors — and asserting the agreement in
-    `tests/test_report_provenance.py` — is what keeps them from drifting apart.
+    An anchor records this rendering as `observed_value`, and the document prints the same
+    value through `reporting.engine._safe`, so the two must agree character for character:
+    an anchor that reads differently from the text beside it has stopped attesting to the
+    document. `_safe` used to hold a second copy of these rules and the copies drifted — it
+    serialised mappings with `sort_keys=True` and this did not, so a payload carrying a dict
+    whose keys were not already in order published a document whose face and provenance block
+    disagreed, with zero blockers: `provenance_blockers` recomputes `render_value` on both
+    sides of its comparison, so it agreed with itself while agreeing with neither.
+
+    `_safe` now delegates here and adds only its substitution for an absent value, so there is
+    one rendering and no copy left to drift. `tests/test_rendered_text_matches_the_document.py`
+    pins the agreement, the end-to-end case above, and the bound on that substitution.
     """
     if value is None or value == "":
         return UNAVAILABLE
     if isinstance(value, (dict, list, tuple)):
-        return json.dumps(value, ensure_ascii=False)
+        # `sort_keys` makes the text a function of the mapping's contents rather than of the
+        # order a caller happened to build it in, so two payloads carrying the same values
+        # render — and hash — identically.
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
     return str(value)
 
 
@@ -514,11 +525,15 @@ class PayloadCompiler:
         parameters closed the door a builder used to grant itself a PASS — and left this one
         open: `register(Artifact.from_payload("policy-evaluation", {...ready: True...}))`
         installed an invented verdict under the reserved name and published FINAL with
-        `operational_status: VERIFICADO`. Verified by doing it.
+        `operational_status: VERIFICADO`.
 
         The verdict may only arrive through the constructor, which reads a file the policy
         engine wrote, or through the fixture path, which can only exist on a payload whose
         every value is a fixture.
+
+        Both reserved names are controlled by
+        `tests/test_reporting_provenance_regressions.py::test_the_reserved_verdict_artifacts_cannot_be_registered`,
+        beside the accepting case that keeps ordinary artifacts registrable.
         """
         if artifact.name == POLICY_EVALUATION_ARTIFACT:
             raise ProvenanceError(
@@ -1137,9 +1152,14 @@ class PayloadCompiler:
                     "cannot disagree"
                 )
             # Anchored fields were refused; the derived authority blocks were not, and those
-            # are the ones `reporting.engine.render_blockers` reads to decide whether a FINAL
-            # document may be produced. `extra={"publication_gate": {"passed": True, ...}}`
-            # published a report the policy engine had blocked. Verified by doing it.
+            # are the ones `reporting.engine._publication_blockers` reads to decide whether a
+            # FINAL document may be produced. `extra={"publication_gate": {"passed": True}}`
+            # published a report the policy engine had blocked.
+            #
+            # `tests/test_reporting_provenance_regressions.py` covers every name in
+            # DERIVED_BLOCKS, and separately shows this guard is the one refusing
+            # `publication_gate` — `policy_evaluation` is also an anchored field, so for that
+            # name the check above fires first and would hide the deletion of this one.
             reserved = sorted(key for key in extra if key in DERIVED_BLOCKS)
             if reserved:
                 raise ProvenanceError(

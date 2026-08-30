@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from reporting.provenance import provenance_blockers
+from reporting.provenance import provenance_blockers, render_value
 
 ROOT = Path(__file__).resolve().parent
 CATALOG_PATH = ROOT / "catalog.json"
@@ -87,11 +87,17 @@ def _publication_blockers(data: dict[str, Any]) -> list[str]:
 
 
 def _safe(value: Any, default: str = "NÃO DISPONÍVEL") -> str:
+    """Print `value` for the document, or `default` when there is nothing to print.
+
+    The rendering itself belongs to `reporting.provenance.render_value`, which is what an
+    anchor records as `observed_value`; this function only chooses what stands in for an
+    absent value. It used to hold its own copy of the serialisation rules, and the copies
+    drifted on mapping key order — see `render_value` and
+    `tests/test_rendered_text_matches_the_document.py`.
+    """
     if value is None or value == "":
         return default
-    if isinstance(value, (dict, list, tuple)):
-        return json.dumps(value, ensure_ascii=False, sort_keys=True)
-    return str(value)
+    return render_value(value)
 
 
 def _model_markdown(report_id: str, model: dict[str, Any]) -> str:
