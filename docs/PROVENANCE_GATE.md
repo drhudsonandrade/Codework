@@ -89,19 +89,26 @@ recomputed by the gate rather than trusted.
 
 ## Negative controls
 
-`tests/test_report_provenance.py` is written entirely as negative controls — each test
-proves a specific way of stating something the data does not support is now refused:
+These are the negative controls that exist, by file and test name. The list is deliberately
+exhaustive: an earlier version of this section named `tests/test_report_provenance.py` and
+`tests/test_genome_completeness.py::CompletenessReportTest`, **neither of which exists in this
+repository**, and enumerated ten controls of which several had no test at all. A citation that
+cannot be opened is worse than no citation, because it reads as coverage.
 
-- a locator absent from the artifact;
-- an out-of-range index;
-- an unregistered artifact;
-- free text submitted through a derived kind;
-- a fixture anchor claiming any measured status;
-- a value edited after compilation;
-- an injected section or finding;
-- an anchor block edited to match a tampered value;
-- a restated floor or distribution;
-- a status declared above the floor.
+`tests/test_reporting_provenance_regressions.py::ReportingProvenanceRegressionTest`:
 
-`tests/test_genome_completeness.py::CompletenessReportTest` adds the end-to-end case: a
-hand-edited headline count on report 09 is refused at render time.
+- `test_extra_cannot_replace_the_compiled_report_identity` — `extra` cannot overwrite the
+  compiled identity;
+- `test_post_compile_publication_gate_edit_is_detected` — a value edited after compilation;
+- `test_removed_section_is_detected_from_its_remaining_anchor` — a section removed while its
+  anchor remains;
+- `test_removed_finding_uncertainties_is_detected` — a finding's uncertainties removed.
+
+`tests/test_execution_manifest_anchoring.py` covers the `execution_manifest[...]` namespace:
+every key anchored, a mutated value, a removed key, an unanchored key added, and the whole
+block replaced through `extra`.
+
+**Not covered by a test in this repository**, and stated here rather than implied: free text
+submitted through a derived kind, a restated floor or distribution, and a status declared
+above the floor. The code paths exist in `reporting/provenance.py`; what does not exist is a
+negative control pinning them, and this section will say so until one does.

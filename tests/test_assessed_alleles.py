@@ -256,7 +256,11 @@ class DecisionRuleTest(unittest.TestCase):
                 patch.object(curation, "placements", return_value=placement),
                 patch.object(curation, "clinvar_records", return_value=[record(classification)]),
                 patch.object(curation, "frequency_alleles", return_value={}),
-                patch.object(curation, "clinvar_citations", return_value=[]),
+                patch.object(
+                    curation,
+                    "clinvar_citations",
+                    return_value={"status": "EXECUTADO", "pmids": [], "reason": None},
+                ),
                 patch.object(curation, "cpic_variant_alleles", return_value={}),
                 patch.object(
                     curation,
@@ -274,7 +278,11 @@ class DecisionRuleTest(unittest.TestCase):
             patch.object(curation, "placements", return_value=placement),
             patch.object(curation, "clinvar_records", return_value=[record("Pathogenic")]),
             patch.object(curation, "frequency_alleles", return_value={}),
-            patch.object(curation, "clinvar_citations", return_value=[]),
+            patch.object(
+                    curation,
+                    "clinvar_citations",
+                    return_value={"status": "EXECUTADO", "pmids": [], "reason": None},
+                ),
             patch.object(curation, "cpic_variant_alleles", return_value={}),
             patch.object(curation.time, "sleep"),
         ):

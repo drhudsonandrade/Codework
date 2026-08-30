@@ -14,6 +14,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -885,6 +886,49 @@ class GnomadConstraintTest(unittest.TestCase):
         self.assertFalse(block["established"])
         self.assertEqual(block["gnomad_constraint"]["pli"], 1.0)
         self.assertEqual(block["gnomad_constraint"]["loeuf"], 0.05)
+
+
+class ClinvarCitationRetrievalTest(unittest.TestCase):
+    """A failed citation lookup must not be published as "no publications exist".
+
+    `clinvar_citations` caught `CurationError` and returned `[]`. The curated target still
+    carried `status: VERIFICADO`, because the allele assignment comes from CPIC's definition
+    rather than from the citations — so an empty `clinvar_pubmed` asserted an absence of
+    supporting literature that a failed request had never established. The two facts now
+    look different in the record.
+    """
+
+    def test_a_failed_lookup_is_recorded_rather_than_read_as_absence(self):
+        from scripts import curate_assessed_alleles as curate
+
+        with patch.object(
+            curate, "_get", side_effect=curate.CurationError("eutils unreachable")
+        ):
+            result = curate.clinvar_citations(["1", "2"])
+        self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+        self.assertEqual(result["pmids"], [])
+        self.assertIn("falhou", result["reason"])
+
+    def test_a_successful_lookup_reports_executado(self):
+        from scripts import curate_assessed_alleles as curate
+
+        payload = {
+            "linksets": [
+                {"linksetdbs": [{"linkname": "clinvar_pubmed", "links": ["11", "22", "11"]}]}
+            ]
+        }
+        with patch.object(curate, "_get", return_value=payload):
+            result = curate.clinvar_citations(["1"])
+        self.assertEqual(result["status"], "EXECUTADO")
+        self.assertEqual(result["pmids"], ["11", "22"])
+        self.assertIsNone(result["reason"])
+
+    def test_no_uids_is_executado_not_a_failure(self):
+        from scripts import curate_assessed_alleles as curate
+
+        result = curate.clinvar_citations([])
+        self.assertEqual(result["status"], "EXECUTADO")
+        self.assertEqual(result["pmids"], [])
 
 
 if __name__ == "__main__":

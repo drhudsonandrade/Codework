@@ -154,16 +154,36 @@ def clinvar_records(rsid: str) -> list[dict[str, Any]]:
     return records
 
 
-def clinvar_citations(uids: list[str]) -> list[str]:
-    """PubMed ids ClinVar links to these records, newest first."""
+def clinvar_citations(uids: list[str]) -> dict[str, Any]:
+    """PubMed ids ClinVar links to these records, newest first, plus whether the lookup ran.
+
+    This returned a bare list and turned a failed `elink` call into `[]`. An empty list then
+    meant two different things in the curated record — "ClinVar links no publications to
+    these accessions" and "the lookup failed and nobody knows" — and the target was still
+    published VERIFICADO either way, because the allele assignment comes from CPIC's
+    definition rather than from the citations. So the Evidence Plane asserted an absence of
+    supporting literature that had never been established.
+
+    The retrieval outcome is now recorded beside the ids. The curation is not blocked on it:
+    the citations are supporting references a reader can follow, not the basis of the
+    assignment, and refusing a locus because PubMed was briefly unreachable would be an
+    over-refusal. What must not happen is publishing the gap as a finding.
+    """
     if not uids:
-        return []
+        return {"status": "EXECUTADO", "pmids": [], "reason": None}
     try:
         linked = _get(
             f"{EUTILS}/elink.fcgi?dbfrom=clinvar&db=pubmed&id={','.join(uids)}&retmode=json"
         )
-    except CurationError:
-        return []
+    except CurationError as exc:
+        return {
+            "status": "NÃO DISPONÍVEL",
+            "pmids": [],
+            "reason": (
+                f"a recuperação de citações no PubMed falhou ({exc}); a lista vazia abaixo "
+                "não significa que não existam publicações vinculadas"
+            ),
+        }
     pmids: list[str] = []
     for linkset in linked.get("linksets", []):
         for db in linkset.get("linksetdbs", []):
@@ -172,7 +192,7 @@ def clinvar_citations(uids: list[str]) -> list[str]:
     # elink returns them newest first; de-duplicate while keeping that order.
     seen: set[str] = set()
     ordered = [p for p in pmids if not (p in seen or seen.add(p))]
-    return ordered[:MAX_CITATIONS]
+    return {"status": "EXECUTADO", "pmids": ordered[:MAX_CITATIONS], "reason": None}
 
 
 def gwas_risk_alleles(rsid: str) -> dict[str, Any]:
@@ -347,9 +367,17 @@ def curate_target(rsid: str, pgx_registry: dict[str, Any] | None = None) -> dict
             if any(str(x.get("rsid", "")).lower() == rsid for x in definition.get("defining", [])):
                 cpic_pmids.extend(str(c) for c in (definition.get("citations") or []))
     time.sleep(REQUEST_INTERVAL_SECONDS)
+    citations = clinvar_citations(matched_uids)
     base["references"] = {
         "clinvar_accessions": sorted({str(m["accession"]) for m in matched if m.get("accession")}),
-        "clinvar_pubmed": clinvar_citations(matched_uids),
+        "clinvar_pubmed": citations["pmids"],
+        # Whether the lookup above actually ran. Without it an empty `clinvar_pubmed`
+        # asserts that ClinVar links no publications, which a failed request never
+        # established.
+        "clinvar_pubmed_retrieval": {
+            "status": citations["status"],
+            "reason": citations["reason"],
+        },
         "cpic_pubmed": sorted(set(cpic_pmids))[:MAX_CITATIONS],
     }
 

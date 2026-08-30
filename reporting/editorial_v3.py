@@ -90,6 +90,19 @@ def _verified_coordinate_manifest(template_dir: Path) -> tuple[dict[str, Any], d
             "mode": mode,
             "manifest": actual_manifest,
             "detail": actual_detail,
+            # Whether the installed container is byte-identical to the pinned one.
+            #
+            # This is NOT the integrity control, and restoring a block here would be wrong:
+            # DEFLATE bytes are not reproducible across zlib builds, so a legitimate install
+            # can differ while carrying identical content. The content *is* pinned —
+            # `verify_coordinate_detail` raises unless the decoded bytes equal
+            # `manifest_bytes`, whose SHA-256 was already checked against the pinned manifest
+            # hash a few lines above — so substituted content cannot reach here.
+            #
+            # It is published because a mismatch still means the installed artifact is not
+            # the historical one, which an auditor should be able to see. Computing it and
+            # dropping it made that fact unavailable to everyone downstream.
+            "detail_container_matches_pinned": detail_result["container_sha256_matches_pinned"],
         }
     raise _template_v3.TemplateV3Error(
         "no approved v3 coordinate pair is installed; run scripts/install_report_templates.py on the exact template pack (" + ",".join(errors) + ")"

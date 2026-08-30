@@ -171,26 +171,52 @@ def _strand_marker_alleles() -> dict[str, set[str]]:
     it into a blocked BUILD_STRAND_GATE with an explicit reason. Palindromic markers stay
     excluded because they read identically on both strands and would vote for whatever they
     were asked.
+
+    The first version of that refusal only checked that the payload was a dict carrying a
+    `markers` list, and skipped entries it could not parse. `{"markers": []}` — or a list
+    whose every entry was malformed — therefore produced an empty mapping and no refusal at
+    all, which is the same fail-open through a different door: zero votes on both sides, the
+    check recorded as EXECUTADO, and the gate free to pass. Validation is now delegated to
+    `provenance_probe.load_markers`, the strict loader that already refuses an empty table,
+    non-object entries, duplicate rsids, missing coordinates, malformed or repeated alleles
+    and an unflagged palindromic pair. Two implementations of the same rules would drift;
+    `verification_status` is additionally required here, because a table that has not itself
+    been verified cannot license a strand verdict.
+
+    The import is local because `provenance_probe` imports from this module at module scope.
     """
     try:
-        payload = json.loads(STRAND_MARKERS_PATH.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        from array_pipeline import provenance_probe
+    except ImportError as exc:  # pragma: no cover - defensive
+        raise StrandMarkerTableError(f"validador de marcadores indisponível: {exc}") from exc
+
+    try:
+        payload = provenance_probe.load_markers(STRAND_MARKERS_PATH)
+    except (OSError, json.JSONDecodeError, provenance_probe.ProvenanceProbeError) as exc:
         raise StrandMarkerTableError(
-            f"tabela de marcadores de fita ilegível ({STRAND_MARKERS_PATH.name}): {exc}"
+            f"tabela de marcadores de fita inutilizável ({STRAND_MARKERS_PATH.name}): {exc}"
         ) from exc
-    if not isinstance(payload, dict) or not isinstance(payload.get("markers"), list):
+
+    status = str(payload.get("verification_status") or "").strip().upper()
+    if status != "VERIFICADO":
         raise StrandMarkerTableError(
-            f"tabela de marcadores de fita inválida ({STRAND_MARKERS_PATH.name}): "
-            "o schema esperado é um objeto com a lista 'markers'"
+            f"tabela de marcadores de fita não verificada ({STRAND_MARKERS_PATH.name}): "
+            f"verification_status={status or 'ausente'!r}. Uma tabela cujo próprio estado "
+            "não é VERIFICADO não pode sustentar um veredicto de fita."
         )
+
     out: dict[str, set[str]] = {}
-    for marker in payload.get("markers") or []:
-        if not isinstance(marker, dict) or marker.get("palindromic"):
+    for marker in payload["markers"]:
+        if marker.get("palindromic"):
             continue
-        alleles = marker.get("plus_alleles")
-        rsid = str(marker.get("rsid") or "").strip().lower()
-        if rsid and isinstance(alleles, list) and len(alleles) == 2:
-            out[rsid] = {str(a).strip().upper() for a in alleles}
+        out[str(marker["rsid"]).strip().lower()] = set(marker["plus_alleles"])
+    if not out:
+        # Every marker palindromic, or none left after exclusion: the contradiction check
+        # has nothing to vote with and must not be reported as having run.
+        raise StrandMarkerTableError(
+            f"tabela de marcadores de fita sem marcadores não palindrômicos utilizáveis "
+            f"({STRAND_MARKERS_PATH.name}); a checagem de contradição não teria com o que votar"
+        )
     return out
 
 

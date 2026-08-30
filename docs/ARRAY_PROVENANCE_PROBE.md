@@ -66,17 +66,24 @@ Three independent checks now close that, and each fails on its own:
    is neither confirmed nor refused. This is what stops a *hand-written* attestation, which
    nothing else checks, from certifying a flipped file.
 
-## Result on the real file
+## Historical observation on a real file — não verificada
+
+The verdict words below are **the probe's output from one past run, not a status this
+repository publishes**. No input or output artifact for that run is committed — the input was
+a real consumer array, and `scripts/validate_repo.py` forbids committing genomic payload — so
+there is no SHA-256 to bind it to and no way to re-run it here. Quoted on its own, the block
+would read as a release verdict; it is not one, and the labels below say so inline rather
+than only in the prose underneath.
 
 ```text
-BUILD : VERIFICADO -> GRCh37   (GRCh37=11  GRCh38=0,  threshold 3)
-FITA  : VERIFICADO -> forward  (plus=9     minus=0,   threshold 3)
+[observação histórica, não verificada — sem artefato de entrada/saída]
+BUILD : (probe reported VERIFICADO) -> GRCh37   (GRCh37=11  GRCh38=0,  threshold 3)
+FITA  : (probe reported VERIFICADO) -> forward  (plus=9     minus=0,   threshold 3)
 ```
 
-with `rs738409` (C/G) and `rs17580` (A/T) correctly recorded as non-informative.
-These counts are a historical measured example; no input/output artifact for that run is
-committed, so they are **not independently reproducible evidence** and must not be used as a
-release gate.
+with `rs738409` (C/G) and `rs17580` (A/T) correctly recorded as non-informative. What *is*
+reproducible is the mechanism: the marker table below, and the unit tests that pin the
+contradiction logic. Neither this block nor any number in it may be used as a release gate.
 
 ## The marker table is verified against dbSNP
 

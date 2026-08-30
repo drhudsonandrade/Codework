@@ -165,6 +165,53 @@ class ArrayQCTest(unittest.TestCase):
         self.assertEqual(result["gates"]["BUILD_STRAND_GATE"]["state"], "PASS")
         self.assertEqual(result["metrics"]["strand_contradiction_check"], "EXECUTADO")
 
+    def test_a_marker_table_with_nothing_usable_also_blocks(self):
+        """An empty or all-invalid table is the same fail-open through a different door.
+
+        The first version of this refusal only checked that the payload was a dict with a
+        `markers` list, then skipped entries it could not parse. `{"markers": []}` produced
+        an empty mapping and no refusal: zero votes on both sides, the check recorded as
+        EXECUTADO, and BUILD_STRAND_GATE free to pass — exactly the state the refusal was
+        written to prevent. Validation now delegates to `provenance_probe.load_markers`, so
+        the rules live in one place, plus a check that something usable survives the
+        palindromic exclusion.
+        """
+        p = self._write("RSID,CHROMOSOME,POSITION,RESULT\nrs1,1,100,TC\n")
+        build_evidence = self._verified_evidence(p, asserted_value="GRCh37")
+        strand_evidence = self._verified_evidence(p, asserted_value="forward")
+        good = json.loads(
+            (Path(__file__).resolve().parents[1] / "config/array_provenance_markers.json")
+            .read_text(encoding="utf-8")
+        )
+        only_palindromic = dict(good)
+        only_palindromic["markers"] = [m for m in good["markers"] if m.get("palindromic")]
+        unverified = dict(good)
+        unverified["verification_status"] = "PROPOSTO"
+        for label, payload in (
+            ("empty markers", {**good, "markers": []}),
+            ("entries not objects", {**good, "markers": ["rs1"]}),
+            ("every marker palindromic", only_palindromic),
+            ("table not itself verified", unverified),
+        ):
+            with self.subTest(case=label):
+                with tempfile.TemporaryDirectory() as td:
+                    table = Path(td) / "array_provenance_markers.json"
+                    table.write_text(json.dumps(payload), encoding="utf-8")
+                    with patch("array_pipeline.qc.STRAND_MARKERS_PATH", table):
+                        result = inspect_array(
+                            p,
+                            case_id="T",
+                            build="GRCh37",
+                            strand="forward",
+                            build_evidence=build_evidence,
+                            strand_evidence=strand_evidence,
+                        )
+                self.assertEqual(result["gates"]["BUILD_STRAND_GATE"]["state"], "BLOCKED")
+                self.assertEqual(
+                    result["metrics"]["strand_contradiction_check"], "NÃO DISPONÍVEL"
+                )
+                self.assertEqual(result["operational_status"], "NÃO DISPONÍVEL")
+
     def test_an_unreadable_marker_table_blocks_instead_of_disappearing(self):
         """The one check against a lying attestation must not vanish with its data file.
 

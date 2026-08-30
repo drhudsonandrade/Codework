@@ -132,9 +132,35 @@ e cada alvo declara o próprio `clinvar_review_stars`. Isso é o que torna o seg
 
 | corte | rsids | genes | genes só alcançáveis nesse corte |
 |---|---:|---:|---:|
-| 2★+ | 54.801 | 3.081 | — |
-| 1★ | 74.161 | 4.166 | 1.328 |
-| união | **123.541** | **4.409** | |
+| 2★+ | 54.845 | 3.082 | — |
+| só 1★ | 68.706 | — | 1.326 |
+| união | **123.551** | **4.408** | |
+
+Estes números são **derivados dos artefatos versionados**, não transcritos: saem de
+`config/targets_clinvar_plp.json.gz` e `config/targets_clinvar_plp_1star.json.gz`, cujos
+SHA-256 estão publicados abaixo. Reproduza com:
+
+```bash
+python3 - <<'PY'
+import json, gzip
+from pathlib import Path
+def load(p):
+    raw = Path(p).read_bytes()
+    return json.loads(gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw)
+two = load("config/targets_clinvar_plp.json.gz")
+one = load("config/targets_clinvar_plp_1star.json.gz")
+genes = lambda d: {t[k] for t in d["targets"] for k in ("gene",) if isinstance(t.get(k), str) and t[k]}
+r2 = {t["rsid"] for t in two["targets"]}; r1 = {t["rsid"] for t in one["targets"]}
+print(len(r2), len(genes(two)))
+print(len(r1 - r2), len(genes(one) - genes(two)))
+print(len(r1), len(genes(one)))
+PY
+```
+
+A tabela anterior publicava 54.801 / 74.161 / 123.541 e contagens de genes que não
+correspondiam a nenhum campo dos artefatos. `só 1★` é a faixa exclusiva de uma estrela
+(`target_statistics.tier_1_star`), não o total do arquivo de 1★ — e 54.845 + 68.706 = 123.551
+fecha exatamente com o total publicado.
 
 Um locus de uma estrela **nunca** vira achado acionável nem estado de portador: a
 interpretação o rebaixa a `ACHADO PRELIMINAR`, com o texto dizendo que uma asserção de
