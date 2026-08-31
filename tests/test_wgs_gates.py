@@ -676,7 +676,10 @@ class WgsAlignConsumesVerifiedInputsTest(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+        def digest(path):
+            """SHA-256 of a fixture file, as the gate records it."""
+            return hashlib.sha256(path.read_bytes()).hexdigest()
+
         input_qc = root / "input-qc.json"
         input_qc.write_text(
             json.dumps(
