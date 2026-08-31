@@ -39,6 +39,57 @@ class CpicRetryPolicyTest(unittest.TestCase):
         slept.assert_called_once_with(1)
 
 
+class TransportSchemeTest(unittest.TestCase):
+    """No fetcher opens a URL whose scheme is not the one it was written for.
+
+    `urllib.request.urlopen` honours `file:`, `ftp:` and `data:` exactly as readily as it
+    honours `https:`. Every fetcher in `scripts/` takes its URL from a module constant, a CLI
+    flag or a caller argument, so a `file:` URL reaching any of them would turn a *download*
+    into a read of the runner's own filesystem, and the bytes would be handed on as if a
+    public registry had published them — a curated registry, a marker verification or a
+    fifteen-case smoke, all built from local files nobody audited.
+
+    Each case asserts the refusal happens *before* the network layer is reached, by patching
+    `urlopen` to fail loudly if it is ever called.
+    """
+
+    @staticmethod
+    def _never_called(*_args, **_kwargs):
+        """A stand-in for `urlopen` that fails if the guard let the request through."""
+        raise AssertionError("urlopen was reached for a refused scheme")
+
+    def test_the_cpic_fetcher_refuses_a_non_https_base(self):
+        """A `file:` CPIC base is refused: the allele registry is built from that response."""
+        with patch.object(build_pgx_registry, "CPIC_BASE", "file:///etc"):
+            with patch.object(build_pgx_registry.urllib.request, "urlopen", self._never_called):
+                with self.assertRaisesRegex(build_pgx_registry.CpicError, "non-HTTPS"):
+                    build_pgx_registry._get("passwd")
+
+    def test_the_bulk_export_fetcher_refuses_a_non_https_url(self):
+        """A `file:` bulk-export URL is refused: local bytes would become the target panel."""
+        with patch.object(expand_clinvar_targets.urllib.request, "urlopen", self._never_called):
+            with self.assertRaisesRegex(RuntimeError, "non-HTTPS"):
+                expand_clinvar_targets._fetch("file:///etc/passwd")
+
+    def test_the_dbsnp_fetcher_refuses_a_non_https_endpoint(self):
+        """A `file:` dbSNP endpoint is refused: it is the authority the marker table is checked against."""
+        with patch.object(verify_provenance_markers, "REFSNP_URL", "file:///etc/{rsid}"):
+            with patch.object(
+                verify_provenance_markers.urllib.request, "urlopen", self._never_called
+            ):
+                with self.assertRaisesRegex(
+                    verify_provenance_markers.MarkerVerificationError, "non-HTTPS"
+                ):
+                    verify_provenance_markers.fetch_refsnp("rs1800562")
+
+    def test_https_is_still_admitted(self):
+        """The negative control: the guard must not refuse the scheme every caller uses."""
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = json.dumps([]).encode()
+        with patch.object(build_pgx_registry.urllib.request, "urlopen", return_value=response):
+            self.assertEqual(build_pgx_registry._get("gene"), [])
+
+
 class SharedHttpRetryPolicyTest(unittest.TestCase):
     """The same retry policy, applied by the dbSNP and ClinVar fetchers."""
     @staticmethod

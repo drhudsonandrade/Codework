@@ -215,7 +215,7 @@ class TemplateV3ContractTest(unittest.TestCase):
 
     def test_poppler_failure_keeps_the_converter_diagnostics(self):
         """A poppler failure keeps the converter's diagnostics instead of discarding them."""
-        import subprocess
+        import subprocess  # nosec B404
 
         from reporting.template_v3 import TemplateV3Error, _run_poppler
 
@@ -236,7 +236,7 @@ class TemplateV3ContractTest(unittest.TestCase):
 
     def test_poppler_timeout_fails_closed_with_page_context(self):
         """A poppler timeout fails closed and names the page it was on."""
-        import subprocess
+        import subprocess  # nosec B404
         from unittest.mock import patch
 
         from reporting.template_v3 import POPPLER_TIMEOUT_SECONDS, TemplateV3Error, _run_poppler

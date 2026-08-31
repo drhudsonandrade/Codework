@@ -180,7 +180,14 @@ def wgs_qc_record(*, case_id: str, vcf_sha256: str = "b" * 64, **overrides: Any)
         "indel_count": 780_000, "cnv_count": 1_240, "sv_count": 9_800,
         "mtdna_mean_depth": 2_450.0, "contamination_estimate": 0.004,
     }
-    assert set(plausible) == set(REQUIRED_METRICS), "fixture drifted from the required set"
+    # Raised, not asserted: this is a guard on the fixture itself, and `assert` is stripped
+    # under `python -O`, which would leave a drifted fixture silently building records that
+    # omit a required metric. Bandit's B101 is right about the mechanism here.
+    if set(plausible) != set(REQUIRED_METRICS):
+        raise ValueError(
+            "fixture drifted from the required set: "
+            f"{sorted(set(plausible) ^ set(REQUIRED_METRICS))}"
+        )
     record = {
         "schema": WGS_QC_SCHEMA,
         "case_id": case_id,

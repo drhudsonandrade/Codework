@@ -28,7 +28,10 @@ def _load(name: str):
     path = ROOT / "scripts" / f"{name}.py"
     spec = importlib.util.spec_from_file_location(f"_script_{name}", path)
     module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
+    # Raised, not asserted: `assert` is stripped under `python -O`, and a loaderless spec
+    # would then fail on the next line with an AttributeError naming nothing useful.
+    if spec is None or spec.loader is None:
+        raise ImportError(f"no loader for {path}")
     spec.loader.exec_module(module)
     return module
 

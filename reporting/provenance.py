@@ -109,7 +109,12 @@ POST_DEPLOYMENT_WITNESS_ARTIFACT = "post-deployment-witness"
 #: asserting its own conclusion, so `_witness_binding_refusal` additionally requires the
 #: structured evidence each one summarises — see `_attestation_refusal` there, and the limit
 #: recorded with it: this binds the witness to a named commit, it does not authenticate it.
-WITNESS_REQUIRED = {
+# Bandit's B105 matches the key names `all_pass` and `passed` against its
+# hardcoded-password wordlist. Neither is a credential: they are booleans and a count in
+# the POST-DEPLOYMENT witness schema that `scripts/run_live_post_deployment_smoke.py`
+# writes and consumers read. Renaming them to satisfy a wordlist would change the field
+# names of a published artifact.
+WITNESS_REQUIRED = {  # nosec B105
     "post_deployment_status": "PASS",
     "all_pass": True,
     "bootstrap_verified": True,

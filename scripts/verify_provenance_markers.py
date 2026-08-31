@@ -89,8 +89,18 @@ def fetch_refsnp(rsid: str, *, timeout: int = 30) -> dict[str, Any]:
         REFSNP_URL.format(rsid=numeric),
         headers={"Accept": "application/json", "User-Agent": "genoma-provenance-verifier/1.0"},
     )
+    # Refuse any transport but HTTPS before the request is opened. `urlopen` honours
+    # `file:`, `ftp:` and `data:` as readily as `https:`, so a URL that reached this function
+    # from a constant someone edited, a CLI flag or a manifest could make a *download* read
+    # the local filesystem and hand the bytes to the caller as if a registry had published
+    # them. The scheme is the one property that decides which of those happens.
+    if request.type != "https":
+        raise MarkerVerificationError(
+            f"refusing a non-HTTPS transport for dbSNP: {request.full_url}"
+        )
+
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # nosec B310
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         raise MarkerVerificationError(

@@ -109,10 +109,18 @@ def _fetch(url: str, *, attempts: int = 4, accept: str = "application/json") -> 
     request = urllib.request.Request(
         url, headers={"Accept": accept, "User-Agent": "genoma-gene-disease-curation/1.0"}
     )
+    # Refuse any transport but HTTPS before the request is opened. `urlopen` honours
+    # `file:`, `ftp:` and `data:` as readily as `https:`, so a URL that reached this function
+    # from a constant someone edited, a CLI flag or a manifest could make a *download* read
+    # the local filesystem and hand the bytes to the caller as if a registry had published
+    # them. The scheme is the one property that decides which of those happens.
+    if request.type != "https":
+        raise CurationError(f"refusing a non-HTTPS transport: {url}")
+
     last: Exception | None = None
     for attempt in range(attempts):
         try:
-            with urllib.request.urlopen(request, timeout=120) as response:
+            with urllib.request.urlopen(request, timeout=120) as response:  # nosec B310
                 return response.read()
         except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
             last = exc

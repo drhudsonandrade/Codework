@@ -134,9 +134,17 @@ def _fetch(url: str, *, attempts: int = 4) -> bytes:
     """
     last: Exception | None = None
     request = urllib.request.Request(url, headers={"User-Agent": "genoma-target-expansion/1.0"})
+    # Refuse any transport but HTTPS before the request is opened. `urlopen` honours
+    # `file:`, `ftp:` and `data:` as readily as `https:`, so a URL that reached this function
+    # from a constant someone edited, a CLI flag or a manifest could make a *download* read
+    # the local filesystem and hand the bytes to the caller as if a registry had published
+    # them. The scheme is the one property that decides which of those happens.
+    if request.type != "https":
+        raise RuntimeError(f"refusing a non-HTTPS transport for a bulk export: {url}")
+
     for attempt in range(attempts):
         try:
-            with urllib.request.urlopen(request, timeout=1800) as response:
+            with urllib.request.urlopen(request, timeout=1800) as response:  # nosec B310
                 return response.read()
         except urllib.error.HTTPError as exc:
             last = exc

@@ -9,7 +9,11 @@ import math
 import os
 import re
 import shutil
-import subprocess
+
+# Imported to drive poppler's `pdftocairo`/`pdftoppm` when a DOCX is built from the
+# template pack. Bandit's B404 is an advisory on the import alone; `_run_poppler`, the
+# single call site, states why its argv is trusted.
+import subprocess  # nosec B404
 import tempfile
 import zipfile
 import zlib
@@ -761,7 +765,13 @@ def _run_poppler(command: list[str], page: int) -> None:
     image that the DOCX then renders as a blank.
     """
     try:
-        result = subprocess.run(
+        # Bandit's B603 asks a human to confirm the argv is trusted. It is: `command[0]` is a
+        # poppler binary this module resolved with `shutil.which` — the same lookup that
+        # decided the conversion could run at all, so the binary that was checked is the
+        # binary that runs — and every remaining element is a page number this loop produced
+        # or a path under the caller's temporary working directory. The list form goes
+        # straight to execve with no shell.
+        result = subprocess.run(  # nosec B603
             command,
             check=False,
             stdout=subprocess.DEVNULL,
@@ -790,7 +800,9 @@ def _convert_template_pages(
     Both are produced because Word needs the raster for display and the vector for print
     fidelity. Refuses up front when poppler is absent rather than emitting a partial pack.
     """
-    if shutil.which("pdftocairo") is None or shutil.which("pdftoppm") is None:
+    pdftocairo = shutil.which("pdftocairo")
+    pdftoppm = shutil.which("pdftoppm")
+    if pdftocairo is None or pdftoppm is None:
         raise TemplateV3Error(
             "DOCX template-v3 mode requires pdftocairo and pdftoppm (poppler-utils)"
         )
@@ -800,14 +812,14 @@ def _convert_template_pages(
         svg = work / f"page-{page}.svg"
         raw = work / f"page-{page}.svg.raw"
         _run_poppler(
-            ["pdftocairo", "-f", str(page), "-l", str(page), "-svg", str(template_pdf), str(raw)],
+            [pdftocairo, "-f", str(page), "-l", str(page), "-svg", str(template_pdf), str(raw)],
             page,
         )
         raw.rename(svg)
         stem = work / f"page-{page}-fallback"
         _run_poppler(
             [
-                "pdftoppm",
+                pdftoppm,
                 "-f",
                 str(page),
                 "-l",

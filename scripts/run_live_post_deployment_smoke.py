@@ -85,8 +85,19 @@ def http_json(base: str, method: str, path: str, payload: dict[str, Any] | None 
     request.add_header("Accept", "application/json")
     if body is not None:
         request.add_header("Content-Type", "application/json")
+    # `--base-url` is operator-supplied, and `urlopen` honours `file:`, `ftp:` and `data:` as
+    # readily as it honours HTTP. A `file:` base would make every case "succeed" against
+    # bytes on the runner's disk, and the witness would record fifteen passes for a service
+    # that was never contacted — the precise substitution `reporting/deployment_target.py`
+    # exists to prevent, arriving one layer lower. `http` stays admissible because the
+    # ceremony deliberately dials `http://127.0.0.1:8787`; the witness then classifies that
+    # target as loopback and refuses to certify a deployment on it.
+    if request.type not in {"http", "https"}:
+        raise SystemExit(
+            f"refusing a non-HTTP transport for the live smoke: {request.full_url}"
+        )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=30) as response:  # nosec B310
             raw = response.read()
             return response.status, json.loads(raw), raw
     except urllib.error.HTTPError as exc:

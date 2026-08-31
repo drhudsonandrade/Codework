@@ -26,6 +26,8 @@ from reporting import provenance
 def _complete_witness() -> dict[str, object]:
     """A witness that satisfies the full documented contract."""
     return {
+        # nosec B105 - `all_pass` and `passed` are witness-schema field names, not
+        # credentials; Bandit matches the key against its password wordlist.
         "post_deployment_status": "PASS",
         "all_pass": True,
         "bootstrap_verified": True,
@@ -71,6 +73,7 @@ class WitnessContractTest(unittest.TestCase):
         """The exact shape the previous contract accepted."""
         verdict = provenance.witness_verdict(
             {
+                # nosec B105 - witness-schema field names, not credentials.
                 "post_deployment_status": "PASS",
                 "all_pass": True,
                 "bootstrap_verified": True,
@@ -200,6 +203,7 @@ class LayoutFixtureCanStillRenderThePassFaceTest(unittest.TestCase):
         """The exemption is keyed to `fixture`, not to a shape a real witness could take."""
         verdict = provenance.witness_verdict(
             {
+                # nosec B105 - witness-schema field names, not credentials.
                 "post_deployment_status": "PASS",
                 "all_pass": True,
                 "bootstrap_verified": True,
