@@ -76,8 +76,10 @@ def _fetch_pages(
             raise CodacyAPIError("Codacy API returned a non-list data field")
         issues.extend(item for item in data if isinstance(item, dict))
 
-        pagination = payload.get("pagination") or {}
-        next_cursor = pagination.get("cursor") if isinstance(pagination, dict) else None
+        pagination = payload.get("pagination")
+        if pagination is not None and not isinstance(pagination, dict):
+            raise CodacyAPIError("Codacy API returned a non-object pagination field")
+        next_cursor = pagination.get("cursor") if pagination else None
         if not next_cursor:
             return issues
         next_cursor = str(next_cursor)
