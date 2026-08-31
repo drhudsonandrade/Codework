@@ -679,7 +679,7 @@ class WgsAlignConsumesVerifiedInputsTest(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()  # noqa: E731
+        digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
         input_qc = root / "input-qc.json"
         input_qc.write_text(
             json.dumps(
@@ -734,6 +734,9 @@ class WgsAlignConsumesVerifiedInputsTest(unittest.TestCase):
             text=True,
             env=env,
             timeout=120,
+            # Explicit: every caller reads `returncode` to assert the script refused, so a
+            # raising `check=True` would turn the property under test into an exception.
+            check=False,
         )
 
     def _assert_no_tool_ran(self, env):
