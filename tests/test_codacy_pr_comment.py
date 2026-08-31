@@ -49,7 +49,7 @@ const github = {{
   process.stdout.write(JSON.stringify({{ result, calls }}));
 }})().catch(err => {{ console.error(err); process.exit(1); }});
 """
-        completed = subprocess.run(  # nosec B603
+        completed = subprocess.run(  # nosec B603  # nosemgrep
             [NODE, "-e", program], text=True, capture_output=True, check=False
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)

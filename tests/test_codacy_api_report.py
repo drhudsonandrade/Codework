@@ -31,27 +31,34 @@ class CodacyApiReportTest(unittest.TestCase):
     def test_auth_rejection_retries_once_with_account_token_for_401_and_403(self):
         from scripts.codacy_api_report import fetch_issues
 
+        # Built by a factory, not defined inside the loop. A closure written in the loop
+        # body reads the loop variable when it is *called*, which gives the right status
+        # today only because the call happens in the same iteration; if it ever outlived
+        # the iteration, the 403 case would silently re-test 401 and report both as
+        # covered. The factory gives each opener its own scope, so the binding is a
+        # property of the structure rather than of the call timing — and, unlike keyword
+        # defaults, it does so without putting a mutable list in a signature.
+        def make_opener(status, seen):
+            """An opener that records each request and rejects the project token."""
+
+            def opener(request, timeout=30):
+                seen.append(dict(request.header_items()))
+                if request.get_header("Project-token"):
+                    raise urllib.error.HTTPError(
+                        request.full_url,
+                        status,
+                        "auth rejected",
+                        {},
+                        io.BytesIO(b"bad token"),
+                    )
+                return _Response({"data": [{"id": "issue-1"}], "pagination": {}})
+
+            return opener
+
         for status in (401, 403):
             with self.subTest(status=status):
                 seen = []
-
-                # `status` and `seen` are bound as defaults rather than closed over. The
-                # closure is built inside the loop and would otherwise read whatever the
-                # loop variable holds when it is *called*; that happens to be the right
-                # value today only because the call is in the same iteration. Binding makes
-                # the 403 case fail loudly if the call ever outlives its iteration, instead
-                # of quietly re-testing 401 twice and reporting both as covered.
-                def opener(request, timeout=30, *, status=status, seen=seen):
-                    seen.append(dict(request.header_items()))
-                    if request.get_header("Project-token"):
-                        raise urllib.error.HTTPError(
-                            request.full_url,
-                            status,
-                            "auth rejected",
-                            {},
-                            io.BytesIO(b"bad token"),
-                        )
-                    return _Response({"data": [{"id": "issue-1"}], "pagination": {}})
+                opener = make_opener(status, seen)
 
                 issues = fetch_issues(
                     "gh", "org", "repo", "project", "account", opener=opener
