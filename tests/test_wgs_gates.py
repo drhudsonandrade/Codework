@@ -4,7 +4,12 @@ import hashlib
 import json
 import os
 import shutil
-import subprocess
+
+# Imported to run the real `wgs_align_or_stage.sh` under test — the executable regressions
+# below exist precisely because asserting on the script's source text is not the same as
+# running it. Bandit's B404 is an advisory on the import alone; the single call site, in
+# `WgsAlignConsumesVerifiedInputsTest._run`, states why its argv is trusted.
+import subprocess  # nosec B404
 import tempfile
 import threading
 import unittest
@@ -585,6 +590,14 @@ class WgsInputPathContainmentTest(unittest.TestCase):
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ALIGN_SCRIPT = REPO_ROOT / "scripts" / "wgs_align_or_stage.sh"
 
+#: Absolute path to the interpreter that runs the script under test, resolved once from this
+#: process's own PATH. Not the bare name `bash`: the child is handed a PATH whose first entry
+#: is a directory of stub tools this test writes, so a bare name is looked up *there* first,
+#: and a stub that happened to be called `bash` would silently replace the interpreter while
+#: the assertions kept passing. `None` here is unreachable at the call site — the class is
+#: skipped unless `_tools_available()`, which already requires `shutil.which("bash")`.
+BASH = shutil.which("bash")
+
 SAMTOOLS_STUB = """#!/usr/bin/env bash
 echo "samtools $*" >> "$STUB_LOG"
 sub="$1"; shift
@@ -699,10 +712,18 @@ class WgsAlignConsumesVerifiedInputsTest(unittest.TestCase):
         return {"manifest": manifest, "ref": ref, "out": root / "out" / "sample.bam", "qc": input_qc, "r1": r1}, env
 
     def _run(self, paths, env):
-        """Run the real alignment script against the stub toolchain and capture everything."""
-        return subprocess.run(
+        """Run the real alignment script against the stub toolchain and capture everything.
+
+        Bandit's B603 asks a human to confirm the argv is trusted before the call is made.
+        This is that confirmation: every element is either a constant of this repository
+        (`BASH`, resolved from PATH at import; `ALIGN_SCRIPT`, a path under `REPO_ROOT`) or a
+        file this test itself created under its own temporary directory. Nothing in it comes
+        from outside the process, and there is no shell — the list form is passed straight to
+        `execve`. The suppression names the single rule and sits on the single line it covers.
+        """
+        return subprocess.run(  # nosec B603
             [
-                "bash",
+                BASH,
                 str(ALIGN_SCRIPT),
                 str(paths["manifest"]),
                 str(paths["ref"]),
@@ -766,6 +787,32 @@ class WgsAlignConsumesVerifiedInputsTest(unittest.TestCase):
             result = self._run(paths, env)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("records no verified r1", result.stderr)
+            self._assert_no_tool_ran(env)
+
+    def test_a_stub_named_bash_does_not_replace_the_interpreter(self):
+        """The harness runs the real shell, not whatever the stub directory happens to hold.
+
+        `_fixture` puts its stub directory first on the child's PATH so `samtools` and
+        `bwa-mem2` resolve to the stubs. CPython resolves a bare `"bash"` in the argv against
+        that *same* PATH, so a stub of that name would run instead of the interpreter — and
+        every refusal test in this class would then pass by never executing the script at
+        all, which is the failure mode they exist to detect. `BASH` is therefore an absolute
+        path resolved at import, and this plants the trap to prove it.
+
+        The fixture is the one whose gate verdict is refused, because the script exits before
+        reaching any tool. That matters: `SAMTOOLS_STUB` and `BWA_STUB` open with
+        `#!/usr/bin/env bash`, which resolves `bash` through the same stub-first PATH, so a
+        run that got as far as a tool would meet the planted stub by that second route and
+        the result would no longer isolate the interpreter this harness chose.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            paths, env = self._fixture(Path(tmp), status="NÃO DISPONÍVEL")
+            hijack = Path(env["PATH"].split(os.pathsep)[0]) / "bash"
+            hijack.write_text("#!/bin/sh\nexit 99\n", encoding="utf-8")
+            hijack.chmod(0o755)
+            result = self._run(paths, env)
+            self.assertNotEqual(result.returncode, 99, "the planted stub ran as the interpreter")
+            self.assertIn("input gate did not verify this sample", result.stderr)
             self._assert_no_tool_ran(env)
 
     def test_verified_inputs_reach_the_aligner(self):
