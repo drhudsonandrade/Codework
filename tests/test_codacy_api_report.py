@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 import urllib.error
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import patch
 
@@ -38,10 +39,10 @@ class CodacyApiReportTest(unittest.TestCase):
         # covered. The factory gives each opener its own scope, so the binding is a
         # property of the structure rather than of the call timing — and, unlike keyword
         # defaults, it does so without putting a mutable list in a signature.
-        def make_opener(status, seen):
+        def make_opener(status, seen) -> Callable[..., _Response]:
             """An opener that records each request and rejects the project token."""
 
-            def opener(request, timeout=30):
+            def opener(request, timeout=30) -> _Response:
                 seen.append(dict(request.header_items()))
                 if request.get_header("Project-token"):
                     raise urllib.error.HTTPError(
@@ -98,6 +99,33 @@ class CodacyApiReportTest(unittest.TestCase):
         self.assertEqual([item["id"] for item in issues], [1, 2])
         self.assertEqual(len(urls), 2)
         self.assertIn("cursor=next+page", urls[1])
+
+    def test_a_payload_that_is_not_a_json_object_is_refused_before_it_is_read(self):
+        """An array or scalar body must raise a named error, not `AttributeError`.
+
+        `data`, `pagination` and `analyzed` are each validated, but every one of those checks
+        reads a key off the payload. A JSON array or scalar — which an error page or an
+        intercepting proxy can return with a 200 — reached `payload.get` first and raised
+        `AttributeError: 'list' object has no attribute 'get'`, replacing the error that names
+        the problem with a traceback that names the wrong one. Raised by review on this PR.
+        """
+        from scripts.codacy_api_report import CodacyAPIError, fetch_issues
+
+        def make_opener(body) -> Callable[..., _Response]:
+            """An opener that answers with this decoded body, whatever its JSON type."""
+
+            def opener(request, timeout=30) -> _Response:
+                return _Response(body)
+
+            return opener
+
+        for body in ([{"id": 1}], "unauthorized", 7, None):
+            with self.subTest(body=body):
+                opener = make_opener(body)
+
+                with self.assertRaises(CodacyAPIError) as caught:
+                    fetch_issues("gh", "org", "repo", "project", "", opener=opener)
+                self.assertIn("JSON object", str(caught.exception))
 
     def test_non_object_pagination_is_rejected(self):
         from scripts.codacy_api_report import CodacyAPIError, fetch_issues
@@ -305,11 +333,21 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
     def test_a_missing_analyzed_flag_is_refused_rather_than_assumed_true(self):
         from scripts.codacy_api_report import CodacyAPIError, fetch_pull_request_issues
 
+        # A factory again, not a keyword default. Binding the loop variable as `payload=payload`
+        # works, but puts a mutable dict in a signature — pylint W0102, and the finding Codacy
+        # reported for this pull request. The factory binds by scope instead, which needs no
+        # default at all.
+        def make_opener(payload) -> Callable[..., _Response]:
+            """An opener that answers every page with this payload."""
+
+            def opener(request, timeout=30) -> _Response:
+                return _Response(payload)
+
+            return opener
+
         for payload in ({"data": []}, {"analyzed": "true", "data": []}):
             with self.subTest(payload=payload):
-
-                def opener(request, timeout=30, payload=payload):
-                    return _Response(payload)
+                opener = make_opener(payload)
 
                 with self.assertRaises(CodacyAPIError) as caught:
                     fetch_pull_request_issues(
@@ -478,10 +516,10 @@ class CodacyScopeDegradationTest(unittest.TestCase):
     """
 
     @staticmethod
-    def _opener(pull_request_status=401, repository_payload=None):
+    def _opener(pull_request_status=401, repository_payload=None) -> Callable[..., _Response]:
         """An opener that rejects the pull-request endpoint and serves the repository one."""
 
-        def opener(request, timeout=30):
+        def opener(request, timeout=30) -> _Response:
             if "/pull-requests/" in request.full_url:
                 raise urllib.error.HTTPError(
                     request.full_url,

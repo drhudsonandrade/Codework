@@ -10,8 +10,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Callable, Iterable, NamedTuple
+from typing import NamedTuple
 
 AUTH_FAILURE_CODES = {401, 403}
 API_ROOT = "https://app.codacy.com/api/v3/analysis/organizations"
@@ -169,6 +170,15 @@ def _paged_payloads(endpoint: _Endpoint, token_header: str, token: str, *, opene
         request = _page_request(endpoint, token_header, token, cursor)
         with opener(request, timeout=30) as response:
             payload = json.load(response)
+        # Checked before anything reads a key off it. `data`, `pagination` and `analyzed` are
+        # each validated below, but only once `payload` is known to be a mapping: a JSON array
+        # or scalar — which an error page or an intercepting proxy can return with a 200 —
+        # would otherwise reach `payload.get` and raise `AttributeError`, replacing a
+        # `CodacyAPIError` naming the problem with a traceback that names the wrong one.
+        if not isinstance(payload, dict):
+            raise CodacyAPIError(
+                f"Codacy API returned a {type(payload).__name__} where a JSON object was expected"
+            )
         yield payload
 
         pagination = payload.get("pagination")

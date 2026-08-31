@@ -114,7 +114,7 @@ serve API v3 and only the working one has local evidence behind it.
 
 If no token is configured the workflow reports `NÃO DISPONÍVEL` and does not pretend that Codacy was queried. `NÃO DISPONÍVEL` is the repository's operational status vocabulary; it is intentionally retained even though the surrounding documentation is English.
 
-Before contacting Codacy, the workflow runs the reporter regression tests. They cover credential preference and account-token fallback on both scopes, missing-credential candidate selection, cursor pagination, the pull-request endpoint's path and `status=new` filter, the `analyzed` fail-closed rule, delta unwrapping, pull-request number validation, Markdown cell normalization, artifact shape, and create/update behavior for the pull-request comment with mocked APIs.
+Before contacting Codacy, the workflow runs the reporter regression tests. They cover credential preference and account-token fallback on both scopes, missing-credential candidate selection, cursor pagination, refusal of a response body that is not a JSON object, the pull-request endpoint's path and `status=new` filter, the `analyzed` fail-closed rule, delta unwrapping, pull-request number validation, Markdown cell normalization, artifact shape, and create/update behavior for the pull-request comment with mocked APIs.
 
 ## Manual setup
 

@@ -20,7 +20,7 @@ NODE = shutil.which("node")
 class CodacyPrCommentTest(unittest.TestCase):
     """The one report comment is created once and updated thereafter."""
 
-    def _run_case(self, existing):
+    def _run_case(self, existing) -> dict:
         """Run the real upsert against a stub Octokit, with these comments already present.
 
         Bandit's B603 asks a human to confirm the argv is trusted before the call is made.
