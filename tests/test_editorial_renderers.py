@@ -8,6 +8,7 @@ from ruleset_test_support import RULESET
 
 
 def final_data(report_id="01"):
+    """A payload complete enough for a FINAL render of this report."""
     from reporting.provenance import fixture_payload
 
     data = fixture_payload(
@@ -26,7 +27,9 @@ def final_data(report_id="01"):
 
 
 class EditorialRendererTest(unittest.TestCase):
+    """What the editorial renderer produces, and what it refuses to produce unattended."""
     def test_design_tokens_match_v3_visual_system(self):
+        """The design tokens are the v3 visual system's, not arbitrary colours."""
         from reporting.editorial_v3 import DESIGN
         self.assertEqual(DESIGN["navy"], "0B1F33")
         self.assertEqual(DESIGN["teal"], "0F766E")
@@ -35,6 +38,7 @@ class EditorialRendererTest(unittest.TestCase):
         self.assertEqual(DESIGN["a4_mm"], (210, 297))
 
     def test_engine_exposes_exact_v3_cover_metadata(self):
+        """The engine exposes exactly the v3 cover metadata."""
         from reporting.engine import render_document
 
         rendered = render_document("01", final_data(), mode="FINAL")
@@ -46,6 +50,7 @@ class EditorialRendererTest(unittest.TestCase):
         self.assertIn("Organizar achados germinativos", meta["purpose"])
 
     def test_report_specific_accents_follow_v3_models(self):
+        """Each report carries the accent colour its v3 model declares."""
         from reporting.engine import render_document
 
         expected = {"01": "0F766E", "02": "2563EB", "03": "7C3AED", "04": "166534", "05": "475467", "06": "B42318", "07": "A16207", "08": "0F766E", "09": "475467", "10": "0B1F33", "11": "0B1F33"}
@@ -53,6 +58,7 @@ class EditorialRendererTest(unittest.TestCase):
             self.assertEqual(render_document(report_id, final_data(report_id), mode="FINAL")["metadata"]["accent"], accent)
 
     def test_payload_cannot_self_authorize_a_programmatic_final_render(self):
+        """A payload cannot authorize its own programmatic FINAL render."""
         from reporting.editorial_v3 import UnapprovedRendererError, write_editorial_bundle
         from reporting.engine import render_document
 
@@ -63,6 +69,7 @@ class EditorialRendererTest(unittest.TestCase):
                 write_editorial_bundle(rendered, Path(td), stem="refused")
 
     def test_programmatic_disclosure_preserves_anchored_limitations(self):
+        """The programmatic-render disclosure preserves the limitations already anchored in the payload."""
         from reporting.editorial_v3 import _disclose_programmatic_render
         from reporting.engine import render_document
 
@@ -78,6 +85,7 @@ class EditorialRendererTest(unittest.TestCase):
         )
 
     def test_disclosure_is_present_in_json_bundle_too(self):
+        """The disclosure reaches the JSON bundle too, not only the rendered page."""
         from reporting.editorial_v3 import prepare_editorial_render
         from reporting.engine import render_document, write_bundle
 
@@ -141,6 +149,7 @@ class EditorialRendererTest(unittest.TestCase):
             prepare_editorial_render(rendered)
 
     def test_final_report_writes_real_pdf_and_editable_docx(self):
+        """A FINAL report writes a real PDF and an editable DOCX."""
         from reporting.engine import render_document
         from reporting.editorial_v3 import write_editorial_bundle
 

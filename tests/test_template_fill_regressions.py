@@ -6,7 +6,9 @@ from reporting.template_fill import _resolve
 
 
 class TemplateFillAssayTest(unittest.TestCase):
+    """Which artifact each template placeholder resolves against."""
     def test_wgs_projection_uses_projection_assay_and_qc(self):
+        """A WGS projection resolves against the projection assay and its QC."""
         payload = {
             "case_id": "CASE",
             "input": {"schema": "wgs_vcf_projection_v1"},
@@ -18,6 +20,7 @@ class TemplateFillAssayTest(unittest.TestCase):
         self.assertIn("VCF", _resolve("01", "TIPO_AMOSTRA_E_IDENTIFICADOR", payload))
 
     def test_array_uses_array_qc(self):
+        """An array input resolves against the array QC."""
         payload = {
             "case_id": "CASE",
             "input": {"schema": "raw_snp_array_v1"},
@@ -27,6 +30,7 @@ class TemplateFillAssayTest(unittest.TestCase):
         self.assertIn("array", _resolve("01", "METODO", payload))
 
     def test_array_manifest_list_exposes_array_qc_evidence_id(self):
+        """A manifest given as a list still exposes the array QC evidence id."""
         payload = {
             "case_id": "CASE",
             "input": {"schema": "raw_snp_array_v1"},
@@ -41,6 +45,7 @@ class TemplateFillAssayTest(unittest.TestCase):
         self.assertEqual(_resolve("01", "RELATORIO_QC", payload), "array-qc")
 
     def test_pgx_manifest_exposes_both_bound_artifacts(self):
+        """A pharmacogenomic manifest exposes both bound artifacts, not only the passport."""
         payload = {
             "case_id": "CASE",
             "input": {"schema": "raw_snp_array_v1"},
@@ -58,6 +63,7 @@ class TemplateFillAssayTest(unittest.TestCase):
         )
 
     def test_clinical_counts_use_their_declared_fields(self):
+        """The clinical counts are taken from the fields the findings actually declare."""
         payload = {
             "findings": [
                 {
@@ -77,6 +83,7 @@ class TemplateFillAssayTest(unittest.TestCase):
         self.assertEqual(_resolve("09", "N_CEGOS", payload), "1")
 
     def test_missing_count_fields_remain_unavailable(self):
+        """A missing count field stays unavailable rather than resolving to zero."""
         payload = {"findings": [{"id": "finding"}]}
         failures: list[dict[str, str]] = []
         self.assertIsNone(_resolve("01", "N_ACHADOS_P1_P2", payload, failures))

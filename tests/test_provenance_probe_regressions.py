@@ -13,7 +13,9 @@ from array_pipeline.provenance_probe import (
 
 
 class ProvenanceProbeRegressionTest(unittest.TestCase):
+    """What the provenance marker table must declare before the probe will use it."""
     def _write_markers(self, root: Path, marker: object) -> Path:
+        """Write a marker table containing exactly this marker."""
         path = root / "markers.json"
         path.write_text(json.dumps({
             "schema": "genoma-array-provenance-markers-v1",
@@ -23,6 +25,7 @@ class ProvenanceProbeRegressionTest(unittest.TestCase):
         return path
 
     def test_marker_entries_must_be_objects(self):
+        """A marker entry that is not an object is refused."""
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             for marker in (None, 7, "rs1"):
@@ -31,6 +34,7 @@ class ProvenanceProbeRegressionTest(unittest.TestCase):
                         load_markers(self._write_markers(root, marker))
 
     def test_rsid_must_be_a_non_empty_string(self):
+        """An rsid that is not a non-empty string is refused."""
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             for marker in ({}, {"rsid": None}, {"rsid": ""}, {"rsid": "   "}, {"rsid": 7}):
@@ -39,6 +43,7 @@ class ProvenanceProbeRegressionTest(unittest.TestCase):
                         load_markers(self._write_markers(root, marker))
 
     def test_marker_positions_must_be_positive_integers(self):
+        """Marker positions must be positive integers, and True is not one."""
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             for position in (None, "abc", 0, -1, True):
@@ -55,6 +60,7 @@ class ProvenanceProbeRegressionTest(unittest.TestCase):
                         load_markers(self._write_markers(root, marker))
 
     def test_duplicate_rsids_are_rejected_case_insensitively(self):
+        """Duplicate rsids are rejected case-insensitively."""
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "markers.json"
             marker = {
@@ -74,6 +80,7 @@ class ProvenanceProbeRegressionTest(unittest.TestCase):
                 load_markers(path)
 
     def test_invalid_plus_allele_is_domain_error_not_keyerror(self):
+        """An invalid plus-strand allele is a domain error, not a KeyError escaping the parser."""
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "markers.json"
             path.write_text(json.dumps({
@@ -90,6 +97,7 @@ class ProvenanceProbeRegressionTest(unittest.TestCase):
                 load_markers(path)
 
     def test_plus_alleles_must_be_distinct(self):
+        """The two plus-strand alleles must be distinct."""
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "markers.json"
             path.write_text(json.dumps({
@@ -108,6 +116,7 @@ class ProvenanceProbeRegressionTest(unittest.TestCase):
                 load_markers(path)
 
     def test_duplicate_and_unresolved_markers_are_discarded(self):
+        """Duplicate and unresolved markers are discarded rather than probed."""
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "array.csv"
             path.write_text(

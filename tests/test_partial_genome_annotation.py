@@ -13,7 +13,9 @@ from array_pipeline.targets import build_query_plan, load_target_manifest
 
 
 class PartialGenomeAnnotationTest(unittest.TestCase):
+    """The bounded annotation plane over a partial genome."""
     def _fixture(self, root: Path) -> Path:
+        """A gzipped array fixture with one target locus and one off-target locus."""
         p = root / "array.csv.gz"
         with gzip.open(p, "wt", encoding="utf-8", newline="") as f:
             f.write("RSID,CHROMOSOME,POSITION,CONSENSUS_RESULT,STATUS,GENERA_RESULT,MYHERITAGE_RESULT,SOURCES\n")
@@ -22,6 +24,7 @@ class PartialGenomeAnnotationTest(unittest.TestCase):
         return p
 
     def _evidence(self, array: Path, *, asserted_value: str) -> str:
+        """A build/strand attestation bound to this array by its SHA-256."""
         sha = hashlib.sha256(array.read_bytes()).hexdigest()
         return json.dumps({
             "status": "VERIFICADO",
@@ -76,6 +79,7 @@ class PartialGenomeAnnotationTest(unittest.TestCase):
             self.assertEqual(agreeing["gates"]["BUILD_STRAND_GATE"]["state"], "PASS")
 
     def test_plan_only_is_target_first_and_not_verified_evidence(self):
+        """plan-only is target-first and is PROPOSTO, never verified evidence."""
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             array = self._fixture(root)
@@ -102,6 +106,7 @@ class PartialGenomeAnnotationTest(unittest.TestCase):
             self.assertIn("genome-wide negative/exclusion claims", result["unsupported_claims"])
 
     def test_query_budget_fails_closed(self):
+        """Exceeding the query budget fails closed rather than truncating the plan."""
         manifest = {
             "schema": "genoma-partial-genome-targets-v1",
             "targets": [
@@ -113,6 +118,7 @@ class PartialGenomeAnnotationTest(unittest.TestCase):
             build_query_plan({"rs1", "rs2"}, manifest, max_targets=1)
 
     def test_default_manifest_is_well_formed_and_bounded(self):
+        """The shipped default manifest is well formed and within its declared bounds."""
         path = Path(__file__).resolve().parents[1] / "config" / "partial_genome_annotation_targets.json"
         payload = load_target_manifest(path)
         self.assertEqual(payload["schema"], "genoma-partial-genome-targets-v1")

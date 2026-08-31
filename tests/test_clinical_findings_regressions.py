@@ -16,6 +16,7 @@ from reporting.case_dossier import SEX_FEMALE, SEX_INTERSEX, SEX_NOT_RECORDED
 
 
 def _pathogenic_x_linked(genotype: str, sex: str | None):
+    """The interpretation of a pathogenic X-linked locus for this genotype and sex at birth."""
     return _interpretation(
         {
             "classification": "OBSERVADO",
@@ -41,7 +42,9 @@ def _pathogenic_x_linked(genotype: str, sex: str | None):
 
 
 class ClinicalFindingsRegressionTest(unittest.TestCase):
+    """How clinical findings read validity, inheritance and sex at birth."""
     def test_clingen_disease_lists_normalise_the_mode_of_inheritance(self):
+        """ClinGen disease lists normalise the mode of inheritance."""
         validity = _validity_for("GENE", {
             "gene_validity": {
                 "GENE": {
@@ -58,6 +61,7 @@ class ClinicalFindingsRegressionTest(unittest.TestCase):
         self.assertEqual(validity["recessive_diseases"], ["Fixture disease"])
 
     def test_gencc_disease_lists_normalise_each_mode_of_inheritance(self):
+        """GenCC disease lists normalise each mode of inheritance, not only the first."""
         validity = _validity_for("GENE", {
             "gene_validity": {
                 "GENE": {
@@ -86,6 +90,7 @@ class ClinicalFindingsRegressionTest(unittest.TestCase):
         )
 
     def test_registry_totals_recompute_stored_validity_summaries(self):
+        """Registry totals are recomputed rather than read from the stored summary."""
         totals = _registry_totals({
             "gene_validity": {
                 "STALE": {
@@ -112,18 +117,21 @@ class ClinicalFindingsRegressionTest(unittest.TestCase):
         self.assertEqual(totals["dominant_genes_established"], 0)
 
     def test_unknown_female_zygosity_is_not_described_as_homozygous(self):
+        """An undetermined female zygosity is not described as homozygous."""
         result = _pathogenic_x_linked("DI", SEX_FEMALE)
         self.assertEqual(result["kind"], GENOTIPO_DE_RISCO)
         self.assertIn("zigosidade não foi determinada", result["basis"])
         self.assertNotIn("homozigoto", result["basis"].lower())
 
     def test_intersex_has_its_own_x_linked_refusal(self):
+        """Intersex has its own X-linked refusal, distinct from an unrecorded sex."""
         result = _pathogenic_x_linked("AG", SEX_INTERSEX)
         self.assertIn("intersexo", result["basis"])
         self.assertNotIn("não registra o sexo", result["basis"])
         self.assertNotIn("Preencha", result["basis"])
 
     def test_explicit_not_recorded_is_distinct_from_an_absent_field(self):
+        """An explicit 'not recorded' is distinct from an absent field, and asks for nothing."""
         explicit = _pathogenic_x_linked("AG", SEX_NOT_RECORDED)["basis"]
         absent = _pathogenic_x_linked("AG", None)["basis"]
         self.assertIn("explicitamente", explicit)
@@ -131,6 +139,7 @@ class ClinicalFindingsRegressionTest(unittest.TestCase):
         self.assertIn("Preencha", absent)
 
     def test_qc_reservations_travel_with_the_clinical_payload(self):
+        """QC reservations travel with the clinical payload rather than being dropped."""
         reservations = [{"gate": "LIMITED_INTERPRETATION_GATE", "state": "BLOCKED"}]
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

@@ -35,7 +35,9 @@ def _anchored_compiler(case_id: str = "CASE-1", report_id: str = "01") -> Payloa
 
 
 class ReportingProvenanceRegressionTest(unittest.TestCase):
+    """What the provenance compiler refuses to let a caller overwrite after the fact."""
     def test_extra_cannot_replace_the_compiled_report_identity(self):
+        """`extra` cannot replace the compiled report identity."""
         compiler = _anchored_compiler()
         with self.assertRaisesRegex(ProvenanceError, "report_id"):
             compiler.compile(extra={"report_id": "02"})
@@ -183,6 +185,7 @@ class ReportingProvenanceRegressionTest(unittest.TestCase):
         self.assertEqual([], provenance_blockers(payload))
 
     def test_post_compile_publication_gate_edit_is_detected(self):
+        """An edit to the publication gate after compilation is detected."""
         payload = fixture_payload(
             case_id="CASE-1",
             report_id="01",
@@ -196,6 +199,7 @@ class ReportingProvenanceRegressionTest(unittest.TestCase):
         )
 
     def test_removed_section_is_detected_from_its_remaining_anchor(self):
+        """A removed section is detected from the anchor it left behind."""
         payload = fixture_payload(
             case_id="CASE-1",
             report_id="01",
@@ -209,6 +213,7 @@ class ReportingProvenanceRegressionTest(unittest.TestCase):
         )
 
     def test_removed_finding_uncertainties_is_detected(self):
+        """Removed finding uncertainties are detected."""
         compiler = PayloadCompiler(case_id="CASE-1", report_id="01")
         for name, value in (
             ("summary", "fixture"),

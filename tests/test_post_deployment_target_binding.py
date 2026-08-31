@@ -22,21 +22,26 @@ def _target(addresses: list[str]) -> dict[str, object]:
 
 
 class DeploymentTargetRefusalTest(unittest.TestCase):
+    """Which recorded targets a post-deployment witness may be read as certifying."""
     def test_a_witness_without_a_target_is_refused(self):
+        """A witness with no target block, or one that is not a mapping, is refused."""
         self.assertIsNotNone(deployment_target.refusal(None))
         self.assertIsNotNone(deployment_target.refusal("loopback"))
 
     def test_loopback_cannot_certify_a_deployment(self):
+        """Loopback cannot certify a deployment: the verdict stays PENDENTE."""
         refusal = deployment_target.refusal(_target(["127.0.0.1"]))
         self.assertIsNotNone(refusal)
         self.assertIn("PENDENTE", refusal)
 
     def test_unresolved_cannot_certify_a_deployment(self):
+        """An unresolved target cannot certify a deployment either."""
         refusal = deployment_target.refusal(_target([]))
         self.assertIsNotNone(refusal)
         self.assertIn("PENDENTE", refusal)
 
     def test_reachable_classes_pass_this_particular_gate(self):
+        """Negative control: the reachable classes pass this particular gate."""
         for addresses in (["10.0.0.5"], ["93.184.216.34"]):
             with self.subTest(addresses=addresses):
                 self.assertIsNone(deployment_target.refusal(_target(addresses)))
@@ -60,6 +65,7 @@ class DeploymentTargetRefusalTest(unittest.TestCase):
 
 
 class WitnessProducerRecordsTargetTest(unittest.TestCase):
+    """The producer writes the target field the gate above reads."""
     def test_the_live_smoke_records_the_target_it_ran_against(self):
         """Producer and gate are a pair: a gate demanding a field nobody writes is dead.
 

@@ -15,7 +15,9 @@ from array_pipeline.completeness import (
 
 
 class CompletenessRegressionTest(unittest.TestCase):
+    """How the completeness matrix classifies genotypes and reconciles duplicate rows."""
     def test_multibase_assessed_alleles_are_not_compared_character_by_character(self):
+        """A multi-base assessed allele is compared as a unit, not character by character."""
         classification, basis = _classify(
             {"RESULT": "AA", "__orientation_status": "VERIFICADO"},
             "raw_snp_array_v1",
@@ -27,6 +29,7 @@ class CompletenessRegressionTest(unittest.TestCase):
         self.assertIn("não é comparável", basis)
 
     def test_no_call_duplicate_does_not_create_a_divergent_genotype_conflict(self):
+        """A no-call duplicate does not create a divergent genotype conflict."""
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             input_path = root / "array.csv"
@@ -73,6 +76,7 @@ class CompletenessRegressionTest(unittest.TestCase):
         self.assertNotIn("divergentes", entry["basis"])
 
     def test_no_call_before_valid_duplicate_preserves_the_valid_call(self):
+        """A no-call before a valid duplicate preserves the valid call."""
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             input_path = root / "array.csv"
@@ -119,6 +123,7 @@ class CompletenessRegressionTest(unittest.TestCase):
         self.assertEqual(entry["genotype"], "AA")
 
     def test_duplicate_rows_with_no_valid_call_remain_no_call(self):
+        """Duplicate rows with no valid call between them remain a no-call."""
         classification, _basis = _classify(
             {"RESULT": "--", "__orientation_status": "VERIFICADO"},
             "raw_snp_array_v1",

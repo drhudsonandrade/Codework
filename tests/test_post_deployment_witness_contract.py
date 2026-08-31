@@ -61,6 +61,7 @@ def _complete_witness() -> dict[str, object]:
 
 
 class WitnessContractTest(unittest.TestCase):
+    """What a post-deployment witness must record before its PASS may be read."""
     def test_the_complete_witness_passes(self):
         """The accepting case, so the refusals below are not passing vacuously."""
         verdict = provenance.witness_verdict(_complete_witness(), sha256="a" * 64)
@@ -106,6 +107,7 @@ class WitnessContractTest(unittest.TestCase):
                 self.assertEqual(verdict["status"], "PENDENTE")
 
     def test_the_gate_must_be_named_and_passing(self):
+        """The gate must be named and passing; neither absence nor a BLOCKED state qualifies."""
         for gate in (
             None,
             {},
@@ -155,6 +157,7 @@ class LayoutFixtureCanStillRenderThePassFaceTest(unittest.TestCase):
     """
 
     def test_the_fixture_renders_the_pass_face(self):
+        """The layout fixture renders the PASS face when asked for it."""
         payload = provenance.fixture_payload(
             case_id="CASE-1", report_id="01", summary="fixture",
             basis="fixture de QA de layout", post_deployment_status="PASS",
@@ -163,6 +166,7 @@ class LayoutFixtureCanStillRenderThePassFaceTest(unittest.TestCase):
         self.assertEqual("PASS", payload["post_deployment"]["status"])
 
     def test_the_default_is_still_pendente(self):
+        """The fixture's default is still PENDENTE, so a PASS face is never obtained by accident."""
         payload = provenance.fixture_payload(
             case_id="CASE-1", report_id="01", summary="fixture", basis="fixture",
         )
@@ -212,6 +216,7 @@ class LayoutFixtureCanStillRenderThePassFaceTest(unittest.TestCase):
         self.assertEqual("PENDENTE", verdict["status"])
 
     def test_only_the_two_documented_faces_are_offered(self):
+        """Only the two documented faces are offered; anything else raises."""
         for value in ("VERIFICADO", "FAIL", "", None, "pass"):
             with self.subTest(post_deployment_status=value):
                 with self.assertRaises(provenance.ProvenanceError):

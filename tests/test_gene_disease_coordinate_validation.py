@@ -7,6 +7,7 @@ from scripts import curate_gene_disease as CURATE
 
 
 def _summary(sequence: str, position: int, deleted: str) -> dict:
+    """A ClinVar summary placing the variant at this SPDI."""
     return {
         "result": {
             "uids": ["1"],
@@ -30,7 +31,9 @@ def _summary(sequence: str, position: int, deleted: str) -> dict:
 
 
 class ClinvarCoordinateIdentityTests(unittest.TestCase):
+    """A ClinVar record is accepted only when its own coordinate matches the target's."""
     def _run(self, summary: dict) -> dict:
+        """Run the curation against this ClinVar summary."""
         search = {"esearchresult": {"idlist": ["1"]}}
         placement = {
             "GRCh38": {
@@ -48,6 +51,7 @@ class ClinvarCoordinateIdentityTests(unittest.TestCase):
             return CURATE.fetch_clinvar_conditions("rs123")
 
     def test_dbsnp_failure_is_local_to_one_locus(self):
+        """A dbSNP failure is local to one locus and does not abort the curation."""
         from scripts.verify_provenance_markers import MarkerVerificationError
 
         with patch.object(
@@ -66,6 +70,7 @@ class ClinvarCoordinateIdentityTests(unittest.TestCase):
         self.assertEqual(second["records"][0]["accession"], "VCV2")
 
     def test_clinvar_pagination_collects_every_uid(self):
+        """ClinVar pagination collects every uid, not only the first page."""
         placement = {
             "GRCh38": {
                 "seq_id": "NC_000001.11",
@@ -141,6 +146,7 @@ class ClinvarCoordinateIdentityTests(unittest.TestCase):
                 self.assertNotIn("não retorna registro", message)
 
     def test_clinvar_fetch_failure_is_local_to_one_locus(self):
+        """A ClinVar fetch failure is local to one locus."""
         with patch.object(
             CURATE,
             "fetch_clinvar_conditions",
@@ -156,18 +162,21 @@ class ClinvarCoordinateIdentityTests(unittest.TestCase):
         self.assertEqual(second["status"], "VERIFICADO")
 
     def test_matching_grch38_spdi_is_verified(self):
+        """A matching GRCh38 SPDI is VERIFICADO."""
         result = self._run(_summary("NC_000001.11", 100, "A"))
         self.assertEqual(result["status"], "VERIFICADO")
         self.assertEqual(len(result["records"]), 1)
         self.assertEqual(result["records"][0]["coordinate_check"]["status"], "VERIFICADO")
 
     def test_wrong_coordinate_is_not_declared_verified(self):
+        """A record at the wrong coordinate is not declared verified: it is rejected and counted."""
         result = self._run(_summary("NC_000001.11", 999, "A"))
         self.assertEqual(result["status"], CURATE.UNAVAILABLE)
         self.assertEqual(result["records"], [])
         self.assertEqual(result["records_rejected_by_coordinate"], 1)
 
     def test_wrong_sequence_or_reference_is_not_declared_verified(self):
+        """A wrong sequence or a wrong reference base is not declared verified either."""
         for summary in (
             _summary("NC_000002.12", 100, "A"),
             _summary("NC_000001.11", 100, "C"),

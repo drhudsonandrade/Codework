@@ -37,10 +37,12 @@ HISTORICAL_SUFFIX = "_historical_observation"
 
 
 def _artifacts() -> list[Path]:
+    """Every evidence artifact shipped in the repository."""
     return sorted(EVIDENCE_DIR.glob("*.json"))
 
 
 def _is_passing(value: object) -> bool:
+    """Whether this value is one of the recognised passing verdicts."""
     if isinstance(value, bool):
         return value is True
     return isinstance(value, str) and value.strip().upper() in PASSING_STRINGS
@@ -56,11 +58,13 @@ def _summary_blocks(document: dict) -> list[tuple[str, dict]]:
 
 
 class EvidenceVerdictCoherenceTest(unittest.TestCase):
+    """No evidence artifact may offer a passing verdict while declaring itself unavailable."""
     def test_the_evidence_directory_is_not_empty(self):
         """A vacuous pass here would hide the whole rule."""
         self.assertTrue(_artifacts(), f"no evidence artifacts found under {EVIDENCE_DIR}")
 
     def test_an_unavailable_artifact_offers_no_passing_verdict(self):
+        """An artifact declaring NÃO DISPONÍVEL offers no passing verdict anywhere inside it."""
         checked = 0
         for path in _artifacts():
             document = json.loads(path.read_text(encoding="utf-8"))

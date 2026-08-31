@@ -54,6 +54,7 @@ RENDERABLE = (
 
 
 class RenderedTextMatchesTheDocumentTest(unittest.TestCase):
+    """The rendered text of a value and the anchor recorded for it must agree exactly."""
     def test_every_renderable_value_prints_as_its_anchor_records_it(self):
         """The property the docstring claimed and no test had ever checked."""
         for value in RENDERABLE:

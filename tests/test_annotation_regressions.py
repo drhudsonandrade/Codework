@@ -6,13 +6,16 @@ from array_pipeline.annotation import _observation_status, check_coordinate
 
 
 class AnnotationRegressionTest(unittest.TestCase):
+    """One orientation implementation, and the structured refusals built on it."""
     def test_orientation_is_shared_by_qc_annotation_and_completeness(self):
+        """QC, annotation and completeness share the same orientation function, not three copies."""
         from array_pipeline import annotation, completeness, qc
 
         self.assertIs(annotation._orientation, qc._orientation)
         self.assertIs(completeness._orientation, qc._orientation)
 
     def test_determinate_orientation_refusal_is_not_promoted_to_inferred(self):
+        """A determinate orientation refusal is not promoted to INFERIDO."""
         self.assertEqual(
             _observation_status([{
                 "orientation_operational_status": "NÃO DISPONÍVEL",
@@ -23,6 +26,7 @@ class AnnotationRegressionTest(unittest.TestCase):
         )
 
     def test_missing_expected_position_is_a_domain_refusal_not_an_exception(self):
+        """A missing expected position is a domain refusal, not an exception escaping the check."""
         result = check_coordinate(
             {"chromosome": "1", "position": "100"},
             {
@@ -62,6 +66,7 @@ class AnnotationRegressionTest(unittest.TestCase):
         self.assertNotIn("outra montagem", result["basis"])
 
     def test_registry_chromosome_prefix_is_normalized(self):
+        """A 'chr' prefix in the registry coordinate is normalised before comparison."""
         result = check_coordinate(
             {"chromosome": "3", "position": "100"},
             {
@@ -76,6 +81,7 @@ class AnnotationRegressionTest(unittest.TestCase):
         self.assertEqual(result["code"], "COORDINATE_MATCH")
 
     def test_ambiguous_registry_coordinate_is_inferred(self):
+        """An ambiguous registry coordinate is INFERIDO."""
         self.assertEqual(
             _observation_status([{
                 "orientation_operational_status": "VERIFICADO",
@@ -86,6 +92,7 @@ class AnnotationRegressionTest(unittest.TestCase):
         )
 
     def test_missing_and_divergent_coordinates_have_distinct_structured_outcomes(self):
+        """A missing coordinate and a divergent one produce distinct structured outcomes."""
         missing = _observation_status([{
             "orientation_operational_status": "VERIFICADO",
             "coordinate_operational_status": "NÃO DISPONÍVEL",

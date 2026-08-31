@@ -41,6 +41,7 @@ def _evaluation(**overrides):
 
 
 def _verdict_for(payload, *, case_id="CASE-1"):
+    """The verdict a compiler reaches for this policy evaluation."""
     compiler = PayloadCompiler(case_id=case_id, report_id="01")
     compiler._install_verdict(
         Artifact.from_payload(POLICY_EVALUATION_ARTIFACT, payload)
@@ -49,6 +50,7 @@ def _verdict_for(payload, *, case_id="CASE-1"):
 
 
 class PolicyEvaluationBindingTest(unittest.TestCase):
+    """What binds a policy evaluation to the case and ruleset it may authorise."""
     def test_a_bound_evaluation_is_accepted(self):
         """The accepting case, so the refusals below are not passing vacuously."""
         verdict = _verdict_for(_evaluation())
@@ -69,6 +71,7 @@ class PolicyEvaluationBindingTest(unittest.TestCase):
         self.assertIn("ruleset", verdict["source"]["reason"])
 
     def test_an_evaluation_for_another_ruleset_does_not_authorise_this_one(self):
+        """An evaluation for another ruleset does not authorise this one."""
         verdict = _verdict_for(_evaluation(ruleset={"sha256": "b" * 64}))
         self.assertFalse(verdict["ready_for_requested_operation"])
         self.assertEqual(verdict["source"]["status"], "NÃO DISPONÍVEL")
@@ -80,10 +83,12 @@ class PolicyEvaluationBindingTest(unittest.TestCase):
         self.assertIn("CASE-OTHER", verdict["source"]["reason"])
 
     def test_an_evaluation_naming_this_case_is_accepted(self):
+        """An evaluation naming this case is accepted."""
         verdict = _verdict_for(_evaluation(case_id="CASE-1"), case_id="CASE-1")
         self.assertTrue(verdict["ready_for_requested_operation"])
 
     def test_an_empty_evaluation_object_is_refused(self):
+        """An empty evaluation object is refused rather than read as no objection."""
         verdict = _verdict_for({})
         self.assertFalse(verdict["ready_for_requested_operation"])
         self.assertEqual(verdict["source"]["status"], "NÃO DISPONÍVEL")

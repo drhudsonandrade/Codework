@@ -24,12 +24,14 @@ from unittest.mock import patch
 
 
 class CoreImportsWithoutAdaptersTest(unittest.TestCase):
+    """The core modules import and run with the optional adapter package absent."""
     @staticmethod
     def _import_with_adapters_missing(module_name: str):
         """Import `module_name` fresh, with `evidence_adapters` unavailable."""
         real_import = builtins.__import__
 
         def refuse_adapters(name, *args, **kwargs):
+            """An __import__ that refuses evidence_adapters and passes everything else through."""
             if name == "evidence_adapters" or name.startswith("evidence_adapters."):
                 raise ImportError("No module named 'evidence_adapters'")
             return real_import(name, *args, **kwargs)
@@ -42,6 +44,7 @@ class CoreImportsWithoutAdaptersTest(unittest.TestCase):
                 return importlib.import_module(module_name)
 
     def test_the_core_modules_import_with_the_adapter_package_absent(self):
+        """Each core module imports with the adapter package absent."""
         for module_name in (
             "array_pipeline.claims",
             "array_pipeline.completeness",
@@ -71,6 +74,7 @@ class CoreImportsWithoutAdaptersTest(unittest.TestCase):
         real_import = builtins.__import__
 
         def refuse_adapters(name, *args, **kwargs):
+            """An __import__ that refuses evidence_adapters and passes everything else through."""
             if name == "evidence_adapters" or name.startswith("evidence_adapters."):
                 raise ImportError("No module named 'evidence_adapters'")
             return real_import(name, *args, **kwargs)
@@ -104,6 +108,7 @@ class AdapterAbsenceReachesTheCallerAsARefusalTest(unittest.TestCase):
         real_import = builtins.__import__
 
         def refuse_adapters(name, *args, **kwargs):
+            """An __import__ that refuses evidence_adapters and passes everything else through."""
             if name == "evidence_adapters" or name.startswith("evidence_adapters."):
                 raise ImportError("No module named 'evidence_adapters'")
             return real_import(name, *args, **kwargs)
@@ -154,6 +159,7 @@ class AdapterAbsenceReachesTheCallerAsARefusalTest(unittest.TestCase):
         digest = hashlib.sha256(array.read_bytes()).hexdigest()
 
         def evidence(asserted_value: str) -> str:
+            """A build/strand attestation asserting this value."""
             return json.dumps({
                 "status": "VERIFICADO",
                 "decision": "SATISFIED",

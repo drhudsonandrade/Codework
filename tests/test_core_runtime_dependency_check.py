@@ -41,6 +41,7 @@ except ImportError:
 
 
 class CoreRuntimeDependencyCheckTest(unittest.TestCase):
+    """The runtime dependency check over the core packages."""
     def _errors_for(self, source: str) -> list[str]:
         """Run the real check over a throwaway core package containing `source`."""
         errors: list[str] = []
@@ -56,6 +57,7 @@ class CoreRuntimeDependencyCheckTest(unittest.TestCase):
         return errors
 
     def assert_refused(self, source: str, name: str = "numpy") -> None:
+        """Assert this source is refused, and that the refusal names the dependency."""
         errors = self._errors_for(source)
         self.assertTrue(errors, f"expected a refusal, got none for:\n{source}")
         self.assertIn(name, errors[0])
@@ -96,6 +98,7 @@ class CoreRuntimeDependencyCheckTest(unittest.TestCase):
                 )
 
     def test_a_tuple_naming_only_the_import_errors_is_accepted(self):
+        """A tuple naming only the import errors is accepted."""
         for clause in (
             "except (ImportError, ModuleNotFoundError):",
             "except ModuleNotFoundError:",
@@ -206,6 +209,7 @@ class CoreRuntimeDependencyCheckTest(unittest.TestCase):
         )
 
     def test_the_standard_library_and_local_packages_are_allowed(self):
+        """The standard library and local packages are allowed at module scope."""
         self.assertEqual([], self._errors_for("import json\nimport math\n"))
         self.assertEqual([], self._errors_for("from array_pipeline import assembly\n"))
 

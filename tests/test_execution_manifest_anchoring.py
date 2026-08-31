@@ -28,12 +28,15 @@ def _payload(**kwargs):
 
 
 class ExecutionManifestAnchoringTest(unittest.TestCase):
+    """Every execution-manifest value must be anchored in the provenance block."""
     def _compiled(self):
+        """A compiled payload whose execution manifest is a mapping."""
         payload = _payload()
         self.assertIsInstance(payload.get("execution_manifest"), dict)
         return payload
 
     def test_every_execution_manifest_key_is_anchored(self):
+        """Every execution-manifest key is anchored as a provenance field."""
         payload = self._compiled()
         fields = payload["provenance"]["fields"]
         for key in payload["execution_manifest"]:
@@ -41,6 +44,7 @@ class ExecutionManifestAnchoringTest(unittest.TestCase):
                 self.assertIn(f"execution_manifest[{key}]", fields)
 
     def test_a_clean_payload_has_no_blockers_for_the_manifest(self):
+        """A clean payload raises no manifest blocker."""
         payload = self._compiled()
         manifest_blockers = [
             b for b in provenance_blockers(payload) if "execution_manifest" in b
@@ -48,6 +52,7 @@ class ExecutionManifestAnchoringTest(unittest.TestCase):
         self.assertEqual(manifest_blockers, [])
 
     def test_mutating_a_manifest_value_is_blocked(self):
+        """Mutating a manifest value is blocked as a mismatch against its anchor."""
         payload = self._compiled()
         key = sorted(payload["execution_manifest"])[0]
         payload["execution_manifest"][key] = "adulterado"
@@ -57,6 +62,7 @@ class ExecutionManifestAnchoringTest(unittest.TestCase):
         )
 
     def test_removing_a_manifest_key_is_blocked(self):
+        """Removing a manifest key is blocked as a missing value."""
         payload = self._compiled()
         key = sorted(payload["execution_manifest"])[0]
         del payload["execution_manifest"][key]
@@ -66,6 +72,7 @@ class ExecutionManifestAnchoringTest(unittest.TestCase):
         )
 
     def test_adding_an_unanchored_manifest_key_is_blocked(self):
+        """Adding a key with no anchor is blocked as unanchored."""
         payload = self._compiled()
         payload["execution_manifest"]["injected"] = "veio de lugar nenhum"
         self.assertIn(
