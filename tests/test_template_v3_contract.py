@@ -266,6 +266,39 @@ class TemplateV3ContractTest(unittest.TestCase):
         roomy = _fit_single_line_size("VALOR", wide_box, 12.0, "Helvetica-Bold", max_height=100.0)
         self.assertEqual(roomy, 12.0)
 
+    def test_a_colour_is_validated_before_it_is_converted(self):
+        """A malformed colour is refused, not silently truncated to its first six digits.
+
+        `_hex_to_rgb` read the first three hex pairs and ignored the rest, so `#1234567`
+        painted as `#123456` — the wrong colour, with nothing said — and a non-hex character
+        escaped as a bare `ValueError` from `int()` in the middle of rendering. The value can
+        come from the payload, through `_normalize_value`'s `raw["color"]`, so neither
+        outcome is confined to a typo in this repository's own constants.
+        """
+        from reporting.template_v3 import TemplateV3Error, _hex_to_rgb
+
+        self.assertEqual(_hex_to_rgb("#000000"), (0.0, 0.0, 0.0))
+        self.assertEqual(_hex_to_rgb("ffffff"), (1.0, 1.0, 1.0))
+
+        for malformed in ("#1234567", "#12345", "#12345g", "", "#", "0F766E0F766E", None, 123):
+            with self.subTest(colour=malformed):
+                with self.assertRaises(TemplateV3Error):
+                    _hex_to_rgb(malformed)
+
+    def test_every_accent_the_catalogue_declares_still_converts(self):
+        """The negative control: the new validation must not refuse a shipped colour."""
+        from reporting.editorial_v3 import DESIGN
+        from reporting.engine import load_catalog
+        from reporting.template_v3 import _hex_to_rgb
+
+        for name, value in DESIGN.items():
+            if isinstance(value, str) and len(value.lstrip("#")) == 6:
+                with self.subTest(token=name):
+                    _hex_to_rgb(value)
+        for report_id, model in load_catalog().items():
+            with self.subTest(report=report_id):
+                _hex_to_rgb(model["accent"])
+
     @unittest.skipUnless(os.environ.get("GENOMA_REPORT_TEMPLATE_DIR"), "external v3 template pack not mounted")
     def test_external_template_pack_verifies_and_report10_strict_docx_is_editable(self):
         """The external template pack verifies, and the strict DOCX for report 10 stays editable."""

@@ -48,13 +48,53 @@ def _is_passing(value: object) -> bool:
     return isinstance(value, str) and value.strip().upper() in PASSING_STRINGS
 
 
-def _summary_blocks(document: dict) -> list[tuple[str, dict]]:
-    """The document root and its immediate object children — where verdicts live."""
-    blocks = [("", document)]
-    blocks.extend(
-        (key, value) for key, value in document.items() if isinstance(value, dict)
-    )
-    return blocks
+def _blocks(node: object, prefix: str = ""):
+    """Every object anywhere in the artifact, with the dotted path that reaches it.
+
+    The walk is recursive, through lists as well as objects. An earlier version looked at the
+    root and its immediate object children only, so an artifact declaring
+    `status: "NÃO DISPONÍVEL"` at the root while carrying `{"detail": {"verdict": "PASS"}}`
+    two levels down satisfied the rule — the exact shape the rule exists to refuse. Depth is
+    not a property a consumer quoting the field would notice.
+    """
+    if isinstance(node, dict):
+        yield prefix, node
+        for key, value in node.items():
+            yield from _blocks(value, f"{prefix}.{key}" if prefix else key)
+    elif isinstance(node, list):
+        for index, item in enumerate(node):
+            yield from _blocks(item, f"{prefix}[{index}]")
+
+
+def _declares_unavailable(block: dict) -> bool:
+    """Whether this object says of itself that it is not available."""
+    return any(block.get(key) == UNAVAILABLE for key in ("result", "status"))
+
+
+def _passing_verdicts(block: dict, prefix: str = "") -> list[str]:
+    """Paths of every verdict field *of this block* that reads as an approval.
+
+    This block's own keys, not its subtree. A subtree rule was written first and refused on
+    evidence: run over the shipped artifacts it flagged nine coherent blocks, all of the shape
+    `gene_validity.VKORC1` has in `GENE_DISEASE_VALIDITY.json` — an outer
+    `status: "NÃO DISPONÍVEL"` meaning *this gene's disease validity is not established*, over
+    an inner `clingen.status: "VERIFICADO"` meaning *the ClinGen lookup was performed*. Those
+    are verdicts about two different subjects, and the inner one is what lets a reader see
+    that the outer refusal rests on a source that answered rather than on a source that was
+    never asked. Reading them as a contradiction would push the artifact to hide its own
+    provenance.
+
+    The gap the recursive walk closes is a different one: a block at depth two or more that
+    carries both `result: "NÃO DISPONÍVEL"` and a passing verdict *among its own keys* was
+    never examined at all, because the walk stopped at the root's immediate children.
+    """
+    return [
+        f"{prefix}.{key}" if prefix else key
+        for key, value in block.items()
+        if key in VERDICT_KEYS
+        and not key.endswith(HISTORICAL_SUFFIX)
+        and _is_passing(value)
+    ]
 
 
 class EvidenceVerdictCoherenceTest(unittest.TestCase):
@@ -64,40 +104,70 @@ class EvidenceVerdictCoherenceTest(unittest.TestCase):
         self.assertTrue(_artifacts(), f"no evidence artifacts found under {EVIDENCE_DIR}")
 
     def test_an_unavailable_artifact_offers_no_passing_verdict(self):
-        """An artifact declaring NÃO DISPONÍVEL offers no passing verdict anywhere inside it."""
+        """A block declaring NÃO DISPONÍVEL offers no passing verdict anywhere beneath it."""
         checked = 0
         for path in _artifacts():
             document = json.loads(path.read_text(encoding="utf-8"))
-            if not isinstance(document, dict):
-                continue
-            blocks = _summary_blocks(document)
-            unavailable = any(
-                block.get(key) == UNAVAILABLE
-                for _, block in blocks
-                for key in ("result", "status")
-            )
-            if not unavailable:
-                continue
-            checked += 1
-            offending = [
-                f"{prefix + '.' if prefix else ''}{key}"
-                for prefix, block in blocks
-                for key, value in block.items()
-                if key in VERDICT_KEYS
-                and not key.endswith(HISTORICAL_SUFFIX)
-                and _is_passing(value)
-            ]
-            with self.subTest(artifact=path.name):
-                self.assertEqual(
-                    offending,
-                    [],
-                    f"{path.name} declares {UNAVAILABLE} yet still publishes a passing "
-                    f"verdict at {offending}: rename the field with the "
-                    f"{HISTORICAL_SUFFIX} suffix or set it to {UNAVAILABLE}",
-                )
+            for prefix, block in _blocks(document):
+                if not _declares_unavailable(block):
+                    continue
+                checked += 1
+                offending = _passing_verdicts(block, prefix)
+                with self.subTest(artifact=path.name, block=prefix or "<root>"):
+                    self.assertEqual(
+                        offending,
+                        [],
+                        f"{path.name} declares {UNAVAILABLE} at "
+                        f"{prefix or '<root>'} yet still publishes a passing verdict at "
+                        f"{offending}: rename the field with the {HISTORICAL_SUFFIX} "
+                        f"suffix or set it to {UNAVAILABLE}",
+                    )
         self.assertGreater(
             checked, 0, "no artifact declared NÃO DISPONÍVEL, so the rule never ran"
         )
+
+    @staticmethod
+    def _offending(document: object) -> list[str]:
+        """Every incoherence the rule finds in this document."""
+        return sorted(
+            found
+            for prefix, block in _blocks(document)
+            if _declares_unavailable(block)
+            for found in _passing_verdicts(block, prefix)
+        )
+
+    def test_a_deep_block_is_reached_by_the_walk(self):
+        """The depth at which the earlier walk stopped looking.
+
+        It examined the root and its immediate object children, so a block three levels down
+        — including one inside a list — could declare itself unavailable and publish an
+        approval in the same breath without ever being looked at. Asserted on a synthetic
+        document rather than on a shipped artifact, so it keeps holding as the evidence
+        directory changes.
+        """
+        document = {
+            "a": {"b": {"c": {"status": UNAVAILABLE, "verdict": "PASS"}}},
+            "runs": [{"result": UNAVAILABLE, "outcome": "APROVADO"}],
+        }
+        self.assertEqual(
+            self._offending(document),
+            ["a.b.c.verdict", "runs[0].outcome"],
+        )
+
+    def test_a_source_status_under_a_refused_block_is_not_an_incoherence(self):
+        """The scope this rule deliberately does not have.
+
+        `gene_validity.<gene>` in `GENE_DISEASE_VALIDITY.json` is exactly this shape: the
+        outer refusal is about the gene's disease validity, the inner `VERIFICADO` is about
+        whether the source was reached. Treating the pair as a contradiction would flag nine
+        coherent blocks in the shipped evidence and push artifacts to drop the very field
+        that shows the refusal rests on an answer rather than on silence.
+        """
+        document = {
+            "status": UNAVAILABLE,
+            "clingen": {"status": "VERIFICADO", "established": False},
+        }
+        self.assertEqual(self._offending(document), [])
 
 
 if __name__ == "__main__":

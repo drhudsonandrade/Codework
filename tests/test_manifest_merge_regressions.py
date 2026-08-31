@@ -97,7 +97,13 @@ class ManifestIdentityMergeTest(unittest.TestCase):
         self.assertNotIn("assessed_allele_status", target)
 
     def test_version_is_bound_to_input_content(self):
-        """The merged manifest's version is bound to the input content, not to the clock."""
+        """The merged manifest's version is bound to the input content, not to the clock.
+
+        The mutation changes a target coordinate and leaves the input manifest's own `version`
+        at "1". An earlier version of this test bumped `version` instead, which an
+        implementation deriving the merged version from that one metadata field would also
+        have satisfied — the field this test exists to prove is *not* the only input.
+        """
         with tempfile.TemporaryDirectory() as td:
             one = Path(td) / "one.json"
             first = self._manifest(self._target(10), identifier="one", version="1")
@@ -105,9 +111,10 @@ class ManifestIdentityMergeTest(unittest.TestCase):
             with patch("scripts.merge_target_manifests.datetime") as clock:
                 clock.now.return_value.isoformat.return_value = "2026-08-24T00:00:00+00:00"
                 initial = merge([one])
-                first["version"] = "2"
-                one.write_text(json.dumps(first), encoding="utf-8")
+                second = self._manifest(self._target(11), identifier="one", version="1")
+                one.write_text(json.dumps(second), encoding="utf-8")
                 changed = merge([one])
+        self.assertEqual(second["version"], first["version"])
         self.assertNotEqual(initial["version"], changed["version"])
 
 

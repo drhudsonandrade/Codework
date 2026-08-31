@@ -7,6 +7,7 @@ import io
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -282,8 +283,27 @@ def _register_fonts() -> dict[str, str]:
     return result
 
 
+#: Exactly six hex digits, with the leading `#` optional. Three-digit shorthand is not
+#: accepted: no colour in this repository is written that way, and admitting it would mean
+#: two spellings of the same value on a document whose identity is compared byte for byte.
+_HEX_COLOR = re.compile(r"^#?[0-9a-fA-F]{6}$")
+
+
 def _hex_to_rgb(value: str) -> tuple[float, float, float]:
-    """A `#rrggbb` string as the 0..1 float triple reportlab expects."""
+    """A `#rrggbb` string as the 0..1 float triple reportlab expects.
+
+    The format is checked before the conversion, and anything else is refused. The previous
+    version read the first three hex pairs and ignored the rest, so `#1234567` — a typo, or a
+    caller-supplied `color` that came from data — was silently painted as `#123456`, and a
+    non-hex character escaped as a bare `ValueError` from `int()` in the middle of rendering.
+    `_normalize_value` accepts `raw["color"]` from the payload, so this is reachable from
+    outside the module: neither a wrong colour nor an unlabelled crash is an acceptable
+    outcome for a report page.
+    """
+    if not isinstance(value, str) or not _HEX_COLOR.match(value):
+        raise TemplateV3Error(
+            f"cor inválida {value!r}: esperado #rrggbb com exatamente seis dígitos hexadecimais"
+        )
     value = value.lstrip("#")
     return tuple(int(value[index : index + 2], 16) / 255.0 for index in (0, 2, 4))  # type: ignore[return-value]
 
