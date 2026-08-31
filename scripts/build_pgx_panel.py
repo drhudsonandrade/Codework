@@ -170,6 +170,7 @@ def build_panel(registry: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> int:
+    """Build the PGx target panel from the curated registry's defining positions."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--registry", default=str(DEFAULT_REGISTRY))
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT))

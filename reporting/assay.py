@@ -194,6 +194,11 @@ ASSAYS: dict[str, Assay] = {
 
 
 def assay_for_schema(schema: str | None) -> Assay:
+    """The assay for a declared input schema, refusing one this project does not know.
+
+    Refused rather than defaulted: the assay decides how the document describes how the
+    genotype was obtained, and guessing would print a method that was never used.
+    """
     try:
         return ASSAYS[str(schema)]
     except KeyError as exc:

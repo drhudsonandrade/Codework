@@ -97,10 +97,15 @@ UNAVAILABLE = "NÃO DISPONÍVEL"
 
 
 class CurationError(RuntimeError):
-    pass
+    """A gene-disease source could not be read, so its evidence may not be published."""
 
 
 def _fetch(url: str, *, attempts: int = 4, accept: str = "application/json") -> bytes:
+    """Download from a curation source, retrying transient failures.
+
+    Exhausting the attempts raises rather than returning empty bytes: an empty registry would
+    read downstream as "no gene has an established relation", which is a scientific claim.
+    """
     request = urllib.request.Request(
         url, headers={"Accept": accept, "User-Agent": "genoma-gene-disease-curation/1.0"}
     )
@@ -117,6 +122,7 @@ def _fetch(url: str, *, attempts: int = 4, accept: str = "application/json") -> 
 
 
 def _json(url: str) -> Any:
+    """Fetch and parse JSON, turning a decode failure into a named curation refusal."""
     try:
         return json.loads(_fetch(url).decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -470,6 +476,12 @@ def fetch_clinvar_gene_variant_counts(gene: str) -> dict[str, Any]:
 
 
 def _ancestry_of(study: dict[str, Any]) -> dict[str, Any]:
+    """The ancestry composition of a GWAS study, by participant count.
+
+    Carried because a polygenic result is only transferable to the extent its cohort
+    resembles the person: publishing the association without the composition would hide the
+    dominant source of error for an admixed genome.
+    """
     groups: dict[str, int] = {}
     for block in study.get("ancestries") or []:
         count = block.get("numberOfIndividuals") or 0
@@ -581,6 +593,12 @@ def fetch_gwas_associations(rsid: str) -> dict[str, Any]:
 
 
 def curate(targets_path: Path, *, with_gwas: bool = True) -> dict[str, Any]:
+    """Assemble gene-disease validity for the target panel, recording which registry said so.
+
+    `established_by` names the curators rather than collapsing to a boolean: "Definitive by a
+    ClinGen expert panel" and "green on one NHS panel" are assertions of different weight,
+    and a flattened flag makes them indistinguishable to everything downstream.
+    """
     manifest = load_target_manifest(targets_path)
     clingen = fetch_clingen_validity()
     gencc = fetch_gencc_validity()
@@ -780,6 +798,7 @@ def curate(targets_path: Path, *, with_gwas: bool = True) -> dict[str, Any]:
 
 
 def main() -> int:
+    """Curate gene-disease validity for the target panel and write the evidence artifact."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--targets", default=str(DEFAULT_TARGETS))
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT))

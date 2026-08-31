@@ -282,6 +282,22 @@ def _to_html(markdown: str, title: str) -> str:
 
 
 def render_document(report_id: str, data: dict[str, Any], *, mode: str = "MODEL") -> dict[str, Any]:
+    """Render one report in MODEL or FINAL mode, returning payload, Markdown and HTML.
+
+    MODEL renders the empty template from the catalogue and never touches `data`: it shows
+    what a report of this kind looks like, and must remain producible for a case that has no
+    evidence at all. FINAL renders the case and is gated — `_publication_blockers` runs
+    first and any blocker raises `ReportReleaseError` instead of returning a document.
+
+    The gate raises rather than returning a bundle with `publication_blockers` filled in.
+    A blocked FINAL that still produced Markdown would be a publishable file on disk whose
+    only warning lived in a sibling metadata field; the caller has to be unable to obtain
+    the text at all. `publication_blockers` in the metadata is therefore always empty on a
+    FINAL that was returned, and carries the (empty) list on MODEL for schema stability.
+
+    `data` is deep-copied into the bundle so a later mutation by the caller cannot change
+    what the rendered Markdown was rendered from.
+    """
     catalog = load_catalog()
     if report_id not in catalog:
         raise ReportReleaseError(f"unknown report model: {report_id}")

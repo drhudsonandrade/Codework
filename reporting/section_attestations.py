@@ -105,6 +105,7 @@ def curation_for_schema(schema: str | None) -> Path | None:
 
 
 def load_curation(path: Path | str | None = None) -> dict[str, Any]:
+    """Read the curated section attestations, defaulting to the tracked array curation."""
     source = Path(path) if path is not None else ARRAY_CURATION_PATH
     try:
         curation = json.loads(source.read_text(encoding="utf-8"))
@@ -140,6 +141,11 @@ def load_curation(path: Path | str | None = None) -> dict[str, Any]:
 
 @lru_cache(maxsize=1)
 def _canonical_section_hashes() -> dict[int, str]:
+    """Section number → SHA-256, computed from the sealed ruleset rather than read from a file.
+
+    Derived at call time from the verified transport so an attestation is checked against the
+    ruleset that actually decoded, not against a hash list that could drift away from it.
+    """
     from policy_engine.genoma_policy.ruleset import _compile_sections
     from scripts.sealed_ruleset import decode_verified_payload
 

@@ -69,6 +69,12 @@ NON_ASSERTING = ("benign", "likely benign")
 
 
 def _is_asserting_classification(classification: str) -> bool:
+    """Whether a ClinVar classification actually asserts pathogenicity.
+
+    The field is free text and carries compound values separated by `;`, `/` or `|`, so it is
+    split and each term judged. "Conflicting" and "uncertain" are not assertions: reading them
+    as one would let a variant nobody agreed on become an assessed allele.
+    """
     terms = {
         term.strip()
         for term in re.split(r"[;/|]", str(classification).lower())
@@ -80,10 +86,16 @@ def _is_asserting_classification(classification: str) -> bool:
 
 
 class CurationError(RuntimeError):
-    pass
+    """A curation input could not be read, or the sources disagree irreconcilably."""
 
 
 def _get(url: str, *, attempts: int = 4) -> dict[str, Any]:
+    """One JSON request to a public registry, retrying transient failures.
+
+    Retried because a single transport error should not discard a long curation run;
+    exhausting the attempts raises rather than returning an empty result, which would read
+    downstream as "the registry says nothing about this locus".
+    """
     request = urllib.request.Request(
         url, headers={"Accept": "application/json", "User-Agent": "genoma-assessed-allele/1.0"}
     )
@@ -234,6 +246,11 @@ def gwas_risk_alleles(rsid: str) -> dict[str, Any]:
 
 
 def _classification(record: dict[str, Any]) -> str:
+    """The clinical significance ClinVar states, under whichever key this record uses.
+
+    ClinVar moved germline and somatic classifications into separate blocks and kept the old
+    flat key, so all three spellings are tried before concluding the record says nothing.
+    """
     for key in ("germline_classification", "clinical_significance", "somatic_classification"):
         block = record.get(key)
         if isinstance(block, dict) and block.get("description"):
@@ -242,6 +259,11 @@ def _classification(record: dict[str, Any]) -> str:
 
 
 def _spdi(record: dict[str, Any]) -> tuple[str, int, str, str] | None:
+    """The canonical SPDI as (sequence, position, deleted, inserted), or None if absent.
+
+    None rather than a partial tuple: a coordinate missing one of its four parts cannot be
+    compared against anything, and filling the gap with a default would invent a position.
+    """
     variation = (record.get("variation_set") or [{}])[0]
     raw = variation.get("canonical_spdi") or ""
     parts = raw.split(":")
@@ -531,6 +553,12 @@ def curate_target(rsid: str, pgx_registry: dict[str, Any] | None = None) -> dict
 
 
 def curate(targets_path: Path, pgx_registry_path: Path | None = None) -> dict[str, Any]:
+    """Determine, per target, which allele the locus is scored against — or that none is.
+
+    Every outcome is recorded with its basis, including the refusals: a locus whose sources
+    disagree comes out with no assessed allele *and* the disagreement, because that is what
+    lets a later reader tell "not pathogenic" from "we could not establish which allele".
+    """
     payload = json.loads(Path(targets_path).read_text(encoding="utf-8"))
     registry = (
         json.loads(Path(pgx_registry_path).read_text(encoding="utf-8"))
@@ -592,6 +620,7 @@ def _apply_target_assessment(
 
 
 def main() -> int:
+    """Curate assessed alleles for the target registry and write the evidence artifact."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--targets", default=str(DEFAULT_TARGETS))
     parser.add_argument("--output", default=str(DEFAULT_EVIDENCE))

@@ -903,6 +903,24 @@ def build(
     clingen_dosage_path: Path | None = None,
     min_review_stars: int = 2,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Assemble the clinical target registry and its statistics from a ClinVar release.
+
+    Returns `(registry, stats)`. The registry is the artifact the pipeline consumes; the
+    stats block is kept separate and returned alongside rather than embedded, because a
+    reader comparing two releases needs the counts without having to diff the whole target
+    list.
+
+    Gene-disease validity is not taken from ClinVar. It is composed from ClinGen, GenCC,
+    PanelApp, ClinGen dosage and gnomAD constraint, so that "this gene causes this disease"
+    rests on curated assertions rather than on the presence of variant submissions. Each
+    optional source path may be None: the corresponding evidence is then simply absent from
+    the validity block, which downgrades the claim — it never silently promotes a gene to
+    established on the strength of the sources that did load.
+
+    `min_review_stars` defaults to 2 (multiple submitters, no conflicts). Every target also
+    carries its own star level, so a consumer that needs a stricter bar can apply it without
+    re-running the scan.
+    """
     by_rsid, scan_stats, gene_counts = scan_clinvar(
         clinvar_path, min_review_stars=min_review_stars
     )

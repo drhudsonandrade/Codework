@@ -135,6 +135,11 @@ class ClinicalEvidenceError(ValueError):
 
 
 def _zygosity(genotype: Any) -> str | None:
+    """HOMOZIGOTO, HETEROZIGOTO, or None when the call is not readable biallelic SNP text.
+
+    None rather than a guess: an indel code or a no-call carries no zygosity, and the X-linked
+    wording downstream distinguishes the three cases rather than folding None into homozygous.
+    """
     text = str(genotype or "").strip().upper()
     if len(text) != 2 or not set(text) <= set("ACGT"):
         return None
@@ -155,6 +160,11 @@ def _verified_accessions(assessed: dict[str, Any]) -> dict[str, set[str]]:
 
 
 def _coordinate(value: Any) -> tuple[str, int] | None:
+    """A (chromosome, position) pair from a registry coordinate block, or None if unusable.
+
+    The `chr` prefix is stripped so `chr7` and `7` compare equal; anything without both parts
+    returns None rather than a partial coordinate that would compare as a mismatch.
+    """
     if not isinstance(value, dict):
         return None
     chromosome = str(value.get("chromosome") or "").strip().replace("chr", "")
@@ -340,6 +350,11 @@ def _validity_for(gene: str | None, evidence: dict[str, Any]) -> dict[str, Any]:
     ]
 
     def diseases_with(mode: str) -> list[str]:
+        """Curated diseases for this gene under one mode of inheritance, sorted.
+
+        The mode is normalised on both sides before comparing, because the registries spell
+        it inconsistently and a raw comparison silently drops the ones spelled differently.
+        """
         return sorted(
             {
                 str(c["disease"])
@@ -576,6 +591,12 @@ def _interpretation(
     sources = " e ".join(validity["established_by"]) or "registro curado"
 
     def dossier_sex_clause() -> str:
+        """How the finding refers to what the dossier recorded about sex at birth.
+
+        Recorded, intersex, and not recorded each get their own wording: X-linked
+        interpretation depends on it, and a report that reads as though sex were known when
+        it was not would present an inference as an observation.
+        """
         if sex_at_birth in (SEX_MALE, SEX_FEMALE):
             return f"o dossiê registra {sex_at_birth}"
         if sex_at_birth == SEX_INTERSEX:
@@ -767,6 +788,7 @@ def _registry_totals(evidence: dict[str, Any]) -> dict[str, Any]:
     established = [record for record in computed if record["established"]]
 
     def with_mode(mode: str) -> int:
+        """How many established gene-disease relations carry this mode of inheritance."""
         return sum(
             1
             for record in established
@@ -833,6 +855,11 @@ def build_clinical_findings(
     validity_cache: dict[str, dict[str, Any]] = {}
 
     def validity_for(gene: Any) -> dict[str, Any]:
+        """The gene-disease validity block for one gene, memoised across the run.
+
+        The evidence file is large and the same gene recurs across many loci, so the lookup
+        is cached rather than repeated per finding.
+        """
         key = str(gene or "")
         if key not in validity_cache:
             validity_cache[key] = _validity_for(gene, evidence)
@@ -1035,6 +1062,7 @@ def build_clinical_findings(
 
 
 def write_findings(result: dict[str, Any], output: Path) -> Path:
+    """Write the clinical join deterministically, and return where it landed."""
     output = Path(output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(

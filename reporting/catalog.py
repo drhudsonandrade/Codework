@@ -25,10 +25,16 @@ class CatalogError(KeyError):
 
 @lru_cache(maxsize=1)
 def load_catalog() -> dict[str, Any]:
+    """The raw report catalog as written on disk."""
     return json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
 
 
 def report(report_id: str) -> dict[str, Any]:
+    """One catalog entry, refusing an unknown id rather than returning an empty mapping.
+
+    An empty entry would render a document with blank headings and no indication that the
+    model was never defined.
+    """
     catalog = load_catalog()
     entry = catalog.get(str(report_id))
     if not isinstance(entry, dict):
@@ -45,4 +51,5 @@ def section_titles(report_id: str) -> tuple[str, ...]:
 
 
 def report_ids() -> tuple[str, ...]:
+    """Every report id in the catalog, in sorted order."""
     return tuple(sorted(load_catalog()))

@@ -16,6 +16,7 @@ from reporting.engine import ReportReleaseError, render_document, write_bundle
 
 
 def main() -> int:
+    """Render one report in MODEL or FINAL mode and write the bundle."""
     p = argparse.ArgumentParser()
     p.add_argument("--report", required=True, help="01..11")
     p.add_argument("--mode", choices=["MODEL", "FINAL"], default="MODEL")

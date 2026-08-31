@@ -87,6 +87,12 @@ def _class_of_address(text: str) -> str:
 
 
 def _resolve(host: str, port: int) -> list[str]:
+    """Every address a host name resolves to right now, or an empty list if it resolves to none.
+
+    Failure returns empty rather than raising: an unresolvable name is a *classification*
+    (`UNRESOLVED`), not an error — "we could not tell what it reached" is a fact the witness
+    has to be able to record.
+    """
     try:
         infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
     except (socket.gaierror, UnicodeError, OSError):
@@ -115,6 +121,11 @@ def _authority(scheme: str, host: str, port: int) -> str:
 
 
 def _split(base_url: str) -> tuple[str, str, int]:
+    """Scheme, host and port from a base URL, applying the scheme's default port.
+
+    The port matters to resolution, so it is derived rather than left unset; a URL naming no
+    host yields an empty host, which classifies as UNRESOLVED rather than as loopback.
+    """
     parts = urlsplit(base_url)
     host = parts.hostname or ""
     try:

@@ -36,11 +36,17 @@ Resolver = Callable[[dict[str, Any]], Any]
 
 
 def _section(payload: dict[str, Any], title: str) -> Any:
+    """One section's text, or None when the payload carries no sections at all."""
     sections = payload.get("sections")
     return sections.get(title) if isinstance(sections, dict) else None
 
 
 def _manifest(payload: dict[str, Any], key: str) -> Any:
+    """One execution-manifest entry, accepting either the mapping or the list spelling.
+
+    Both shapes exist in payloads this renderer has to read, and picking one would make the
+    other silently produce empty fields on the page.
+    """
     manifest = payload.get("execution_manifest")
     if isinstance(manifest, dict):
         return manifest.get(key)
@@ -54,18 +60,30 @@ def _manifest(payload: dict[str, Any], key: str) -> Any:
 
 
 def _count_findings(payload: dict[str, Any], predicate: Callable[[dict], bool]) -> Any:
+    """How many findings satisfy `predicate`, or None when there is no findings list.
+
+    None rather than zero: "no findings were recorded" and "none matched" are different
+    facts, and printing 0 for the first states a count nobody measured.
+    """
     findings = payload.get("findings")
     if not isinstance(findings, list):
         return None
     return str(sum(1 for f in findings if isinstance(f, dict) and predicate(f)))
 
 def _assay(payload: dict[str, Any]):
+    """The assay this payload was produced by, resolved from its declared input schema."""
     input_block = payload.get("input")
     schema = input_block.get("schema") if isinstance(input_block, dict) else None
     return assay_for_schema(schema)
 
 
 def _qc_reference(payload: dict[str, Any]) -> Any:
+    """The QC digest to print, under whichever key this assay records it.
+
+    Tried by the assay's own prefix first so a WGS payload cites the WGS QC and an array
+    payload the array QC — printing the wrong one would attribute the document to a run that
+    did not produce it.
+    """
     assay = _assay(payload)
     direct = _manifest(payload, f"{assay.evidence_prefix.upper()}_QC_SHA256")
     if direct:
@@ -87,6 +105,12 @@ def _count_findings_with_field(
     field: str,
     predicate: Callable[[dict], bool],
 ) -> Any:
+    """Count findings that carry `field` *and* satisfy the predicate on it.
+
+    Findings missing the field are excluded rather than counted as failing it: absence is not
+    a negative result, and folding the two together would report a count as measured when
+    part of it was never recorded.
+    """
     findings = payload.get("findings")
     if not isinstance(findings, list):
         return None

@@ -112,6 +112,12 @@ SUPERSEDED_WEAK_KEYS = ("version", "effective_date", "iso_date")
 
 
 def _load_superseded_contract() -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    """Read the superseded-identity registry from every archived ruleset version.
+
+    Refuses when no registry is present rather than scanning for nothing: a check with an
+    empty pattern list passes every repository, including one that has reintroduced an
+    identity a previous version retired.
+    """
     fixtures = sorted((ROOT / "docs" / "history").glob("*/superseded-identities.json"))
     if not fixtures:
         raise RuntimeError("superseded identity registry is missing from docs/history")
@@ -153,6 +159,7 @@ ACTIVE_DECLARATION_MARKERS = (
 
 
 def validate_sealed_ruleset(root: Path, errors: list[str]) -> None:
+    """Record an error unless the sealed transport decodes to the canonical ruleset."""
     try:
         verify_transport(root / "normative" / "sealed")
     except (OSError, UnicodeError, ValueError, SealedRulesetError) as exc:
@@ -167,12 +174,22 @@ def validate_active_identity_text(text: str, relative: str, errors: list[str]) -
 
 
 def _constant_value(node: ast.AST) -> str | int | float | bool | None:
+    """The literal behind an AST node, or None when it is computed at runtime.
+
+    Only literals can be checked statically; a value assembled at runtime is deliberately
+    not guessed at, because guessing wrong would either pass a violation or fail a legal file.
+    """
     if isinstance(node, ast.Constant) and isinstance(node.value, (str, int, float, bool)):
         return node.value
     return None
 
 
 def _formatted_constant(value: ast.FormattedValue) -> str | None:
+    """The literal text an f-string placeholder expands to, when it is a constant.
+
+    Lets an identity spelled through an f-string be checked like a plain string, so the
+    superseded-identity scan cannot be evaded by interpolating a constant.
+    """
     constant = _constant_value(value.value)
     if constant is None:
         return None
@@ -289,6 +306,11 @@ def _active_declaration_context(path: Path, text: str) -> tuple[str, ...]:
 
 
 def _historical_roots(root: Path) -> tuple[Path, ...]:
+    """Directories holding archived ruleset versions, which are exempt from identity checks.
+
+    A superseded identity is *expected* inside its own archive: that is the record of what it
+    was. The scan refuses it everywhere else.
+    """
     history = root / "docs" / "history"
     return tuple(
         fixture.parent.relative_to(root)
@@ -297,6 +319,7 @@ def _historical_roots(root: Path) -> tuple[Path, ...]:
 
 
 def _is_historical_path(relative: Path, history_roots: tuple[Path, ...]) -> bool:
+    """Whether a path sits inside an archived ruleset version."""
     return any(relative == historical or historical in relative.parents for historical in history_roots)
 
 
@@ -378,6 +401,7 @@ def validate_superseded_identity_locations(root: Path, errors: list[str]) -> Non
 
 
 def _missing_path_error(relative: str) -> str:
+    """The error for a required path that is absent, with the hint for fixing it if there is one."""
     hint = MISSING_PATH_HINTS.get(relative)
     if hint:
         return f"missing required path: {relative} — {hint}"
@@ -698,6 +722,12 @@ def validate(root: Path) -> list[str]:
 
 
 def main() -> None:
+    """Run every repository check and print the verdict.
+
+    The twelve `PASS` lines are a fixed banner printed once `validate()` returns no errors —
+    not twelve independent verdicts. What exit 0 supports is "`validate()` found no errors";
+    see `validate()` for what that does and does not cover.
+    """
     errors = validate(ROOT)
     if errors:
         for error in errors:

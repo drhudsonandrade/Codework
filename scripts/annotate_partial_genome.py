@@ -18,6 +18,14 @@ from array_pipeline.annotation import (
 
 
 def main() -> int:
+    """Run the bounded annotation plane and report its outcome through the exit code.
+
+    Exit 2 covers two distinct situations, both of which have to stop a pipeline: the run
+    was blocked before producing anything (the `ANNOTATION BLOCKED` branch), and a `live`
+    run that completed but did not reach `VERIFICADO`. A `plan-only` run is `PROPOSTO` by
+    construction and exits 0 — it is a plan, and refusing it for not being verified would
+    make the mode useless.
+    """
     p = argparse.ArgumentParser(description="GENOMA v3.4 bounded Evidence/Annotation Plane for partial SNP-array genomes")
     p.add_argument("--input", required=True)
     p.add_argument("--qc", required=True)

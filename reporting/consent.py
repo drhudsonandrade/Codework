@@ -118,6 +118,11 @@ def _today() -> date:
 
 
 def _parse_date(value: Any, field: str) -> date:
+    """Parse a consent date, naming the field in the refusal when it cannot be read.
+
+    Consent has a validity window, so an unparseable date cannot be defaulted: doing so would
+    decide, silently, whether an authorisation is still in force.
+    """
     try:
         text = str(value)
         if text.endswith("Z"):
@@ -129,6 +134,7 @@ def _parse_date(value: Any, field: str) -> date:
 
 
 def sha256_file(path: Path) -> str:
+    """SHA-256 of the consent record on disk, so the verdict names the file it read."""
     digest = hashlib.sha256()
     with Path(path).open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):

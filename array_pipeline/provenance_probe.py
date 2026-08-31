@@ -57,6 +57,14 @@ class ProvenanceProbeError(ValueError):
 
 
 def load_markers(path: Path) -> dict[str, Any]:
+    """Read the two-assembly marker table, refusing anything a strand verdict cannot rest on.
+
+    Every rule is enforced here — schema, non-empty table, object entries, unique rsids,
+    coordinates present, well-formed alleles, palindromes flagged — because this is the only
+    loader. `array_pipeline.qc` delegates to it rather than re-implementing the checks: two
+    copies of the same rules eventually disagree, and the one that drifted would be the one
+    licensing a strand verdict.
+    """
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     if payload.get("schema") != MARKERS_SCHEMA:
         raise ProvenanceProbeError(f"unsupported marker table schema: {payload.get('schema')!r}")
@@ -111,6 +119,11 @@ def load_markers(path: Path) -> dict[str, Any]:
 
 
 def _read_markers_from_array(path: Path, wanted: set[str]) -> dict[str, dict[str, str]]:
+    """Read just the wanted markers out of an array file, keyed by rsid.
+
+    Only the requested rsids are retained: the probe needs a handful of loci out of hundreds
+    of thousands, and holding the rest would trade memory for nothing.
+    """
     import csv
 
     found: dict[str, dict[str, str]] = {}

@@ -54,6 +54,7 @@ def _get_adapter(source: str):
 
 
 def _stable_json(value: Any) -> bytes:
+    """JSON bytes that depend only on the value: sorted keys, no incidental whitespace."""
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
@@ -271,6 +272,12 @@ def _observation_status(rows: list[dict[str, Any]]) -> str:
 
 
 def _query_key(source: str, query: dict[str, Any]) -> str:
+    """A stable identity for one provider query, so the same question is asked once.
+
+    Derived from the source and the query together: the same terms sent to two registries are
+    two different retrievals, and collapsing them would attribute one provider's answer to
+    the other.
+    """
     return hashlib.sha256(_stable_json({"source": source, "query": query})).hexdigest()
 
 
@@ -338,6 +345,27 @@ def annotate_partial_genome(
     max_payload_bytes: int = 1_500_000,
     checked_at: str | None = None,
 ) -> dict[str, Any]:
+    """Annotate the genotyped targets of a partial genome, within declared bounds.
+
+    Two preconditions are checked before any target is read, and both raise rather than
+    degrade. The QC evidence must be `VERIFICADO` with `LIMITED_INTERPRETATION_GATE` at
+    PASS, and its recorded `input.sha256` must match the file actually being annotated —
+    otherwise the annotation would inherit a quality claim made about a different file.
+
+    `mode` decides what the retrievals are. `plan-only` asks each adapter to build its
+    request and records the locator with status `PROPOSTO`, performing no network call:
+    the output is a plan that can be reviewed before anything is fetched. `live` performs
+    the retrievals, and each one that fails degrades to `NÃO DISPONÍVEL` instead of
+    aborting the run — a single unreachable source must not discard the targets that were
+    successfully annotated. The run as a whole is `VERIFICADO` only when every retrieval
+    is, so a partial success can never be read as a complete one.
+
+    `max_targets`, `max_queries` and `max_payload_bytes` bound the plane rather than tune
+    it. The first two raise in `build_query_plan` when exceeded instead of trimming the
+    plan: a silently shortened plan would produce an annotation that looks complete while
+    having skipped targets nobody named. `checked_at` is injectable so a test can pin a
+    timestamp; production leaves it None.
+    """
     if mode not in {"plan-only", "live"}:
         raise ValueError("mode must be plan-only or live")
     qc = json.loads(qc_path.read_text(encoding="utf-8"))
@@ -441,6 +469,7 @@ def annotate_partial_genome(
 
 
 def write_annotation(result: dict[str, Any], output: Path) -> Path:
+    """Write the annotation artifact deterministically, and return where it landed."""
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return output

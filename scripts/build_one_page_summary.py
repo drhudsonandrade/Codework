@@ -59,6 +59,7 @@ def _headline(totals: dict[str, Any]) -> str:
 
 
 def _observed_findings(matrix: dict[str, Any]) -> str:
+    """The observed-carriage line, naming gene, rsid and genotype for each entry."""
     carried = [
         f"{e['gene'] or 'sem gene'} {e['rsid']} ({e['genotype']})"
         for e in matrix.get("entries", [])
@@ -68,6 +69,11 @@ def _observed_findings(matrix: dict[str, Any]) -> str:
 
 
 def _pgx_line(passport: dict[str, Any] | None) -> str:
+    """The pharmacogenomic line, distinguishing "no passport" from "passport not verified".
+
+    Both cases print NÃO DISPONÍVEL, but for different reasons, and this is a one-page summary
+    a clinician may read alone — the reason is what tells them whether to go looking.
+    """
     if passport is None:
         return f"{UNAVAILABLE} — nenhum passaporte farmacogenômico foi compilado nesta execução"
     if passport.get("operational_status") != "VERIFICADO":
@@ -102,6 +108,18 @@ def build_payload(
     post_deployment_witness: Path | None = None,
     consent: Path | None = None,
 ) -> dict:
+    """Compile the payload for the one-page summary.
+
+    The completeness matrix is required and the passport is not: the summary's purpose is to
+    state how much of the genome was actually interrogated, which the matrix alone
+    establishes. When a passport is supplied its pharmacogenomic content is folded in;
+    when it is absent the corresponding fields read `NÃO DISPONÍVEL` rather than being
+    omitted, so that a reader can tell "not measured" from "measured as nothing".
+
+    As in the other report builders, the three anchor paths being optional arguments does
+    not make the anchors optional: the publication gate still refuses a FINAL release that
+    lacks them.
+    """
     matrix = Artifact.from_path("completeness-matrix", matrix_path)
     passport = Artifact.from_path("pgx-passport", passport_path) if passport_path else None
 
@@ -194,6 +212,7 @@ def build_payload(
 
 
 def main() -> int:
+    """Build report 10, the one-page summary, from the completeness matrix and passport."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--matrix", required=True)
     parser.add_argument("--passport")

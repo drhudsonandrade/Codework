@@ -346,6 +346,7 @@ def merge(paths: list[Path]) -> dict[str, Any]:
 
 
 def main() -> int:
+    """Merge the given target manifests into one panel and write it out."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("manifests", nargs="+", help="target manifests to union")
     parser.add_argument("--output", required=True)

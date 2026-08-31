@@ -15,6 +15,7 @@ _ORIGINAL_LOADER = _template_v3.load_reference_manifest
 
 
 def _sha256(path: Path) -> str:
+    """SHA-256 of a file, read in chunks so a large template is not held in memory."""
     h = hashlib.sha256()
     with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):

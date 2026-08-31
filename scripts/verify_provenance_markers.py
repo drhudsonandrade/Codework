@@ -47,7 +47,7 @@ REQUEST_INTERVAL_SECONDS = 0.4
 
 
 class MarkerVerificationError(RuntimeError):
-    pass
+    """A marker could not be verified against dbSNP, so the table may not claim VERIFICADO."""
 
 
 def _chromosome_from_accession(seq_id: str) -> str | None:
@@ -64,6 +64,11 @@ def _chromosome_from_accession(seq_id: str) -> str | None:
 
 
 def _numeric_rsid(rsid: str) -> str:
+    """The bare numeric part of an rsid, refusing anything that is not `rs` plus digits.
+
+    dbSNP is queried by number, and a malformed rsid would otherwise be sent as-is and come
+    back as a miss — indistinguishable from a locus dbSNP genuinely does not carry.
+    """
     normalized = str(rsid or "").strip().lower()
     numeric = normalized.removeprefix("rs")
     if not numeric or not numeric.isdecimal():
@@ -74,6 +79,11 @@ def _numeric_rsid(rsid: str) -> str:
 
 
 def fetch_refsnp(rsid: str, *, timeout: int = 30) -> dict[str, Any]:
+    """Fetch one RefSNP record from dbSNP, the independent source the table is checked against.
+
+    Independent on purpose: verifying the marker table against the registry that produced it
+    would prove only that the file is self-consistent.
+    """
     numeric = _numeric_rsid(rsid)
     request = urllib.request.Request(
         REFSNP_URL.format(rsid=numeric),
@@ -173,6 +183,15 @@ def frequency_alleles(payload: dict[str, Any]) -> dict[str, float]:
 
 
 def _fetch_with_retries(rsid: str, *, attempts: int = 4) -> dict[str, Any]:
+    """One marker's dbSNP record, retrying only the failures that retrying can fix.
+
+    Backs off on 429 and on 5xx — rate limiting and a server-side fault are transient, and a
+    verification run that gave up on them would report `NÃO VERIFICADO` for a marker that is
+    in fact correct, which reads as a provenance discrepancy. Every other HTTPError (404 for
+    an rsid that does not exist, 400 for a malformed one) is re-raised on the first attempt:
+    those are facts about the marker table, and hiding them behind three more requests would
+    only delay the finding.
+    """
     _numeric_rsid(rsid)
     last: MarkerVerificationError | None = None
     for attempt in range(attempts):
@@ -195,6 +214,18 @@ def _fetch_with_retries(rsid: str, *, attempts: int = 4) -> dict[str, Any]:
 
 
 def verify(markers_path: Path, *, offline_payloads: dict[str, dict] | None = None) -> dict[str, Any]:
+    """Check every declared marker coordinate against dbSNP and record what was found.
+
+    The declared table is the repository's claim; dbSNP is the external authority. Each
+    marker is compared on both assemblies, and a mismatch in chromosome or position is
+    recorded as a discrepancy rather than corrected in place: silently rewriting a
+    coordinate would destroy the evidence that the table was ever wrong.
+
+    A fetch that fails is `NÃO VERIFICADO`, never `CONFERE` — an unreachable authority
+    cannot confirm anything, and the run's overall status degrades accordingly (fail-closed).
+    `offline_payloads` substitutes recorded dbSNP responses so the contract can be tested
+    without network access; it does not weaken any check, only supplies the same input.
+    """
     table = load_markers(markers_path)
     results: list[dict[str, Any]] = []
     discrepancies: list[str] = []
@@ -328,6 +359,12 @@ def verify(markers_path: Path, *, offline_payloads: dict[str, dict] | None = Non
 
 
 def main() -> int:
+    """Run the verification, write the evidence artifact, and exit non-zero on divergence.
+
+    Exit code 2 rather than 0 for anything short of `VERIFICADO`: this runs in CI, and a
+    marker table that no longer matches dbSNP has to stop the pipeline, not merely print a
+    line someone might read.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--markers", default=str(ROOT / "config/array_provenance_markers.json"))
     parser.add_argument("--output", default=str(DEFAULT_EVIDENCE))

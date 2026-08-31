@@ -16,6 +16,7 @@ from scripts.prepare_report_release import assemble_release
 
 
 def main() -> int:
+    """Render every report the case supports, from one array input and its artifacts."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True)
     parser.add_argument("--policy", help="actual policy evaluation JSON; if omitted, a staged evaluation.json is used when present")

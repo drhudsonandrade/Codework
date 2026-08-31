@@ -92,6 +92,7 @@ def assessed_bases(target: dict[str, Any]) -> set[str]:
 
 
 def _header_of(path: Path) -> list[str]:
+    """The column header of an array file, with the stream closed again afterwards."""
     fh, _ = _text_stream(path)
     try:
         header, _metadata = _read_header_and_metadata(fh)
@@ -101,6 +102,11 @@ def _header_of(path: Path) -> list[str]:
 
 
 def _row_reader(path: Path):
+    """Yield genotype rows one at a time, keeping the stream open only while iterating.
+
+    A generator rather than a list: a consumer array is hundreds of thousands of rows, and
+    the matrix is built by streaming rather than by holding the file in memory.
+    """
     fh, _ = _text_stream(path)
     try:
         header, _metadata = _read_header_and_metadata(fh)
@@ -389,6 +395,11 @@ def build_completeness_matrix(
 
 
 def write_matrix(result: dict[str, Any], output: Path) -> Path:
+    """Write the completeness matrix deterministically, and return where it landed.
+
+    Sorted keys, so rebuilding from the same inputs produces the same bytes and the digest
+    that other artifacts cite identifies the content rather than the moment it was written.
+    """
     output = Path(output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(

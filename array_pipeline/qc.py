@@ -297,10 +297,16 @@ class _ZipBackedTextStream(io.TextIOWrapper):
     """
 
     def __init__(self, raw, archive: zipfile.ZipFile, **kwargs: Any) -> None:
+        """Wrap a member stream, holding the archive open for as long as the stream lives."""
         super().__init__(raw, **kwargs)
         self._genoma_zipfile = archive
 
     def close(self) -> None:
+        """Close the member stream and then the archive it came from.
+
+        The archive is released in `finally`, so a failure closing the member cannot leak the
+        zip handle — a long array run would otherwise exhaust the descriptor table.
+        """
         try:
             super().close()
         finally:
@@ -311,6 +317,7 @@ class _BoundedRaw(io.RawIOBase):
     """Bound a decompressor by bytes it actually emits, independent of its headers."""
 
     def __init__(self, raw: Any, *, limit: int, name: str) -> None:
+        """Wrap a stream so it refuses past `limit` bytes, naming the file in the refusal."""
         super().__init__()
         self._raw = raw
         self._limit = limit
@@ -318,9 +325,16 @@ class _BoundedRaw(io.RawIOBase):
         self._read = 0
 
     def readable(self) -> bool:
+        """Always readable: this wrapper only ever decorates a readable stream."""
         return True
 
     def readinto(self, buffer: Any) -> int:
+        """Read into `buffer`, refusing once the decompressed total passes the cap.
+
+        The cap is enforced on the decompressed side because that is where a zip bomb does its
+        damage: a few kilobytes of archive can expand to gigabytes, and checking the
+        compressed size would not see it coming.
+        """
         count = self._raw.readinto(buffer)
         if count is None:
             return 0
@@ -332,6 +346,7 @@ class _BoundedRaw(io.RawIOBase):
         return count
 
     def close(self) -> None:
+        """Close the wrapped stream, releasing this wrapper's state either way."""
         try:
             self._raw.close()
         finally:
@@ -1102,6 +1117,11 @@ def inspect_array(
 
 
 def write_outputs(result: dict[str, Any], outdir: Path) -> dict[str, str]:
+    """Write the QC record deterministically and return the digest of each file written.
+
+    The digests are returned rather than recomputed by the caller so the manifest cites the
+    bytes this function actually wrote.
+    """
     outdir.mkdir(parents=True, exist_ok=True)
     qc = outdir / "array-qc.json"
     qc.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")

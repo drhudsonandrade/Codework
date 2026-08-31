@@ -63,6 +63,11 @@ class TraitScopeError(ValueError):
 
 
 def _open_associations(path: Path) -> io.TextIOWrapper:
+    """Open the GWAS associations table, whether it arrives as a zip or a plain TSV.
+
+    The catalog publishes both shapes, so the container is detected rather than assumed and a
+    download does not have to be unpacked by hand before a build.
+    """
     if path.suffix == ".zip":
         archive = zipfile.ZipFile(path)
         name = next(n for n in archive.namelist() if n.endswith(".tsv"))
@@ -189,6 +194,22 @@ def build(
     ancestry_path: Path,
     scopes_path: Path,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Build the trait target registry from a GWAS catalogue, its ancestries and a scope file.
+
+    Returns `(registry, stats)`. Three refusals are deliberate and are errors rather than
+    quiet omissions:
+
+    * an unknown scope name — the scope file would be silently ignored in part;
+    * a declared term that matched no genome-wide-significant association — the registry
+      would then advertise coverage of a trait it has no loci for;
+    * a marker whose associations disagree about its GRCh38 position, which is dropped and
+      counted, because a target with two candidate coordinates cannot be genotyped.
+
+    Loci are capped per term (`max_loci_per_term`) keeping the strongest p-values, so that a
+    heavily studied trait cannot crowd out the rest of the registry. The ancestry file is
+    joined in rather than assumed: an association discovered in one population is not
+    evidence for another, and the registry has to say which.
+    """
     config = json.loads(Path(scopes_path).read_text(encoding="utf-8"))
     if config.get("schema") != "genoma-trait-scopes-v1":
         raise TraitScopeError(f"unsupported trait scope schema: {config.get('schema')!r}")
@@ -409,6 +430,11 @@ def build(
 
 
 def _write(payload: dict[str, Any], path: Path) -> Path:
+    """Write a registry deterministically, gzipping when the path says so.
+
+    Sorted keys and a zeroed gzip mtime, so the same inputs rebuild to the same bytes and a
+    digest identifies content rather than the moment of writing.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(payload, ensure_ascii=False, indent=1, sort_keys=True) + "\n"
     if path.suffix == ".gz":
@@ -419,6 +445,7 @@ def _write(payload: dict[str, Any], path: Path) -> Path:
 
 
 def main() -> int:
+    """Build the GWAS trait target registry from the catalog exports."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--associations", required=True, help="GWAS Catalog associations zip/tsv")
     parser.add_argument("--ancestries", required=True, help="GWAS Catalog ancestries TSV")

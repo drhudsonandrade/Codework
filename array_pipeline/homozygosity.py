@@ -101,6 +101,11 @@ class HomozygosityError(ValueError):
 
 
 def _zygosity(genotype: Any) -> str | None:
+    """HOMOZIGOTO, HETEROZIGOTO, or None when the genotype is not a readable biallelic call.
+
+    None rather than a guess: an indel code or a no-call is not a zygosity, and treating it
+    as one would publish a homozygosity claim about a locus that was never read.
+    """
     text = str(genotype or "").strip().upper()
     if len(text) != 2 or not set(text) <= set("ACGT"):
         return None
@@ -387,6 +392,11 @@ def _interpretation(f_roh: float, tract_count: int) -> dict[str, Any]:
 
 
 def _method(autosome_kb: float | None) -> str:
+    """The method sentence printed beside the run, naming the denominator actually used.
+
+    The denominator is stated rather than implied: a fraction of the autosomes is only
+    interpretable if the reader knows what it was taken over, and it changes with the panel.
+    """
     denominator = (
         f"{autosome_kb:,.0f} kb de autossomos"
         if autosome_kb is not None

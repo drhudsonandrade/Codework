@@ -40,6 +40,7 @@ UNAVAILABLE = "NÃO DISPONÍVEL"
 
 
 def _percent(value: float) -> str:
+    """A fraction as a percentage with one decimal, for printing on the page."""
     return f"{value * 100:.1f}%"
 
 
@@ -57,6 +58,7 @@ def _locus_text(locus: dict) -> str:
 
 
 def _gene_layer(genes: list) -> str:
+    """The per-gene coverage paragraph, naming each gene's interrogated loci."""
     parts = []
     for record in genes:
         loci = ", ".join(_locus_text(x) for x in record["loci"])
@@ -69,6 +71,11 @@ def _gene_layer(genes: list) -> str:
 
 
 def _percent_or_unavailable(value) -> str:
+    """A percentage when there is a number, NÃO DISPONÍVEL otherwise.
+
+    Never 0%: a missing measurement and a measured zero are different facts, and printing the
+    second for the first states a result nobody produced.
+    """
     return f"{value * 100:.1f}%" if isinstance(value, (int, float)) else UNAVAILABLE
 
 
@@ -119,6 +126,12 @@ def _conditional_layer(genes: list) -> str:
 
 
 def _requisition_text(requisitions: list) -> str:
+    """The sequencing-requisition section, which says *why* when it proposes nothing.
+
+    An empty list has two causes — no gene carries actionable alleles, or none could be
+    assessed — and the reader needs to know which, so the absence is explained rather than
+    left as a blank section.
+    """
     if not requisitions:
         return (
             "Nenhuma requisição de sequenciamento foi proposta: ou nenhum gene tem alelos de "
@@ -141,6 +154,11 @@ def _requisition_text(requisitions: list) -> str:
 
 
 def _anesthesia_text(card: dict) -> str:
+    """The anaesthesia card section, or an explicit statement of why no card was issued.
+
+    This is the one section a clinician may act on in an emergency, so an unissued card names
+    the gaps that prevented it rather than printing a reassuring blank.
+    """
     if card.get("status") == UNAVAILABLE and not card.get("observations"):
         gaps = _anesthesia_gaps(card)
         reason = card.get("reason") or card.get("status_reason") or "cartão não emitido"
@@ -182,6 +200,19 @@ def build_payload(
     post_deployment_witness: Path | None = None,
     consent: Path | None = None,
 ) -> dict:
+    """Compile the payload for the pharmacogenomic report from passport and matrix.
+
+    The two artifacts must carry the same non-empty `input_sha256`, and that is checked
+    before anything is read out of them. Without it a passport from one sample and a
+    completeness matrix from another would compose into a single coherent-looking report:
+    every field would be individually true and the document as a whole would be about
+    nobody.
+
+    `policy_evaluation`, `post_deployment_witness` and `consent` are optional paths, not
+    optional requirements. Omitting one does not waive the corresponding gate; it leaves the
+    payload without that anchor, and the publication gate in `reporting.engine` refuses to
+    release a FINAL document that lacks it.
+    """
     passport = Artifact.from_path("pgx-passport", passport_path)
     matrix = Artifact.from_path("completeness-matrix", matrix_path)
     passport_input = str(passport.payload.get("input_sha256") or "").strip()
@@ -429,6 +460,7 @@ def build_payload(
 
 
 def main() -> int:
+    """Build report 06 from an array input, its QC record and the pharmacogenomic passport."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True, help="SNP-array CSV/gz/zip")
     parser.add_argument("--qc", required=True, help="array-qc.json")

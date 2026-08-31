@@ -32,6 +32,11 @@ def read_manifest_bytes(path: Path) -> str:
 
 @dataclass(frozen=True)
 class Target:
+    """One interrogated locus: which variant, how strongly scoped, and what to ask about it.
+
+    `scope` is what decides whether a locus may become a clinical finding at all, so it is
+    part of the target's identity rather than presentation metadata.
+    """
     rsid: str
     scope: str
     label: str
@@ -40,14 +45,22 @@ class Target:
 
 
 def _stable_json(value: Any) -> str:
+    """JSON that depends only on the value: sorted keys, no incidental whitespace."""
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def sha256_json(value: Any) -> str:
+    """SHA-256 over the stable rendering, so equal content gives equal digests."""
     return hashlib.sha256(_stable_json(value).encode("utf-8")).hexdigest()
 
 
 def load_target_manifest(path: Path) -> dict[str, Any]:
+    """Read a target manifest, refusing any entry the pipeline could not act on.
+
+    Schema, rsid shape, duplicate rsids, scope vocabulary and query sources are all checked
+    here rather than at use: a duplicate locus would be interrogated twice and weighted
+    twice, and an unknown scope would reach the ranking as a value it cannot place.
+    """
     payload = json.loads(read_manifest_bytes(Path(path)))
     if payload.get("schema") != "genoma-partial-genome-targets-v1":
         raise ValueError("unsupported target manifest schema")
@@ -80,6 +93,11 @@ def load_target_manifest(path: Path) -> dict[str, Any]:
 
 
 def targets_from_manifest(payload: dict[str, Any]) -> list[Target]:
+    """Convert a validated manifest into `Target` records, normalising rsid and scope case.
+
+    The manifest is accepted in whatever case it was written; everything downstream compares
+    against the canonical spelling, so normalising happens once, here.
+    """
     out: list[Target] = []
     for item in payload["targets"]:
         out.append(

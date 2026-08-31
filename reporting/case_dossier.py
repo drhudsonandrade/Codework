@@ -120,6 +120,11 @@ class CaseDossierError(ValueError):
 
 
 def _parse_date(section: str, field: str, value: Any) -> str:
+    """Normalise a dossier date to dd/mm/yyyy, naming section and field when it cannot be read.
+
+    Both are named because a dossier carries many dates, and a refusal that says only "invalid
+    date" leaves the operator to find which one.
+    """
     if isinstance(value, (date, datetime)):
         return value.strftime("%d/%m/%Y")
     text = str(value).strip()
@@ -264,6 +269,7 @@ def dossier_values(dossier: dict[str, Any] | None) -> dict[str, Any]:
     release = dossier.get("release", {})
 
     def joined(value: Any) -> Any:
+        """Render a list as a comma-separated string, leaving anything else untouched."""
         return ", ".join(str(v) for v in value) if isinstance(value, list) else value
 
     values: dict[str, Any] = {

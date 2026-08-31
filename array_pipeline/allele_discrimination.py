@@ -81,6 +81,11 @@ def function_bucket(label: Any) -> str:
 
 
 def _is_recognised(label: Any) -> bool:
+    """Whether a CPIC function label is one this module knows how to place.
+
+    An allowlist: a label nobody anticipated is refused rather than bucketed by resemblance,
+    because guessing which bucket an unknown function belongs to is a clinical judgement.
+    """
     text = str(label or "").strip()
     return text == NORMAL_FUNCTION or text in ALTERED_FUNCTIONS or text in UNCERTAIN_FUNCTIONS
 
@@ -116,6 +121,7 @@ def _numeric(table: Any) -> dict[str, float]:
 
 
 def _interpretable(classification: Any) -> bool:
+    """Whether a genotype classification may be scored at all."""
     return str(classification or "") in INTERPRETABLE
 
 
@@ -393,6 +399,12 @@ def sequencing_requisition(
             coordinates.setdefault(str(item["rsid"]).lower(), item)
 
     def weight(record: dict[str, Any]) -> float:
+        """This allele's population frequency, taken from the right population for its bucket.
+
+        Uncertain-function alleles are weighted against their own population rather than the
+        altered-function one: the two maxima usually fall in different populations, and using
+        one for both would rank an allele by a frequency measured somewhere else.
+        """
         population = uncertain_group if record["function_bucket"] == UNCERTAIN else group
         if population is None:
             return 0.0

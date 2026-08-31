@@ -83,7 +83,7 @@ ANAESTHESIA_GUIDELINE_NAME = "RYR1, CACNA1S and Volatile anesthetic agents and S
 
 
 class CpicError(RuntimeError):
-    pass
+    """CPIC could not be read, or returned something this registry cannot represent."""
 
 
 def _get(path: str, *, attempts: int = 4, **params: str) -> list[dict[str, Any]]:
@@ -439,6 +439,11 @@ def fetch_anaesthesia_scope(built: dict[str, Any]) -> dict[str, Any]:
 
 
 def build(genes: tuple[str, ...] = DEFAULT_GENES) -> dict[str, Any]:
+    """Build the pharmacogenomic registry from CPIC, stamped with when it was retrieved.
+
+    The retrieval timestamp is part of the artifact: CPIC is a living guideline, and a
+    passport has to be able to name the version of the guidance it was scored against.
+    """
     retrieved = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     built = {symbol: fetch_gene(symbol) for symbol in genes}
     return {
@@ -467,6 +472,7 @@ def build(genes: tuple[str, ...] = DEFAULT_GENES) -> dict[str, Any]:
 
 
 def main() -> int:
+    """Build the CPIC-derived pharmacogenomic registry and write it out."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
     parser.add_argument("--genes", nargs="*", default=list(DEFAULT_GENES))

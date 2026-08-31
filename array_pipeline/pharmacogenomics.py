@@ -112,6 +112,11 @@ def load_pgx_registry(path: Path) -> dict[str, Any]:
 
 
 def _pgx_targets(manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """The manifest targets that carry pharmacogenomic evidence, keyed by rsid.
+
+    Selected by the sources a target actually queries rather than by scope: a locus is
+    pharmacogenomic because a PGx registry speaks about it, not because of how it is labelled.
+    """
     out: dict[str, dict[str, Any]] = {}
     for target in manifest["targets"]:
         sources = set(target.get("queries", {}))
@@ -859,6 +864,7 @@ def _anesthesia_card(gene_records: list[dict[str, Any]], registry: dict[str, Any
 
 
 def write_passport(result: dict[str, Any], output: Path) -> Path:
+    """Write the pharmacogenomic passport deterministically, and return where it landed."""
     output = Path(output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(
