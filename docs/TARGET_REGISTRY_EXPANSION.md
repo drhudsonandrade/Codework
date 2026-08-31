@@ -224,7 +224,7 @@ associação de significância genômica no release. Dois termos caíram nessa g
 
 `rs3918290` é **multialélico** em chr1:97450058 (GRCh38, referência C):
 
-* **C>T** = `c.1905+1G>A` = **DPYD\\*2A**, classificado pelo ClinVar como *drug response* — é o
+* **C>T** = `c.1905+1G>A` = **DPYD\*2A**, classificado pelo ClinVar como *drug response* — é o
   alelo que o CPIC define;
 * **C>G** = `c.1905+1G>C`, variante **diferente** na mesma posição, essa sim P/LP.
 
@@ -323,22 +323,22 @@ curl -O https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.t
 curl -O https://ftp.clinicalgenome.org/ClinGen_gene_curation_list_GRCh38.tsv
 curl -O https://storage.googleapis.com/gcp-public-data--gnomad/release/4.1/constraint/gnomad.v4.1.constraint_metrics.tsv
 python3 scripts/curate_panelapp.py            # varre as duas instâncias; recusa leitura curta
-python3 scripts/expand_clinvar_targets.py \\
-    --clinvar-bulk variant_summary.txt.gz \\
-    --panelapp docs/evidence/PANELAPP_CURATION.json.gz \\
-    --clingen-dosage ClinGen_gene_curation_list_GRCh38.tsv \\
-    --gnomad-constraint gnomad.v4.1.constraint_metrics.tsv \\
-    --min-review-stars 1 \\
-    --targets-out config/targets_clinvar_plp_1star.json.gz \\
+python3 scripts/expand_clinvar_targets.py \
+    --clinvar-bulk variant_summary.txt.gz \
+    --panelapp docs/evidence/PANELAPP_CURATION.json.gz \
+    --clingen-dosage ClinGen_gene_curation_list_GRCh38.tsv \
+    --gnomad-constraint gnomad.v4.1.constraint_metrics.tsv \
+    --min-review-stars 1 \
+    --targets-out config/targets_clinvar_plp_1star.json.gz \
     --evidence-out docs/evidence/GENE_DISEASE_VALIDITY_BULK_1STAR.json.gz
-python3 scripts/build_trait_targets.py \\
-    --associations gwas-catalog-associations_ontology-annotated-full.zip \\
+python3 scripts/build_trait_targets.py \
+    --associations gwas-catalog-associations_ontology-annotated-full.zip \
     --ancestries gwas-catalog-download-ancestries-v1.0.3.1.txt
-python3 scripts/merge_target_manifests.py \\
-    config/partial_genome_annotation_targets.json \\
-    config/pgx_panel_targets.json \\
-    config/targets_clinvar_plp_1star.json.gz \\
-    config/targets_gwas_traits.json \\
+python3 scripts/merge_target_manifests.py \
+    config/partial_genome_annotation_targets.json \
+    config/pgx_panel_targets.json \
+    config/targets_clinvar_plp_1star.json.gz \
+    config/targets_gwas_traits.json \
     --output config/targets_merged_panel_1star.json.gz
 ```
 
