@@ -245,7 +245,9 @@ def build(
     for rsid, records in by_rsid.items():
         for record in records:
             by_term[record["term_id"]].append((record["pvalue"], rsid))
-    for term_id, entries in by_term.items():
+    # `.values()`: o termo já foi usado para agrupar, e o corte por termo abaixo não
+    # precisa do rótulo. Iterar sobre pares e descartar a chave diz que ela importa.
+    for entries in by_term.values():
         for _pvalue, rsid in sorted(set(entries))[:per_term]:
             keep.add(rsid)
 

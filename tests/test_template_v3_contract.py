@@ -243,7 +243,10 @@ class TemplateV3ContractTest(unittest.TestCase):
 
         with patch(
             "reporting.template_v3.subprocess.run",
-            side_effect=subprocess.TimeoutExpired(cmd=["pdftoppm"], timeout=POPPLER_TIMEOUT_SECONDS),
+            # Semgrep's subprocess audit matches the name `TimeoutExpired`, but this
+            # constructs the exception used as a `side_effect`; nothing is executed, and
+            # the real call it stands in for is patched out by this very statement.
+            side_effect=subprocess.TimeoutExpired(cmd=["pdftoppm"], timeout=POPPLER_TIMEOUT_SECONDS),  # nosemgrep
         ):
             with self.assertRaisesRegex(
                 TemplateV3Error,

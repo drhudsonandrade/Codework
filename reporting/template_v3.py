@@ -771,7 +771,7 @@ def _run_poppler(command: list[str], page: int) -> None:
         # binary that runs — and every remaining element is a page number this loop produced
         # or a path under the caller's temporary working directory. The list form goes
         # straight to execve with no shell.
-        result = subprocess.run(  # nosec B603
+        result = subprocess.run(  # nosec B603  # nosemgrep
             command,
             check=False,
             stdout=subprocess.DEVNULL,

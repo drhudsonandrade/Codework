@@ -310,7 +310,9 @@ def cpic_variant_alleles(rsid: str, registry: dict[str, Any] | None) -> dict[str
     real pharmacogenetic targets with no assessed allele.
     """
     out: dict[str, list[str]] = {}
-    for gene, spec in (registry or {}).get("genes", {}).items():
+    # `.values()`: a busca é por rsid em qualquer gene, então o nome do gene não entra
+    # no resultado nem na decisão.
+    for spec in (registry or {}).get("genes", {}).values():
         for allele, definition in (spec.get("alleles") or {}).items():
             for position in definition.get("defining", []):
                 if str(position.get("rsid", "")).lower() == rsid:
