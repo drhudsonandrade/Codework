@@ -40,11 +40,38 @@ branch every finding that was already on the default branch. The scope is chosen
 | Run | `CODACY_PULL_REQUEST` | Endpoint | The count means |
 |---|---|---|---|
 | `pull_request` | the PR number | `listPullRequestIssues` with `status=new` | issues this pull request introduces |
-| `workflow_dispatch` | empty | `searchRepositoryIssues` | every open issue in the repository |
+| `workflow_dispatch` with the `pull_request` input | that number | `listPullRequestIssues` with `status=new` | issues that pull request introduces |
+| `workflow_dispatch` with the input empty | empty | `searchRepositoryIssues` | every open issue in the repository |
 
 An unset or empty variable selects the repository scope. Any other non-numeric or non-positive
 value is refused rather than silently falling back to it, so a misconfigured workflow cannot
 publish a repository-wide backlog total under a pull request's name.
+
+The manual dispatch input exists so the delta for any open pull request can be obtained on
+demand, without waiting for a new push to that branch.
+
+### The pull-request endpoint requires an *account* token
+
+VERIFICADO by live run `33434452877`. Codacy refuses `listPullRequestIssues` when it is
+presented with a repository token:
+
+```
+HTTP 401 {"message":"Account authentication required","error":"Unauthorized","code":"ProjectTokenNotAllowed"}
+```
+
+So `CODACY_PROJECT_TOKEN` reaches every repository-scoped endpoint and no pull-request one.
+`CODACY_API_TOKEN` is therefore not merely a fallback for this feature — it is the only
+credential that can answer "what did this pull request introduce?".
+
+When Codacy rejects the pull-request endpoint **and no account token is configured at all**,
+the run degrades to the repository scope rather than failing every pull request over a secret
+the repository has never held. The degradation is explicit and cannot be mistaken for a delta:
+the report and the artifact both drop to `scope: repository`, and both carry a `NÃO DISPONÍVEL`
+note stating that the counts are the backlog and naming the missing secret. The pull-request
+label is never kept over a repository-wide count.
+
+When an account token **is** configured and Codacy still rejects the request, that is a real
+authentication failure and the run fails.
 
 `codacy-issues.json` records which scope produced it: `{"scope": "repository", "data": [...]}`
 or `{"scope": "pull-request", "pullRequest": N, "analyzed": bool, "data": [...]}`. The report's
@@ -104,11 +131,18 @@ Before contacting Codacy, the workflow runs the reporter regression tests. They 
 9. Save.
 10. Open GitHub `Actions` → `Codacy API Report` → `Run workflow` to validate the connection.
 
-### Account token fallback
+### Account token — required for pull-request scope
 
-If the repository token is rejected by a Codacy v3 endpoint with `401` or `403`, create an account API token in Codacy under `My Account` → `Access Management` → `API Tokens`, then store it in GitHub as `CODACY_API_TOKEN`.
+Create an account API token in Codacy under `My Account` → `Access Management` → `API Tokens`,
+then store it in GitHub as the repository secret `CODACY_API_TOKEN` (`Settings` → `Secrets and
+variables` → `Actions` → `New repository secret`). Paste it only into that field; it must never
+be sent anywhere else.
 
-The workflow prefers `CODACY_PROJECT_TOKEN` when both secrets are configured, but it no longer discards the configured account-token recovery path after an authentication or authorization rejection.
+This is not optional for the pull-request delta. As recorded above, Codacy answers
+`listPullRequestIssues` only to an account token; without this secret the reporter can produce
+the repository backlog and nothing else.
+
+The workflow prefers `CODACY_PROJECT_TOKEN` when both secrets are configured, and does not discard the configured account-token recovery path after an authentication or authorization rejection.
 
 ## Security notes
 

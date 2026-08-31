@@ -468,5 +468,110 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
         self.assertTrue(any(k.lower() == "api-token" for k in seen[1]))
 
 
+class CodacyScopeDegradationTest(unittest.TestCase):
+    """What happens when the pull-request endpoint refuses the only configured credential.
+
+    Observed live: Codacy answers `listPullRequestIssues` with
+    `401 {"code":"ProjectTokenNotAllowed"}` for a repository token. The endpoint is answered
+    only to an account token. A deployment holding just `CODACY_PROJECT_TOKEN` can therefore
+    reach every repository-scoped endpoint and no pull-request one.
+    """
+
+    @staticmethod
+    def _opener(pull_request_status=401, repository_payload=None):
+        """An opener that rejects the pull-request endpoint and serves the repository one."""
+
+        def opener(request, timeout=30):
+            if "/pull-requests/" in request.full_url:
+                raise urllib.error.HTTPError(
+                    request.full_url,
+                    pull_request_status,
+                    "Unauthorized",
+                    {},
+                    io.BytesIO(b'{"code":"ProjectTokenNotAllowed"}'),
+                )
+            return _Response(repository_payload or {"data": [{"id": "backlog"}], "pagination": {}})
+
+        return opener
+
+    def test_a_rejected_pull_request_endpoint_raises_a_typed_auth_error(self):
+        from scripts.codacy_api_report import CodacyAuthError, fetch_pull_request_issues
+
+        with self.assertRaises(CodacyAuthError):
+            fetch_pull_request_issues(
+                "gh", "org", "repo", 32, "project", "", opener=self._opener()
+            )
+
+    def test_a_non_auth_failure_is_not_a_typed_auth_error(self):
+        """The type must separate "needs a credential nobody has" from "something broke"."""
+        from scripts.codacy_api_report import CodacyAPIError, CodacyAuthError, fetch_issues
+
+        def opener(request, timeout=30):
+            raise urllib.error.HTTPError(
+                request.full_url, 500, "server error", {}, io.BytesIO(b"boom")
+            )
+
+        with self.assertRaises(CodacyAPIError) as caught:
+            fetch_issues("gh", "org", "repo", "project", "", opener=opener)
+        self.assertNotIsInstance(caught.exception, CodacyAuthError)
+
+    def test_without_an_account_token_the_run_degrades_and_says_so_loudly(self):
+        """Degrading is allowed; relabelling a backlog as a pull request's delta is not.
+
+        The alternative to degrading would be failing every pull-request run over a secret the
+        repository has never had. What it must never do is keep the pull-request label: the
+        report and the artifact both drop to `repository` scope and carry a note saying the
+        counts are not the delta.
+        """
+        from scripts.codacy_api_report import build_report, collect
+
+        collected = collect("gh", "org", "repo", 32, "project", "", opener=self._opener())
+        self.assertIsNone(collected.pull_request)
+        self.assertEqual(collected.issues, [{"id": "backlog"}])
+        self.assertIn("NÃO DISPONÍVEL", collected.note)
+        self.assertIn("CODACY_API_TOKEN", collected.note)
+        self.assertIn("not this pull request's new issues", collected.note)
+
+        report = build_report(
+            "org", "repo", collected.issues, pull_request=collected.pull_request,
+            analyzed=collected.analyzed, note=collected.note,
+        )
+        self.assertIn("Scope: **repository**", report)
+        self.assertNotIn("Scope: **pull request", report)
+        self.assertIn("NÃO DISPONÍVEL", report)
+
+    def test_with_an_account_token_configured_a_rejection_is_a_real_failure(self):
+        """Both credentials rejected means broken auth, not an unconfigured capability."""
+        from scripts.codacy_api_report import CodacyAuthError, collect
+
+        with self.assertRaises(CodacyAuthError):
+            collect("gh", "org", "repo", 32, "project", "account", opener=self._opener())
+
+    def test_the_degradation_is_recorded_in_the_artifact_not_only_in_the_prose(self):
+        from scripts.codacy_api_report import collect, write_artifacts
+
+        collected = collect("gh", "org", "repo", 32, "project", "", opener=self._opener())
+        with tempfile.TemporaryDirectory() as td:
+            _, issues_path = write_artifacts(
+                "org", "repo", collected.issues, directory=Path(td),
+                pull_request=collected.pull_request, analyzed=collected.analyzed,
+                note=collected.note,
+            )
+            payload = json.loads(issues_path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["scope"], "repository")
+        self.assertNotIn("pullRequest", payload)
+        self.assertIn("NÃO DISPONÍVEL", payload["note"])
+
+    def test_a_repository_scoped_run_carries_no_note(self):
+        """The note exists to mark a degraded run; an ordinary one must not look degraded."""
+        from scripts.codacy_api_report import build_report, collect
+
+        collected = collect("gh", "org", "repo", None, "project", "", opener=self._opener())
+        self.assertEqual(collected.note, "")
+        self.assertNotIn(
+            "NÃO DISPONÍVEL", build_report("org", "repo", collected.issues, note=collected.note)
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

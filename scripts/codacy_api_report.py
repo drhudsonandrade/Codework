@@ -21,6 +21,18 @@ class CodacyAPIError(RuntimeError):
     """A Codacy API request failed without a safe fallback path."""
 
 
+class CodacyAuthError(CodacyAPIError):
+    """Codacy rejected every configured credential for this endpoint.
+
+    Distinguished from other failures because it is the one that can mean "this endpoint needs
+    a credential nobody configured" rather than "something is broken". Codacy answers
+    `listPullRequestIssues` only to an account token, refusing a repository token with
+    `401 ProjectTokenNotAllowed` — observed live in run 33434452877 — so a deployment that has
+    only `CODACY_PROJECT_TOKEN` can reach every repository-scoped endpoint and none of the
+    pull-request ones. The caller needs to tell that apart from a rejected token.
+    """
+
+
 def credential_candidates(project_token: str, account_token: str) -> list[tuple[str, str]]:
     """Return credentials in preferred order without discarding the configured fallback."""
     candidates: list[tuple[str, str]] = []
@@ -255,7 +267,8 @@ def _with_credentials(
                 continue
             details = _read_http_error(exc, project_token, account_token)
             suffix = f": {details}" if details else ""
-            raise CodacyAPIError(f"Codacy API HTTP {exc.code}{suffix}") from exc
+            failure = CodacyAuthError if exc.code in AUTH_FAILURE_CODES else CodacyAPIError
+            raise failure(f"Codacy API HTTP {exc.code}{suffix}") from exc
         except urllib.error.URLError as exc:
             raise CodacyAPIError(f"Codacy API network error: {exc.reason}") from exc
     raise CodacyAPIError("Codacy authentication failed for all configured credentials")
@@ -369,6 +382,7 @@ def build_report(
     *,
     pull_request: int | None = None,
     analyzed: bool = True,
+    note: str = "",
 ) -> str:
     """Build the human-readable report, stating the scope the numbers actually belong to.
 
@@ -396,6 +410,8 @@ def build_report(
             "repository, not the delta of any pull request.",
             f"Issues returned by API: **{len(issue_list)}**",
         ]
+        if note:
+            lines += ["", note]
     else:
         lines.append(
             f"Scope: **pull request #{pull_request}** — issues Codacy attributes to this pull "
@@ -437,6 +453,7 @@ def write_artifacts(
     directory: Path = Path("."),
     pull_request: int | None = None,
     analyzed: bool = True,
+    note: str = "",
 ) -> tuple[Path, Path]:
     """Write the consolidated JSON issue list and the Markdown report.
 
@@ -454,9 +471,11 @@ def write_artifacts(
     if pull_request is not None:
         payload["pullRequest"] = pull_request
         payload["analyzed"] = analyzed
+    if note:
+        payload["note"] = note
     issues_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     report_path.write_text(
-        build_report(org, repo, issues, pull_request=pull_request, analyzed=analyzed),
+        build_report(org, repo, issues, pull_request=pull_request, analyzed=analyzed, note=note),
         encoding="utf-8",
     )
     return report_path, issues_path
@@ -479,24 +498,93 @@ def parse_pull_request(raw: str) -> int | None:
     return int(text)
 
 
+def _no_account_token_note(pull_request: int) -> str:
+    """Why a pull-request run is reporting the repository backlog instead of a delta."""
+    return (
+        f"**NÃO DISPONÍVEL — pull request #{pull_request} delta.** Codacy refused "
+        "`listPullRequestIssues` for the configured repository token "
+        "(`401 ProjectTokenNotAllowed`); that endpoint is answered only to an account token, "
+        "and no `CODACY_API_TOKEN` secret is configured. **The counts above are the repository "
+        "backlog, not this pull request's new issues** — do not quote them as the delta. To "
+        "obtain the delta, add a Codacy account API token as the repository secret "
+        "`CODACY_API_TOKEN` (see `docs/CODACY_API_INTEGRATION.md`)."
+    )
+
+
+class Collected(NamedTuple):
+    """What was actually fetched, and under which scope it may be quoted."""
+
+    pull_request: int | None
+    analyzed: bool
+    issues: list[dict]
+    note: str
+
+
+def collect(
+    provider: str,
+    org: str,
+    repo: str,
+    pull_request: int | None,
+    project_token: str,
+    account_token: str,
+    *,
+    opener: Callable = urllib.request.urlopen,
+) -> Collected:
+    """Fetch at the requested scope, degrading to the repository backlog only when it is honest.
+
+    The degradation is narrow on purpose. It applies when Codacy rejects the pull-request
+    endpoint *and no account token was ever configured* — an unconfigured optional capability,
+    not a fault, and one whose only alternative would be to fail every pull-request run over a
+    secret the repository has never had. A rejection with an account token present is a real
+    authentication failure and is raised.
+
+    When it degrades, the scope reported is `repository` and the note says so in the report and
+    in the artifact. It never keeps the pull-request label over a repository-wide count: that
+    substitution — quoting the backlog as a branch's delta — is the specific error this whole
+    change exists to make impossible, and a fallback that committed it would be worse than the
+    bug it works around.
+    """
+    if pull_request is None:
+        return Collected(
+            None, True, fetch_issues(provider, org, repo, project_token, account_token, opener=opener), ""
+        )
+    try:
+        analyzed, issues = fetch_pull_request_issues(
+            provider, org, repo, pull_request, project_token, account_token, opener=opener
+        )
+        return Collected(pull_request, analyzed, issues, "")
+    except CodacyAuthError:
+        if account_token:
+            raise
+        return Collected(
+            None,
+            True,
+            fetch_issues(provider, org, repo, project_token, account_token, opener=opener),
+            _no_account_token_note(pull_request),
+        )
+
+
 def main() -> int:
     """Fetch Codacy data using environment configuration and publish local artifacts."""
     provider = os.environ.get("CODACY_PROVIDER", "gh")
     org = os.environ["CODACY_ORG"]
     repo = os.environ["CODACY_REPO"]
-    project_token = os.environ.get("CODACY_PROJECT_TOKEN", "")
-    account_token = os.environ.get("CODACY_API_TOKEN", "")
-    pull_request = parse_pull_request(os.environ.get("CODACY_PULL_REQUEST", ""))
-
-    if pull_request is None:
-        analyzed, issues = True, fetch_issues(provider, org, repo, project_token, account_token)
-    else:
-        analyzed, issues = fetch_pull_request_issues(
-            provider, org, repo, pull_request, project_token, account_token
-        )
+    collected = collect(
+        provider,
+        org,
+        repo,
+        parse_pull_request(os.environ.get("CODACY_PULL_REQUEST", "")),
+        os.environ.get("CODACY_PROJECT_TOKEN", ""),
+        os.environ.get("CODACY_API_TOKEN", ""),
+    )
 
     report_path, _ = write_artifacts(
-        org, repo, issues, pull_request=pull_request, analyzed=analyzed
+        org,
+        repo,
+        collected.issues,
+        pull_request=collected.pull_request,
+        analyzed=collected.analyzed,
+        note=collected.note,
     )
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
