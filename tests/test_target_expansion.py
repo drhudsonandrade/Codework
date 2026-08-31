@@ -14,6 +14,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,11 +28,13 @@ def _load(name: str):
     """Load one of the scripts/ builders as a module, since they are not importable packages."""
     path = ROOT / "scripts" / f"{name}.py"
     spec = importlib.util.spec_from_file_location(f"_script_{name}", path)
-    module = importlib.util.module_from_spec(spec)
-    # Raised, not asserted: `assert` is stripped under `python -O`, and a loaderless spec
-    # would then fail on the next line with an AttributeError naming nothing useful.
+    # Checked before `module_from_spec`, not after. `module_from_spec(None)` reads
+    # `spec.loader` itself, so a `None` spec died there with an `AttributeError` naming
+    # nothing useful and this guard never ran — it only ever caught the loaderless case.
+    # Raised rather than asserted, because `assert` is stripped under `python -O`.
     if spec is None or spec.loader is None:
         raise ImportError(f"no loader for {path}")
+    module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
@@ -96,6 +99,35 @@ def _bulk(rows: list[str]) -> Path:
 def _scan(rows: list[str]):
     """Scan a bulk file built from these rows and return the scanner's three outputs."""
     return EXPAND.scan_clinvar(_bulk(rows))
+
+
+class ScriptLoaderTest(unittest.TestCase):
+    """`_load` refuses a file it cannot import, with an error that names the file."""
+
+    def test_a_spec_that_cannot_be_built_raises_import_error_not_attribute_error(self):
+        """Raised in review: the guard sat below `module_from_spec`, which reads `spec.loader`.
+
+        `spec_from_file_location` returns `None` for a path Python has no loader for — a
+        directory, or a file with an unrecognised suffix. `module_from_spec(None)` then failed
+        with `AttributeError: 'NoneType' object has no attribute 'loader'` before this
+        module's own check could run, so the check only ever covered the loaderless spec and
+        the diagnosis named nothing.
+        """
+        with patch.object(importlib.util, "spec_from_file_location", return_value=None):
+            with self.assertRaises(ImportError) as caught:
+                _load("expand_clinvar_targets")
+        self.assertIn("expand_clinvar_targets.py", str(caught.exception))
+        self.assertNotIsInstance(caught.exception, AttributeError)
+
+    def test_a_spec_without_a_loader_is_also_refused(self):
+        """The other half of the condition, which the original guard did reach."""
+        with patch.object(
+            importlib.util,
+            "spec_from_file_location",
+            return_value=SimpleNamespace(loader=None),
+        ):
+            with self.assertRaises(ImportError):
+                _load("expand_clinvar_targets")
 
 
 class ClinVarFilterTest(unittest.TestCase):

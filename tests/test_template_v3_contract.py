@@ -217,8 +217,13 @@ class TemplateV3ContractTest(unittest.TestCase):
 
     def test_poppler_failure_keeps_the_converter_diagnostics(self):
         """A poppler failure keeps the converter's diagnostics instead of discarding them."""
-        import subprocess  # nosec B404
-
+        # The exception class is reached through the module under test rather than by
+        # importing `subprocess` here. That removes a B404 suppression this file could not
+        # justify — `subprocess` was only ever used for exception types, never to execute —
+        # and it asserts against the very class the code would have raised. (Written without
+        # the literal directive: Bandit reads one anywhere in a comment, so spelling it out
+        # here would silence this line while explaining why nothing needs silencing.)
+        from reporting import template_v3
         from reporting.template_v3 import TemplateV3Error, _run_poppler
 
         with self.assertRaises(TemplateV3Error) as caught:
@@ -235,12 +240,11 @@ class TemplateV3ContractTest(unittest.TestCase):
         self.assertIn("exit code 3", message)
         self.assertIn("template page 7", message)
         self.assertIn("Couldn't find trailer dictionary", message)
-        self.assertNotIsInstance(caught.exception, subprocess.CalledProcessError)
+        self.assertNotIsInstance(caught.exception, template_v3.subprocess.CalledProcessError)
 
     def test_poppler_timeout_fails_closed_with_page_context(self):
         """A poppler timeout fails closed and names the page it was on."""
-        import subprocess  # nosec B404
-
+        from reporting import template_v3
         from reporting.template_v3 import POPPLER_TIMEOUT_SECONDS, TemplateV3Error, _run_poppler
 
         with patch(
@@ -248,7 +252,9 @@ class TemplateV3ContractTest(unittest.TestCase):
             # Semgrep's subprocess audit matches the name `TimeoutExpired`, but this
             # constructs the exception used as a `side_effect`; nothing is executed, and
             # the real call it stands in for is patched out by this very statement.
-            side_effect=subprocess.TimeoutExpired(cmd=["pdftoppm"], timeout=POPPLER_TIMEOUT_SECONDS),  # nosemgrep
+            side_effect=template_v3.subprocess.TimeoutExpired(  # nosemgrep
+                cmd=["pdftoppm"], timeout=POPPLER_TIMEOUT_SECONDS
+            ),
         ):
             with self.assertRaisesRegex(
                 TemplateV3Error,
