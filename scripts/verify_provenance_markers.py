@@ -36,6 +36,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.https_transport import is_https, policy_opener
+
 from array_pipeline.provenance_probe import COMPLEMENT, load_markers
 
 REFSNP_URL = "https://api.ncbi.nlm.nih.gov/variation/v0/refsnp/{rsid}"
@@ -94,13 +96,13 @@ def fetch_refsnp(rsid: str, *, timeout: int = 30) -> dict[str, Any]:
     # from a constant someone edited, a CLI flag or a manifest could make a *download* read
     # the local filesystem and hand the bytes to the caller as if a registry had published
     # them. The scheme is the one property that decides which of those happens.
-    if request.type != "https":
+    if not is_https(request.full_url):
         raise MarkerVerificationError(
             f"refusing a non-HTTPS transport for dbSNP: {request.full_url}"
         )
 
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:  # nosec B310
+        with policy_opener(is_https, "this source").open(request, timeout=timeout) as response:  # nosec B310
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         raise MarkerVerificationError(

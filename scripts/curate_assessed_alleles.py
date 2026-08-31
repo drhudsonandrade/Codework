@@ -38,6 +38,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.https_transport import is_https, policy_opener
+
 from scripts.verify_provenance_markers import fetch_refsnp, frequency_alleles, placements
 
 EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
@@ -104,13 +106,13 @@ def _get(url: str, *, attempts: int = 4) -> dict[str, Any]:
     # from a constant someone edited, a CLI flag or a manifest could make a *download* read
     # the local filesystem and hand the bytes to the caller as if a registry had published
     # them. The scheme is the one property that decides which of those happens.
-    if request.type != "https":
+    if not is_https(request.full_url):
         raise CurationError(f"refusing a non-HTTPS transport: {url}")
 
     last: Exception | None = None
     for attempt in range(attempts):
         try:
-            with urllib.request.urlopen(request, timeout=45) as response:  # nosec B310
+            with policy_opener(is_https, "the CPIC API").open(request, timeout=45) as response:  # nosec B310
                 return json.loads(response.read().decode("utf-8"))
         # HTTPError subclasses URLError, so a permanent 400/404 used to fall into the retry
         # loop and burn four attempts with 1s, 2s and 4s of waiting before failing anyway.

@@ -62,6 +62,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.https_transport import is_https, policy_opener
+
 from array_pipeline.clinical_findings import (
     AUTOSOMAL_DOMINANT as AUTOSOMAL_DOMINANT_ABBR,
     AUTOSOMAL_RECESSIVE as AUTOSOMAL_RECESSIVE_ABBR,
@@ -139,12 +141,12 @@ def _fetch(url: str, *, attempts: int = 4) -> bytes:
     # from a constant someone edited, a CLI flag or a manifest could make a *download* read
     # the local filesystem and hand the bytes to the caller as if a registry had published
     # them. The scheme is the one property that decides which of those happens.
-    if request.type != "https":
+    if not is_https(request.full_url):
         raise RuntimeError(f"refusing a non-HTTPS transport for a bulk export: {url}")
 
     for attempt in range(attempts):
         try:
-            with urllib.request.urlopen(request, timeout=1800) as response:  # nosec B310
+            with policy_opener(is_https, "this source").open(request, timeout=1800) as response:  # nosec B310
                 return response.read()
         except urllib.error.HTTPError as exc:
             last = exc

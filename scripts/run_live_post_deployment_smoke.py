@@ -26,6 +26,7 @@ from project_instructions_attestation import (
     ProjectInstructionsAttestationError,
     verify_project_instructions_attestation,
 )
+from https_transport import loopback_http_or_https, policy_opener
 from reporting import deployment_target
 
 EXPECTED_SHA = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
@@ -89,15 +90,25 @@ def http_json(base: str, method: str, path: str, payload: dict[str, Any] | None 
     # readily as it honours HTTP. A `file:` base would make every case "succeed" against
     # bytes on the runner's disk, and the witness would record fifteen passes for a service
     # that was never contacted — the precise substitution `reporting/deployment_target.py`
-    # exists to prevent, arriving one layer lower. `http` stays admissible because the
-    # ceremony deliberately dials `http://127.0.0.1:8787`; the witness then classifies that
-    # target as loopback and refuses to certify a deployment on it.
-    if request.type not in {"http", "https"}:
+    # exists to prevent, arriving one layer lower.
+    #
+    # `http` stays admissible because the ceremony deliberately dials
+    # `http://127.0.0.1:8787` — but only for that endpoint. Admitting plain HTTP to *any*
+    # host would let a mistyped or hostile `--base-url` send these request bodies to a third
+    # party in clear text: this function POSTs the case manifests, so the payloads are what
+    # is at stake, not only the verdict. `deployment_target.classify` records that a target
+    # is loopback but does not stop the call, so the refusal has to happen here.
+    #
+    # `policy_opener` re-applies the same rule to every redirect hop. Checking only the
+    # request built here would leave `Location: http://elsewhere/` free to move the exchange
+    # off this machine after the guard had already passed.
+    if not loopback_http_or_https(request.full_url):
         raise SystemExit(
-            f"refusing a non-HTTP transport for the live smoke: {request.full_url}"
+            f"refusing a transport the live smoke does not allow: {request.full_url}"
         )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:  # nosec B310
+        opener = policy_opener(loopback_http_or_https, "the live smoke")
+        with opener.open(request, timeout=30) as response:  # nosec B310
             raw = response.read()
             return response.status, json.loads(raw), raw
     except urllib.error.HTTPError as exc:

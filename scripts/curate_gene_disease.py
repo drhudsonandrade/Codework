@@ -60,6 +60,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.https_transport import is_https, policy_opener
+
 from array_pipeline.clinical_findings import normalised_moi
 from array_pipeline.targets import load_target_manifest, sha256_json
 from scripts.curate_assessed_alleles import _spdi
@@ -114,13 +116,13 @@ def _fetch(url: str, *, attempts: int = 4, accept: str = "application/json") -> 
     # from a constant someone edited, a CLI flag or a manifest could make a *download* read
     # the local filesystem and hand the bytes to the caller as if a registry had published
     # them. The scheme is the one property that decides which of those happens.
-    if request.type != "https":
+    if not is_https(request.full_url):
         raise CurationError(f"refusing a non-HTTPS transport: {url}")
 
     last: Exception | None = None
     for attempt in range(attempts):
         try:
-            with urllib.request.urlopen(request, timeout=120) as response:  # nosec B310
+            with policy_opener(is_https, "this source").open(request, timeout=120) as response:  # nosec B310
                 return response.read()
         except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
             last = exc

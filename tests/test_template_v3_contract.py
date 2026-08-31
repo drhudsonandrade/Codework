@@ -8,6 +8,8 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from ruleset_test_support import RULESET
 
@@ -227,6 +229,7 @@ class TemplateV3ContractTest(unittest.TestCase):
                     "import sys; sys.stderr.write('Syntax Error: Couldn\\'t find trailer dictionary\\n'); sys.exit(3)",
                 ],
                 7,
+                allowed=frozenset({sys.executable}),
             )
         message = str(caught.exception)
         self.assertIn("exit code 3", message)
@@ -237,7 +240,6 @@ class TemplateV3ContractTest(unittest.TestCase):
     def test_poppler_timeout_fails_closed_with_page_context(self):
         """A poppler timeout fails closed and names the page it was on."""
         import subprocess  # nosec B404
-        from unittest.mock import patch
 
         from reporting.template_v3 import POPPLER_TIMEOUT_SECONDS, TemplateV3Error, _run_poppler
 
@@ -252,7 +254,43 @@ class TemplateV3ContractTest(unittest.TestCase):
                 TemplateV3Error,
                 rf"pdftoppm timed out on template page 4 after {POPPLER_TIMEOUT_SECONDS}s",
             ):
-                _run_poppler(["pdftoppm"], 4)
+                _run_poppler(["pdftoppm"], 4, allowed=frozenset({"pdftoppm"}))
+
+    def test_only_a_resolved_poppler_binary_is_executed(self):
+        """The executable allowlist is a gate, not a comment about who calls this.
+
+        Raised in review: `_run_poppler` took a plain list, and its justification for the
+        Bandit and Semgrep suppressions was that `command[0]` had come from `shutil.which`.
+        That was true of the two call sites and of nothing else — a future caller passing a
+        different program would have been executed with the suppression still in place. The
+        set of admissible binaries is now resolved once by `_convert_template_pages` and
+        checked here, so the suppression rests on a test rather than on a premise.
+        """
+        from reporting.template_v3 import TemplateV3Error, _run_poppler
+
+        allowed = frozenset({"/usr/bin/pdftocairo", "/usr/bin/pdftoppm"})
+        for refused in (
+            ["/bin/sh", "-c", "echo pwned"],
+            ["pdftoppm"],                       # the bare name, not the resolved path
+            ["/tmp/pdftoppm"],                  # a lookalike somewhere else  # nosec B108
+            [],
+        ):
+            with self.subTest(refused=refused):
+                with patch("reporting.template_v3.subprocess.run") as ran:
+                    with self.assertRaisesRegex(TemplateV3Error, "refusing to execute"):
+                        _run_poppler(refused, 1, allowed=allowed)
+                    # The refusal happens before the process is started, not after.
+                    ran.assert_not_called()
+
+    def test_a_resolved_poppler_binary_is_still_executed(self):
+        """The negative control: the gate must not refuse the two calls that are legitimate."""
+        from reporting.template_v3 import _run_poppler
+
+        allowed = frozenset({"/usr/bin/pdftocairo"})
+        with patch("reporting.template_v3.subprocess.run") as ran:
+            ran.return_value = SimpleNamespace(returncode=0, stderr=b"")
+            _run_poppler(["/usr/bin/pdftocairo", "-svg", "in.pdf", "out.svg"], 1, allowed=allowed)
+        ran.assert_called_once()
 
     def test_single_line_fit_shrinks_for_the_box_height_too(self):
         """The single-line fit shrinks for the box height as well as its width."""

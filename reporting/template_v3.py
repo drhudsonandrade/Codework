@@ -758,19 +758,32 @@ def _add_vml_textbox(
     paragraph._p.append(run)
 
 
-def _run_poppler(command: list[str], page: int) -> None:
+def _run_poppler(command: list[str], page: int, *, allowed: frozenset[str]) -> None:
     """Run one poppler conversion, turning a non-zero exit or a timeout into a refusal.
 
     stderr is captured and reported: a silent conversion failure would leave a missing page
     image that the DOCX then renders as a blank.
+
+    `allowed` is the set of absolute paths `_convert_template_pages` resolved for the two
+    poppler tools, and it is checked here rather than assumed. Raised in review: a comment
+    saying the executable came from `shutil.which` is a statement about today's callers, not
+    a property of this function — `command` is a plain list, and a future caller passing a
+    different program would be executed with the suppression above still in place. The set is
+    passed in rather than re-resolved so that the binary this gate admits is the same object
+    `shutil.which` returned, not a second PATH lookup that could answer differently.
     """
+    if not command or command[0] not in allowed:
+        raise TemplateV3Error(
+            f"refusing to execute {(command[0] if command else '')!r}: not one of the poppler "
+            "binaries resolved for this conversion"
+        )
     try:
-        # Bandit's B603 asks a human to confirm the argv is trusted. It is: `command[0]` is a
-        # poppler binary this module resolved with `shutil.which` — the same lookup that
-        # decided the conversion could run at all, so the binary that was checked is the
-        # binary that runs — and every remaining element is a page number this loop produced
-        # or a path under the caller's temporary working directory. The list form goes
-        # straight to execve with no shell.
+        # Bandit's B603 asks a human to confirm the argv is trusted. It is, and the check
+        # above is that confirmation rather than a claim about it: `command[0]` has just been
+        # tested against the two absolute paths `shutil.which` returned for pdftocairo and
+        # pdftoppm, and every remaining element is a page number this loop produced or a path
+        # under the caller's temporary working directory. The list form goes straight to
+        # execve with no shell.
         result = subprocess.run(  # nosec B603  # nosemgrep
             command,
             check=False,
@@ -806,6 +819,8 @@ def _convert_template_pages(
         raise TemplateV3Error(
             "DOCX template-v3 mode requires pdftocairo and pdftoppm (poppler-utils)"
         )
+    # Resolved once, here, and handed to every call as the gate they are checked against.
+    allowed = frozenset({pdftocairo, pdftoppm})
     svgs: list[Path] = []
     pngs: list[Path] = []
     for page in range(1, page_count + 1):
@@ -814,6 +829,7 @@ def _convert_template_pages(
         _run_poppler(
             [pdftocairo, "-f", str(page), "-l", str(page), "-svg", str(template_pdf), str(raw)],
             page,
+            allowed=allowed,
         )
         raw.rename(svg)
         stem = work / f"page-{page}-fallback"
@@ -832,6 +848,7 @@ def _convert_template_pages(
                 str(stem),
             ],
             page,
+            allowed=allowed,
         )
         svgs.append(svg)
         pngs.append(Path(str(stem) + ".png"))

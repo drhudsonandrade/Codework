@@ -1,12 +1,34 @@
 from __future__ import annotations
 
 import json
-import urllib.error
 import unittest
+import urllib.error
+import urllib.request
 from unittest.mock import MagicMock, patch
 
 from array_pipeline.allele_discrimination import partition_alleles
-from scripts import build_pgx_panel, build_pgx_registry, expand_clinvar_targets, verify_provenance_markers
+from scripts import (
+    build_pgx_panel,
+    build_pgx_registry,
+    curate_assessed_alleles,
+    curate_gene_disease,
+    expand_clinvar_targets,
+    https_transport,
+    verify_provenance_markers,
+)
+
+
+def opener_factory(*results):
+    """Stand in for `policy_opener`, returning an opener whose `.open` yields `results`.
+
+    The fetchers no longer call `urllib.request.urlopen`: they build an opener that
+    re-applies the transport policy to every redirect hop, so the seam the tests must hold is
+    `policy_opener`, not `urlopen`. Patching the old name would leave every one of these
+    tests passing without exercising anything.
+    """
+    opener = MagicMock()
+    opener.open.side_effect = list(results)
+    return MagicMock(return_value=opener), opener
 
 
 class CpicRetryPolicyTest(unittest.TestCase):
@@ -16,11 +38,12 @@ class CpicRetryPolicyTest(unittest.TestCase):
         error = urllib.error.HTTPError(
             "https://api.cpicpgx.org/v1/gene", 404, "Not Found", None, None
         )
-        with patch.object(build_pgx_registry.urllib.request, "urlopen", side_effect=error) as opened:
+        factory, opener = opener_factory(error, error, error, error)
+        with patch.object(build_pgx_registry, "policy_opener", factory):
             with patch.object(build_pgx_registry.time, "sleep") as slept:
                 with self.assertRaises(build_pgx_registry.CpicError):
                     build_pgx_registry._get("gene", attempts=4)
-        self.assertEqual(opened.call_count, 1)
+        self.assertEqual(opener.open.call_count, 1)
         slept.assert_not_called()
 
     def test_transient_http_error_is_retried(self):
@@ -30,12 +53,11 @@ class CpicRetryPolicyTest(unittest.TestCase):
         error = urllib.error.HTTPError(
             "https://api.cpicpgx.org/v1/gene", 503, "Unavailable", None, None
         )
-        with patch.object(
-            build_pgx_registry.urllib.request, "urlopen", side_effect=[error, response]
-        ) as opened:
+        factory, opener = opener_factory(error, response)
+        with patch.object(build_pgx_registry, "policy_opener", factory):
             with patch.object(build_pgx_registry.time, "sleep") as slept:
                 self.assertEqual(build_pgx_registry._get("gene", attempts=2), [])
-        self.assertEqual(opened.call_count, 2)
+        self.assertEqual(opener.open.call_count, 2)
         slept.assert_called_once_with(1)
 
 
@@ -50,33 +72,37 @@ class TransportSchemeTest(unittest.TestCase):
     fifteen-case smoke, all built from local files nobody audited.
 
     Each case asserts the refusal happens *before* the network layer is reached, by patching
-    `urlopen` to fail loudly if it is ever called.
+    `policy_opener` to fail loudly if it is ever reached. `RedirectTransportPolicyTest` covers
+    the other half: the same policy on every redirect hop, which a check on the initial URL
+    cannot reach.
     """
 
     @staticmethod
     def _never_called(*_args, **_kwargs):
-        """A stand-in for `urlopen` that fails if the guard let the request through."""
-        raise AssertionError("urlopen was reached for a refused scheme")
+        """A stand-in for `policy_opener` that fails if the guard let the request through.
+
+        It replaces the opener *factory*, not the opener, so a refusal that happened only
+        after the transport layer had been built would still be caught.
+        """
+        raise AssertionError("the transport layer was reached for a refused scheme")
 
     def test_the_cpic_fetcher_refuses_a_non_https_base(self):
         """A `file:` CPIC base is refused: the allele registry is built from that response."""
         with patch.object(build_pgx_registry, "CPIC_BASE", "file:///etc"):
-            with patch.object(build_pgx_registry.urllib.request, "urlopen", self._never_called):
+            with patch.object(build_pgx_registry, "policy_opener", self._never_called):
                 with self.assertRaisesRegex(build_pgx_registry.CpicError, "non-HTTPS"):
                     build_pgx_registry._get("passwd")
 
     def test_the_bulk_export_fetcher_refuses_a_non_https_url(self):
         """A `file:` bulk-export URL is refused: local bytes would become the target panel."""
-        with patch.object(expand_clinvar_targets.urllib.request, "urlopen", self._never_called):
+        with patch.object(expand_clinvar_targets, "policy_opener", self._never_called):
             with self.assertRaisesRegex(RuntimeError, "non-HTTPS"):
                 expand_clinvar_targets._fetch("file:///etc/passwd")
 
     def test_the_dbsnp_fetcher_refuses_a_non_https_endpoint(self):
         """A `file:` dbSNP endpoint is refused: it is the authority the marker table is checked against."""
         with patch.object(verify_provenance_markers, "REFSNP_URL", "file:///etc/{rsid}"):
-            with patch.object(
-                verify_provenance_markers.urllib.request, "urlopen", self._never_called
-            ):
+            with patch.object(verify_provenance_markers, "policy_opener", self._never_called):
                 with self.assertRaisesRegex(
                     verify_provenance_markers.MarkerVerificationError, "non-HTTPS"
                 ):
@@ -86,8 +112,123 @@ class TransportSchemeTest(unittest.TestCase):
         """The negative control: the guard must not refuse the scheme every caller uses."""
         response = MagicMock()
         response.__enter__.return_value.read.return_value = json.dumps([]).encode()
-        with patch.object(build_pgx_registry.urllib.request, "urlopen", return_value=response):
+        factory, _ = opener_factory(response)
+        with patch.object(build_pgx_registry, "policy_opener", factory):
             self.assertEqual(build_pgx_registry._get("gene"), [])
+
+
+class RedirectTransportPolicyTest(unittest.TestCase):
+    """The transport policy holds on every hop, not only on the request the caller built.
+
+    Raised in review on this pull request, and correct: the scheme guard each fetcher applies
+    runs once, against the `Request` object. `urllib.request.urlopen` then installs an
+    `HTTPRedirectHandler` that follows `Location` without consulting the caller, so
+    `https://api.cpicpgx.org/...` answered with `Location: http://attacker/...` was downgraded
+    in silence and the fetcher accepted unauthenticated bytes under a check that had already
+    passed. A guard on the first URL is not a transport policy.
+
+    These exercise the handler urllib actually calls — `redirect_request`, the single method
+    every hop goes through — rather than an initially-bad URL, which the previous tests
+    already covered and which never reaches this code path.
+    """
+
+    @staticmethod
+    def _hop(handler, newurl, *, from_url="https://api.cpicpgx.org/v1/gene"):
+        """Ask the handler to follow one redirect, exactly as urllib would."""
+        request = urllib.request.Request(from_url)
+        return handler.redirect_request(
+            request, None, 302, "Found", {"location": newurl}, newurl
+        )
+
+    def test_an_https_request_is_not_allowed_to_be_downgraded_to_http(self):
+        handler = https_transport.PolicyRedirectHandler(
+            https_transport.is_https, "the CPIC API"
+        )
+        with self.assertRaisesRegex(https_transport.TransportPolicyError, "refusing a redirect"):
+            self._hop(handler, "http://attacker.example/v1/gene")
+
+    def test_a_redirect_into_another_scheme_is_refused(self):
+        """`file:` and `ftp:` are reachable by redirect exactly as they are by a bad URL."""
+        handler = https_transport.PolicyRedirectHandler(
+            https_transport.is_https, "the CPIC API"
+        )
+        for target in ("file:///etc/passwd", "ftp://example/x", "data:text/plain,x"):
+            with self.subTest(target=target):
+                with self.assertRaises(https_transport.TransportPolicyError):
+                    self._hop(handler, target)
+
+    def test_an_https_redirect_is_followed(self):
+        """The negative control: the policy must not refuse the hops that are legitimate.
+
+        A CDN or an apex-to-www move is an ordinary HTTPS redirect, and a handler that
+        refused those would break every fetcher while looking like a security improvement.
+        """
+        handler = https_transport.PolicyRedirectHandler(
+            https_transport.is_https, "the CPIC API"
+        )
+        followed = self._hop(handler, "https://cdn.cpicpgx.org/v1/gene")
+        self.assertIsNotNone(followed)
+        self.assertEqual(followed.full_url, "https://cdn.cpicpgx.org/v1/gene")
+
+    def test_the_live_smoke_allows_http_only_on_its_own_loopback_endpoint(self):
+        """HTTP to another host would send the smoke's POST bodies to a third party.
+
+        `http_json` posts the case manifests, so admitting plain HTTP to any host puts the
+        payloads on the wire in clear text to whoever answers — reached directly through
+        `--base-url`, or by a redirect after the guard has passed.
+        """
+        allow = https_transport.loopback_http_or_https
+        self.assertTrue(allow("http://127.0.0.1:8787/v1/case"))
+        self.assertTrue(allow("https://deployed.example/v1/case"))
+        for refused in (
+            "http://127.0.0.1:9999/v1/case",
+            "http://localhost:8787/v1/case",
+            "http://attacker.example/v1/case",
+            "file:///etc/passwd",
+        ):
+            with self.subTest(refused=refused):
+                self.assertFalse(allow(refused))
+
+        handler = https_transport.PolicyRedirectHandler(allow, "the live smoke")
+        with self.assertRaises(https_transport.TransportPolicyError):
+            self._hop(
+                handler,
+                "http://attacker.example/v1/case",
+                from_url="http://127.0.0.1:8787/v1/case",
+            )
+
+    def test_a_refused_hop_raises_instead_of_returning_the_redirect_body(self):
+        """Returning `None` would make urllib hand the 3xx response back as the document.
+
+        That is the failure mode this test exists to keep out: a refusal that reads, to the
+        caller, like a successful fetch of a very short body.
+        """
+        handler = https_transport.PolicyRedirectHandler(
+            https_transport.is_https, "the CPIC API"
+        )
+        try:
+            self._hop(handler, "http://attacker.example/")
+        except https_transport.TransportPolicyError:
+            pass
+        else:
+            self.fail("a refused hop returned instead of raising")
+
+    def test_every_fetcher_builds_its_opener_through_the_policy(self):
+        """The policy is worthless if a fetcher still calls `urlopen` directly.
+
+        Each module is checked for the imported name rather than for a string in its source:
+        a module that never imported `policy_opener` cannot be applying it.
+        """
+        for module in (
+            build_pgx_registry,
+            expand_clinvar_targets,
+            verify_provenance_markers,
+            curate_assessed_alleles,
+            curate_gene_disease,
+        ):
+            with self.subTest(module=module.__name__):
+                self.assertIs(module.policy_opener, https_transport.policy_opener)
+                self.assertIs(module.is_https, https_transport.is_https)
 
 
 class SharedHttpRetryPolicyTest(unittest.TestCase):
@@ -153,15 +294,12 @@ class SharedHttpRetryPolicyTest(unittest.TestCase):
     def test_bulk_download_permanent_http_error_is_not_retried(self):
         """A permanent error on the ClinVar bulk download is not retried."""
         error = urllib.error.HTTPError("https://clinvar", 403, "Forbidden", None, None)
-        with patch.object(
-            expand_clinvar_targets.urllib.request,
-            "urlopen",
-            side_effect=error,
-        ) as opened:
+        factory, opener = opener_factory(error, error, error, error)
+        with patch.object(expand_clinvar_targets, "policy_opener", factory):
             with patch.object(expand_clinvar_targets.time, "sleep") as slept:
                 with self.assertRaises(RuntimeError):
                     expand_clinvar_targets._fetch("https://clinvar", attempts=4)
-        self.assertEqual(opened.call_count, 1)
+        self.assertEqual(opener.open.call_count, 1)
         slept.assert_not_called()
 
 

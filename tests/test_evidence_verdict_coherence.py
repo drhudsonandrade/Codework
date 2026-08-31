@@ -51,11 +51,17 @@ def _is_passing(value: object) -> bool:
 def _blocks(node: object, prefix: str = ""):
     """Every object anywhere in the artifact, with the dotted path that reaches it.
 
-    The walk is recursive, through lists as well as objects. An earlier version looked at the
-    root and its immediate object children only, so an artifact declaring
-    `status: "NÃO DISPONÍVEL"` at the root while carrying `{"detail": {"verdict": "PASS"}}`
-    two levels down satisfied the rule — the exact shape the rule exists to refuse. Depth is
+    The walk is recursive, through lists as well as objects, so that every block is *offered*
+    to the rule. What it fixes is a block that was never examined: one at depth two or more
+    carrying both `result: "NÃO DISPONÍVEL"` and a passing verdict among its own keys went
+    unchecked, because the previous walk stopped at the root's immediate children. Depth is
     not a property a consumer quoting the field would notice.
+
+    It does not make the rule a subtree rule. Each block is judged on its own keys — see
+    `_passing_verdicts`, which explains why, and the two tests that pin both sides of that
+    boundary. `{"status": "NÃO DISPONÍVEL", "detail": {"verdict": "PASS"}}` is therefore
+    *not* an incoherence here: `detail` is a different block making a statement about a
+    different subject, and it is checked only against its own declaration.
     """
     if isinstance(node, dict):
         yield prefix, node
@@ -104,7 +110,12 @@ class EvidenceVerdictCoherenceTest(unittest.TestCase):
         self.assertTrue(_artifacts(), f"no evidence artifacts found under {EVIDENCE_DIR}")
 
     def test_an_unavailable_artifact_offers_no_passing_verdict(self):
-        """A block declaring NÃO DISPONÍVEL offers no passing verdict anywhere beneath it."""
+        """A block declaring NÃO DISPONÍVEL offers no passing verdict among its own fields.
+
+        Its own fields, not its subtree: a nested block states something about a different
+        subject and is judged against its own declaration when the walk reaches it.
+        `_passing_verdicts` records the measurement that settled the scope.
+        """
         checked = 0
         for path in _artifacts():
             document = json.loads(path.read_text(encoding="utf-8"))
