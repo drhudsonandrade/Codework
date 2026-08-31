@@ -35,7 +35,13 @@ class CodacyApiReportTest(unittest.TestCase):
             with self.subTest(status=status):
                 seen = []
 
-                def opener(request, timeout=30):
+                # `status` and `seen` are bound as defaults rather than closed over. The
+                # closure is built inside the loop and would otherwise read whatever the
+                # loop variable holds when it is *called*; that happens to be the right
+                # value today only because the call is in the same iteration. Binding makes
+                # the 403 case fail loudly if the call ever outlives its iteration, instead
+                # of quietly re-testing 401 twice and reporting both as covered.
+                def opener(request, timeout=30, *, status=status, seen=seen):
                     seen.append(dict(request.header_items()))
                     if request.get_header("Project-token"):
                         raise urllib.error.HTTPError(
