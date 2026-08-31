@@ -224,7 +224,7 @@ associação de significância genômica no release. Dois termos caíram nessa g
 
 `rs3918290` é **multialélico** em chr1:97450058 (GRCh38, referência C):
 
-* **C>T** = `c.1905+1G>A` = **DPYD\*2A**, classificado pelo ClinVar como *drug response* — é o
+* **C>T** = `c.1905+1G>A` = **DPYD\\*2A**, classificado pelo ClinVar como *drug response* — é o
   alelo que o CPIC define;
 * **C>G** = `c.1905+1G>C`, variante **diferente** na mesma posição, essa sim P/LP.
 
@@ -286,17 +286,13 @@ relatório 05 em `scripts/` — os únicos presentes são `build_one_page_summar
 10) e `build_pharmacogenomic_report.py` (relatório 06). O parágrafo permanece como narrativa
 de uma execução de demonstração, sem código ou teste aqui que o sustente.
 
-**O relatório 09 gerava 275 MB.** *(NÃO VERIFICÁVEL AQUI.)* Como acima, não há construtor do
-relatório 09 neste repositório e nenhum limite de enumeração de 250 achados em
-`array_pipeline/` ou `reporting/` — os `250` presentes são o `max_targets` da anotação, que é
-outra coisa. Os números a seguir descrevem a execução de demonstração, não um comportamento
-verificável aqui. Ele emite um achado por locus não interpretável, e um array
-de consumo alcança ~4% de 55.916 alvos: são ~53.900 achados individuais, com 592.624 campos
-de proveniência. Um relatório que nomeia cada ponto cego não torna nenhum visível, e nenhum
-renderizador transforma isso num documento. Agora enumera 250, ordenados por escopo — do
-clínico ao de curiosidade —, e o restante vira **um** achado que declara a contagem exata, a
-quebra por escopo, os genes envolvidos e o SHA-256 da matriz que lista todos. Resumido,
-nunca descartado: 275 MB → 1,4 MB.
+**Relatório 09 — observação histórica não verificável.** Como acima, não há construtor do
+relatório 09 neste repositório nem implementação localizável, em `array_pipeline/` ou
+`reporting/`, do comportamento de agregação descrito pela execução de demonstração. Sem
+artefato de saída, SHA-256 de entrada, comando pinado e teste versionado, essa narrativa não
+é atribuída ao HEAD atual. As contagens, limites de enumeração e reduções de tamanho antes
+publicados foram removidos; só podem voltar como resultado quando houver evidência
+reproduzível ligada ao SHA que os produz.
 
 A primeira versão da junção clínica custava **391 MB e 2,8 GB de pico**, porque o bloco de
 validade de cada gene era copiado em cada locus e loci nunca interrogados carregavam detalhe
@@ -327,22 +323,22 @@ curl -O https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.t
 curl -O https://ftp.clinicalgenome.org/ClinGen_gene_curation_list_GRCh38.tsv
 curl -O https://storage.googleapis.com/gcp-public-data--gnomad/release/4.1/constraint/gnomad.v4.1.constraint_metrics.tsv
 python3 scripts/curate_panelapp.py            # varre as duas instâncias; recusa leitura curta
-python3 scripts/expand_clinvar_targets.py \
-    --clinvar-bulk variant_summary.txt.gz \
-    --panelapp docs/evidence/PANELAPP_CURATION.json.gz \
-    --clingen-dosage ClinGen_gene_curation_list_GRCh38.tsv \
-    --gnomad-constraint gnomad.v4.1.constraint_metrics.tsv \
-    --min-review-stars 1 \
-    --targets-out config/targets_clinvar_plp_1star.json.gz \
+python3 scripts/expand_clinvar_targets.py \\
+    --clinvar-bulk variant_summary.txt.gz \\
+    --panelapp docs/evidence/PANELAPP_CURATION.json.gz \\
+    --clingen-dosage ClinGen_gene_curation_list_GRCh38.tsv \\
+    --gnomad-constraint gnomad.v4.1.constraint_metrics.tsv \\
+    --min-review-stars 1 \\
+    --targets-out config/targets_clinvar_plp_1star.json.gz \\
     --evidence-out docs/evidence/GENE_DISEASE_VALIDITY_BULK_1STAR.json.gz
-python3 scripts/build_trait_targets.py \
-    --associations gwas-catalog-associations_ontology-annotated-full.zip \
+python3 scripts/build_trait_targets.py \\
+    --associations gwas-catalog-associations_ontology-annotated-full.zip \\
     --ancestries gwas-catalog-download-ancestries-v1.0.3.1.txt
-python3 scripts/merge_target_manifests.py \
-    config/partial_genome_annotation_targets.json \
-    config/pgx_panel_targets.json \
-    config/targets_clinvar_plp_1star.json.gz \
-    config/targets_gwas_traits.json \
+python3 scripts/merge_target_manifests.py \\
+    config/partial_genome_annotation_targets.json \\
+    config/pgx_panel_targets.json \\
+    config/targets_clinvar_plp_1star.json.gz \\
+    config/targets_gwas_traits.json \\
     --output config/targets_merged_panel_1star.json.gz
 ```
 
