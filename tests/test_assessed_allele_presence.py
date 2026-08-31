@@ -65,10 +65,13 @@ TARGETS = {
 
 
 class AssessedBasesTest(unittest.TestCase):
+    """Which bases a target counts as assessed."""
     def test_a_single_declared_allele_is_the_whole_set(self):
+        """A single declared allele is the whole assessed set."""
         self.assertEqual(assessed_bases({"assessed_allele": "A"}), {"A"})
 
     def test_the_multi_allelic_list_is_read_when_no_single_allele_is_named(self):
+        """The multi-allelic list is read when no single allele is named, and normalised to upper case."""
         self.assertEqual(
             assessed_bases({"clinvar_alternate_alleles": ["A", "g"]}), {"A", "G"}
         )
@@ -81,12 +84,15 @@ class AssessedBasesTest(unittest.TestCase):
         )
 
     def test_a_target_naming_nothing_yields_an_empty_set(self):
+        """A target naming nothing yields an empty set, not a set containing nothing meaningful."""
         self.assertEqual(assessed_bases({}), set())
         self.assertEqual(assessed_bases({"clinvar_alternate_alleles": []}), set())
 
 
 class MultiAllelicClassificationTest(unittest.TestCase):
+    """How a multi-allelic locus is classified against the genotype actually read."""
     def _matrix(self, rows: str):
+        """The completeness matrix entries produced by these array rows."""
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             array = root / "array.csv.gz"
@@ -113,6 +119,7 @@ class MultiAllelicClassificationTest(unittest.TestCase):
         self.assertEqual(entries["rs2"]["assessed_alleles"], ["A", "G"])
 
     def test_a_genotype_carrying_one_of_the_alternates_is_observado(self):
+        """A genotype carrying one of the declared alternates is OBSERVADO."""
         entries = self._matrix(
             "rs1,1,100,TT,consensus,TT,TT,GM\n"
             "rs2,1,200,AT,consensus,AT,AT,GM\n"
@@ -122,6 +129,7 @@ class MultiAllelicClassificationTest(unittest.TestCase):
         self.assertIn("contém o alelo avaliado A", entries["rs2"]["basis"])
 
     def test_a_locus_naming_no_base_stays_observado_and_says_so(self):
+        """A locus naming no base stays OBSERVADO and records why it could not be read further."""
         entries = self._matrix(
             "rs1,1,100,TT,consensus,TT,TT,GM\n"
             "rs2,1,200,TT,consensus,TT,TT,GM\n"
@@ -132,6 +140,7 @@ class MultiAllelicClassificationTest(unittest.TestCase):
         self.assertIn("não declara o alelo avaliado", entries["rs3"]["basis"])
 
     def test_the_single_allele_path_is_unchanged(self):
+        """Negative control: the single-allele path is unchanged."""
         entries = self._matrix(
             "rs1,1,100,AG,consensus,AG,AG,GM\n"
             "rs2,1,200,TT,consensus,TT,TT,GM\n"
@@ -154,11 +163,13 @@ class InterpretationRefusesUntestedLociTest(unittest.TestCase):
     }
 
     def _interpret(self, entry):
+        """The clinical interpretation of this matrix entry."""
         from array_pipeline import clinical_findings as cf
 
         return cf._interpretation(entry, self.CLINVAR, self.VALIDITY, sex_at_birth=None)
 
     def test_observado_without_any_assessed_base_is_never_a_finding(self):
+        """OBSERVADO without any assessed base is never a finding."""
         from array_pipeline.clinical_findings import SEM_INTERPRETACAO
 
         result = self._interpret({
@@ -181,6 +192,7 @@ class InterpretationRefusesUntestedLociTest(unittest.TestCase):
         self.assertNotIn("homozigoto para variante patogênica", result["basis"])
 
     def test_a_named_base_still_reaches_the_clinical_reading(self):
+        """A named base still reaches the clinical reading."""
         from array_pipeline.clinical_findings import GENOTIPO_DE_RISCO
 
         result = self._interpret({
@@ -202,6 +214,7 @@ class InterpretationRefusesUntestedLociTest(unittest.TestCase):
 
 
 class ShippedRegistryTest(unittest.TestCase):
+    """The shipped registry, measured rather than assumed."""
     def test_most_multi_allelic_targets_can_now_be_answered(self):
         """Measured, not assumed: the fix has to actually reach the shipped registry."""
         with gzip.open(

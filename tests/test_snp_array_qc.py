@@ -14,7 +14,9 @@ from array_pipeline.qc import _text_stream, inspect_array
 
 
 class ArrayQCTest(unittest.TestCase):
+    """What the SNP-array QC gates admit and what they refuse."""
     def _write(self, text: str) -> Path:
+        """Write a gzipped genotype file with this content and return its path."""
         td = tempfile.TemporaryDirectory()
         self.addCleanup(td.cleanup)
         p = Path(td.name) / "x.csv.gz"
@@ -23,6 +25,7 @@ class ArrayQCTest(unittest.TestCase):
         return p
 
     def _verified_evidence(self, p: Path, *, asserted_value: str) -> str:
+        """A build/strand attestation bound to this exact file by its SHA-256."""
         sha = hashlib.sha256(p.read_bytes()).hexdigest()
         return json.dumps({
             "status": "VERIFICADO",
@@ -44,6 +47,7 @@ class ArrayQCTest(unittest.TestCase):
         })
 
     def test_harmonized_pass_and_conflict_retained(self):
+        """Harmonized rows pass, and a genotype conflict is retained rather than resolved."""
         p = self._write(
             "RSID,CHROMOSOME,POSITION,CONSENSUS_RESULT,STATUS,GENERA_RESULT,MYHERITAGE_RESULT,SOURCES\n"
             "rs1,1,100,AG,consensus,GA,AG,GM\n"
@@ -61,6 +65,7 @@ class ArrayQCTest(unittest.TestCase):
         self.assertEqual(r["metrics"]["direct_overlap_genotype_conflicts"], 1)
 
     def test_reverse_strand_is_blocked_even_with_bound_attestation(self):
+        """A reverse-strand file is blocked even when the attestation is properly bound."""
         p = self._write("RSID,CHROMOSOME,POSITION,RESULT\nrs1,1,100,AA\n")
         build_evidence = self._verified_evidence(p, asserted_value="GRCh37")
         strand_evidence = self._verified_evidence(p, asserted_value="reverse")
@@ -76,6 +81,7 @@ class ArrayQCTest(unittest.TestCase):
         self.assertEqual(r["gates"]["LIMITED_INTERPRETATION_GATE"]["state"], "BLOCKED")
 
     def test_plain_text_provenance_cannot_unlock_direct_library_gate(self):
+        """Plain-text provenance does not unlock the direct-library gate: only bound evidence does."""
         p = self._write("RSID,CHROMOSOME,POSITION,RESULT\nrs1,1,100,AA\n")
         r = inspect_array(
             p, case_id="T", build="GRCh37", strand="forward",
@@ -85,12 +91,14 @@ class ArrayQCTest(unittest.TestCase):
         self.assertEqual(r["gates"]["LIMITED_INTERPRETATION_GATE"]["state"], "BLOCKED")
 
     def test_unknown_build_blocks(self):
+        """An unknown build blocks both the build/strand gate and limited interpretation."""
         p = self._write("RSID,CHROMOSOME,POSITION,RESULT\nrs1,1,100,AA\n")
         r = inspect_array(p, case_id="T")
         self.assertEqual(r["gates"]["BUILD_STRAND_GATE"]["state"], "BLOCKED")
         self.assertEqual(r["gates"]["LIMITED_INTERPRETATION_GATE"]["state"], "BLOCKED")
 
     def test_raw_duplicate_rsid_is_retained_not_silently_collapsed(self):
+        """A duplicate rsid in the raw file is retained, not silently collapsed."""
         p = self._write("RSID,CHROMOSOME,POSITION,RESULT\nrs1,1,100,AA\nrs1,1,101,AG\n")
         build_evidence = self._verified_evidence(p, asserted_value="GRCh37")
         strand_evidence = self._verified_evidence(p, asserted_value="forward")
@@ -103,6 +111,7 @@ class ArrayQCTest(unittest.TestCase):
         self.assertTrue(r["gates"]["STRUCTURE_GATE"]["notes"])
 
     def test_duplicate_rsid_fails_after_harmonization(self):
+        """A duplicate rsid surviving harmonization fails the run."""
         p = self._write(
             "RSID,CHROMOSOME,POSITION,CONSENSUS_RESULT,STATUS,GENERA_RESULT,MYHERITAGE_RESULT,SOURCES\n"
             "rs1,1,100,AA,consensus,AA,AA,GM\n"
@@ -117,6 +126,7 @@ class ArrayQCTest(unittest.TestCase):
         self.assertEqual(r["gates"]["STRUCTURE_GATE"]["state"], "FAIL")
 
     def test_myheritage_metadata_verifies_build_and_strand(self):
+        """MyHeritage header metadata can verify build and strand on its own."""
         p = self._write(
             "##fileformat=MyHeritage\n##chip=GSA\n##reference=build37\n"
             "# The genotype is reported on the forward (+) strand with respect to human reference build 37.\n"
@@ -128,6 +138,7 @@ class ArrayQCTest(unittest.TestCase):
         self.assertEqual(r["input"]["strand"], "forward")
 
     def test_metadata_cannot_attest_a_build_that_contradicts_the_file(self):
+        """Metadata cannot attest a build the file itself contradicts."""
         p = self._write(
             "##reference=build37\n"
             "RSID,CHROMOSOME,POSITION,RESULT\nrs1,1,100,AA\n"
@@ -144,6 +155,7 @@ class ArrayQCTest(unittest.TestCase):
         self.assertEqual(result["gates"]["BUILD_STRAND_GATE"]["state"], "BLOCKED")
 
     def test_duplicate_rsid_contributes_at_most_one_strand_vote(self):
+        """A duplicated rsid contributes at most one strand vote, so repetition cannot swing the call."""
         p = self._write(
             "RSID,CHROMOSOME,POSITION,RESULT\n"
             "rs1,1,100,TC\n"
@@ -314,9 +326,11 @@ class ZipSourceHandleTest(unittest.TestCase):
 
     @staticmethod
     def _open_zip_handles() -> int:
+        """How many ZipFile objects are still holding an open file handle."""
         return sum(1 for obj in gc.get_objects() if isinstance(obj, zipfile.ZipFile) and obj.fp is not None)
 
     def _assert_no_leak(self, build: "callable[[Path], None]", expected: type[Exception]):
+        """Assert that the failure this archive triggers leaves no ZipFile handle open."""
         with tempfile.TemporaryDirectory() as td:
             archive = Path(td) / "input.zip"
             build(archive)
@@ -328,7 +342,9 @@ class ZipSourceHandleTest(unittest.TestCase):
             self.assertEqual(self._open_zip_handles(), before, "ZipFile handle leaked on the failure path")
 
     def test_multi_member_zip_closes_its_archive(self):
+        """A multi-member zip closes its archive on the refusal."""
         def build(archive: Path) -> None:
+            """Build a zip with two members, which is refused."""
             with zipfile.ZipFile(archive, "w") as zf:
                 zf.writestr("a.csv", "RSID\nrs1\n")
                 zf.writestr("b.csv", "RSID\nrs2\n")
@@ -336,13 +352,16 @@ class ZipSourceHandleTest(unittest.TestCase):
         self._assert_no_leak(build, ValueError)
 
     def test_empty_zip_closes_its_archive(self):
+        """An empty zip closes its archive on the refusal."""
         def build(archive: Path) -> None:
+            """Build a zip with no members, which is refused."""
             with zipfile.ZipFile(archive, "w"):
                 pass
 
         self._assert_no_leak(build, ValueError)
 
     def test_unreadable_member_closes_its_archive(self):
+        """An unreadable member closes its archive on the failure."""
         with tempfile.TemporaryDirectory() as td:
             archive = Path(td) / "input.zip"
             with zipfile.ZipFile(archive, "w") as zf:
@@ -372,6 +391,7 @@ class ZipSourceHandleTest(unittest.TestCase):
             self.assertEqual(self._open_zip_handles(), before, "ZipFile handle leaked on the failure path")
 
     def test_single_member_zip_is_read_successfully(self):
+        """Negative control: a single-member zip is read successfully."""
         with tempfile.TemporaryDirectory() as td:
             archive = Path(td) / "input.zip"
             with zipfile.ZipFile(archive, "w") as zf:
@@ -409,7 +429,9 @@ class ZipSourceHandleTest(unittest.TestCase):
 
 
 class RuntimeExpansionLimitTest(unittest.TestCase):
+    """The decompression limits, enforced on bytes actually read rather than on declared sizes."""
     def test_gzip_limit_is_enforced_on_bytes_actually_read(self):
+        """The gzip limit is enforced on the bytes actually read, not on the header's claim."""
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "input.csv.gz"
             with gzip.open(path, "wb") as fh:
@@ -423,6 +445,7 @@ class RuntimeExpansionLimitTest(unittest.TestCase):
                     stream.close()
 
     def test_zip_limit_is_enforced_even_if_header_validation_is_bypassed(self):
+        """The zip limit is enforced even when header validation is bypassed."""
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "input.zip"
             with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:

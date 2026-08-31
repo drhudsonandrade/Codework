@@ -8,17 +8,23 @@ from array_pipeline.homozygosity import analyse_array, read_autosomal_genotypes
 
 
 class HomozygosityReaderCleanupTest(unittest.TestCase):
+    """The homozygosity readers release what they open, and bound what they accept."""
     def test_autosomal_reader_closes_row_generator(self):
+        """The autosomal reader closes its row generator explicitly."""
         closed = []
 
         class Rows:
+            """A row iterator that records whether it was closed."""
             def __init__(self):
+                """Start undrained."""
                 self.done = False
 
             def __iter__(self):
+                """The iterator is its own iterable."""
                 return self
 
             def __next__(self):
+                """Yield one row, then stop."""
                 if self.done:
                     raise StopIteration
                 self.done = True
@@ -27,6 +33,7 @@ class HomozygosityReaderCleanupTest(unittest.TestCase):
                 }
 
             def close(self):
+                """Record that the consumer closed this iterator."""
                 closed.append(True)
 
         with patch("array_pipeline.completeness._row_reader", return_value=Rows()):
@@ -37,6 +44,7 @@ class HomozygosityReaderCleanupTest(unittest.TestCase):
 
 
     def test_exact_autosomal_bounds_reject_zero_and_length_plus_one(self):
+        """The autosomal bounds are exact: position 0 and length+1 are both rejected."""
         from array_pipeline import assembly
         from array_pipeline.homozygosity import analyse
 
@@ -51,6 +59,7 @@ class HomozygosityReaderCleanupTest(unittest.TestCase):
             self.assertTrue(any("fim do próprio cromossomo" in x for x in result["refusals"]))
 
     def test_f_roh_bounds_follow_the_declared_build(self):
+        """The F-roh denominator follows the declared build, not a hard-coded chromosome length."""
         from array_pipeline.homozygosity import analyse
 
         marker = [("1", 249_100_000, "AA")]
@@ -78,6 +87,7 @@ class AnalyseArrayBuildContractTest(unittest.TestCase):
     """
 
     def test_build_has_no_default(self):
+        """`build` has no default: a caller that omits it gets a TypeError, not an assumed assembly."""
         import inspect
 
         parameter = inspect.signature(analyse_array).parameters["build"]
@@ -95,6 +105,7 @@ class AnalyseArrayBuildContractTest(unittest.TestCase):
         """
 
         def generator():
+            """Yield a homozygous run of this many markers."""
             for i in range(count):
                 yield "raw_snp_array_v1", {
                     "RSID": f"rs{i}",
@@ -106,6 +117,7 @@ class AnalyseArrayBuildContractTest(unittest.TestCase):
         return generator()
 
     def test_the_grch38_path_is_exercised(self):
+        """The GRCh38 path is exercised, not only GRCh37."""
         with patch(
             "array_pipeline.completeness._row_reader",
             return_value=self._homozygous_run(),
@@ -115,6 +127,7 @@ class AnalyseArrayBuildContractTest(unittest.TestCase):
         self.assertEqual(result["autosomal_rows"], 100_001)
 
     def test_an_unsupported_build_is_refused_rather_than_assumed(self):
+        """An unsupported build is refused rather than assumed to be the nearest known one."""
         with patch(
             "array_pipeline.completeness._row_reader",
             return_value=self._homozygous_run(),

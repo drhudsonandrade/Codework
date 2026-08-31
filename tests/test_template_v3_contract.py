@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _minimal_reference_manifest() -> dict:
+    """A reference manifest with the minimum every report entry must declare."""
     reports = {
         f"{index:02d}": {
             "filename": f"{index:02d}.pdf",
@@ -31,7 +32,9 @@ def _minimal_reference_manifest() -> dict:
 
 
 class TemplateV3ContractTest(unittest.TestCase):
+    """What the v3 template contract requires of the reference manifest and the template pack."""
     def test_manifest_is_complete_for_all_eleven_reference_models(self):
+        """The manifest covers all eleven reference models, with their expected page counts."""
         from reporting.template_v3 import load_reference_manifest
 
         manifest = load_reference_manifest()
@@ -58,6 +61,7 @@ class TemplateV3ContractTest(unittest.TestCase):
         self.assertRegex(manifest["external_coordinate_detail"]["sha256"], r"^[0-9a-f]{64}$")
 
     def test_reference_manifest_rejects_missing_page_size_without_external_pack(self):
+        """A report entry with no page size is refused when no external pack supplies one."""
         from reporting.template_v3 import TemplateV3Error, load_reference_manifest
 
         manifest = _minimal_reference_manifest()
@@ -69,6 +73,7 @@ class TemplateV3ContractTest(unittest.TestCase):
                 load_reference_manifest(path)
 
     def test_reference_manifest_rejects_malformed_page_size_without_external_pack(self):
+        """A malformed page size is refused when no external pack supplies one."""
         from reporting.template_v3 import TemplateV3Error, load_reference_manifest
 
         manifest = _minimal_reference_manifest()
@@ -80,6 +85,7 @@ class TemplateV3ContractTest(unittest.TestCase):
                 load_reference_manifest(path)
 
     def test_missing_or_wrong_template_pack_fails_closed(self):
+        """A missing or wrong template pack fails closed."""
         from reporting.template_v3 import TemplateV3Error, verify_template_pack
 
         with tempfile.TemporaryDirectory() as td:
@@ -87,6 +93,7 @@ class TemplateV3ContractTest(unittest.TestCase):
                 verify_template_pack(Path(td))
 
     def test_coordinate_detail_is_bound_to_decoded_manifest_content(self):
+        """The coordinate detail is bound to the decoded manifest content, not to its file name."""
         from reporting.template_v3 import TemplateV3Error, verify_coordinate_detail
 
         manifest = b'{"schema":"fixture"}\n'
@@ -133,6 +140,7 @@ class TemplateV3ContractTest(unittest.TestCase):
                 verify_coordinate_detail(path, meta, manifest)
 
     def test_noncanonical_template_ruleset_labels_fail_closed(self):
+        """A non-canonical ruleset label on a template fails closed."""
         from reporting.template_v3 import (
             CURRENT_RULESET_TEMPLATE_LABEL,
             CURRENT_RULESET_TEMPLATE_SOURCE,
@@ -152,6 +160,7 @@ class TemplateV3ContractTest(unittest.TestCase):
         self.assertIsNone(_system_value_for_source("UNKNOWN", systems))
 
     def test_coordinate_pack_accepts_only_complete_canonical_ruleset_marker(self):
+        """The coordinate pack accepts only the complete canonical ruleset marker."""
         from scripts.build_report_coordinate_pack import _ruleset_control_sources
 
         canonical = "GENOMA-HUDSON-RULESET-v3.4"
@@ -170,6 +179,7 @@ class TemplateV3ContractTest(unittest.TestCase):
                     _ruleset_control_sources(marker)
 
     def test_docx_svg_patch_rejects_zip_slip_member(self):
+        """A DOCX member whose path escapes the archive root is refused."""
         from reporting.template_v3 import TemplateV3Error, _patch_docx_svg
 
         with tempfile.TemporaryDirectory() as td:
@@ -180,6 +190,7 @@ class TemplateV3ContractTest(unittest.TestCase):
                 _patch_docx_svg(malicious, [])
 
     def test_docx_svg_patch_rejects_duplicate_archive_members(self):
+        """Duplicate archive members are refused rather than last-one-wins."""
         from reporting.template_v3 import TemplateV3Error, _patch_docx_svg
 
         with tempfile.TemporaryDirectory() as td:
@@ -191,6 +202,7 @@ class TemplateV3ContractTest(unittest.TestCase):
                 _patch_docx_svg(duplicated, [])
 
     def test_docx_svg_patch_rejects_members_with_same_normalized_target(self):
+        """Members that normalize to the same target are refused."""
         from reporting.template_v3 import TemplateV3Error, _patch_docx_svg
 
         with tempfile.TemporaryDirectory() as td:
@@ -202,6 +214,7 @@ class TemplateV3ContractTest(unittest.TestCase):
                 _patch_docx_svg(duplicated, [])
 
     def test_poppler_failure_keeps_the_converter_diagnostics(self):
+        """A poppler failure keeps the converter's diagnostics instead of discarding them."""
         import subprocess
 
         from reporting.template_v3 import TemplateV3Error, _run_poppler
@@ -222,6 +235,7 @@ class TemplateV3ContractTest(unittest.TestCase):
         self.assertNotIsInstance(caught.exception, subprocess.CalledProcessError)
 
     def test_poppler_timeout_fails_closed_with_page_context(self):
+        """A poppler timeout fails closed and names the page it was on."""
         import subprocess
         from unittest.mock import patch
 
@@ -238,6 +252,7 @@ class TemplateV3ContractTest(unittest.TestCase):
                 _run_poppler(["pdftoppm"], 4)
 
     def test_single_line_fit_shrinks_for_the_box_height_too(self):
+        """The single-line fit shrinks for the box height as well as its width."""
         from reporting.template_v3 import SINGLE_LINE_LEADING, _fit_single_line_size
 
         wide_box = 10_000.0
@@ -253,6 +268,7 @@ class TemplateV3ContractTest(unittest.TestCase):
 
     @unittest.skipUnless(os.environ.get("GENOMA_REPORT_TEMPLATE_DIR"), "external v3 template pack not mounted")
     def test_external_template_pack_verifies_and_report10_strict_docx_is_editable(self):
+        """The external template pack verifies, and the strict DOCX for report 10 stays editable."""
         from reporting.editorial_v3 import write_editorial_bundle
         from reporting.engine import render_document
         from reporting.template_v3 import load_reference_manifest, verify_template_pack

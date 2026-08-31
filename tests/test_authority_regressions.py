@@ -21,7 +21,9 @@ from tests.attestations import wgs_qc_record
 
 
 class CaseDossierExampleTest(unittest.TestCase):
+    """The shipped case-dossier example, which must stay loadable and consent-free."""
     def test_shipped_example_loads_with_notes_and_empty_consent(self):
+        """The example loads, carries its notes, and declares no consent it has not been given."""
         root = Path(__file__).resolve().parents[1]
         source = root / "config/case_dossier.example.json"
         raw = json.loads(source.read_text(encoding="utf-8"))
@@ -33,6 +35,7 @@ class CaseDossierExampleTest(unittest.TestCase):
 
 
 class OnePageSummaryIdentityTest(unittest.TestCase):
+    """The identity check behind the one-page summary."""
     def test_two_artifacts_without_input_identity_are_refused(self):
         """`None != None` is false, so absence used to satisfy the equality check.
 
@@ -53,7 +56,9 @@ class OnePageSummaryIdentityTest(unittest.TestCase):
 
 
 class WgsQcSummaryValidationTest(unittest.TestCase):
+    """What the WGS QC summary may call VERIFICADO."""
     def test_invalid_record_cannot_claim_verified(self):
+        """A record failing schema validation cannot claim VERIFICADO."""
         summary = audit_summary({"schema": "wrong"})
         self.assertEqual(summary["status"], UNAVAILABLE)
         self.assertTrue(summary["problems"])
@@ -82,6 +87,7 @@ class WgsQcSummaryValidationTest(unittest.TestCase):
         self.assertEqual(summary["measured_count"], len(summary["measured"]))
 
     def test_invalid_metric_is_not_counted_as_measured(self):
+        """A metric with an unrecognised status is not counted as measured."""
         record = wgs_qc_record(case_id="CASE")
         record["metrics"]["mean_depth"] = {"status": "DESCONHECIDO"}
         summary = audit_summary(record)
@@ -91,6 +97,7 @@ class WgsQcSummaryValidationTest(unittest.TestCase):
 
 
     def test_non_finite_metrics_are_rejected(self):
+        """NaN and the infinities are rejected as metric values."""
         for value in (float("nan"), float("inf"), float("-inf")):
             with self.subTest(value=value):
                 record = wgs_qc_record(case_id="CASE")
@@ -103,7 +110,9 @@ class WgsQcSummaryValidationTest(unittest.TestCase):
 
 
 class StreamConstructionCleanupTest(unittest.TestCase):
+    """Handles opened while constructing a stream are closed when construction fails."""
     def test_gzip_raw_handle_is_closed_when_wrapper_construction_fails(self):
+        """The raw gzip handle is closed when the wrapper around it fails to construct."""
         raw = MagicMock()
         with (
             patch("array_pipeline.qc.gzip.open", return_value=raw),
@@ -118,7 +127,9 @@ class StreamConstructionCleanupTest(unittest.TestCase):
 
 
 class ConsentInputSetTest(unittest.TestCase):
+    """How the consent input set treats the files it is given."""
     def test_same_input_listed_twice_is_rejected(self):
+        """The same input listed twice is rejected rather than de-duplicated."""
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "reads.fastq"
             path.write_bytes(b"reads")
@@ -127,8 +138,10 @@ class ConsentInputSetTest(unittest.TestCase):
 
 
 class SectionCurationValidationTest(unittest.TestCase):
+    """What a section curation file must satisfy before its attestations are honoured."""
     @staticmethod
     def _payload(schema="array"):
+        """A minimal valid curation payload for this schema."""
         return {
             "schema": CURATION_SCHEMA,
             "ruleset": {"sha256": normative.RAW_SHA256},
@@ -137,6 +150,7 @@ class SectionCurationValidationTest(unittest.TestCase):
         }
 
     def test_overlapping_curations_are_rejected(self):
+        """Two curations claiming the same schema are rejected instead of silently merged."""
         with tempfile.TemporaryDirectory() as td:
             first = Path(td) / "first.json"
             second = Path(td) / "second.json"
@@ -148,6 +162,7 @@ class SectionCurationValidationTest(unittest.TestCase):
                     curation_for_schema("array")
 
     def test_invalid_curation_file_is_not_treated_as_non_applicable(self):
+        """An unreadable curation file raises, rather than being treated as not applicable."""
         with tempfile.TemporaryDirectory() as td:
             invalid = Path(td) / "invalid.json"
             invalid.write_text("{", encoding="utf-8")
@@ -156,6 +171,7 @@ class SectionCurationValidationTest(unittest.TestCase):
                     curation_for_schema("array")
 
     def test_arbitrary_section_hash_is_rejected(self):
+        """A section hash that matches no known section is rejected."""
         payload = self._payload()
         payload["sections"] = {
             "0": {
@@ -171,7 +187,9 @@ class SectionCurationValidationTest(unittest.TestCase):
         self.assertTrue(any("canonical section" in problem for problem in problems))
 
     def test_any_reused_not_applicable_justification_is_reported(self):
+        """A NOT_APPLICABLE justification reused across sections is reported."""
         def entry(reason):
+            """One NOT_APPLICABLE section entry carrying this justification."""
             return {
                 "applicability": "NOT_APPLICABLE",
                 "decision": "NOT_APPLICABLE",

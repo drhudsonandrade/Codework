@@ -7,6 +7,7 @@ from ruleset_test_support import RULESET
 
 
 def passing_policy_evaluation():
+    """A policy evaluation that clears every gate the publication check reads."""
     return {
         "ready_for_requested_operation": True,
         # `policy_verdict` binds the evaluation to the canonical ruleset, so a fixture
@@ -26,6 +27,7 @@ def passing_policy_evaluation():
 
 
 def final_fixture(report_id="01"):
+    """A payload complete enough for a FINAL render of this report."""
     from reporting.provenance import fixture_payload
 
     data = fixture_payload(
@@ -40,7 +42,9 @@ def final_fixture(report_id="01"):
 
 
 class ReportEngineTest(unittest.TestCase):
+    """What the report engine publishes, and everything it refuses to publish."""
     def assert_release_rejected(self, callable_, expected_reason=None):
+        """Assert this call is refused as a release, optionally naming the blocker."""
         from reporting.engine import ReportReleaseError
 
         try:
@@ -52,6 +56,7 @@ class ReportEngineTest(unittest.TestCase):
         self.fail("expected ReportReleaseError")
 
     def test_catalog_contains_all_eleven_v3_models(self):
+        """The catalogue carries all eleven v3 models, with their slugs."""
         from reporting.engine import load_catalog
 
         catalog = load_catalog()
@@ -60,6 +65,7 @@ class ReportEngineTest(unittest.TestCase):
         self.assertEqual(catalog["11"]["slug"], "guia-editorial-matriz-preenchimento")
 
     def test_model_mode_is_explicitly_non_result(self):
+        """MODEL mode says on its face that it is not a genetic result."""
         from reporting.engine import render_document
 
         result = render_document("01", {}, mode="MODEL")
@@ -68,6 +74,7 @@ class ReportEngineTest(unittest.TestCase):
         self.assertEqual(result["metadata"]["ruleset_required"], RULESET)
 
     def test_final_mode_fails_closed_without_publication_gate(self):
+        """FINAL mode fails closed when the publication gate is absent."""
         from reporting.engine import render_document
 
         self.assert_release_rejected(
@@ -76,6 +83,7 @@ class ReportEngineTest(unittest.TestCase):
         )
 
     def test_final_mode_rejects_consent_outside_report_domain(self):
+        """FINAL mode refuses a consent that does not cover this report's domain."""
         from reporting.engine import render_document
 
         data = final_fixture()
@@ -86,6 +94,7 @@ class ReportEngineTest(unittest.TestCase):
         )
 
     def test_final_mode_rejects_wrong_ruleset_digest(self):
+        """FINAL mode refuses a ruleset digest that is not the canonical one."""
         from reporting.engine import render_document
 
         bad_ruleset = dict(RULESET)
@@ -109,6 +118,7 @@ class ReportEngineTest(unittest.TestCase):
         )
 
     def test_final_mode_rejects_unready_policy_evaluation(self):
+        """FINAL mode refuses a policy evaluation that is not ready for the requested operation."""
         from reporting.engine import render_document
 
         data = {
@@ -134,6 +144,7 @@ class ReportEngineTest(unittest.TestCase):
         )
 
     def test_final_mode_requires_final_audit_pass(self):
+        """FINAL mode requires the final audit gate to pass."""
         from reporting.engine import render_document
 
         policy = passing_policy_evaluation()
@@ -159,6 +170,7 @@ class ReportEngineTest(unittest.TestCase):
         )
 
     def test_final_mode_writes_json_markdown_and_html_when_gate_passes(self):
+        """With the gate passing, the bundle is written as JSON, Markdown and HTML."""
         from reporting.engine import render_document, write_bundle
 
         data = final_fixture()
@@ -193,10 +205,12 @@ class PayloadIsBoundToTheModelItAuthorisesTest(unittest.TestCase):
     """
 
     def _payload_for(self, report_id: str):
+        """A payload complete enough for a FINAL render of this report."""
         data = final_fixture(report_id=report_id)
         return data
 
     def test_rendering_a_payload_as_a_different_report_is_refused(self):
+        """Rendering a payload as a different report is refused, not silently relabelled."""
         from reporting.engine import ReportReleaseError, render_document
 
         data = self._payload_for("01")

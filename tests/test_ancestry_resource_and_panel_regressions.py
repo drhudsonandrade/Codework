@@ -22,6 +22,7 @@ def _load_without_optional_numpy():
 
 
 def _marker(rsid: str, loadings: list[float]) -> dict:
+    """One reference-panel marker with these PCA loadings."""
     return {
         "rsid": rsid,
         "reference_allele": "A",
@@ -32,6 +33,7 @@ def _marker(rsid: str, loadings: list[float]) -> dict:
 
 
 def _panel(markers: list[dict], centroids: dict | None = None) -> dict:
+    """A reference panel wrapping these markers and centroids."""
     return {
         "schema": "genoma-ancestry-reference-panel-v1",
         "sources": ["fixture"],
@@ -41,7 +43,9 @@ def _panel(markers: list[dict], centroids: dict | None = None) -> dict:
 
 
 class AncestryRegressionTest(unittest.TestCase):
+    """The ancestry panel's validation, exercised with numpy deliberately absent."""
     def _load(self, payload: dict):
+        """Load this panel payload through the module imported without numpy."""
         namespace = _load_without_optional_numpy()
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "panel.json"
@@ -49,6 +53,7 @@ class AncestryRegressionTest(unittest.TestCase):
             return namespace, path, namespace["load_panel"](path)
 
     def test_panel_rejects_inconsistent_loading_dimensions(self):
+        """A panel whose markers carry different numbers of loadings is refused."""
         namespace = _load_without_optional_numpy()
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "panel.json"
@@ -66,17 +71,22 @@ class AncestryRegressionTest(unittest.TestCase):
                 namespace["load_panel"](path)
 
     def test_case_reader_closes_row_iterator_explicitly(self):
+        """The case reader closes its row iterator explicitly, rather than leaving it to the GC."""
         namespace = _load_without_optional_numpy()
         closed: list[bool] = []
 
         class Rows:
+            """A row iterator that records whether it was closed."""
             def __init__(self):
+                """Start undrained."""
                 self._done = False
 
             def __iter__(self):
+                """The iterator is its own iterable."""
                 return self
 
             def __next__(self):
+                """Yield one row, then stop."""
                 if self._done:
                     raise StopIteration
                 self._done = True
@@ -88,6 +98,7 @@ class AncestryRegressionTest(unittest.TestCase):
                 }
 
             def close(self):
+                """Record that the consumer closed this iterator."""
                 closed.append(True)
 
         with patch("array_pipeline.completeness._row_reader", return_value=Rows()):
@@ -98,6 +109,7 @@ class AncestryRegressionTest(unittest.TestCase):
         self.assertEqual(closed, [True])
 
     def test_panel_rejects_centroids_with_a_different_dimension(self):
+        """A panel whose centroids have a different dimension from its loadings is refused."""
         namespace = _load_without_optional_numpy()
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "panel.json"
@@ -116,6 +128,7 @@ class AncestryRegressionTest(unittest.TestCase):
                 namespace["load_panel"](path)
 
     def test_panel_rejects_malformed_marker_fields(self):
+        """Each marker field is validated: mutating any one of them alone is refused."""
         namespace = _load_without_optional_numpy()
         error = namespace["AncestryPanelError"]
         valid = _marker("rs1", [0.1, 0.2])
@@ -138,6 +151,7 @@ class AncestryRegressionTest(unittest.TestCase):
                         namespace["load_panel"](path)
 
     def test_panel_requires_a_non_admixed_reference_centroid(self):
+        """A panel with no non-admixed reference centroid is refused."""
         namespace = _load_without_optional_numpy()
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "panel.json"
@@ -169,9 +183,11 @@ class AncestryOptionalNumpyTest(unittest.TestCase):
     """
 
     def test_the_module_imports_with_numpy_absent(self):
+        """The module imports with numpy absent."""
         real_import = __builtins__["__import__"] if isinstance(__builtins__, dict) else __builtins__.__import__
 
         def refuse_numpy(name, *args, **kwargs):
+            """An __import__ that refuses numpy and passes everything else through."""
             if name == "numpy" or name.startswith("numpy."):
                 raise ImportError("No module named 'numpy'")
             return real_import(name, *args, **kwargs)
@@ -184,6 +200,7 @@ class AncestryOptionalNumpyTest(unittest.TestCase):
         self.assertIsNone(namespace["np"])
 
     def test_projection_refuses_with_a_reason_instead_of_raising(self):
+        """Without numpy the projection refuses with a reason instead of raising."""
         namespace = _load_without_optional_numpy()
         # `runpy.run_path` hands back a *copy* of the module globals, while the functions it
         # created still close over the original dict. Assigning into the copy changes

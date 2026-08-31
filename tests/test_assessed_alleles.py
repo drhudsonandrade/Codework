@@ -26,13 +26,16 @@ PGX_PATH = ROOT / "config/pgx_allele_definitions.json"
 
 
 class AssessedAlleleEvidenceTest(unittest.TestCase):
+    """The shipped assessed-allele registry against the curation evidence that produced it."""
     @classmethod
     def setUpClass(cls):
+        """Load the shipped registry and its curation evidence once for the whole class."""
         cls.targets = json.loads(TARGETS_PATH.read_text(encoding="utf-8"))
         cls.evidence = json.loads(EVIDENCE_PATH.read_text(encoding="utf-8"))
         cls.by_rsid = {r["rsid"]: r for r in cls.evidence["results"]}
 
     def test_the_registry_cites_its_sources(self):
+        """The registry cites dbSNP, ClinVar and CPIC as the sources it consulted."""
         curation = self.targets["assessed_allele_curation"]
         joined = " ".join(curation["sources"])
         self.assertIn("dbSNP", joined)
@@ -41,6 +44,7 @@ class AssessedAlleleEvidenceTest(unittest.TestCase):
         self.assertIn("ASSESSED_ALLELES_CLINVAR.json", curation["evidence"])
 
     def test_every_declared_allele_matches_the_recorded_evidence(self):
+        """Every declared allele matches the evidence record for the same rsid."""
         for target in self.targets["targets"]:
             rsid = str(target["rsid"]).lower()
             record = self.by_rsid[rsid]
@@ -106,6 +110,7 @@ class AssessedAlleleEvidenceTest(unittest.TestCase):
     }
 
     def test_every_verdict_states_which_source_decided_it(self):
+        """Every verdict names the source that decided it, and a VERIFICADO one names a known source."""
         for record in self.evidence["results"]:
             with self.subTest(rsid=record["rsid"]):
                 self.assertTrue(record["reason"])
@@ -167,6 +172,7 @@ class DecisionRuleTest(unittest.TestCase):
     """The rules themselves, exercised without the network."""
 
     def test_clinvar_assertion_classification_uses_complete_terms(self):
+        """The classification test matches complete ClinVar terms, not substrings of them."""
         from scripts.curate_assessed_alleles import _is_asserting_classification
 
         self.assertTrue(_is_asserting_classification("Pathogenic/Likely pathogenic"))
@@ -179,6 +185,7 @@ class DecisionRuleTest(unittest.TestCase):
         self.assertFalse(_is_asserting_classification("Benign; drug response"))
 
     def test_cpic_lookup_finds_every_allele_a_position_defines(self):
+        """The CPIC lookup finds every allele a defining position belongs to, not just the first."""
         from scripts.curate_assessed_alleles import cpic_variant_alleles
 
         registry = {
@@ -197,6 +204,7 @@ class DecisionRuleTest(unittest.TestCase):
         self.assertEqual(found["G"], ["TPMT*41"])
 
     def test_an_absent_registry_yields_nothing_rather_than_failing(self):
+        """An absent registry yields nothing rather than raising."""
         from scripts.curate_assessed_alleles import cpic_variant_alleles
 
         self.assertEqual(cpic_variant_alleles("rs1142345", None), {})
@@ -220,14 +228,17 @@ class DecisionRuleTest(unittest.TestCase):
         self.assertEqual(registry_source("rs1", None), "CPIC")
 
     def test_the_shipped_registry_marks_its_fallback_gene(self):
+        """The shipped registry marks the gene whose definitions came from the fallback source."""
         registry = json.loads(PGX_PATH.read_text(encoding="utf-8"))
         self.assertTrue(registry["genes"]["BCHE"].get("variant_source"))
         self.assertNotIn("variant_source", registry["genes"]["CYP2C19"])
 
     def test_a_benign_classification_is_not_a_clinical_assertion(self):
+        """A benign classification is not a clinical assertion."""
         from scripts import curate_assessed_alleles as curation
 
         def record(classification: str) -> dict:
+            """One ClinVar record carrying this classification."""
             return {
                 "uid": "1",
                 "accession": "VCV000000001",
@@ -292,6 +303,7 @@ class DecisionRuleTest(unittest.TestCase):
 
 
     def test_apply_writes_verified_status_with_the_allele(self):
+        """Applying an assessment writes the allele together with the VERIFICADO status."""
         from scripts.curate_assessed_alleles import _apply_target_assessment
 
         target = {
@@ -324,10 +336,12 @@ class BcheFallbackTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        """The BCHE definitions the ClinVar fallback produced."""
         cls.registry = json.loads(PGX_PATH.read_text(encoding="utf-8"))
         cls.bche = cls.registry["genes"]["BCHE"]
 
     def test_bche_now_carries_variant_definitions(self):
+        """BCHE carries variant definitions, each with defining positions and ClinVar accessions."""
         self.assertTrue(self.bche["alleles"], "the ClinVar fallback produced no definitions")
         for allele, definition in self.bche["alleles"].items():
             with self.subTest(allele=allele):
@@ -350,6 +364,7 @@ class BcheFallbackTest(unittest.TestCase):
                 self.assertNotIn("*", allele.replace("BCHE ", ""))
 
     def test_bche_still_yields_no_diplotype_or_phenotype(self):
+        """BCHE still yields no diplotype or phenotype: CPIC publishes none, and the fallback is not one."""
         from array_pipeline.pharmacogenomics import _diplotype_for
 
         result = _diplotype_for("BCHE", self.bche, [], [], [])
@@ -358,6 +373,7 @@ class BcheFallbackTest(unittest.TestCase):
         self.assertEqual(self.bche["phenotype_map"], {})
 
     def test_the_anaesthesia_note_survives_the_fallback(self):
+        """The anaesthesia note survives the fallback."""
         self.assertTrue(self.bche["anesthesia_relevant"])
         self.assertIn("succinilcolina", self.bche["anesthesia_note"])
 
@@ -367,16 +383,19 @@ class ReferencesTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Load the shipped registry and its curation evidence once for the whole class."""
         cls.targets = json.loads(TARGETS_PATH.read_text(encoding="utf-8"))
         cls.evidence = json.loads(EVIDENCE_PATH.read_text(encoding="utf-8"))
         cls.by_rsid = {r["rsid"]: r for r in cls.evidence["results"]}
 
     def test_the_curation_cites_every_source_it_consulted(self):
+        """The curation cites every source it consulted."""
         joined = " ".join(self.evidence["sources"])
         for source in ("dbSNP", "ClinVar", "CPIC", "GWAS Catalog", "PubMed"):
             self.assertIn(source, joined)
 
     def test_every_assessed_target_carries_references(self):
+        """Every assessed target carries the references behind its allele."""
         for target in self.targets["targets"]:
             if "assessed_allele" not in target:
                 continue
@@ -390,12 +409,14 @@ class ReferencesTest(unittest.TestCase):
                 )
 
     def test_clinvar_accessions_are_well_formed(self):
+        """ClinVar accessions are well formed."""
         for record in self.evidence["results"]:
             for accession in record.get("references", {}).get("clinvar_accessions", []):
                 with self.subTest(rsid=record["rsid"], accession=accession):
                     self.assertRegex(accession, r"^VCV\d+$")
 
     def test_pubmed_ids_are_numeric_and_bounded(self):
+        """PubMed ids are numeric and bounded by MAX_CITATIONS."""
         from scripts.curate_assessed_alleles import MAX_CITATIONS
 
         for record in self.evidence["results"]:
@@ -408,6 +429,7 @@ class ReferencesTest(unittest.TestCase):
                         self.assertRegex(pmid, r"^\d+$")
 
     def test_references_are_deduplicated(self):
+        """References are de-duplicated."""
         for record in self.evidence["results"]:
             references = record.get("references", {})
             for key, values in references.items():

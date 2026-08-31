@@ -10,7 +10,9 @@ from scripts import build_pgx_panel, build_pgx_registry, expand_clinvar_targets,
 
 
 class CpicRetryPolicyTest(unittest.TestCase):
+    """Which CPIC fetch failures are retried and which are not."""
     def test_non_transient_http_error_is_not_retried(self):
+        """A 404 is a fact about the request and is not retried."""
         error = urllib.error.HTTPError(
             "https://api.cpicpgx.org/v1/gene", 404, "Not Found", None, None
         )
@@ -22,6 +24,7 @@ class CpicRetryPolicyTest(unittest.TestCase):
         slept.assert_not_called()
 
     def test_transient_http_error_is_retried(self):
+        """A 503 is transient and is retried."""
         response = MagicMock()
         response.__enter__.return_value.read.return_value = json.dumps([]).encode()
         error = urllib.error.HTTPError(
@@ -37,8 +40,10 @@ class CpicRetryPolicyTest(unittest.TestCase):
 
 
 class SharedHttpRetryPolicyTest(unittest.TestCase):
+    """The same retry policy, applied by the dbSNP and ClinVar fetchers."""
     @staticmethod
     def _marker_error(code: int):
+        """A MarkerVerificationError caused by an HTTPError with this status."""
         http = urllib.error.HTTPError("https://dbsnp", code, "error", None, None)
         try:
             raise verify_provenance_markers.MarkerVerificationError("fetch failed") from http
@@ -46,6 +51,7 @@ class SharedHttpRetryPolicyTest(unittest.TestCase):
             return exc
 
     def test_dbsnp_permanent_http_error_is_not_retried(self):
+        """A permanent dbSNP error is raised on the first attempt, with no sleep."""
         error = self._marker_error(404)
         with patch.object(
             verify_provenance_markers,
@@ -85,6 +91,7 @@ class SharedHttpRetryPolicyTest(unittest.TestCase):
                 self.assertEqual(slept.call_count, 1)
 
     def test_invalid_dbsnp_identifier_fails_before_fetch(self):
+        """An identifier that is not an rsid fails before any fetch is attempted."""
         with patch.object(verify_provenance_markers, "fetch_refsnp") as fetched:
             with self.assertRaises(
                 verify_provenance_markers.MarkerVerificationError
@@ -93,6 +100,7 @@ class SharedHttpRetryPolicyTest(unittest.TestCase):
         fetched.assert_not_called()
 
     def test_bulk_download_permanent_http_error_is_not_retried(self):
+        """A permanent error on the ClinVar bulk download is not retried."""
         error = urllib.error.HTTPError("https://clinvar", 403, "Forbidden", None, None)
         with patch.object(
             expand_clinvar_targets.urllib.request,
@@ -107,7 +115,9 @@ class SharedHttpRetryPolicyTest(unittest.TestCase):
 
 
 class PartialDefinitionTest(unittest.TestCase):
+    """An allele CPIC defines only partially, and what the consumer may do with it."""
     def test_builder_marks_partial_definition_and_panel_incomplete(self):
+        """The builder marks a partial definition and the panel it belongs to as incomplete."""
         rows = {
             "allele": [{"name": "*2", "definitionid": 1}],
             "allele_definition": [
@@ -126,6 +136,7 @@ class PartialDefinitionTest(unittest.TestCase):
         }
 
         def fake_get(path, **_params):
+            """Serve the fixture rows for this CPIC endpoint."""
             return rows[path]
 
         with patch.object(build_pgx_registry, "_get", side_effect=fake_get):
@@ -138,6 +149,7 @@ class PartialDefinitionTest(unittest.TestCase):
         self.assertIn("TEST*2 (parcial)", record["alleles_without_usable_snp_definition"])
 
     def test_consumer_refuses_a_partial_definition_even_when_observed(self):
+        """The consumer refuses a partial definition even when its positions were observed."""
         spec = {
             "alleles": {
                 "TEST*2": {
@@ -153,8 +165,10 @@ class PartialDefinitionTest(unittest.TestCase):
 
 
 class PgxPanelIdentityTest(unittest.TestCase):
+    """The panel's identity, derived from the registry rather than declared."""
     @staticmethod
     def _registry(position=10):
+        """A registry whose two alleles place rs1 at these positions."""
         return {
             "id": "fixture",
             "version": "1",
@@ -182,10 +196,12 @@ class PgxPanelIdentityTest(unittest.TestCase):
         }
 
     def test_conflicting_coordinates_for_one_rsid_are_rejected(self):
+        """Two coordinates for one rsid are rejected instead of one being picked."""
         with self.assertRaisesRegex(ValueError, "rs1.*position"):
             build_pgx_panel.build_panel(self._registry(position=11))
 
     def test_version_changes_when_registry_content_changes(self):
+        """The panel version changes when the registry content changes."""
         first = build_pgx_panel.build_panel(self._registry())
         second_registry = self._registry()
         second_registry["version"] = "2"
