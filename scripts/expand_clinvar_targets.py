@@ -126,6 +126,12 @@ UNAVAILABLE = "NÃO DISPONÍVEL"
 
 
 def _fetch(url: str, *, attempts: int = 4) -> bytes:
+    """Download a source file, retrying transient failures with a growing delay.
+
+    These are large public bulk exports, so a single transport error is not a reason to
+    discard a long run. Exhausting the attempts raises rather than returning partial bytes:
+    a truncated registry would silently narrow the panel.
+    """
     last: Exception | None = None
     request = urllib.request.Request(url, headers={"User-Agent": "genoma-target-expansion/1.0"})
     for attempt in range(attempts):
@@ -146,6 +152,11 @@ def _fetch(url: str, *, attempts: int = 4) -> bytes:
 
 
 def _local_or_fetch(path: Path | None, url: str) -> bytes:
+    """Prefer an operator-supplied local copy, falling back to the published URL.
+
+    Lets a build be reproduced from pinned inputs instead of whatever the source publishes
+    today — these registries change between runs.
+    """
     if path is not None and path.is_file():
         return path.read_bytes()
     return _fetch(url)
@@ -157,6 +168,12 @@ def _local_or_fetch(path: Path | None, url: str) -> bytes:
 
 
 def read_clingen(raw: bytes) -> dict[str, list[dict[str, Any]]]:
+    """Parse the ClinGen gene-validity CSV into per-gene assertions.
+
+    The real header is located by name rather than by row number: the export carries a
+    preamble whose length changes between releases, and counting lines would silently read
+    the preamble as data on the next one.
+    """
     rows = list(csv.reader(io.StringIO(raw.decode("utf-8"))))
     header_index = next(
         (i for i, row in enumerate(rows) if row and row[0].strip() == "GENE SYMBOL"), None
@@ -184,6 +201,11 @@ def read_clingen(raw: bytes) -> dict[str, list[dict[str, Any]]]:
 
 
 def read_gencc(raw: bytes) -> dict[str, list[dict[str, Any]]]:
+    """Parse the GenCC submissions TSV into per-gene assertions.
+
+    Rows without a gene symbol are dropped rather than grouped under an empty key, which
+    would otherwise appear as a gene establishing itself.
+    """
     reader = csv.DictReader(io.StringIO(raw.decode("utf-8")), delimiter="\t")
     out: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in reader:
@@ -235,6 +257,11 @@ _DOSAGE_CYTOBAND = re.compile(r"^([0-9]{1,2}|X|Y)[pq]", re.IGNORECASE)
 
 
 def _dosage_chromosome(row: dict[str, Any]) -> str | None:
+    """The chromosome for a ClinGen dosage record, from whichever column carries it.
+
+    The export gives a genomic location for some records and only a cytoband for others, so
+    both spellings are tried before giving up rather than assuming one is always present.
+    """
     for column, pattern in (
         ("Genomic Location", _DOSAGE_LOCATION),
         ("cytoBand", _DOSAGE_CYTOBAND),
@@ -348,6 +375,11 @@ def read_clingen_dosage(path: Path | None) -> dict[str, dict[str, Any]]:
 
 
 def _float(text: str) -> float | None:
+    """Parse a float, treating an unparseable value *and* NaN as absence.
+
+    NaN is not a number this pipeline can compare or publish, and letting it through would
+    make every threshold test silently false rather than refusing.
+    """
     try:
         value = float(text)
     except (TypeError, ValueError):
@@ -408,6 +440,12 @@ def read_gnomad_constraint(path: Path | None) -> dict[str, dict[str, Any]]:
 
 
 def _panelapp_block(gene: str, panelapp: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """The PanelApp evidence for one gene, or an explicit NÃO DISPONÍVEL block.
+
+    A gene absent from the scan gets a block saying so rather than no block at all: "not
+    curated by PanelApp" and "we did not look" are different facts, and only the record can
+    tell them apart later.
+    """
     record = panelapp.get(gene)
     if not record:
         return {
@@ -438,6 +476,7 @@ def _panelapp_block(gene: str, panelapp: dict[str, dict[str, Any]]) -> dict[str,
 
 
 def _dosage_block(gene: str, dosage: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """The ClinGen dosage evidence for one gene, or an explicit NÃO DISPONÍVEL block."""
     record = dosage.get(gene)
     if record:
         return record
@@ -1048,6 +1087,11 @@ def build(
 
 
 def _write(payload: dict[str, Any], path: Path) -> Path:
+    """Write a registry deterministically, gzipping when the path says so.
+
+    Sorted keys and a zeroed gzip mtime, so rebuilding from the same inputs produces the same
+    bytes and a digest identifies the content rather than the moment it was written.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(payload, ensure_ascii=False, indent=1, sort_keys=True) + "\n"
     if path.suffix == ".gz":
@@ -1058,6 +1102,7 @@ def _write(payload: dict[str, Any], path: Path) -> Path:
 
 
 def main() -> int:
+    """Build the expanded target registries from the bulk ClinVar export and its companions."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--clinvar-bulk", required=True, help="variant_summary.txt.gz")
     parser.add_argument("--clingen", help="local copy of the ClinGen gene-validity CSV")

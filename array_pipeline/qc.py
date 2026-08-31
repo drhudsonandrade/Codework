@@ -235,12 +235,19 @@ def _strand_marker_alleles() -> dict[str, set[str]]:
 
 @dataclass(frozen=True)
 class SourceInfo:
+    """Where the genotype rows were read from, and what the file said about itself.
+
+    Carried separately from the parsed rows because the container matters to the verdict: a
+    member inside a zip and a plain CSV of identical content are not the same input, and the
+    QC record has to name which one was read.
+    """
     kind: str
     member_name: str | None
     metadata: dict[str, str]
 
 
 def sha256_file(path: Path) -> str:
+    """SHA-256 of a file, read in chunks so a large array is not held in memory."""
     h = hashlib.sha256()
     with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
@@ -390,6 +397,12 @@ def _text_stream(path: Path) -> tuple[TextIO, SourceInfo]:
 
 
 def _read_header_and_metadata(fh: TextIO) -> tuple[list[str], dict[str, str]]:
+    """Consume the leading comment block and return the column header and what it declared.
+
+    Consumer arrays carry provider metadata in `#` comments above the header. It is kept
+    rather than skipped because it states the build and orientation the file claims — the
+    claims the strand and build gates exist to check against the data itself.
+    """
     metadata: dict[str, str] = {}
     while True:
         line = fh.readline()

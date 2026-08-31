@@ -69,10 +69,17 @@ EXPECTED = {
 
 
 def sha256_bytes(value: bytes) -> str:
+    """SHA-256 of a byte string, as lowercase hex."""
     return hashlib.sha256(value).hexdigest()
 
 
 def http_json(base: str, method: str, path: str, payload: dict[str, Any] | None = None) -> tuple[int, dict[str, Any], bytes]:
+    """One real HTTP call to the deployed service: status, parsed body, and raw bytes.
+
+    The raw bytes are returned alongside the parsed body because the witness records their
+    SHA-256: a response digest taken over a re-serialised object would attest to this
+    script's formatting rather than to what the service actually sent.
+    """
     body = None if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")
     request = urllib.request.Request(base.rstrip("/") + path, data=body, method=method)
     request.add_header("Accept", "application/json")
@@ -88,6 +95,11 @@ def http_json(base: str, method: str, path: str, payload: dict[str, Any] | None 
 
 
 def baseline() -> dict[str, Any]:
+    """The manifest every section-260 case starts from, before its own mutation.
+
+    One shared starting point so each case differs from the others only in the field it is
+    written to exercise, and a failure names that field rather than a whole payload.
+    """
     return {
         "case_id": "LIVE-SMOKE",
         "session_id": "live-post-deployment",
@@ -104,6 +116,12 @@ def baseline() -> dict[str, Any]:
 
 
 def valid_na_attestations(catalog: dict[str, Any], run_id: str) -> list[dict[str, Any]]:
+    """A NOT_APPLICABLE attestation for every rule in the catalog, with real trace metadata.
+
+    Cases that exercise one gate still have to satisfy the attestation contract for the rest,
+    or they would be refused for the wrong reason and the case would prove nothing about the
+    gate it targets. Each attestation is explicitly NOT_APPLICABLE — never a claimed pass.
+    """
     out = []
     for rule in catalog["rules"]:
         out.append({
@@ -117,12 +135,19 @@ def valid_na_attestations(catalog: dict[str, Any], run_id: str) -> list[dict[str
 
 
 def claim(**kw: Any) -> dict[str, Any]:
+    """A minimal well-formed claim, with the caller's fields overriding the defaults."""
     value = {"id": "C1", "nature": "ASSOCIAÇÃO", "domain": "PESQUISA", "status": "INFERIDO", "priority": "P5", "evidence_refs": []}
     value.update(kw)
     return value
 
 
 def cases(catalog: dict[str, Any]) -> list[tuple[int, dict[str, Any]]]:
+    """The fifteen canonical section-260 scenarios, each paired with its case number.
+
+    Each one is a manifest built to trip exactly one blocking gate, so a live run that
+    reports 15/15 has exercised fifteen distinct refusals rather than the same one fifteen
+    times. The numbers are the case ids the witness reports against.
+    """
     result: list[tuple[int, dict[str, Any]]] = []
     m = baseline(); m["claims"] = [claim(negative_result=True, disease_excluded=True, all_relevant_mechanisms_assessed=False)]; result.append((1, m))
     m = baseline(); m["operation"]["analysis_relevant"] = True; m["inputs"]=[{"id":"rare","kind":"vcf","source":"live-smoke","sha256":"fixture-sha"}]; m["consent"]={"verified":True,"version":"live-smoke","authorized_domains":["research"]}; m["qc"]={"status":"EXECUTADO","passed":False,"evidence_refs":["smoke:qc"]}; m["claims"]=[claim(nature="FATO CONFIRMADO",technical_quality_flag="LOW")]; m["section_attestations"]=valid_na_attestations(catalog,"SMOKE-02"); result.append((2,m))
@@ -143,6 +168,12 @@ def cases(catalog: dict[str, Any]) -> list[tuple[int, dict[str, Any]]]:
 
 
 def verify_ruleset(metadata: dict[str, Any]) -> None:
+    """Refuse unless the live service reports the exact canonical ruleset identity.
+
+    Checked before any case runs: a smoke against a service carrying a different ruleset
+    measures that other ruleset, and reporting it as this deployment's result would be the
+    transfer the witness binding exists to prevent.
+    """
     expected = {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026", "canonical_filename": EXPECTED_NAME, "sha256": EXPECTED_SHA, "section_count": 263}
     mismatch = {key: (metadata.get(key), value) for key, value in expected.items() if metadata.get(key) != value}
     if mismatch:
@@ -150,6 +181,13 @@ def verify_ruleset(metadata: dict[str, Any]) -> None:
 
 
 def main() -> int:
+    """Run the fifteen section-260 cases against a live deployment and write the witness.
+
+    Every argument is required and nothing is defaulted: the base URL, the attestation paths
+    and their expected digests all have to be supplied by whoever is running the ceremony,
+    because a default would let a run certify something the operator did not choose. Exits
+    non-zero unless all fifteen pass with no critical failure.
+    """
     p = argparse.ArgumentParser()
     p.add_argument("--base-url", required=True)
     p.add_argument("--output", required=True)

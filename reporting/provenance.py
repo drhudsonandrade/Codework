@@ -406,10 +406,16 @@ def witness_verdict(
 
 
 def _stable_json(value: Any) -> str:
+    """JSON that depends only on the value, not on how it was built.
+
+    Sorted keys and no incidental whitespace, so two structurally equal payloads hash
+    identically and a digest means "same content" rather than "same construction order".
+    """
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def sha256_json(value: Any) -> str:
+    """SHA-256 over the stable rendering of a value, so equal content gives equal digests."""
     return hashlib.sha256(_stable_json(value).encode("utf-8")).hexdigest()
 
 
@@ -480,6 +486,11 @@ class Artifact:
 
     @classmethod
     def from_path(cls, name: str, path: Path) -> "Artifact":
+        """Read an artifact from disk, digesting the bytes that were actually read.
+
+        The SHA-256 is taken over the raw file rather than over the re-serialised object, so
+        it identifies the file a reader can open rather than this module's formatting of it.
+        """
         raw = Path(path).read_bytes()
         payload = json.loads(raw.decode("utf-8"))
         if not isinstance(payload, dict):
@@ -507,6 +518,7 @@ class Anchor:
     basis: str
 
     def to_dict(self) -> dict[str, Any]:
+        """The anchor as it appears in the published provenance block."""
         return {
             "kind": self.kind,
             "artifact": self.artifact,
@@ -519,6 +531,12 @@ class Anchor:
 
 
 def _validate_anchor(anchor: Anchor) -> None:
+    """Refuse an anchor that could not honestly describe a value.
+
+    Checked at construction rather than at render: an anchor with an unknown kind, an
+    invalid status or an empty basis is malformed evidence, and rejecting it where it is
+    created names the caller that produced it instead of surfacing later as a blocker.
+    """
     if anchor.kind not in ANCHOR_KINDS:
         raise ProvenanceError(f"unknown anchor kind: {anchor.kind!r}")
     if anchor.operational_status not in OPERATIONAL_STATUSES:
@@ -541,6 +559,7 @@ class CompiledPayload:
     anchors: dict[str, Anchor] = dataclass_field(default_factory=dict)
 
     def to_payload(self) -> dict[str, Any]:
+        """The compiled data with its provenance block attached."""
         payload = dict(self.data)
         payload["provenance"] = provenance_block(self.anchors)
         return payload
@@ -561,6 +580,13 @@ def status_distribution(anchors: Any) -> dict[str, int]:
 
 
 def provenance_block(anchors: dict[str, Anchor]) -> dict[str, Any]:
+    """Assemble the provenance block a payload publishes about itself.
+
+    The floor and the distribution are *computed* from the anchors here and recomputed by
+    `provenance_blockers` at render time, so a block that merely stated a reassuring floor
+    disagrees with its own fields and is caught. Fields are emitted in sorted order so the
+    block's digest depends on its content and not on insertion order.
+    """
     fields = {name: anchors[name].to_dict() for name in sorted(anchors)}
     floor = weakest_status(anchors.values())
     block = {
@@ -605,6 +631,13 @@ class PayloadCompiler:
         post_deployment_witness: "Path | str | None" = None,
         consent: "Path | str | None" = None,
     ) -> None:
+        """Start a payload for one case and one report, optionally binding its authorities.
+
+        The three authority artifacts arrive here as *paths* and nowhere else. That is the
+        whole point of the constructor taking them: a verdict, a witness or a consent record
+        composed in memory by the builder would be the builder granting itself the authority
+        each of them exists to withhold, so they can only enter as a file someone else wrote.
+        """
         if not str(case_id).strip():
             raise ProvenanceError("case_id is required")
         self.case_id = str(case_id)
@@ -696,6 +729,11 @@ class PayloadCompiler:
         self._fixture_consent = fixture
 
     def artifact(self, name: str) -> Artifact:
+        """A registered artifact by name, refusing rather than returning None.
+
+        A missing artifact is a caller error, and returning None would let a derive() read a
+        locator out of nothing and record the default as though it had been measured.
+        """
         try:
             return self._artifacts[name]
         except KeyError as exc:
@@ -786,6 +824,11 @@ class PayloadCompiler:
         kind: str = "observation",
         transform: Any = None,
     ) -> Any:
+        """Fill a section from a value read out of a registered artifact.
+
+        The section is anchored under its title, so removing the text later leaves the anchor
+        behind and the gate reports the removal instead of a shorter document.
+        """
         value = self.derive(
             _anchor_name_for_section(title),
             artifact=artifact,
@@ -799,11 +842,18 @@ class PayloadCompiler:
         return value
 
     def section_stated(self, title: str, text: Any, *, kind: str, basis: str, status: str) -> Any:
+        """Record free text for a section, anchored as stated rather than measured."""
         value = self.state(_anchor_name_for_section(title), text, kind=kind, basis=basis, status=status)
         self._sections[title] = value
         return value
 
     def section_unavailable(self, title: str, *, basis: str) -> str:
+        """Declare a section NÃO DISPONÍVEL, with the reason it could not be filled.
+
+        An honest absence, anchored like any other value: the section is present in the
+        document saying nothing is known, rather than missing so a reader cannot tell
+        whether it was considered.
+        """
         value = self.unavailable(_anchor_name_for_section(title), basis=basis)
         self._sections[title] = value
         return value
@@ -815,13 +865,20 @@ class PayloadCompiler:
     # -- output ------------------------------------------------------------------
 
     def value(self, name: str) -> Any:
+        """The value recorded under an anchor name, or None if nothing was recorded."""
         return self._values.get(name)
 
     @property
     def anchors(self) -> dict[str, Anchor]:
+        """A copy of the anchors recorded so far, so a caller cannot mutate the originals."""
         return dict(self._anchors)
 
     def status_floor(self) -> str:
+        """The weakest operational status among the anchors: the payload cannot read stronger.
+
+        One honestly absent value floors the whole report, which is the point — a document
+        may not claim more than its least supported statement.
+        """
         return weakest_status(self._anchors.values())
 
     def post_deployment(self) -> dict[str, Any]:
@@ -1299,6 +1356,12 @@ class FindingBuilder:
     """Assemble one structured finding, anchoring each field as it is set."""
 
     def __init__(self, compiler: PayloadCompiler, finding_id: str, *, basis: str) -> None:
+        """Begin one structured finding, anchoring its id immediately.
+
+        The id is printed on the document like every other value, so it is anchored on the
+        way in rather than treated as a key — a finding whose id was edited afterwards would
+        otherwise carry another finding's evidence under a new name.
+        """
         if not str(finding_id).strip():
             raise ProvenanceError("a finding needs an id")
         self._compiler = compiler
@@ -1324,6 +1387,11 @@ class FindingBuilder:
         kind: str = "observation",
         transform: Any = None,
     ) -> "FindingBuilder":
+        """Set one finding field from an artifact, refusing a field the schema does not have.
+
+        Returns self so fields chain; an unknown key is a refusal rather than a silently
+        stored extra, because a field the renderer never prints is evidence nobody reads.
+        """
         if key not in FINDING_FIELDS:
             raise ProvenanceError(f"unknown finding field: {key!r}")
         value = self._compiler.derive(
@@ -1339,6 +1407,7 @@ class FindingBuilder:
         return self
 
     def stated(self, key: str, value: Any, *, kind: str, basis: str, status: str) -> "FindingBuilder":
+        """Set one finding field to a stated value, which can never claim a measurement."""
         if key not in FINDING_FIELDS:
             raise ProvenanceError(f"unknown finding field: {key!r}")
         stored = self._compiler.state(
@@ -1348,6 +1417,7 @@ class FindingBuilder:
         return self
 
     def unavailable(self, key: str, *, basis: str) -> "FindingBuilder":
+        """Declare one finding field NÃO DISPONÍVEL, with the reason, rather than omitting it."""
         return self.stated(key, UNAVAILABLE, kind="fixture", basis=basis, status=UNAVAILABLE)
 
     def add(self) -> dict[str, Any]:
@@ -1387,14 +1457,21 @@ FINDING_FIELDS = (
 
 
 def _anchor_name_for_section(title: str) -> str:
+    """The anchor name for a report section, in the namespace the gate reads back."""
     return f"sections[{title}]"
 
 
 def _anchor_name_for_finding(finding_id: str, key: str) -> str:
+    """The anchor name for one field of one finding."""
     return f"findings[{finding_id}].{key}"
 
 
 def _anchor_name_for_execution_manifest(key: str) -> str:
+    """The anchor name for one execution-manifest key.
+
+    Each key is anchored separately rather than the block as a whole, so an edit to a single
+    tool version or log locator is caught instead of only a wholesale replacement.
+    """
     return f"execution_manifest[{key}]"
 
 
@@ -1530,6 +1607,12 @@ def provenance_blockers(data: dict[str, Any]) -> list[str]:
         blockers.append("provenance:sha256")
 
     def check(name: str, value: Any) -> None:
+        """Compare one printed value against the anchor that claims to describe it.
+
+        Runs where the artifacts are gone, so it cannot re-measure. What it can prove is that
+        the text and its anchor still agree, that the anchor is well formed, and that a
+        fixture has not been dressed up as evidence.
+        """
         anchor = fields.get(name)
         if not isinstance(anchor, dict):
             blockers.append(f"provenance:unanchored:{name}")

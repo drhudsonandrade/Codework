@@ -33,10 +33,19 @@ REQUIRED_PLANES = ("policy_control", "scientific_data", "evidence", "audit")
 
 
 class ReportReleaseError(RuntimeError):
-    pass
+    """A document may not be released in the form that was asked for.
+
+    Every refusal in this module raises it, because they mean the same thing to a caller: the
+    artifact you would get is not the one the gates authorise, so none is produced.
+    """
 
 
 def load_catalog() -> dict[str, dict[str, Any]]:
+    """The eleven v3 report models, refusing any catalog that is not exactly 01..11.
+
+    A partial catalog would let a render pick a model nobody approved, and a model missing
+    its editorial metadata would render a document with empty headings.
+    """
     catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     if not isinstance(catalog, dict) or sorted(catalog) != [f"{i:02d}" for i in range(1, 12)]:
         raise ReportReleaseError("report catalog must contain exactly models 01..11")
@@ -118,6 +127,12 @@ def _safe(value: Any, default: str = "NÃO DISPONÍVEL") -> str:
 
 
 def _model_markdown(report_id: str, model: dict[str, Any]) -> str:
+    """The empty template for a model, with every slot left as a visible placeholder.
+
+    Reads no payload at all. MODEL mode exists to show the shape of a report without
+    asserting anything, so the placeholders are printed rather than filled — a blank where a
+    result belongs would read as a measurement that came back empty.
+    """
     lines = [
         f"# {model['title']}",
         "",
@@ -145,6 +160,12 @@ def _model_markdown(report_id: str, model: dict[str, Any]) -> str:
 
 
 def _final_markdown(report_id: str, model: dict[str, Any], data: dict[str, Any]) -> str:
+    """The published document: every printed value comes from the payload.
+
+    Values are rendered through `reporting.provenance.render_value`, which is also what the
+    anchors record, so the text on the page and the provenance block describing it cannot
+    disagree. Raises if any placeholder syntax survives into the output.
+    """
     lines = [
         f"# {model['title']}",
         "",
@@ -225,6 +246,12 @@ def _final_markdown(report_id: str, model: dict[str, Any], data: dict[str, Any])
 
 
 def _to_html(markdown: str, title: str) -> str:
+    """Convert the rendered Markdown to standalone HTML, escaping every dynamic value.
+
+    A deliberately small converter rather than a Markdown library: the input is this module's
+    own output, and the set of constructs it emits is fixed and known. Content is escaped, so
+    a value carrying HTML is displayed rather than interpreted.
+    """
     body: list[str] = []
     in_code = False
     code: list[str] = []
@@ -295,6 +322,11 @@ def render_document(report_id: str, data: dict[str, Any], *, mode: str = "MODEL"
 
 
 def write_bundle(rendered: dict[str, Any], output_dir: Path, *, stem: str | None = None) -> dict[str, Path]:
+    """Write the JSON, Markdown and HTML of one render, and return where each landed.
+
+    All three share a stem so a reader can tell they describe the same document, and the JSON
+    travels beside the rendered text so the payload behind a page is always recoverable.
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
     metadata = rendered["metadata"]
     stem = stem or f"{metadata['report_id']}-{metadata['slug']}"

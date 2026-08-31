@@ -42,10 +42,15 @@ SYSTEM_REPLACEMENTS = {
 
 
 class TemplateV3Error(RuntimeError):
-    pass
+    """The approved v3 template pack is absent, altered, or cannot be rendered from.
+
+    Raised rather than degrading to an approximation: a FINAL report laid out by anything
+    other than the hash-pinned pack is a different document, and the reader cannot tell.
+    """
 
 
 def _sha256(path: Path) -> str:
+    """SHA-256 of a file, read in chunks so a large PDF is not held in memory."""
     h = hashlib.sha256()
     with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
@@ -102,6 +107,12 @@ def verify_coordinate_detail(
 
 
 def _validate_controlled_span_sources(payload: dict[str, Any]) -> None:
+    """Refuse a manifest whose controlled spans name a ruleset other than the current one.
+
+    A controlled span carries the ruleset marker printed on the page. A manifest still
+    naming a superseded ruleset would render a document that states the wrong normative
+    identity while every hash around it checks out.
+    """
     for report_id, meta in payload.get("reports", {}).items():
         for item in meta.get("controlled_spans", []):
             source = str(item.get("source_text", ""))
@@ -112,6 +123,11 @@ def _validate_controlled_span_sources(payload: dict[str, Any]) -> None:
 
 
 def _validate_page_size_pt(report_id: str, meta: dict[str, Any]) -> None:
+    """Refuse a page size that is not exactly two finite numbers.
+
+    Geometry is computed from these values, so a string, a boolean or a missing dimension
+    would place text at coordinates nobody chose rather than failing where it can be seen.
+    """
     page_size = meta.get("page_size_pt")
     if not isinstance(page_size, list) or len(page_size) != 2:
         raise TemplateV3Error(
@@ -135,6 +151,12 @@ def _validate_page_size_pt(report_id: str, meta: dict[str, Any]) -> None:
 
 
 def load_reference_manifest(path: Path = MANIFEST_PATH) -> dict[str, Any]:
+    """Read the v3 reference manifest, refusing anything that is not the full 01..11 set.
+
+    The manifest is what binds a rendered document to the approved pack: it carries each
+    report's filename, page count, page size and expected digest. A partial one would let a
+    render proceed against templates nobody pinned.
+    """
     index = json.loads(path.read_text(encoding="utf-8"))
     if index.get("schema") != "genoma-editorial-v3-reference-manifest-v1":
         raise TemplateV3Error("invalid v3 reference manifest schema")
@@ -177,6 +199,10 @@ def resolve_template_pdf(
     template_dir: Path,
     manifest: dict[str, Any] | None = None,
 ) -> tuple[Path, dict[str, Any]]:
+    """The installed PDF for one report, with the manifest entry that describes it.
+
+    Refuses when the file is missing rather than falling back to another report's template.
+    """
     manifest = manifest or load_reference_manifest()
     meta = manifest["reports"][report_id]
     path = template_dir / meta["filename"]
@@ -192,6 +218,12 @@ def verify_template_pack(
     template_dir: Path,
     manifest: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Check every installed template against the manifest before anything renders.
+
+    Page count and digest are both verified: a PDF with the right hash and the wrong page
+    count is not the approved artifact, and neither is one with the right page count and a
+    different hash.
+    """
     manifest = manifest or load_reference_manifest()
     verified: list[dict[str, Any]] = []
     for rid in sorted(manifest["reports"]):
@@ -216,6 +248,12 @@ def verify_template_pack(
 
 
 def _register_fonts() -> dict[str, str]:
+    """Register the DejaVu faces the layout measures against, or refuse.
+
+    Text is fitted by measuring it, so substituting whatever font happens to be installed
+    would place correctly-measured text of the wrong shape — the overflow appears in the
+    published PDF rather than here.
+    """
     candidates = {
         "regular": [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -245,11 +283,17 @@ def _register_fonts() -> dict[str, str]:
 
 
 def _hex_to_rgb(value: str) -> tuple[float, float, float]:
+    """A `#rrggbb` string as the 0..1 float triple reportlab expects."""
     value = value.lstrip("#")
     return tuple(int(value[index : index + 2], 16) / 255.0 for index in (0, 2, 4))  # type: ignore[return-value]
 
 
 def _field_value(fields: dict[str, Any], item: dict[str, Any]) -> Any | None:
+    """The supplied value for one template slot, by the most specific key that matches.
+
+    Tried in order: the field id, then `token#occurrence`, then the bare token — so a caller
+    may address one occurrence of a repeated token without affecting the others.
+    """
     keys = (item["field_id"], f"{item['token']}#{item['occurrence']}", item["token"])
     for key in keys:
         if key in fields:
@@ -258,6 +302,11 @@ def _field_value(fields: dict[str, Any], item: dict[str, Any]) -> Any | None:
 
 
 def _normalize_value(raw: Any, *, default_color: str) -> dict[str, Any]:
+    """Accept either a bare value or a `{value, color, font_size_pt, bold}` mapping.
+
+    Returns the mapping form so the drawing code has one shape to handle. `None` becomes the
+    empty string rather than the text "None", which would otherwise be printed on the page.
+    """
     if isinstance(raw, dict):
         value = raw.get("value")
         return {
@@ -275,6 +324,11 @@ def _normalize_value(raw: Any, *, default_color: str) -> dict[str, Any]:
 
 
 def _is_dark(hex_color: str) -> bool:
+    """Whether text on this background needs to be light, by Rec. 709 luma.
+
+    Perceived brightness, not the arithmetic mean: green contributes far more than blue, and
+    averaging the channels puts unreadable text on saturated backgrounds.
+    """
     value = hex_color.lstrip("#")
     red, green, blue = [int(value[index : index + 2], 16) for index in (0, 2, 4)]
     return (0.2126 * red + 0.7152 * green + 0.0722 * blue) < 100
@@ -287,6 +341,13 @@ def _fit_single_line_size(
     font_name: str,
     max_height: float | None = None,
 ) -> float:
+    """Largest point size at which `text` still fits one line in the given box.
+
+    Steps down by 0.2pt from the template's own size rather than choosing a size outright,
+    so a value that fits keeps the layout as approved and only an overlong one shrinks. The
+    4.2pt floor is a legibility bound: below it the text is present but unreadable, and
+    silently rendering that is worse than the overflow it avoids.
+    """
     text = " ".join(str(text).split())
     size = float(start_size)
     while size > 4.2 and (
@@ -310,6 +371,13 @@ def _draw_fit_text(
     color: str,
     page_height: float,
 ) -> float:
+    """Draw wrapped text into a box, shrinking until it fits, and return the size used.
+
+    Wrapping and shrinking are decided together: a size that fits horizontally may still
+    overflow once the wrap adds a line, so each candidate size is measured against the real
+    line count. Returns the size actually drawn so the caller can record what was rendered
+    rather than what was requested.
+    """
     text = " ".join(text.split())
     if not text:
         return font_size
@@ -351,6 +419,12 @@ def _replacement_geometry(
     page_width: float,
     page_items: list[dict[str, Any]] | None = None,
 ) -> tuple[list[float], list[float]]:
+    """The rectangle to blank out and the rectangle to draw into, for one template slot.
+
+    They differ: the cover must reach the table cell's edges so no glyph of the placeholder
+    survives, while the text is inset. Where two slots share a cell, the cover is pulled back
+    to the neighbour's edge so replacing one does not erase the other.
+    """
     bbox = [float(value) for value in item["bbox"]]
     cell = item.get("cell_bbox")
     if cell:
@@ -387,6 +461,7 @@ def _replacement_geometry(
 
 
 def _system_values(data: dict[str, Any]) -> dict[str, Any]:
+    """The system-supplied template fields, with any caller overrides applied over them."""
     values = dict(SYSTEM_REPLACEMENTS)
     supplied = data.get("template_system_fields")
     if isinstance(supplied, dict):
@@ -395,6 +470,11 @@ def _system_values(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _system_value_for_source(source_text: str, systems: dict[str, Any]) -> Any | None:
+    """Resolve one template marker, refusing a ruleset marker that is not the current one.
+
+    The ruleset label is handled here rather than through the generic map so that a template
+    carrying a superseded marker fails loudly instead of rendering the wrong identity.
+    """
     if source_text == CURRENT_RULESET_TEMPLATE_SOURCE:
         return CURRENT_RULESET_TEMPLATE_LABEL
     if source_text.startswith(RULESET_TEMPLATE_PREFIX):
@@ -409,6 +489,13 @@ def render_pdf_from_template(
     *,
     strict: bool = False,
 ) -> dict[str, Any]:
+    """Render a payload onto the approved PDF template and report what was filled.
+
+    The template is verified against the manifest before a mark is made. Every slot the
+    template declares is accounted for: `strict` decides whether an unfilled one is a
+    refusal or a recorded omission, because a silently blank field reads on the page as a
+    measurement that came back empty.
+    """
     report_id = str(rendered["metadata"]["report_id"])
     manifest = load_reference_manifest()
     template, meta = resolve_template_pdf(report_id, template_dir, manifest)
@@ -528,6 +615,12 @@ def render_pdf_from_template(
 
 
 def _inline_to_anchor(inline):
+    """Convert an inline DOCX image into a floating anchor behind the text.
+
+    python-docx only inserts inline images, which would push the page content down. The
+    template page has to sit *behind* the filled text, so the element is rewritten as an
+    anchor positioned at the page origin with `behindDoc` set.
+    """
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
 
@@ -579,6 +672,12 @@ def _add_vml_textbox(
     font_size: float,
     box_id: str,
 ) -> None:
+    """Place one absolutely-positioned text box on a DOCX page, over the template image.
+
+    VML rather than DrawingML: Word honours VML absolute positioning consistently across
+    versions, and the filled values have to land on the exact coordinates the PDF template
+    declares or the document stops matching the approved layout.
+    """
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
     from lxml import etree
@@ -636,6 +735,11 @@ def _add_vml_textbox(
 
 
 def _run_poppler(command: list[str], page: int) -> None:
+    """Run one poppler conversion, turning a non-zero exit or a timeout into a refusal.
+
+    stderr is captured and reported: a silent conversion failure would leave a missing page
+    image that the DOCX then renders as a blank.
+    """
     try:
         result = subprocess.run(
             command,
@@ -661,6 +765,11 @@ def _convert_template_pages(
     work: Path,
     page_count: int,
 ) -> tuple[list[Path], list[Path]]:
+    """Render each template page to SVG and PNG for embedding in a DOCX.
+
+    Both are produced because Word needs the raster for display and the vector for print
+    fidelity. Refuses up front when poppler is absent rather than emitting a partial pack.
+    """
     if shutil.which("pdftocairo") is None or shutil.which("pdftoppm") is None:
         raise TemplateV3Error(
             "DOCX template-v3 mode requires pdftocairo and pdftoppm (poppler-utils)"
@@ -698,6 +807,12 @@ def _convert_template_pages(
 
 
 def _patch_docx_svg(docx_path: Path, svgs: list[Path]) -> None:
+    """Attach the SVG page images to a DOCX that already carries the PNG fallbacks.
+
+    python-docx cannot write `asvg:svgBlip`, so the package is reopened and the relationship
+    added directly. Entry names are resolved against the archive root before extraction, so
+    a crafted DOCX cannot write outside the temporary directory.
+    """
     from lxml import etree
 
     temp_dir = Path(tempfile.mkdtemp(prefix="genoma-docx-svg-"))
@@ -821,6 +936,13 @@ def render_docx_from_template(
     *,
     strict: bool = False,
 ) -> dict[str, Any]:
+    """Render a payload as a DOCX that reproduces the approved template page for page.
+
+    Each template page becomes a full-page background image with the filled values placed
+    over it as absolutely-positioned boxes, so the result is a Word document rather than a
+    picture of one while still matching the approved layout. `strict` has the same meaning
+    as in the PDF path: it decides whether an unfilled slot refuses or is recorded.
+    """
     from docx import Document
     from docx.enum.text import WD_BREAK
     from docx.shared import Mm, Pt
@@ -957,6 +1079,11 @@ def render_docx_from_template(
 
 
 def template_mode_requested(rendered: dict[str, Any]) -> bool:
+    """Whether this render was asked for in template-v3 mode.
+
+    Read from the payload first and the environment second, so a caller that sets it
+    explicitly is not overridden by whatever the shell happened to export.
+    """
     data = rendered.get("data") if isinstance(rendered.get("data"), dict) else {}
     return str(
         data.get("editorial_mode") or os.environ.get("GENOMA_EDITORIAL_MODE") or ""
@@ -964,6 +1091,10 @@ def template_mode_requested(rendered: dict[str, Any]) -> bool:
 
 
 def template_dir_from_environment() -> Path:
+    """The installed template pack directory, refusing when it is not configured.
+
+    No default: guessing a location would silently render against whatever pack is there.
+    """
     raw = os.environ.get("GENOMA_REPORT_TEMPLATE_DIR")
     if not raw:
         raise TemplateV3Error("GENOMA_REPORT_TEMPLATE_DIR is required for template-v3 mode")

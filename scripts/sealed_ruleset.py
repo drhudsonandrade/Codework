@@ -34,14 +34,27 @@ MANIFEST_NAME = "MANIFEST.json"
 
 
 class SealedRulesetError(RuntimeError):
-    pass
+    """The sealed transport does not decode to the canonical ruleset, byte for byte.
+
+    Every failure in this module is this one error: a missing part, a bad Base64 body, a
+    digest mismatch and a truncated section list all mean the same thing operationally — the
+    ruleset this run would use is not the one that was sealed, so nothing may proceed on it.
+    """
 
 
 def sha256_bytes(value: bytes) -> str:
+    """SHA-256 of a byte string, as lowercase hex."""
     return hashlib.sha256(value).hexdigest()
 
 
 def sequential_sections(text: str) -> list[int]:
+    """Section numbers read from the ruleset, stopping at the first gap.
+
+    The ruleset is numbered from zero without gaps, so the first number that is not the one
+    expected ends the run. A caller compares the length against the declared section count:
+    a body that decodes cleanly but stops numbering at 200 is truncated, and a digest check
+    alone would not say where.
+    """
     expected = 0
     found: list[int] = []
     for raw in text.splitlines():
@@ -59,6 +72,12 @@ def sequential_sections(text: str) -> list[int]:
 
 
 def load_manifest(sealed_dir: str | Path) -> dict[str, Any]:
+    """Read the sealed manifest, refusing anything unreadable rather than defaulting.
+
+    The manifest declares the part list, the sizes and the digests every other check in this
+    module compares against, so a missing or malformed one leaves nothing to verify against
+    and must stop the run rather than let it proceed unverified.
+    """
     root = Path(sealed_dir)
     path = root / MANIFEST_NAME
     if not path.is_file():
@@ -85,6 +104,12 @@ def load_manifest(sealed_dir: str | Path) -> dict[str, Any]:
 
 
 def _safe_part_path(sealed_dir: Path, relative: str) -> Path:
+    """Resolve one declared transport part, refusing any path that leaves `parts/`.
+
+    The manifest is data, and a `file` entry of `../../etc/passwd` would otherwise be read
+    and hashed as though it were transport. The name shape is checked and the resolved
+    parent compared against the real `parts` directory, so a symlink cannot redirect it.
+    """
     if not relative.startswith("parts/part-") or not relative.endswith(".b64"):
         raise SealedRulesetError(f"invalid sealed transport part path: {relative!r}")
     root = sealed_dir.resolve()
@@ -95,6 +120,12 @@ def _safe_part_path(sealed_dir: Path, relative: str) -> Path:
 
 
 def read_transport(sealed_dir: str | Path, manifest: dict[str, Any] | None = None) -> tuple[bytes, list[dict[str, Any]]]:
+    """Concatenate the Base64 parts in canonical order, with per-part evidence.
+
+    The declared part list must equal `EXPECTED_TRANSPORT_PARTS` exactly — same names, same
+    order. Accepting a reordering or a subset would let a manifest choose which bytes are
+    assembled, and the concatenation is what every later digest is taken over.
+    """
     root = Path(sealed_dir)
     manifest = manifest or load_manifest(root)
     parts = manifest.get("transport_parts")
@@ -141,6 +172,12 @@ def read_transport(sealed_dir: str | Path, manifest: dict[str, Any] | None = Non
 
 
 def _verify_identity(raw: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
+    """Check the decoded ruleset against every identity the project pins.
+
+    Digest, size, decodability, header lines and section count are all checked, against the
+    module's own constants *and* the manifest: a manifest that agrees with itself proves
+    nothing, so the pinned `EXPECTED_SHA` is compared too.
+    """
     digest = sha256_bytes(raw)
     if digest != EXPECTED_SHA or digest != manifest.get("raw_sha256"):
         raise SealedRulesetError(f"canonical raw SHA-256 mismatch: {digest}")
@@ -181,6 +218,11 @@ def _verify_identity(raw: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
 
 
 def decode_verified_payload(sealed_dir: str | Path) -> tuple[bytes, dict[str, Any]]:
+    """The canonical ruleset bytes, with the evidence gathered while verifying them.
+
+    Nothing is returned until identity has been established, so a caller cannot hold the
+    bytes before the checks that authorise using them have run.
+    """
     root = Path(sealed_dir)
     manifest = load_manifest(root)
     encoded, part_evidence = read_transport(root, manifest)
@@ -211,11 +253,20 @@ def decode_verified_payload(sealed_dir: str | Path) -> tuple[bytes, dict[str, An
 
 
 def verify_transport(sealed_dir: str | Path) -> dict[str, Any]:
+    """Verify the sealed transport and return only the evidence, discarding the bytes.
+
+    For callers that need to know the transport is intact without holding the ruleset.
+    """
     _, evidence = decode_verified_payload(sealed_dir)
     return evidence
 
 
 def _active_vigente_files(output_dir: Path) -> list[Path]:
+    """Ruleset files already present in the output directory that declare themselves VIGENTE.
+
+    Materialising over one without checking would leave two files claiming to be the active
+    ruleset, and which of them a reader picked up would depend on the glob order.
+    """
     active: list[Path] = []
     for candidate in output_dir.glob("REGRAS_PROJETO_GENOMA*.txt"):
         try:
@@ -258,6 +309,12 @@ def _already_materialized(destination: Path, active: list[Path], raw: bytes) -> 
 
 
 def materialize(sealed_dir: str | Path, output_dir: str | Path) -> tuple[Path, dict[str, Any]]:
+    """Write the verified ruleset to disk, reusing an identical file already there.
+
+    Provenance is established before anything on disk is read as trustworthy or written, and
+    an existing VIGENTE file is only reused when its bytes match — otherwise it is a
+    different ruleset wearing the canonical name and the run must not continue on it.
+    """
     # Provenance is verified before anything on disk is trusted or written.
     raw, evidence = decode_verified_payload(sealed_dir)
     destination = Path(output_dir)
