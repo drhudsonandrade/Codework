@@ -455,7 +455,6 @@ class WgsInputPathContainmentTest(unittest.TestCase):
         The count is asserted, not assumed: a regression that reopens the path would raise
         the number of opens even though the hash still matched.
         """
-        import hashlib
         from unittest.mock import patch
 
         from scripts import wgs_input_gate
@@ -526,8 +525,6 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             contained = nested / "r1.fastq"
 
             # The swap happens after the path was accepted.
-            import shutil
-
             shutil.rmtree(nested)
             nested.symlink_to(elsewhere)
             with self.assertRaises(ValueError):
@@ -721,7 +718,7 @@ class WgsAlignConsumesVerifiedInputsTest(unittest.TestCase):
         from outside the process, and there is no shell — the list form is passed straight to
         `execve`. The suppression names the single rule and sits on the single line it covers.
         """
-        return subprocess.run(  # nosec B603
+        return subprocess.run(  # nosec B603  # nosemgrep
             [
                 BASH,
                 str(ALIGN_SCRIPT),

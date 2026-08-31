@@ -291,6 +291,15 @@ def validate_manifest(manifest_path: Path) -> dict:
         # Size and hash from one handle, for the same reason as the FASTQ path: `stat` then
         # `open` is two lookups of a name that was validated once.
         alignment_size = None
+        # Bound here, not only inside the `try`. The digest is assigned on the statement
+        # after the size, so today the pair is always set together — but that is an accident
+        # of adjacency, not a structure. A statement inserted between them that raises one of
+        # the caught exceptions would leave `alignment_size` set and `alignment_sha` unbound,
+        # and the read below would raise UnboundLocalError from inside the gate. A gate that
+        # raises instead of returning is not fail-closed, it is absent: no `input-qc.json`
+        # is written and the pipeline waits for a verdict that never arrives, which is the
+        # one failure mode this whole module exists to remove.
+        alignment_sha = None
         # Same distinction as the FASTQ path: a refused open is a containment fact, not an
         # absent file, and the Evidence Plane has to be able to tell them apart.
         alignment_refusal = None
