@@ -24,6 +24,7 @@ from array_pipeline.targets import load_target_manifest, read_manifest_bytes
 
 
 def _load(name: str):
+    """Load one of the scripts/ builders as a module, since they are not importable packages."""
     path = ROOT / "scripts" / f"{name}.py"
     spec = importlib.util.spec_from_file_location(f"_script_{name}", path)
     module = importlib.util.module_from_spec(spec)
@@ -51,6 +52,12 @@ TWO_STAR = "criteria provided, multiple submitters, no conflicts"
 
 
 def _row(**overrides):
+    """One ClinVar row that passes every filter, with keyword overrides for the negative controls.
+
+    The base row is the real HFE p.Cys282Tyr record. Building the negative controls by changing
+    one field of a known-good row is what makes each of them a control: the only difference
+    between accepted and rejected is the field under test.
+    """
     base = {
         "Type": "single nucleotide variant",
         "Name": "NM_000410.4(HFE):c.845G>A (p.Cys282Tyr)",
@@ -75,6 +82,7 @@ def _row(**overrides):
 
 
 def _bulk(rows: list[str]) -> Path:
+    """Write the given rows into a gzipped variant_summary with the real column header."""
     directory = Path(tempfile.mkdtemp())
     path = directory / "variant_summary.txt.gz"
     body = "\t".join(COLUMNS) + "\n" + "\n".join(rows) + "\n"
@@ -83,17 +91,21 @@ def _bulk(rows: list[str]) -> Path:
 
 
 def _scan(rows: list[str]):
+    """Scan a bulk file built from these rows and return the scanner's three outputs."""
     return EXPAND.scan_clinvar(_bulk(rows))
 
 
 class ClinVarFilterTest(unittest.TestCase):
+    """Which ClinVar rows the scanner accepts as targets, and which it refuses."""
     def test_a_qualifying_row_is_kept(self):
+        """A row that passes every filter is kept, indexed by rsid, and counted for its gene."""
         by_rsid, stats, counts = _scan([_row()])
         self.assertEqual(stats["kept"], 1)
         self.assertIn("rs1800562", by_rsid)
         self.assertEqual(counts["HFE"]["pathogenic_any"], 1)
 
     def test_each_filter_rejects_on_its_own(self):
+        """Every filter refuses on its own, with the others satisfied."""
         # Negative controls, one per filter. Each row differs from the accepted one in
         # exactly one field, so a filter that stopped working would show up here alone.
         for label, row in (
@@ -110,6 +122,7 @@ class ClinVarFilterTest(unittest.TestCase):
                 self.assertEqual(stats.get("kept", 0), 0)
 
     def test_conflicting_classifications_are_not_read_as_pathogenic(self):
+        """'Conflicting classifications of pathogenicity' contains 'athogenic' and must still be refused."""
         # The substring trap: this string contains "athogenic" and asserts the opposite.
         _by_rsid, stats, _counts = _scan(
             [_row(ClinicalSignificance="Conflicting classifications of pathogenicity")]
@@ -117,16 +130,19 @@ class ClinVarFilterTest(unittest.TestCase):
         self.assertEqual(stats.get("kept", 0), 0)
 
     def test_benign_is_not_pathogenic(self):
+        """Benign, likely benign and uncertain significance are not pathogenic."""
         for classification in ("Benign", "Likely benign", "Uncertain significance"):
             with self.subTest(classification=classification):
                 _b, stats, _c = _scan([_row(ClinicalSignificance=classification)])
                 self.assertEqual(stats.get("kept", 0), 0)
 
     def test_a_trailing_qualifier_does_not_block_a_pathogenic_row(self):
+        """A trailing qualifier ('Pathogenic; risk factor') does not disqualify a pathogenic row."""
         _by, stats, _c = _scan([_row(ClinicalSignificance="Pathogenic; risk factor")])
         self.assertEqual(stats["kept"], 1)
 
     def test_the_gene_denominator_counts_the_whole_catalogue_not_the_kept_rows(self):
+        """The per-gene denominator counts the gene's whole pathogenic catalogue, not only the kept rows."""
         # An indel and a one-star variant belong in the denominator — they are part of the
         # gene's pathogenic catalogue even though this registry cannot represent them. A
         # denominator that counted only what was kept would make coverage look complete.
@@ -144,13 +160,16 @@ class ClinVarFilterTest(unittest.TestCase):
 
 
 class TargetShapeTest(unittest.TestCase):
+    """What a built target asserts about the variant behind it."""
     def test_one_alternate_yields_an_assessed_allele(self):
+        """A single alternate allele becomes the target's assessed allele."""
         by_rsid, _s, _c = _scan([_row()])
         targets, stats = EXPAND.build_targets(by_rsid)
         self.assertEqual(targets[0]["assessed_allele"], "A")
         self.assertEqual(stats["with_assessed_allele"], 1)
 
     def test_two_alternates_at_one_position_yield_none(self):
+        """Two alternates at one coordinate yield no assessed allele, and both are recorded."""
         # rs3918290 is the real case: C>T is DPYD*2A and C>G is a different pathogenic
         # variant at the same coordinate. Picking one would score the genotype against the
         # wrong base.
@@ -163,12 +182,14 @@ class TargetShapeTest(unittest.TestCase):
         self.assertEqual(stats["multi_allelic"], 1)
 
     def test_one_rsid_at_two_coordinates_is_dropped(self):
+        """An rsid the release places at two coordinates is dropped rather than guessed at."""
         by_rsid, _s, _c = _scan([_row(), _row(PositionVCF="99999999", VariationID="10")])
         targets, stats = EXPAND.build_targets(by_rsid)
         self.assertEqual(targets, [])
         self.assertEqual(stats["ambiguous_position"], 1)
 
     def test_the_target_carries_the_coordinate_so_a_consumer_can_check_it(self):
+        """The target carries its own GRCh38 coordinate and accession, so a consumer can re-check it."""
         by_rsid, _s, _c = _scan([_row()])
         target = EXPAND.build_targets(by_rsid)[0][0]
         self.assertEqual(target["grch38"], {
@@ -176,12 +197,14 @@ class TargetShapeTest(unittest.TestCase):
         })
 
     def test_conditions_keep_their_mondo_cross_reference(self):
+        """A condition keeps the MONDO cross-reference the release gave it."""
         by_rsid, _s, _c = _scan([_row()])
         conditions = by_rsid["rs1800562"][0]["conditions"]
         self.assertEqual(conditions[0]["name"], "Hemochromatosis type 1")
         self.assertEqual(conditions[0]["xrefs"]["MONDO"], "MONDO:0021001")
 
     def test_misaligned_condition_columns_drop_the_ids_not_the_names(self):
+        """When names and cross-references are misaligned, the ids are dropped and the names kept."""
         # Names and cross-references are positionally aligned; where they are not, a
         # condition matched to the wrong MONDO id is worse than one with no id.
         by_rsid, _s, _c = _scan(
@@ -192,12 +215,15 @@ class TargetShapeTest(unittest.TestCase):
         self.assertTrue(all(not c["xrefs"] for c in conditions))
 
     def test_placeholder_conditions_are_dropped(self):
+        """ClinVar's 'not provided' / 'not specified' placeholders are not conditions."""
         by_rsid, _s, _c = _scan([_row(PhenotypeList="not provided|not specified")])
         self.assertEqual(by_rsid["rs1800562"][0]["conditions"], [])
 
 
 class GzipManifestTest(unittest.TestCase):
+    """Reading a target manifest that is stored compressed."""
     def test_a_gzipped_manifest_loads(self):
+        """A gzipped manifest loads and yields the same targets as an uncompressed one."""
         manifest = {
             "schema": "genoma-partial-genome-targets-v1",
             "id": "T", "version": "1",
@@ -210,6 +236,7 @@ class GzipManifestTest(unittest.TestCase):
             self.assertEqual(load_target_manifest(path)["id"], "T")
 
     def test_compression_is_detected_by_content_not_by_extension(self):
+        """Compression is detected from the file's magic bytes, not from its name."""
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "no-extension.json"
             path.write_bytes(gzip.compress(b'{"a": 1}'))
@@ -217,6 +244,7 @@ class GzipManifestTest(unittest.TestCase):
 
 
 def _manifest(identifier: str, targets: list[dict]) -> dict:
+    """A minimal valid manifest wrapper around the given targets."""
     return {
         "schema": "genoma-partial-genome-targets-v1",
         "id": identifier,
@@ -226,13 +254,16 @@ def _manifest(identifier: str, targets: list[dict]) -> dict:
 
 
 def _write(payload: dict, directory: Path, name: str) -> Path:
+    """Write a payload as JSON into a directory and return the path."""
     path = directory / name
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
 
 
 class MergeTest(unittest.TestCase):
+    """How two target registries combine, and what the merge refuses to decide on its own."""
     def _merge(self, *manifests):
+        """Merge these manifests through the real script, via temporary files."""
         with tempfile.TemporaryDirectory() as td:
             paths = [
                 _write(m, Path(td), f"m{i}.json") for i, m in enumerate(manifests)
@@ -240,6 +271,7 @@ class MergeTest(unittest.TestCase):
             return MERGE.merge(paths)
 
     def test_agreeing_registries_merge_and_keep_the_allele(self):
+        """Registries that agree merge to one target and keep the allele they agree on."""
         target = {"rsid": "rs1", "scope": "CLINICO", "label": "a",
                   "queries": {"clinvar": {"term": "rs1"}}, "assessed_allele": "A"}
         result = self._merge(_manifest("A", [target]), _manifest("B", [dict(target)]))
@@ -248,6 +280,7 @@ class MergeTest(unittest.TestCase):
         self.assertEqual(result["totals"]["assessed_allele_conflicts"], 0)
 
     def test_a_disagreement_removes_the_allele_rather_than_choosing(self):
+        """Registries that disagree on the allele lose it: the merge records a conflict, not a winner."""
         result = self._merge(
             _manifest("A", [{"rsid": "rs1", "scope": "CLINICO", "label": "a",
                              "queries": {"clinvar": {"term": "rs1"}}, "assessed_allele": "T"}]),
@@ -260,6 +293,7 @@ class MergeTest(unittest.TestCase):
         self.assertEqual(result["totals"]["assessed_allele_conflicts"], 1)
 
     def test_reference_conflict_removes_assessed_allele_and_its_evidence(self):
+        """A reference-allele conflict removes the assessed allele and the provenance that supported it."""
         first = {
             "rsid": "rs1",
             "scope": "CLINICO",
@@ -328,6 +362,7 @@ class MergeTest(unittest.TestCase):
         self.assertIn("alelo de referência", merged["assessed_allele_reason"])
 
     def test_silence_is_not_disagreement(self):
+        """A registry that says nothing about the allele is not disagreeing with one that does."""
         result = self._merge(
             _manifest("A", [{"rsid": "rs1", "scope": "CLINICO", "label": "a",
                              "queries": {"clinvar": {"term": "rs1"}}}]),
@@ -337,6 +372,7 @@ class MergeTest(unittest.TestCase):
         self.assertEqual(result["targets"][0]["assessed_allele"], "G")
 
     def test_a_locus_keeps_the_stronger_scope(self):
+        """The strongest declared scope wins, so merging never demotes a clinical locus."""
         result = self._merge(
             _manifest("A", [{"rsid": "rs1", "scope": "CURIOSIDADE", "label": "a",
                              "queries": {"clinvar": {"term": "rs1"}}}]),
@@ -346,6 +382,7 @@ class MergeTest(unittest.TestCase):
         self.assertEqual(result["targets"][0]["scope"], "CLINICO")
 
     def test_a_conflict_is_not_undone_by_a_third_registry(self):
+        """A third registry agreeing with one side does not resolve an existing conflict by majority."""
         result = self._merge(
             _manifest("A", [{"rsid": "rs1", "scope": "CLINICO", "label": "a",
                              "queries": {"clinvar": {"term": "rs1"}}, "assessed_allele": "T"}]),
@@ -358,7 +395,9 @@ class MergeTest(unittest.TestCase):
 
 
 class TraitScopeTest(unittest.TestCase):
+    """How trait scopes are validated against the GWAS catalogue."""
     def test_a_declared_term_with_no_significant_association_is_a_hard_error(self):
+        """A declared term with no genome-wide-significant association is an error, not an empty scope."""
         # The guard that caught two real terms: sweet-taste perception, whose best p-value in
         # the catalogue is 4e-07, and lactose intolerance, which has no mapped association at
         # all. A scope that silently covered neither would claim more than it delivers.
@@ -395,6 +434,7 @@ class TraitScopeTest(unittest.TestCase):
         self.assertIn("GO_0050916", str(raised.exception))
 
     def test_unknown_scope_is_a_domain_error(self):
+        """A scope name outside the known vocabulary is refused instead of being ignored."""
         with tempfile.TemporaryDirectory() as td:
             directory = Path(td)
             associations = directory / "a.tsv"
@@ -422,6 +462,7 @@ class TraitScopeTest(unittest.TestCase):
     )
 
     def _scan(self, mapped_trait, mapped_uri):
+        """Scan one association row carrying this trait label and URI."""
         row = "\t".join(
             ["rs4988235", "1e-20", mapped_trait, mapped_uri, "2", "136608646",
              "rs4988235-T", "0.3", "1.5", "[1-2]", "GCST1", "1", "MCM6", "MCM6",
@@ -435,6 +476,7 @@ class TraitScopeTest(unittest.TestCase):
             )
 
     def test_a_comma_inside_a_trait_label_does_not_misname_the_locus(self):
+        """A comma inside a trait label must not shift the locus onto another trait's name."""
         # MAPPED_TRAIT and MAPPED_TRAIT_URI are comma-separated and positionally aligned, so a
         # label containing a comma breaks the alignment. Zipping them anyway printed another
         # trait's name on this locus. Where the lengths disagree the declared label is used.
@@ -445,6 +487,7 @@ class TraitScopeTest(unittest.TestCase):
         self.assertEqual(by_rsid["rs4988235"][0]["term_label"], "persistência da lactase")
 
     def test_a_misaligned_row_still_matches_every_term_it_declares(self):
+        """A misaligned row still matches every term it declares, instead of being truncated by zip."""
         # The other half of the failure: with fewer labels than URIs, zip truncates and the
         # trailing terms are never checked against the declared scope, so their targets
         # silently vanish.
@@ -456,11 +499,13 @@ class TraitScopeTest(unittest.TestCase):
         self.assertEqual(by_rsid["rs4988235"][0]["term_id"], "EFO_0801753")
 
     def test_aligned_columns_keep_the_catalogue_label(self):
+        """Aligned columns keep the catalogue's own label."""
         by_rsid, stats = self._scan("lactase persistence", "http://x/EFO_0801753")
         self.assertEqual(stats.get("misaligned_trait_columns", 0), 0)
         self.assertEqual(by_rsid["rs4988235"][0]["term_label"], "lactase persistence")
 
     def test_the_risk_allele_parser_refuses_what_it_cannot_read(self):
+        """The risk-allele parser returns None for anything it cannot read, never a guess."""
         self.assertEqual(TRAITS._risk_allele("rs738409-G", "rs738409"), "G")
         for unreadable in ("rs738409-?", "rs738409", "", "rs738409-NR"):
             self.assertIsNone(TRAITS._risk_allele(unreadable, "rs738409"), unreadable)
@@ -470,6 +515,7 @@ class ShippedRegistryTest(unittest.TestCase):
     """The registries committed to the repository must load and be internally consistent."""
 
     def _registries(self):
+        """The registries actually shipped in config/, whichever of them exist."""
         return [
             p
             for p in (
@@ -483,15 +529,18 @@ class ShippedRegistryTest(unittest.TestCase):
         ]
 
     def test_registries_were_found(self):
+        """The registry list is not silently empty: at least four are shipped."""
         self.assertGreaterEqual(len(self._registries()), 4)
 
     def test_every_shipped_registry_loads(self):
+        """Every shipped registry parses and contains targets."""
         for path in self._registries():
             with self.subTest(registry=path.name):
                 manifest = load_target_manifest(path)
                 self.assertTrue(manifest["targets"])
 
     def test_every_shipped_registry_cites_a_source(self):
+        """Every shipped registry declares where it came from."""
         for path in self._registries():
             with self.subTest(registry=path.name):
                 manifest = load_target_manifest(path)
@@ -501,6 +550,7 @@ class ShippedRegistryTest(unittest.TestCase):
                 )
 
     def test_a_target_with_an_assessed_allele_names_where_it_came_from(self):
+        """A shipped target that carries an assessed allele also names the source that assessed it."""
         for path in self._registries():
             manifest = load_target_manifest(path)
             with self.subTest(registry=path.name):
@@ -533,7 +583,9 @@ class ShippedRegistryTest(unittest.TestCase):
 
 
 class AssessedAlleleApplicationTest(unittest.TestCase):
+    """How a re-assessment is applied to a target that already carried an allele."""
     def test_refusal_clears_stale_allele_and_provenance(self):
+        """A refusal clears the stale allele and every provenance field that supported it."""
         target = {
             "rsid": "rs1",
             "assessed_allele": "A",
@@ -565,6 +617,7 @@ class ReviewStarTierTest(unittest.TestCase):
     """Admitting one-star variants only helps if every one of them stays labelled as such."""
 
     def test_the_ladder_scores_the_statuses_clinvar_actually_writes(self):
+        """The star ladder scores each review status ClinVar actually writes."""
         for status, expected in (
             ("practice guideline", 4),
             ("reviewed by expert panel", 3),
@@ -576,6 +629,7 @@ class ReviewStarTierTest(unittest.TestCase):
                 self.assertEqual(EXPAND.review_stars(status), expected)
 
     def test_an_unrecognised_status_scores_zero_rather_than_passing(self):
+        """An unrecognised review status scores zero, so a new NCBI status cannot fail open."""
         # The fail-open shape this guards against: a status NCBI adds later defaulting to a
         # number that clears the threshold would admit it silently.
         for status in ("", None, "reviewed by a friend", "criteria provided, whatever"):
@@ -584,11 +638,13 @@ class ReviewStarTierTest(unittest.TestCase):
                 self.assertLess(EXPAND.review_stars(status), 2)
 
     def test_the_default_threshold_still_rejects_a_single_submitter(self):
+        """At the default threshold a single-submitter assertion is refused and counted as such."""
         _by, stats, _counts = _scan([_row(ReviewStatus="criteria provided, single submitter")])
         self.assertEqual(stats.get("kept", 0), 0)
         self.assertEqual(stats["below_review_threshold"], 1)
 
     def test_lowering_the_threshold_admits_it_and_records_one_star(self):
+        """Lowering the threshold admits it and records it as one star, not as unqualified."""
         by_rsid, stats, counts = EXPAND.scan_clinvar(
             _bulk([_row(ReviewStatus="criteria provided, single submitter")]),
             min_review_stars=1,
@@ -600,6 +656,7 @@ class ReviewStarTierTest(unittest.TestCase):
         self.assertEqual(counts["HFE"]["pathogenic_two_star_snv_rsid"], 0)
 
     def test_a_one_star_target_carries_its_star_level(self):
+        """A one-star target carries its own star level, so a stricter consumer can still refuse it."""
         by_rsid, _stats, _counts = EXPAND.scan_clinvar(
             _bulk([_row(ReviewStatus="criteria provided, single submitter")]),
             min_review_stars=1,
@@ -609,6 +666,7 @@ class ReviewStarTierTest(unittest.TestCase):
         self.assertIn("1★", targets[0]["assessed_allele_source"])
 
     def test_a_locus_asserted_at_two_levels_reports_both_ends(self):
+        """A locus asserted at two review levels reports both ends rather than only the best."""
         by_rsid, _stats, _counts = EXPAND.scan_clinvar(
             _bulk(
                 [
@@ -624,6 +682,7 @@ class ReviewStarTierTest(unittest.TestCase):
 
 
 def _panelapp(**genes):
+    """A PanelApp index built from the given gene records."""
     return {gene: record for gene, record in genes.items()}
 
 
@@ -646,12 +705,14 @@ class PanelAppRegistryTest(unittest.TestCase):
     }
 
     def test_a_green_gene_establishes_and_says_which_registry_did(self):
+        """A green gene establishes validity and names PanelApp as the registry that did it."""
         block = EXPAND.gene_validity("HFE", {}, {}, _panelapp(HFE=self.GREEN))
         self.assertEqual(block["established_by"], ["PanelApp"])
         self.assertTrue(block["established"])
         self.assertEqual(block["modes_of_inheritance"], ["AR"])
 
     def test_an_amber_only_gene_does_not_establish(self):
+        """Amber is not evidence: a gene the curators declined to endorse does not establish."""
         # The failure this guards against: reading amber as evidence would report a gene the
         # curators explicitly declined to endorse.
         block = EXPAND.gene_validity("HFE", {}, {}, _panelapp(HFE=self.AMBER_ONLY))
@@ -660,15 +721,18 @@ class PanelAppRegistryTest(unittest.TestCase):
         self.assertEqual(block["panelapp"]["status"], "NÃO DISPONÍVEL")
 
     def test_a_gene_absent_from_panelapp_says_so_rather_than_failing_open(self):
+        """A gene absent from PanelApp is recorded as absent, not as refuted."""
         block = EXPAND.gene_validity("HFE", {}, {}, _panelapp(CFTR=self.GREEN))
         self.assertFalse(block["panelapp"]["established"])
         self.assertIn("não aparece como gene verde", block["panelapp"]["reason"])
 
     def test_no_panelapp_file_is_reported_as_missing_input_not_as_a_negative(self):
+        """No PanelApp file at all is a missing input, distinct from a gene PanelApp rejected."""
         block = EXPAND.gene_validity("HFE", {}, {}, None)
         self.assertIn("não fornecida", block["panelapp"]["reason"])
 
     def test_the_gencc_overlap_is_flagged_rather_than_counted_twice(self):
+        """A gene established in both GenCC and PanelApp is flagged as overlapping, not counted twice."""
         gencc = {
             "HFE": [
                 {
@@ -690,10 +754,12 @@ class PanelAppRegistryTest(unittest.TestCase):
         )
 
     def test_a_panelapp_mode_with_no_disease_anchor_is_listed_as_such(self):
+        """A PanelApp mode of inheritance with no disease anchor is listed as such."""
         block = EXPAND.gene_validity("HFE", {}, {}, _panelapp(HFE=self.GREEN))
         self.assertEqual(block["modes_without_disease_anchor"], ["AR"])
 
     def test_the_curation_schema_is_checked_before_it_is_trusted(self):
+        """A curation file whose schema is not the expected one is refused before it is read."""
         directory = Path(tempfile.mkdtemp())
         path = directory / "panelapp.json"
         path.write_text(json.dumps({"schema": "something-else", "genes": {}}), encoding="utf-8")
@@ -701,6 +767,7 @@ class PanelAppRegistryTest(unittest.TestCase):
             EXPAND.read_panelapp(path)
 
     def test_a_missing_file_is_an_error_not_an_empty_registry(self):
+        """A missing curation file raises, rather than being read as a registry with no genes."""
         with self.assertRaises(FileNotFoundError):
             EXPAND.read_panelapp(Path(tempfile.mkdtemp()) / "absent.json.gz")
 
@@ -737,6 +804,7 @@ class ClinGenDosageTest(unittest.TestCase):
     """ClinGen's dosage scores are labels, not a ranking — 30 is not more than 3."""
 
     def test_a_haploinsufficiency_score_of_three_establishes_and_reads_dominant(self):
+        """A haploinsufficiency score of 3 establishes the gene and reads as dominant."""
         table = EXPAND.read_clingen_dosage(_dosage_file([("HFE", "3", "0")]))
         self.assertTrue(table["HFE"]["established"])
         self.assertEqual(table["HFE"]["modes_of_inheritance"], ["AD"])
@@ -744,6 +812,7 @@ class ClinGenDosageTest(unittest.TestCase):
         self.assertEqual(block["established_by"], ["ClinGen Dosage"])
 
     def test_score_thirty_records_recessive_inheritance_without_establishing(self):
+        """Score 30 records recessive inheritance without establishing: it is a code, not a stronger 3."""
         # The trap: 30 sorts above 3 as a number and reads as "even more evidence". It is not
         # a score at all — it is the curators writing "this gene's phenotype is recessive"
         # instead of scoring dosage, and treating it as establishment would report hundreds
@@ -756,6 +825,7 @@ class ClinGenDosageTest(unittest.TestCase):
         self.assertEqual(block["modes_of_inheritance"], ["AR"])
 
     def test_haploinsufficiency_on_x_is_x_linked_not_autosomal_dominant(self):
+        """Haploinsufficiency on the X chromosome is X-linked, not autosomal dominant."""
         table = EXPAND.read_clingen_dosage(
             _dosage_file(
                 [("BTK", "3", "0")],
@@ -767,6 +837,7 @@ class ClinGenDosageTest(unittest.TestCase):
         self.assertNotIn("AD", table["BTK"]["modes_of_inheritance"])
 
     def test_recessive_dosage_code_on_x_remains_x_linked(self):
+        """The recessive dosage code on X stays X-linked too."""
         table = EXPAND.read_clingen_dosage(
             _dosage_file(
                 [("BTK", "30", "0")],
@@ -778,26 +849,31 @@ class ClinGenDosageTest(unittest.TestCase):
         self.assertNotIn("AR", table["BTK"]["modes_of_inheritance"])
 
     def test_score_forty_neither_establishes_nor_contributes_a_mode(self):
+        """Score 40 neither establishes nor contributes a mode of inheritance."""
         table = EXPAND.read_clingen_dosage(_dosage_file([("HFE", "40", "0")]))
         self.assertFalse(table["HFE"]["established"])
         self.assertEqual(table["HFE"]["modes_of_inheritance"], [])
 
     def test_the_partial_scores_do_not_establish(self):
+        """The partial scores (0, 1, 2) do not establish."""
         for score in ("0", "1", "2"):
             with self.subTest(score=score):
                 table = EXPAND.read_clingen_dosage(_dosage_file([("HFE", score, "0")]))
                 self.assertFalse(table["HFE"]["established"])
 
     def test_triplosensitivity_alone_can_establish(self):
+        """Triplosensitivity on its own can establish, without any haploinsufficiency score."""
         table = EXPAND.read_clingen_dosage(_dosage_file([("HFE", "0", "3")]))
         self.assertTrue(table["HFE"]["established"])
 
     def test_a_gene_absent_from_the_list_says_so(self):
+        """A gene absent from the dosage list is recorded as absent, not as scored zero."""
         table = EXPAND.read_clingen_dosage(_dosage_file([("CFTR", "3", "0")]))
         block = EXPAND.gene_validity("HFE", {}, {}, {}, table)
         self.assertIn("não consta", block["clingen_dosage"]["reason"])
 
     def test_a_file_with_no_recognisable_header_is_refused(self):
+        """A dosage file with no recognisable header is refused instead of parsed as empty."""
         path = Path(tempfile.mkdtemp()) / "broken.tsv"
         path.write_text("#comment only\nHFE\t1\n", encoding="utf-8")
         with self.assertRaises(ValueError):
@@ -811,6 +887,7 @@ CONSTRAINT_COLUMNS = [
 
 
 def _constraint_file(rows: list[dict[str, str]]) -> Path:
+    """Write a gnomAD constraint TSV containing exactly these rows."""
     path = Path(tempfile.mkdtemp()) / "constraint.tsv"
     lines = ["\t".join(CONSTRAINT_COLUMNS)]
     for row in rows:
@@ -823,6 +900,7 @@ class GnomadConstraintTest(unittest.TestCase):
     """Constraint is carried, displayed, and never allowed to establish anything."""
 
     def test_the_mane_select_transcript_wins_over_the_canonical_one(self):
+        """The MANE Select transcript is preferred over the merely canonical one."""
         table = EXPAND.read_gnomad_constraint(
             _constraint_file(
                 [
@@ -837,6 +915,7 @@ class GnomadConstraintTest(unittest.TestCase):
         self.assertEqual(table["HFE"]["transcript_basis"], "MANE Select")
 
     def test_the_ensembl_keyed_row_wins_the_tie(self):
+        """When both rows claim MANE and canonical, the Ensembl-keyed row breaks the tie."""
         table = EXPAND.read_gnomad_constraint(
             _constraint_file(
                 [
@@ -850,6 +929,7 @@ class GnomadConstraintTest(unittest.TestCase):
         self.assertEqual(table["HFE"]["transcript"], "ENST00000357618")
 
     def test_a_row_that_is_neither_mane_nor_canonical_is_skipped(self):
+        """A transcript that is neither MANE nor canonical is skipped, however extreme its metrics."""
         table = EXPAND.read_gnomad_constraint(
             _constraint_file(
                 [{"gene": "HFE", "gene_id": "ENSG1", "transcript": "ENST_ALT",
@@ -859,6 +939,7 @@ class GnomadConstraintTest(unittest.TestCase):
         self.assertEqual(table, {})
 
     def test_an_unparseable_metric_becomes_absent_not_zero(self):
+        """A metric that does not parse becomes absent, never zero."""
         # A pLI of NaN read as 0.0 would say "tolerant of loss of function" about a gene the
         # release declined to score, which is a claim rather than a gap.
         table = EXPAND.read_gnomad_constraint(
@@ -871,6 +952,7 @@ class GnomadConstraintTest(unittest.TestCase):
         self.assertIsNone(table["HFE"]["loeuf"])
 
     def test_constraint_never_appears_in_established_by(self):
+        """Constraint never establishes gene-disease validity, however extreme the metrics are."""
         constraint = {
             "HFE": {
                 "status": "VERIFICADO",
@@ -899,6 +981,7 @@ class ClinvarCitationRetrievalTest(unittest.TestCase):
     """
 
     def test_a_failed_lookup_is_recorded_rather_than_read_as_absence(self):
+        """A failed citation lookup is recorded as a failure, not as 'this variant has no citations'."""
         from scripts import curate_assessed_alleles as curate
 
         with patch.object(
@@ -910,6 +993,7 @@ class ClinvarCitationRetrievalTest(unittest.TestCase):
         self.assertIn("falhou", result["reason"])
 
     def test_a_successful_lookup_reports_executado(self):
+        """A successful lookup reports EXECUTADO and de-duplicates the returned links."""
         from scripts import curate_assessed_alleles as curate
 
         payload = {
@@ -924,6 +1008,7 @@ class ClinvarCitationRetrievalTest(unittest.TestCase):
         self.assertIsNone(result["reason"])
 
     def test_no_uids_is_executado_not_a_failure(self):
+        """A lookup with no uids is EXECUTADO with an empty result, which is not a failure."""
         from scripts import curate_assessed_alleles as curate
 
         result = curate.clinvar_citations([])
@@ -940,6 +1025,7 @@ class MergeCarriesWhatItPublishesTest(unittest.TestCase):
     """
 
     def _merge(self, *manifests):
+        """Merge these manifests through the real script, via temporary files."""
         with tempfile.TemporaryDirectory() as td:
             paths = [
                 _write(m, Path(td), f"m{i}.json") for i, m in enumerate(manifests)

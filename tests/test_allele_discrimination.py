@@ -71,6 +71,7 @@ FINDING_ABSENT = {
 
 
 def _analyse(classifications, findings, heterozygous, spec=SPEC):
+    """Run the discrimination analysis for the fixture gene against these inputs."""
     return analyse_gene("G", spec, classifications, findings, heterozygous)
 
 
@@ -78,6 +79,7 @@ class FunctionBucketTest(unittest.TestCase):
     """An unrecognised CPIC label must never be read as normal function."""
 
     def test_cpic_vocabulary_maps_to_the_expected_buckets(self):
+        """Each CPIC function label maps to the bucket the residual arithmetic expects."""
         self.assertEqual(function_bucket("Normal function"), NORMAL)
         for label in ("No function", "Decreased function", "Increased function"):
             self.assertEqual(function_bucket(label), ALTERED)
@@ -85,12 +87,14 @@ class FunctionBucketTest(unittest.TestCase):
             self.assertEqual(function_bucket(label), UNCERTAIN)
 
     def test_an_unknown_label_is_uncertain_not_normal(self):
+        """An unrecognised label is UNCERTAIN, so a CPIC rename grows the residual instead of shrinking it."""
         # Negative control for the fail-open direction: if CPIC renames a status, the
         # residual must grow, not shrink.
         for label in (None, "", "Diminished activity", "função reduzida"):
             self.assertEqual(function_bucket(label), UNCERTAIN, label)
 
     def test_analysis_surfaces_labels_it_did_not_recognise(self):
+        """The analysis surfaces the labels it did not recognise, rather than absorbing them silently."""
         spec = {
             "reference_allele": "G*1",
             "alleles": {
@@ -105,7 +109,9 @@ class FunctionBucketTest(unittest.TestCase):
 
 
 class PartitionTest(unittest.TestCase):
+    """Which alleles the array can actually tell apart, given what was interrogated."""
     def test_an_allele_is_discriminable_only_when_every_position_is_interpretable(self):
+        """An allele is discriminable only when every one of its defining positions is interpretable."""
         partition = partition_alleles(SPEC, {"rs1": "OBSERVADO", "rs2": "OBSERVADO"})
         self.assertEqual(partition["discriminable"], ["G*2"])
         self.assertEqual(partition["indiscriminable"], ["G*3"])
@@ -113,11 +119,13 @@ class PartitionTest(unittest.TestCase):
         self.assertEqual(partition["positions_missing"], ["rs3"])
 
     def test_non_interpretable_classes_do_not_count_as_interrogated(self):
+        """NO-CALL, NÃO TESTADO and NÃO REPORTÁVEL do not count as interrogated."""
         for classification in ("NO-CALL", "NÃO TESTADO", "NÃO REPORTÁVEL"):
             partition = partition_alleles(SPEC, {"rs1": classification})
             self.assertEqual(partition["discriminable"], [], classification)
 
     def test_an_allele_with_no_defining_positions_is_never_discriminable(self):
+        """An allele with no defining positions is never discriminable, despite all([]) being True."""
         # Vacuous truth: `all()` over an empty requirement is True, which would have made an
         # allele with no definition at all look fully covered.
         spec = {"reference_allele": "G*1", "alleles": {"G*9": {"defining": []}}}
@@ -127,7 +135,9 @@ class PartitionTest(unittest.TestCase):
 
 
 class ResidualTest(unittest.TestCase):
+    """The residual risk left by the alleles that could not be excluded."""
     def test_the_residual_is_the_summed_frequency_of_what_could_not_be_excluded(self):
+        """The residual is the summed frequency of what could not be excluded, per population group."""
         partition = partition_alleles(SPEC, {"rs1": "OBSERVADO"})
         residual = residual_risk(partition)
         self.assertTrue(residual["computable"])
@@ -138,6 +148,7 @@ class ResidualTest(unittest.TestCase):
         self.assertEqual(residual["worst_altered"], 0.05)
 
     def test_a_zero_residual_from_full_coverage_is_marked_computable(self):
+        """A zero residual from full coverage is computable and bounded."""
         partition = partition_alleles(SPEC, {"rs1": "OBSERVADO", "rs2": "OBSERVADO", "rs3": "OBSERVADO"})
         residual = residual_risk(partition)
         self.assertEqual(residual["worst_altered"], 0.0)
@@ -145,6 +156,7 @@ class ResidualTest(unittest.TestCase):
         self.assertTrue(residual["bounded"])
 
     def test_a_zero_residual_from_missing_frequencies_is_not_computable(self):
+        """A zero residual from missing frequencies is not computable: the two zeros mean opposite things."""
         # The negative control that matters most: two zeros that mean opposite things.
         spec = {
             "reference_allele": "G*1",
@@ -159,6 +171,7 @@ class ResidualTest(unittest.TestCase):
         self.assertEqual(residual["unpriced_altered"], ["G*3"])
 
     def test_a_partly_priced_residual_is_a_lower_bound(self):
+        """A residual priced for only some of its alleles is reported as a lower bound."""
         spec = {
             "reference_allele": "G*1",
             "alleles": {
@@ -177,6 +190,7 @@ class ResidualTest(unittest.TestCase):
         self.assertEqual(residual["unpriced_altered"], ["G*4"])
 
     def test_a_group_priced_elsewhere_in_the_gene_is_still_reported_as_unpriced_here(self):
+        """A population group priced elsewhere in the gene is still reported here, as unpriced."""
         # The fail-open this guards: if the group universe came only from the alleles that
         # could not be excluded, African would vanish from the output entirely, and a missing
         # group reads exactly like a group with no residual.
@@ -202,6 +216,7 @@ class ResidualTest(unittest.TestCase):
         self.assertFalse(residual["bounded"])
 
     def test_a_null_frequency_is_dropped_rather_than_read_as_zero(self):
+        """A null frequency is dropped rather than read as zero."""
         spec = {
             "reference_allele": "G*1",
             "alleles": {
@@ -218,6 +233,7 @@ class ResidualTest(unittest.TestCase):
         self.assertEqual(residual["populations"]["European"]["altered"], 0.02)
 
     def test_uncertain_function_is_counted_apart_from_altered(self):
+        """Uncertain function is counted apart from altered, not folded into it."""
         spec = {
             "reference_allele": "G*1",
             "alleles": {
@@ -235,7 +251,9 @@ class ResidualTest(unittest.TestCase):
 
 
 class ConditionalDiplotypeTest(unittest.TestCase):
+    """The conditional diplotype: what can be said without claiming the reference haplotype."""
     def test_a_heterozygous_carrier_gets_a_conditional_call_not_a_reference_call(self):
+        """A heterozygous carrier gets a conditional call, never a reference call."""
         result = _analyse({"rs1": "OBSERVADO"}, [FINDING_DETECTED_HET], ["rs1"])
         diplotype = result["conditional_diplotype"]
         self.assertEqual(diplotype["status"], "INFERIDO")
@@ -246,6 +264,7 @@ class ConditionalDiplotypeTest(unittest.TestCase):
         self.assertEqual(diplotype["alleles_not_excluded"], 1)
 
     def test_nothing_interrogated_yields_no_conditional_call(self):
+        """Nothing interrogated yields no conditional call, not a reference/reference call."""
         # Negative control for the substitution report 09 exists to prevent: an empty tested
         # set must not produce a reference/reference call.
         result = _analyse({}, [], [])
@@ -275,12 +294,14 @@ class ConditionalDiplotypeTest(unittest.TestCase):
         self.assertTrue(any("G*2" in r for r in diplotype["reasons"]))
 
     def test_two_heterozygous_defining_positions_block_the_call(self):
+        """Two heterozygous defining positions block the call: the phase is unresolved."""
         result = _analyse({"rs1": "OBSERVADO", "rs2": "OBSERVADO"}, [FINDING_ABSENT], ["rs1", "rs2"])
         diplotype = result["conditional_diplotype"]
         self.assertEqual(diplotype["status"], UNAVAILABLE)
         self.assertTrue(any("fase não resolvida" in r for r in diplotype["reasons"]))
 
     def test_two_detected_alleles_block_the_call(self):
+        """Two detected alleles block the call rather than being paired by guesswork."""
         other = dict(FINDING_DETECTED_HET, allele="G*3")
         spec = {
             "reference_allele": "G*1",
@@ -300,11 +321,13 @@ class ConditionalDiplotypeTest(unittest.TestCase):
         self.assertTrue(any("genótipo composto" in r for r in diplotype["reasons"]))
 
     def test_an_unnamed_reference_haplotype_blocks_the_call(self):
+        """An unnamed reference haplotype blocks the call: there is nothing to pair the allele with."""
         spec = dict(SPEC, reference_allele=None)
         result = _analyse({"rs1": "OBSERVADO"}, [FINDING_DETECTED_HET], ["rs1"], spec=spec)
         self.assertEqual(result["conditional_diplotype"]["status"], UNAVAILABLE)
 
     def test_a_structurally_unresolved_gene_is_never_called(self):
+        """A structurally unresolved gene is never called."""
         diplotype = conditional_diplotype(
             "G",
             SPEC,
@@ -317,12 +340,15 @@ class ConditionalDiplotypeTest(unittest.TestCase):
         self.assertEqual(diplotype["status"], UNAVAILABLE)
 
     def test_a_conditional_call_is_never_stronger_than_inferido(self):
+        """A conditional call is never stronger than INFERIDO."""
         result = _analyse({"rs1": "OBSERVADO"}, [FINDING_DETECTED_HET], ["rs1"])
         self.assertEqual(result["conditional_diplotype"]["status"], "INFERIDO")
 
 
 class ConditionalPhenotypeTest(unittest.TestCase):
+    """The conditional phenotype, and the assumption it has to carry."""
     def test_a_bounded_residual_yields_a_phenotype_carrying_its_assumption(self):
+        """A bounded residual yields a phenotype that states the assumption it rests on."""
         result = _analyse({"rs1": "OBSERVADO"}, [FINDING_DETECTED_HET], ["rs1"])
         phenotype = result["conditional_phenotype"]
         self.assertEqual(phenotype["status"], "INFERIDO")
@@ -331,6 +357,7 @@ class ConditionalPhenotypeTest(unittest.TestCase):
         self.assertIn("condicional", phenotype["caveat"])
 
     def test_an_unpriceable_residual_yields_no_phenotype(self):
+        """A residual that cannot be priced yields no phenotype."""
         spec = {
             "reference_allele": "G*1",
             "phenotype_map": {"*2/*1": {"phenotype": "Intermediate Metabolizer"}},
@@ -344,6 +371,7 @@ class ConditionalPhenotypeTest(unittest.TestCase):
         self.assertEqual(result["conditional_phenotype"]["status"], UNAVAILABLE)
 
     def test_a_lower_bound_residual_is_declared_on_the_phenotype(self):
+        """A lower-bound residual is declared as such on the phenotype that rests on it."""
         spec = {
             "reference_allele": "G*1",
             "phenotype_map": {"*2/*1": {"phenotype": "Intermediate Metabolizer"}},
@@ -368,6 +396,7 @@ class ConditionalPhenotypeTest(unittest.TestCase):
         self.assertIn("função incerta", phenotype["caveat"])
 
     def test_a_diplotype_absent_from_the_table_yields_no_nearest_match(self):
+        """A diplotype absent from the phenotype table yields no phenotype, never a nearest match."""
         spec = dict(SPEC, phenotype_map={"*9/*9": {"phenotype": "Poor Metabolizer"}})
         phenotype = _analyse({"rs1": "OBSERVADO"}, [FINDING_DETECTED_HET], ["rs1"], spec=spec)[
             "conditional_phenotype"
@@ -376,12 +405,15 @@ class ConditionalPhenotypeTest(unittest.TestCase):
         self.assertIn("não consta", phenotype["reason"])
 
     def test_no_diplotype_means_no_phenotype(self):
+        """No diplotype means no phenotype."""
         phenotype = conditional_phenotype("G", SPEC, {"status": UNAVAILABLE, "value": None}, {})
         self.assertEqual(phenotype["status"], UNAVAILABLE)
 
 
 class SequencingRequisitionTest(unittest.TestCase):
+    """The sequencing requisition: what would still have to be read, and what it would recover."""
     def test_the_requisition_names_the_uncovered_positions_with_coordinates(self):
+        """The requisition names each uncovered position with its coordinates."""
         result = _analyse({"rs1": "OBSERVADO"}, [FINDING_DETECTED_HET], ["rs1"])
         requisition = result["sequencing_requisition"]
         self.assertEqual(requisition["status"], "PROPOSTO")
@@ -391,6 +423,7 @@ class SequencingRequisitionTest(unittest.TestCase):
             self.assertIsNotNone(step["position"])
 
     def test_the_last_position_of_an_allele_is_the_one_credited_with_its_frequency(self):
+        """Only the last position an allele needs is credited with the frequency it recovers."""
         result = _analyse({"rs1": "OBSERVADO"}, [FINDING_DETECTED_HET], ["rs1"])
         steps = result["sequencing_requisition"]["positions"]
         # G*3 needs both rs2 and rs3; only the second one sequenced unlocks it, so exactly
@@ -401,6 +434,7 @@ class SequencingRequisitionTest(unittest.TestCase):
         self.assertEqual(steps[-1]["residual_altered_after"], 0.0)
 
     def test_full_coverage_produces_no_requisition(self):
+        """Full coverage produces no requisition."""
         result = _analyse(
             {"rs1": "OBSERVADO", "rs2": "OBSERVADO", "rs3": "OBSERVADO"},
             [FINDING_ABSENT],
@@ -409,6 +443,7 @@ class SequencingRequisitionTest(unittest.TestCase):
         self.assertEqual(result["sequencing_requisition"]["status"], UNAVAILABLE)
 
     def test_positions_are_ordered_by_the_frequency_mass_they_recover(self):
+        """Positions are ordered by the frequency mass sequencing them would recover."""
         spec = {
             "reference_allele": "G*1",
             "alleles": {
@@ -432,6 +467,7 @@ class SequencingRequisitionTest(unittest.TestCase):
         self.assertEqual(requisition["positions"][0]["cumulative_frequency_recovered"], 0.40)
 
     def test_the_requisition_states_what_sequencing_still_cannot_resolve(self):
+        """The requisition states what sequencing still would not resolve."""
         spec = dict(SPEC, structural_alleles_excluded=["G*5xN"])
         requisition = sequencing_requisition(
             "G",
@@ -443,6 +479,7 @@ class SequencingRequisitionTest(unittest.TestCase):
         self.assertIn("fase", requisition["scope_note"])
 
     def test_each_axis_uses_its_own_population_and_uncertainty_does_not_reduce_altered_residual(self):
+        """Each axis uses its own population, and uncertainty never reduces the altered residual."""
         spec = {
             "alleles": {
                 "altered": {
@@ -468,11 +505,14 @@ class SequencingRequisitionTest(unittest.TestCase):
 
 
 class AnalysisShapeTest(unittest.TestCase):
+    """The shape of the analysis block on every path, including the refusals."""
     def test_a_gene_with_no_curated_alleles_is_reported_unavailable(self):
+        """A gene with no curated alleles is reported unavailable, whether the spec is None or empty."""
         self.assertEqual(analyse_gene("X", None, {}, [], [])["status"], UNAVAILABLE)
         self.assertEqual(analyse_gene("X", {"alleles": {}}, {}, [], [])["status"], UNAVAILABLE)
 
     def test_coverage_fraction_counts_positions_not_alleles(self):
+        """The coverage fraction counts defining positions, not alleles."""
         result = _analyse({"rs1": "OBSERVADO"}, [FINDING_ABSENT], [])
         self.assertEqual(result["positions_total"], 3)
         self.assertEqual(result["positions_interpretable"], 1)
@@ -490,6 +530,7 @@ class WorstGroupPerAxisTest(unittest.TestCase):
     """
 
     def _spec(self, freq_a, freq_b):
+        """A two-allele spec with these altered and uncertain frequencies per population group."""
         return {
             "alleles": {
                 "*2": {
@@ -506,6 +547,7 @@ class WorstGroupPerAxisTest(unittest.TestCase):
         }
 
     def test_the_uncertain_maximum_is_not_taken_from_the_altered_group(self):
+        """The uncertain maximum is taken from its own axis, not from the altered group."""
         # Group A tops the altered axis; group B tops the uncertain axis by a wide margin.
         spec = self._spec({"A": 0.20, "B": 0.01}, {"A": 0.00, "B": 0.90})
         residual = residual_risk(partition_alleles(spec, {}))
@@ -515,18 +557,21 @@ class WorstGroupPerAxisTest(unittest.TestCase):
         self.assertEqual(residual["worst_uncertain_population"], "B")
 
     def test_the_group_behind_each_number_is_named(self):
+        """Each number names the group behind it, so a reader cannot attach both to one label."""
         # A reader given one group label would attach both numbers to it.
         spec = self._spec({"A": 0.20, "B": 0.01}, {"A": 0.00, "B": 0.90})
         residual = residual_risk(partition_alleles(spec, {}))
         self.assertNotEqual(residual["worst_population"], residual["worst_uncertain_population"])
 
     def test_one_group_peaking_on_both_axes_still_reports_that_group(self):
+        """One group peaking on both axes is still reported on both."""
         spec = self._spec({"A": 0.20, "B": 0.01}, {"A": 0.50, "B": 0.10})
         residual = residual_risk(partition_alleles(spec, {}))
         self.assertEqual(residual["worst_population"], "A")
         self.assertEqual(residual["worst_uncertain_population"], "A")
 
     def test_every_return_path_declares_the_field(self):
+        """Every return path declares worst_uncertain_population, so a consumer cannot hit a KeyError."""
         # A consumer reading it must not hit a KeyError on the refusal paths.
         for spec in ({}, {"alleles": {}}):
             with self.subTest(spec=spec):
@@ -535,6 +580,7 @@ class WorstGroupPerAxisTest(unittest.TestCase):
                 )
 
     def test_the_shipped_registry_no_longer_understates_vkorc1(self):
+        """The shipped registry no longer understates the VKORC1 uncertain residual."""
         # VKORC1 dictates warfarin dosing. Its whole residual is uncertainty, and it was
         # reported as 0.101 where East Asian is 0.866.
         import json
@@ -551,6 +597,7 @@ class WorstGroupPerAxisTest(unittest.TestCase):
         self.assertGreater(residual["worst_uncertain"], 0.8)
 
     def test_no_shipped_gene_understates_its_uncertain_residual(self):
+        """No shipped gene understates its uncertain residual."""
         import json
 
         registry = json.loads(
@@ -572,12 +619,14 @@ class VacuousResidualTest(unittest.TestCase):
     """A residual of zero must never come from an empty catalogue."""
 
     def test_a_gene_with_no_catalogued_alleles_is_not_a_zero_residual(self):
+        """A gene with no catalogued alleles is not a zero residual: it is an uncomputable one."""
         residual = residual_risk(partition_alleles({"alleles": {}}, {}))
         self.assertFalse(residual["computable"])
         self.assertIsNone(residual["worst_altered"])
         self.assertIn("ausência de catálogo", residual["basis"])
 
     def test_a_gene_with_every_allele_discriminable_is_a_measured_zero(self):
+        """A gene whose every allele is discriminable is a measured zero, and says so."""
         residual = residual_risk(
             partition_alleles(SPEC, {"rs1": "OBSERVADO", "rs2": "OBSERVADO", "rs3": "OBSERVADO"})
         )

@@ -76,6 +76,11 @@ REGISTRY = {
 
 
 def _artifacts(root: Path, rows: str, *, registry: dict | None = None):
+    """Build a genotype file, its QC, the completeness matrix and the passport from these rows.
+
+    Everything downstream is derived from the same array file and its SHA-256, so a test cannot
+    accidentally compose a passport with a matrix taken from a different input.
+    """
     array = root / "array.csv.gz"
     with gzip.open(array, "wt", encoding="utf-8", newline="") as fh:
         fh.write(HEADER)
@@ -122,7 +127,9 @@ CLEAN_ROWS = (
 
 
 class PassportScopeTest(unittest.TestCase):
+    """What the pharmacogenomic passport is allowed to contain."""
     def test_only_pharmacogenomic_targets_enter_the_passport(self):
+        """Only pharmacogenomic targets enter the passport; a ClinVar-only locus does not."""
         with tempfile.TemporaryDirectory() as td:
             _matrix, passport, _root = _artifacts(Path(td), CLEAN_ROWS)
         genes = {g["gene"] for g in passport["genes"]}
@@ -131,6 +138,7 @@ class PassportScopeTest(unittest.TestCase):
         self.assertNotIn("F5", genes)
 
     def test_the_passport_cannot_outrank_the_matrix_that_fed_it(self):
+        """The passport cannot claim a stronger status than the completeness matrix it was built from."""
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             array = root / "array.csv.gz"
@@ -151,6 +159,7 @@ class DiplotypeRefusalTest(unittest.TestCase):
     """The headline refusals: no diplotype, no phenotype, no invented reference call."""
 
     def test_no_diplotype_without_a_curated_allele_registry(self):
+        """Without a curated allele registry there is no diplotype, only NÃO DISPONÍVEL."""
         with tempfile.TemporaryDirectory() as td:
             _matrix, passport, _root = _artifacts(Path(td), CLEAN_ROWS)
         for record in passport["genes"]:
@@ -173,6 +182,7 @@ class DiplotypeRefusalTest(unittest.TestCase):
         self.assertEqual(statuses, {"CYP2C19*2": "NÃO DETECTADO", "CYP2C19*3": "NÃO DETECTADO"})
 
     def test_an_untested_defining_position_makes_the_allele_unavailable_not_absent(self):
+        """A defining position that was never tested makes the allele unavailable, not absent."""
         rows = CLEAN_ROWS.replace("rs4986893,10,96540410,GG,consensus,GG,GG,GM\n", "")
         with tempfile.TemporaryDirectory() as td:
             _matrix, passport, _root = _artifacts(Path(td), rows, registry=REGISTRY)
@@ -182,6 +192,7 @@ class DiplotypeRefusalTest(unittest.TestCase):
         self.assertEqual(statuses["CYP2C19*2"], "NÃO DETECTADO")
 
     def test_a_no_call_defining_position_makes_the_allele_unavailable(self):
+        """A no-call at a defining position makes the allele unavailable, not absent."""
         rows = CLEAN_ROWS.replace(
             "rs4986893,10,96540410,GG,consensus,GG,GG,GM\n",
             "rs4986893,10,96540410,--,consensus,--,--,GM\n",
@@ -193,6 +204,7 @@ class DiplotypeRefusalTest(unittest.TestCase):
         self.assertEqual(statuses["CYP2C19*3"], "NÃO DISPONÍVEL")
 
     def test_unresolved_phase_blocks_a_diplotype_even_on_a_complete_panel(self):
+        """Unresolved phase blocks the diplotype even when the panel is complete."""
         registry = json.loads(json.dumps(REGISTRY))
         registry["genes"]["CYP2C19"]["complete_panel"] = True
         rows = CLEAN_ROWS.replace(
@@ -218,12 +230,14 @@ class DiplotypeRefusalTest(unittest.TestCase):
         self.assertTrue(any("reference_allele" in r for r in cyp["diplotype"]["reasons"]))
 
     def _complete_registry(self):
+        """A registry declaring the CYP2C19 panel complete and naming its reference allele."""
         registry = json.loads(json.dumps(REGISTRY))
         registry["genes"]["CYP2C19"]["complete_panel"] = True
         registry["genes"]["CYP2C19"]["reference_allele"] = "CYP2C19*1"
         return registry
 
     def test_a_diplotype_on_a_complete_unambiguous_panel_is_inferido_never_executado(self):
+        """A diplotype on a complete unambiguous panel is INFERIDO, never EXECUTADO."""
         with tempfile.TemporaryDirectory() as td:
             _matrix, passport, _root = _artifacts(
                 Path(td), CLEAN_ROWS, registry=self._complete_registry()
@@ -249,6 +263,7 @@ class DiplotypeRefusalTest(unittest.TestCase):
         self.assertEqual(finding["zygosity"], "HETEROZIGOTO")
 
     def test_a_homozygous_carrier_gets_the_allele_on_both_chromosomes(self):
+        """A homozygous carrier gets the allele on both chromosomes."""
         rows = CLEAN_ROWS.replace(
             "rs4244285,10,96541616,GG,consensus,GG,GG,GM\n",
             "rs4244285,10,96541616,AA,consensus,AA,AA,GM\n",
@@ -290,6 +305,7 @@ class DiplotypeRefusalTest(unittest.TestCase):
         )
 
     def test_a_phenotype_is_never_emitted(self):
+        """A phenotype is never emitted: the passport reports alleles, not metabolizer status."""
         registry = json.loads(json.dumps(REGISTRY))
         registry["genes"]["CYP2C19"]["complete_panel"] = True
         with tempfile.TemporaryDirectory() as td:
@@ -347,7 +363,9 @@ class DiplotypeRefusalTest(unittest.TestCase):
 
 
 class RegistryValidationTest(unittest.TestCase):
+    """What the allele registry must declare before it is trusted."""
     def test_a_registry_without_a_cited_source_is_refused(self):
+        """A registry that cites no source is refused."""
         bad = json.loads(json.dumps(REGISTRY))
         del bad["source"]
         with tempfile.TemporaryDirectory() as td:
@@ -358,6 +376,7 @@ class RegistryValidationTest(unittest.TestCase):
         self.assertIn("source", str(ctx.exception))
 
     def test_an_allele_without_defining_positions_is_refused(self):
+        """An allele with no defining positions is refused: it could never be called or excluded."""
         bad = json.loads(json.dumps(REGISTRY))
         bad["genes"]["BCHE"]["alleles"]["BCHE*2"]["defining"] = []
         with tempfile.TemporaryDirectory() as td:
@@ -396,6 +415,7 @@ class RegistryValidationTest(unittest.TestCase):
             self.assertIn("BCHE", load_pgx_registry(path)["genes"])
 
     def test_the_shipped_registry_carries_only_single_character_alleles(self):
+        """The shipped registry carries only single-character alleles, which is what the caller assumes."""
         registry = json.loads(
             (ROOT / "config/pgx_allele_definitions.json").read_text(encoding="utf-8")
         )
@@ -408,6 +428,7 @@ class RegistryValidationTest(unittest.TestCase):
                     )
 
     def test_a_wrong_schema_is_refused(self):
+        """A registry declaring an unexpected schema is refused."""
         bad = json.loads(json.dumps(REGISTRY))
         bad["schema"] = "something-else"
         with tempfile.TemporaryDirectory() as td:
@@ -418,7 +439,9 @@ class RegistryValidationTest(unittest.TestCase):
 
 
 class AnesthesiaCardTest(unittest.TestCase):
+    """What the anaesthesia card says, and what it refuses to say."""
     def test_the_card_is_unavailable_without_a_declared_relevance_list(self):
+        """Without a declared relevance list the card is NÃO DISPONÍVEL, with no observations."""
         with tempfile.TemporaryDirectory() as td:
             _matrix, passport, _root = _artifacts(Path(td), CLEAN_ROWS)
         card = passport["anesthesia_card"]
@@ -427,6 +450,7 @@ class AnesthesiaCardTest(unittest.TestCase):
         self.assertIn("não foi declarada", card["reason"])
 
     def test_the_card_reports_observations_and_never_clears_anaesthesia(self):
+        """The card reports its observations and never clears a patient for anaesthesia."""
         with tempfile.TemporaryDirectory() as td:
             _matrix, passport, _root = _artifacts(Path(td), CLEAN_ROWS, registry=REGISTRY)
         card = passport["anesthesia_card"]
@@ -436,6 +460,7 @@ class AnesthesiaCardTest(unittest.TestCase):
         self.assertIn("ausência de achado", card["clearance_policy"])
 
     def test_the_card_is_unavailable_when_no_relevant_locus_is_interpretable(self):
+        """When no relevant locus is interpretable the card is NÃO DISPONÍVEL."""
         rows = (
             "rs1799807,3,165548529,--,consensus,--,--,GM\n"
             "rs1803274,3,165551201,--,consensus,--,--,GM\n"
@@ -463,11 +488,13 @@ class AnesthesiaScopeTest(unittest.TestCase):
     )
 
     def _card(self, registry):
+        """Build a passport from the clean rows against this registry."""
         with tempfile.TemporaryDirectory() as td:
             _matrix, passport, _root = _artifacts(Path(td), CLEAN_ROWS, registry=registry)
         return passport
 
     def test_a_clean_bche_read_is_not_a_verified_anaesthesia_card(self):
+        """A clean BCHE read is not a verified anaesthesia card: the loci read, the card still refuses."""
         passport = self._card(self.REAL_REGISTRY)
         card = passport["anesthesia_card"]
         # The BCHE loci really were read: this is not a refusal for lack of data.
@@ -478,6 +505,7 @@ class AnesthesiaScopeTest(unittest.TestCase):
         self.assertEqual(card["scope"]["state"], "INCOMPLETO")
 
     def test_the_uninterrogated_level_a_genes_are_named_with_their_drugs(self):
+        """The CPIC level A genes that were never interrogated are named, with their drugs."""
         card = self._card(self.REAL_REGISTRY)["anesthesia_card"]
         missing = {entry["gene"]: entry for entry in card["not_interrogated"]}
         self.assertEqual(set(missing), {"RYR1", "CACNA1S"})
@@ -489,6 +517,7 @@ class AnesthesiaScopeTest(unittest.TestCase):
             self.assertIn("ausência de exame", entry["basis"])
 
     def test_the_report_line_states_the_gap_next_to_the_observations(self):
+        """The report line states the gap next to the observations, not instead of them."""
         from scripts.build_pharmacogenomic_report import _anesthesia_text
 
         text = _anesthesia_text(self._card(self.REAL_REGISTRY)["anesthesia_card"])
@@ -499,6 +528,7 @@ class AnesthesiaScopeTest(unittest.TestCase):
         self.assertIn("não libera nem contraindica", text)
 
     def test_one_page_names_a_refused_compiled_passport(self):
+        """The one-page summary distinguishes a refused passport from no passport at all."""
         from scripts.build_one_page_summary import _pgx_line
 
         line = _pgx_line({"operational_status": "NÃO DISPONÍVEL"})
@@ -507,6 +537,7 @@ class AnesthesiaScopeTest(unittest.TestCase):
         self.assertIn("dados PGx", line)
 
     def test_the_one_page_summary_never_prints_the_status_word_alone(self):
+        """The one-page summary never prints the status word alone: it names what is missing."""
         from scripts.build_one_page_summary import _pgx_line
 
         line = _pgx_line(self._card(self.REAL_REGISTRY))
@@ -552,6 +583,7 @@ class AnesthesiaScopeTest(unittest.TestCase):
         self.assertEqual(card["status"], "VERIFICADO")
 
     def test_a_declared_gene_with_only_no_calls_is_not_covered(self):
+        """A declared gene whose every locus is a no-call is not covered."""
         registry = json.loads(json.dumps(REGISTRY))
         registry["anesthesia_scope"] = {
             "guideline_id": 1,
@@ -591,6 +623,7 @@ class ConditionalLayerReachesTheReportTest(unittest.TestCase):
     )
 
     def _sections(self, root: Path):
+        """The report sections and the passport they were built from."""
         from scripts.build_pharmacogenomic_report import build_payload
 
         matrix_path, passport, _ = _artifacts(root, CLEAN_ROWS, registry=self.REAL_REGISTRY)
@@ -598,6 +631,7 @@ class ConditionalLayerReachesTheReportTest(unittest.TestCase):
         return build_payload(passport_path, matrix_path, policy_evaluation_file(root))["sections"], passport
 
     def test_a_conditional_phenotype_in_the_passport_appears_in_the_report(self):
+        """A conditional phenotype in the passport reaches the report."""
         with tempfile.TemporaryDirectory() as td:
             sections, passport = self._sections(Path(td))
         cyp = next(g for g in passport["genes"] if g["gene"] == "CYP2C19")
@@ -609,6 +643,7 @@ class ConditionalLayerReachesTheReportTest(unittest.TestCase):
         self.assertIn("CYP2C19", section)
 
     def test_the_residual_is_not_separable_from_the_label(self):
+        """The residual is not separable from its label: both travel together or neither does."""
         with tempfile.TemporaryDirectory() as td:
             sections, passport = self._sections(Path(td))
         residual = next(
@@ -621,6 +656,7 @@ class ConditionalLayerReachesTheReportTest(unittest.TestCase):
         self.assertIn("limite inferior", section)
 
     def test_the_summary_no_longer_reads_as_nothing_was_derived(self):
+        """The summary distinguishes the unconditional layer from the conditional one."""
         with tempfile.TemporaryDirectory() as td:
             sections, _passport = self._sections(Path(td))
         summary = sections["Resumo farmacogenômico"]
@@ -628,6 +664,7 @@ class ConditionalLayerReachesTheReportTest(unittest.TestCase):
         self.assertIn("camada condicional", summary)
 
     def test_the_sequencing_requisition_reaches_the_page_as_proposto(self):
+        """The sequencing requisition reaches the page as PROPOSTO."""
         with tempfile.TemporaryDirectory() as td:
             sections, passport = self._sections(Path(td))
         section = sections["Requisição de sequenciamento"]
@@ -638,6 +675,7 @@ class ConditionalLayerReachesTheReportTest(unittest.TestCase):
             self.assertIn(str(requisition["position_count"]), section)
 
     def test_a_gene_without_a_conditional_diplotype_says_why(self):
+        """A gene without a conditional diplotype says why, rather than being omitted."""
         with tempfile.TemporaryDirectory() as td:
             sections, _passport = self._sections(Path(td))
         section = sections["Diplótipo condicional e risco residual"]
@@ -645,6 +683,7 @@ class ConditionalLayerReachesTheReportTest(unittest.TestCase):
 
 
 class ReportIntegrationTest(unittest.TestCase):
+    """The passport as the pharmacogenomic report consumes it."""
     def _payload(
         self,
         root: Path,
@@ -653,6 +692,7 @@ class ReportIntegrationTest(unittest.TestCase):
         *,
         prepare_release: bool = True,
     ):
+        """Build the report payload from these rows, optionally without the release prerequisites."""
         from scripts.build_pharmacogenomic_report import build_payload
 
         matrix_path, passport, _ = _artifacts(root, rows, registry=registry)
@@ -671,6 +711,7 @@ class ReportIntegrationTest(unittest.TestCase):
         return payload, passport
 
     def test_passport_and_matrix_must_share_the_same_input(self):
+        """The passport and the completeness matrix must describe the same input_sha256."""
         from scripts.build_pharmacogenomic_report import build_payload
 
         with tempfile.TemporaryDirectory() as td:
@@ -684,6 +725,7 @@ class ReportIntegrationTest(unittest.TestCase):
                 build_payload(passport_path, matrix_path)
 
     def test_unassembled_payload_keeps_release_prerequisites_fail_closed(self):
+        """A payload assembled without the release prerequisites is refused, not published."""
         from reporting.engine import ReportReleaseError, render_document
 
         with tempfile.TemporaryDirectory() as td:
@@ -695,6 +737,7 @@ class ReportIntegrationTest(unittest.TestCase):
         self.assertIn("publication_gate:placeholders_resolved", message)
 
     def test_the_compiled_payload_passes_the_provenance_gate(self):
+        """The compiled payload passes the provenance gate with no blockers."""
         from reporting.provenance import provenance_blockers
 
         with tempfile.TemporaryDirectory() as td:
@@ -702,6 +745,7 @@ class ReportIntegrationTest(unittest.TestCase):
         self.assertEqual(provenance_blockers(payload), [])
 
     def test_the_report_renders_and_states_the_refusals_on_the_page(self):
+        """The report renders and states its refusals on the page, not only in the payload."""
         from reporting.engine import render_document
 
         with tempfile.TemporaryDirectory() as td:
@@ -715,6 +759,7 @@ class ReportIntegrationTest(unittest.TestCase):
         self.assertIn("diplótipo NÃO DISPONÍVEL", markdown)
 
     def test_a_hand_written_phenotype_is_refused_at_render_time(self):
+        """A phenotype written into a section by hand is refused at render time."""
         from reporting.engine import ReportReleaseError, render_document
 
         with tempfile.TemporaryDirectory() as td:
@@ -755,6 +800,7 @@ class ReportIntegrationTest(unittest.TestCase):
         self.assertNotIn("AG", text)
 
     def test_the_sections_match_the_catalogue_for_report_06(self):
+        """The sections the builder emits are exactly the ones the catalogue declares for report 06."""
         from reporting.engine import load_catalog
         from scripts.build_pharmacogenomic_report import SECTIONS
 
@@ -763,6 +809,7 @@ class ReportIntegrationTest(unittest.TestCase):
         self.assertIn("Requisição de sequenciamento", SECTIONS)
 
     def test_cli_forwards_exact_control_artifacts_and_fails_when_release_is_blocked(self):
+        """The CLI forwards the control artifacts unchanged and exits non-zero when release is blocked."""
         from scripts.build_pharmacogenomic_report import main
 
         with tempfile.TemporaryDirectory() as td:
@@ -807,10 +854,12 @@ class CpicRegistryTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Load the shipped CPIC-derived registry once for the whole class."""
         path = ROOT / "config/pgx_allele_definitions.json"
         cls.registry = load_pgx_registry(path)
 
     def test_the_registry_cites_cpic_and_its_retrieval_date(self):
+        """The shipped registry cites CPIC, the endpoint and the script, with a retrieval date."""
         self.assertIn("CPIC", self.registry["source"])
         self.assertIn("api.cpicpgx.org", self.registry["source"])
         self.assertIn("build_pgx_registry.py", self.registry["source"])
@@ -825,6 +874,7 @@ class CpicRegistryTest(unittest.TestCase):
                     self.assertEqual(spec["complete_panel_scope"], "CPIC")
 
     def test_every_defining_position_carries_an_rsid_and_a_single_base(self):
+        """Every defining position carries an rsid and a single base."""
         for gene, spec in self.registry["genes"].items():
             for allele, definition in spec["alleles"].items():
                 for position in definition["defining"]:
@@ -878,6 +928,7 @@ class CpicRegistryTest(unittest.TestCase):
         self.assertIn("não fornece tabela", result["reason"])
 
     def test_a_diplotype_absent_from_the_table_yields_no_nearest_match(self):
+        """A diplotype absent from the phenotype table yields no phenotype, never a nearest match."""
         from array_pipeline.pharmacogenomics import _phenotype_for
 
         spec = self.registry["genes"]["CYP2C19"]
@@ -889,6 +940,7 @@ class CpicRegistryTest(unittest.TestCase):
         self.assertIn("não consta", result["reason"])
 
     def test_a_listed_diplotype_is_translated_and_marked_inferido(self):
+        """A diplotype listed in the table is translated and marked INFERIDO."""
         from array_pipeline.pharmacogenomics import _phenotype_for
 
         spec = self.registry["genes"]["CYP2C19"]
@@ -912,12 +964,14 @@ class PanelMatrixTest(unittest.TestCase):
     """
 
     def test_a_passport_without_a_panel_matrix_says_so_on_its_face(self):
+        """A passport built without a panel matrix says so on its face."""
         with tempfile.TemporaryDirectory() as td:
             _matrix, passport, _root = _artifacts(Path(td), CLEAN_ROWS, registry=REGISTRY)
         self.assertEqual(passport["panel_matrix"]["status"], "NÃO DISPONÍVEL")
         self.assertIn("NÃO TESTADO por construção", passport["panel_matrix"]["reason"])
 
     def test_a_panel_matrix_from_a_different_input_is_refused(self):
+        """A panel matrix taken from a different input is refused."""
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             matrix_path, _passport, _root = _artifacts(root, CLEAN_ROWS, registry=REGISTRY)
@@ -935,6 +989,7 @@ class PanelMatrixTest(unittest.TestCase):
         self.assertIn("different inputs", str(raised.exception))
 
     def test_a_panel_matrix_raises_the_measured_defining_position_coverage(self):
+        """A panel matrix raises the measured coverage of defining positions the target list omits."""
         # rs1234567 defines an allele the curated target list never mentions. Without the
         # panel matrix it can only read as NÃO TESTADO; with it, the array is actually asked.
         registry = json.loads(json.dumps(REGISTRY))
@@ -1001,14 +1056,17 @@ class NoCallIsNotHomozygousTest(unittest.TestCase):
     }
 
     def _diplotype(self, loci):
+        """Call the diplotype for the fixture gene from these loci."""
         from array_pipeline.pharmacogenomics import _diplotype_for
 
         return _diplotype_for("TEST", self.SPEC, loci, [], gaps=[])
 
     def _locus(self, rsid, genotype, interpretable):
+        """One locus record."""
         return {"rsid": rsid, "genotype": genotype, "interpretable": interpretable}
 
     def test_a_gene_of_nothing_but_no_calls_yields_no_diplotype(self):
+        """A gene of nothing but no-calls yields no diplotype."""
         result = self._diplotype([
             self._locus("rs2", "--", False), self._locus("rs3", None, False),
         ])
@@ -1016,23 +1074,27 @@ class NoCallIsNotHomozygousTest(unittest.TestCase):
         self.assertIsNone(result["value"])
 
     def test_the_refusal_names_the_uncalled_positions(self):
+        """The refusal names the uncalled positions and the closed-world assumption it broke."""
         result = self._diplotype([self._locus("rs9", "--", False)])
         self.assertIn("rs9", " ".join(result["reasons"]))
         self.assertIn("mundo fechado", " ".join(result["reasons"]))
 
     def test_one_no_call_beside_called_positions_still_withholds(self):
+        """One no-call beside called positions still withholds the diplotype."""
         result = self._diplotype([
             self._locus("rs1", "AG", True), self._locus("rs2", "--", False),
         ])
         self.assertEqual(result["status"], "NÃO DISPONÍVEL")
 
     def test_fully_called_positions_still_produce_a_diplotype(self):
+        """Negative control: fully called positions still produce a diplotype."""
         # Negative control: the refusal must not have made every diplotype impossible.
         result = self._diplotype([self._locus("rs1", "AA", True)])
         self.assertEqual(result["status"], "INFERIDO")
         self.assertEqual(result["value"], "*1/*1")
 
     def test_a_no_call_no_longer_masks_phase_ambiguity(self):
+        """Two heterozygous positions raise phase ambiguity whether or not a no-call sits between them."""
         # Two heterozygous positions must raise phase ambiguity whether or not an uncalled
         # position sits between them.
         result = self._diplotype([
@@ -1042,6 +1104,7 @@ class NoCallIsNotHomozygousTest(unittest.TestCase):
         self.assertIn("fase não resolvida", " ".join(result["reasons"]))
 
     def test_the_call_predicate_separates_reads_from_placeholders(self):
+        """The call predicate separates real reads from placeholders."""
         from array_pipeline.pharmacogenomics import _is_called_genotype
 
         for value in ("AG", "AA", "ID", "cc"):
@@ -1068,6 +1131,7 @@ class OneAlleleIsNotTwoTest(unittest.TestCase):
     }
 
     def _run(self, genotype):
+        """The allele finding and the diplotype produced by this single genotype."""
         from array_pipeline.pharmacogenomics import _allele_findings, _diplotype_for
 
         locus = {"rsid": "rs1", "classification": "OBSERVADO", "genotype": genotype,
@@ -1076,6 +1140,7 @@ class OneAlleleIsNotTwoTest(unittest.TestCase):
         return findings[0], _diplotype_for("TEST", self.SPEC, [locus], findings, gaps)
 
     def test_a_half_read_yields_no_zygosity_and_no_diplotype(self):
+        """A half read yields no zygosity and no diplotype, though the allele is still detected."""
         finding, diplotype = self._run("A")
         self.assertEqual(finding["status"], "DETECTADO")
         self.assertIsNone(finding["zygosity"])
@@ -1085,12 +1150,14 @@ class OneAlleleIsNotTwoTest(unittest.TestCase):
         self.assertIn("zigosidade não legível", " ".join(diplotype["reasons"]))
 
     def test_a_real_homozygote_still_diplotypes(self):
+        """A real homozygote still produces a diplotype."""
         finding, diplotype = self._run("AA")
         self.assertEqual(finding["zygosity"], "HOMOZIGOTO")
         self.assertEqual(diplotype["status"], "INFERIDO")
         self.assertEqual(diplotype["value"], "TEST*2/TEST*2")
 
     def test_a_heterozygote_pairs_with_the_named_reference(self):
+        """A heterozygote pairs with the registry's named reference allele."""
         finding, diplotype = self._run("AG")
         self.assertEqual(finding["zygosity"], "HETEROZIGOTO")
         self.assertEqual(diplotype["value"], "TEST*1/TEST*2")

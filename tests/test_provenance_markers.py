@@ -10,7 +10,15 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ProvenanceMarkerEvidenceTest(unittest.TestCase):
+    """The shipped marker table and the pinned dbSNP evidence must still agree.
+
+    The evidence file is a recorded verification run, not a live one: this test is what keeps
+    it honest. Editing a coordinate in the table without re-running
+    `scripts/verify_provenance_markers.py` leaves a VERIFICADO artifact describing a table
+    that no longer exists, and that is exactly the state this fails on.
+    """
     def test_shipped_marker_table_matches_pinned_dbsnp_evidence(self):
+        """Every marker in the table appears in the evidence, verified and without discrepancy."""
         table = load_markers(ROOT / "config/array_provenance_markers.json")
         evidence = json.loads(
             (ROOT / "docs/evidence/ARRAY_PROVENANCE_MARKERS_DBSNP.json").read_text(
