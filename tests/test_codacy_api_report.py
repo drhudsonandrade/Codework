@@ -28,22 +28,32 @@ class CodacyApiReportTest(unittest.TestCase):
         )
         self.assertEqual(credential_candidates("", ""), [])
 
-    def test_auth_rejection_retries_once_with_account_token(self):
+    def test_auth_rejection_retries_once_with_account_token_for_401_and_403(self):
         from scripts.codacy_api_report import fetch_issues
 
-        seen = []
+        for status in (401, 403):
+            with self.subTest(status=status):
+                seen = []
 
-        def opener(request, timeout=30):
-            seen.append(dict(request.header_items()))
-            if request.get_header("Project-token"):
-                raise urllib.error.HTTPError(request.full_url, 401, "unauthorized", {}, io.BytesIO(b"bad token"))
-            return _Response({"data": [{"id": "issue-1"}], "pagination": {}})
+                def opener(request, timeout=30):
+                    seen.append(dict(request.header_items()))
+                    if request.get_header("Project-token"):
+                        raise urllib.error.HTTPError(
+                            request.full_url,
+                            status,
+                            "auth rejected",
+                            {},
+                            io.BytesIO(b"bad token"),
+                        )
+                    return _Response({"data": [{"id": "issue-1"}], "pagination": {}})
 
-        issues = fetch_issues("gh", "org", "repo", "project", "account", opener=opener)
-        self.assertEqual(issues, [{"id": "issue-1"}])
-        self.assertEqual(len(seen), 2)
-        self.assertTrue(any(k.lower() == "project-token" for k in seen[0]))
-        self.assertTrue(any(k.lower() == "api-token" for k in seen[1]))
+                issues = fetch_issues(
+                    "gh", "org", "repo", "project", "account", opener=opener
+                )
+                self.assertEqual(issues, [{"id": "issue-1"}])
+                self.assertEqual(len(seen), 2)
+                self.assertTrue(any(k.lower() == "project-token" for k in seen[0]))
+                self.assertTrue(any(k.lower() == "api-token" for k in seen[1]))
 
     def test_non_auth_http_error_does_not_fall_back(self):
         from scripts.codacy_api_report import CodacyAPIError, fetch_issues
@@ -75,6 +85,16 @@ class CodacyApiReportTest(unittest.TestCase):
         self.assertEqual([item["id"] for item in issues], [1, 2])
         self.assertEqual(len(urls), 2)
         self.assertIn("cursor=next+page", urls[1])
+
+    def test_non_object_pagination_is_rejected(self):
+        from scripts.codacy_api_report import CodacyAPIError, fetch_issues
+
+        def opener(request, timeout=30):
+            return _Response({"data": [{"id": 1}], "pagination": ["unexpected"]})
+
+        with self.assertRaises(CodacyAPIError) as caught:
+            fetch_issues("gh", "org", "repo", "project", "", opener=opener)
+        self.assertIn("pagination", str(caught.exception).lower())
 
     def test_markdown_cells_cannot_break_out_of_the_table(self):
         from scripts.codacy_api_report import build_report
