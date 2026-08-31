@@ -234,8 +234,238 @@ class CodacyApiReportTest(unittest.TestCase):
                     "org", "repo", [{"id": 1}], directory=Path(td)
                 )
             payload = json.loads(issues_path.read_text(encoding="utf-8"))
-            self.assertEqual(payload, {"data": [{"id": 1}]})
+            self.assertEqual(payload, {"scope": "repository", "data": [{"id": 1}]})
             self.assertTrue(report_path.read_text(encoding="utf-8").startswith("# Codacy API report"))
+
+
+class CodacyPullRequestScopeTest(unittest.TestCase):
+    """The endpoint that answers "what did *this pull request* introduce?".
+
+    The repository search called with a body of `{}` returns the whole backlog. Quoting that
+    total beside a pull request credits the branch with every finding already on the default
+    branch — a mistake this project has actually made — so the pull-request delta has to come
+    from the endpoint that computes it.
+    """
+
+    def test_the_official_pull_request_endpoint_is_called_with_the_new_status_filter(self):
+        """Path and filter are pinned, because a near-miss returns a plausible wrong number.
+
+        Verified against Codacy's published OpenAPI document: operationId
+        `listPullRequestIssues`, path `.../repositories/{repo}/pull-requests/{n}/issues`, with
+        `status` taking `all | new | fixed`. A URL that omitted `status=new` would return the
+        pull request's issues *including* pre-existing ones and still look like a delta.
+        """
+        from scripts.codacy_api_report import fetch_pull_request_issues
+
+        seen = []
+
+        def opener(request, timeout=30):
+            seen.append((request.get_method(), request.full_url, request.data))
+            return _Response({"analyzed": True, "data": [], "pagination": {}})
+
+        analyzed, issues = fetch_pull_request_issues(
+            "gh", "org", "repo", 32, "project", "", opener=opener
+        )
+        self.assertTrue(analyzed)
+        self.assertEqual(issues, [])
+        method, url, body = seen[0]
+        self.assertEqual(method, "GET")
+        self.assertIsNone(body)
+        self.assertIn("/repositories/repo/pull-requests/32/issues", url)
+        self.assertIn("status=new", url)
+
+    def test_an_unanalyzed_pull_request_is_never_reported_as_having_no_issues(self):
+        """`analyzed: false` and "clean" are the same empty list, and must not read the same.
+
+        The schema documents `data` as an "empty list if Codacy didn't analyze the latest
+        commit yet". Treating that as zero findings publishes a green verdict on a commit
+        Codacy has not read — the single failure this reporter exists to prevent — so the flag
+        travels with the data and suppresses the count.
+        """
+        from scripts.codacy_api_report import build_report, fetch_pull_request_issues
+
+        def opener(request, timeout=30):
+            return _Response({"analyzed": False, "data": [], "pagination": {}})
+
+        analyzed, issues = fetch_pull_request_issues(
+            "gh", "org", "repo", 32, "project", "", opener=opener
+        )
+        self.assertFalse(analyzed)
+
+        report = build_report("org", "repo", issues, pull_request=32, analyzed=analyzed)
+        self.assertIn("NÃO DISPONÍVEL", report)
+        self.assertNotIn("**0**", report)
+
+        # And the analysed case does state the count, or the guard above would be satisfied by
+        # a report that never reports anything.
+        clean = build_report("org", "repo", [], pull_request=32, analyzed=True)
+        self.assertIn("**0**", clean)
+        self.assertNotIn("NÃO DISPONÍVEL", clean)
+
+    def test_a_missing_analyzed_flag_is_refused_rather_than_assumed_true(self):
+        from scripts.codacy_api_report import CodacyAPIError, fetch_pull_request_issues
+
+        for payload in ({"data": []}, {"analyzed": "true", "data": []}):
+            with self.subTest(payload=payload):
+
+                def opener(request, timeout=30, payload=payload):
+                    return _Response(payload)
+
+                with self.assertRaises(CodacyAPIError) as caught:
+                    fetch_pull_request_issues(
+                        "gh", "org", "repo", 32, "project", "", opener=opener
+                    )
+                self.assertIn("analyzed", str(caught.exception))
+
+    def test_one_unanalyzed_page_makes_the_whole_paginated_answer_unanalyzed(self):
+        """Combining pages with `and`, not last-page-wins."""
+        from scripts.codacy_api_report import fetch_pull_request_issues
+
+        pages = [
+            {"analyzed": False, "data": [], "pagination": {"cursor": "p2"}},
+            {"analyzed": True, "data": [], "pagination": {}},
+        ]
+
+        def opener(request, timeout=30):
+            return _Response(pages.pop(0))
+
+        analyzed, _ = fetch_pull_request_issues(
+            "gh", "org", "repo", 32, "project", "", opener=opener
+        )
+        self.assertFalse(analyzed)
+
+    def test_pull_request_pages_are_followed_and_delta_issues_are_unwrapped_for_the_report(self):
+        """`data` here is `CommitDeltaIssue`, not the bare issue the repository search returns.
+
+        The artifact keeps the wrapper — it is what Codacy said — so the report has to reach
+        through `commitIssue` to find the severity and path. Without that, every row of a
+        pull-request report renders as `Unknown`.
+        """
+        from scripts.codacy_api_report import build_report, fetch_pull_request_issues
+
+        pages = [
+            {
+                "analyzed": True,
+                "data": [
+                    {
+                        "commitIssue": {
+                            "filePath": "scripts/a.py",
+                            "patternInfo": {"id": "B101", "level": "Warning", "category": "Security"},
+                        },
+                        "deltaType": "Added",
+                    }
+                ],
+                "pagination": {"cursor": "page-2"},
+            },
+            {
+                "analyzed": True,
+                "data": [
+                    {
+                        "commitIssue": {
+                            "filePath": "scripts/b.py",
+                            "patternInfo": {"id": "E731", "level": "Info", "category": "CodeStyle"},
+                        },
+                        "deltaType": "Added",
+                    }
+                ],
+                "pagination": {},
+            },
+        ]
+        urls = []
+
+        def opener(request, timeout=30):
+            urls.append(request.full_url)
+            return _Response(pages.pop(0))
+
+        analyzed, issues = fetch_pull_request_issues(
+            "gh", "org", "repo", 32, "project", "", opener=opener
+        )
+        self.assertTrue(analyzed)
+        self.assertEqual(len(issues), 2)
+        self.assertIn("cursor=page-2", urls[1])
+        # The wrapper survives into the evidence rather than being flattened away.
+        self.assertEqual(issues[0]["deltaType"], "Added")
+
+        report = build_report("org", "repo", issues, pull_request=32, analyzed=True)
+        self.assertIn("| Warning | Security | scripts/a.py | B101 |", report)
+        self.assertIn("| Info | CodeStyle | scripts/b.py | E731 |", report)
+        self.assertNotIn("Unknown", report)
+
+    def test_the_report_states_which_scope_produced_its_count(self):
+        from scripts.codacy_api_report import build_report
+
+        repository = build_report("org", "repo", [{"id": 1}])
+        self.assertIn("Scope: **repository**", repository)
+        self.assertIn("not the delta of any pull request", repository)
+
+        pull = build_report("org", "repo", [{"id": 1}], pull_request=30, analyzed=True)
+        self.assertIn("Scope: **pull request #30**", pull)
+        self.assertIn("status=new", pull)
+
+    def test_the_artifact_records_the_scope_it_was_produced_under(self):
+        from scripts.codacy_api_report import write_artifacts
+
+        with tempfile.TemporaryDirectory() as td:
+            _, issues_path = write_artifacts(
+                "org", "repo", [], directory=Path(td), pull_request=30, analyzed=False
+            )
+            payload = json.loads(issues_path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["scope"], "pull-request")
+        self.assertEqual(payload["pullRequest"], 30)
+        self.assertIs(payload["analyzed"], False)
+
+    def test_a_pull_request_number_that_is_not_a_positive_integer_is_refused(self):
+        """A bad number would be interpolated into the path and answered with a bare 404."""
+        from scripts.codacy_api_report import CodacyAPIError, fetch_pull_request_issues
+
+        def opener(request, timeout=30):
+            raise AssertionError(f"no request should be made: {request.full_url}")
+
+        for value in (0, -1, "32", 3.0, None, True):
+            with self.subTest(value=value):
+                with self.assertRaises(CodacyAPIError):
+                    fetch_pull_request_issues(
+                        "gh", "org", "repo", value, "project", "", opener=opener
+                    )
+
+    def test_the_configured_pull_request_variable_is_parsed_or_refused(self):
+        """An unset variable is the repository scope; a malformed one is never silently that.
+
+        A workflow that substitutes an empty GitHub expression into `pr-${{ ... }}`, or passes
+        a ref name where a number belongs, must not quietly produce a repository-wide backlog
+        total published under a pull request's name.
+        """
+        from scripts.codacy_api_report import CodacyAPIError, parse_pull_request
+
+        self.assertIsNone(parse_pull_request(""))
+        self.assertIsNone(parse_pull_request("   "))
+        self.assertEqual(parse_pull_request("30"), 30)
+        self.assertEqual(parse_pull_request(" 30 "), 30)
+        for bad in ("0", "-1", "refs/pull/30/merge", "30x", "pr-"):
+            with self.subTest(bad=bad):
+                with self.assertRaises(CodacyAPIError):
+                    parse_pull_request(bad)
+
+    def test_the_account_token_fallback_covers_the_pull_request_endpoint_too(self):
+        """The fallback is shared, so it must be shown to apply to both scopes."""
+        from scripts.codacy_api_report import fetch_pull_request_issues
+
+        seen = []
+
+        def opener(request, timeout=30):
+            seen.append(dict(request.header_items()))
+            if request.get_header("Project-token"):
+                raise urllib.error.HTTPError(
+                    request.full_url, 403, "auth rejected", {}, io.BytesIO(b"bad token")
+                )
+            return _Response({"analyzed": True, "data": [], "pagination": {}})
+
+        analyzed, _ = fetch_pull_request_issues(
+            "gh", "org", "repo", 32, "project", "account", opener=opener
+        )
+        self.assertTrue(analyzed)
+        self.assertEqual(len(seen), 2)
+        self.assertTrue(any(k.lower() == "api-token" for k in seen[1]))
 
 
 if __name__ == "__main__":

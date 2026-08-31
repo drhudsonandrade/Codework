@@ -22,17 +22,72 @@ For pull requests, workflow runs are serialized by pull-request identity and a n
 
 When a token is present it:
 
-1. calls Codacy API v3 `searchRepositoryIssues` for the current GitHub repository;
+1. calls Codacy API v3 for the current GitHub repository, choosing the endpoint by scope (below);
 2. follows cursor pagination and consolidates the returned issue objects;
-3. stores the consolidated issue list as `{ "data": [...] }` in `codacy-issues.json`; pagination metadata and other per-page top-level fields are not preserved;
+3. stores the consolidated issue list with its scope in `codacy-issues.json`; pagination metadata and other per-page top-level fields are not preserved;
 4. creates `codacy-report.md` with totals by severity/category and a Markdown-safe issue table;
 5. adds the report to the GitHub Actions job summary;
 6. uploads both files as the `codacy-api-report` artifact for 30 days;
 7. on pull requests, creates or updates one bot comment containing the report.
 
+## Scope: repository backlog vs. pull-request delta
+
+These are different questions with different answers, and confusing them attributes to a
+branch every finding that was already on the default branch. The scope is chosen by the
+`CODACY_PULL_REQUEST` environment variable, which the workflow sets from
+`github.event.pull_request.number`.
+
+| Run | `CODACY_PULL_REQUEST` | Endpoint | The count means |
+|---|---|---|---|
+| `pull_request` | the PR number | `listPullRequestIssues` with `status=new` | issues this pull request introduces |
+| `workflow_dispatch` | empty | `searchRepositoryIssues` | every open issue in the repository |
+
+An unset or empty variable selects the repository scope. Any other non-numeric or non-positive
+value is refused rather than silently falling back to it, so a misconfigured workflow cannot
+publish a repository-wide backlog total under a pull request's name.
+
+`codacy-issues.json` records which scope produced it: `{"scope": "repository", "data": [...]}`
+or `{"scope": "pull-request", "pullRequest": N, "analyzed": bool, "data": [...]}`. The report's
+header states the same thing in words.
+
+### The `analyzed` flag is load-bearing
+
+`PullRequestIssuesResponse` carries a required `analyzed` boolean — "True if Codacy already
+analyzed the latest commit" — and documents `data` as an "empty list if Codacy didn't analyze
+the latest commit yet". An unanalysed pull request and a clean one therefore return the same
+empty list.
+
+The reporter carries the flag out of the fetch and refuses to print a count when it is false,
+emitting `NÃO DISPONÍVEL` instead. A response that omits the field, or sends a non-boolean, is
+an error rather than an assumed `true`. Reporting an unanalysed head as zero new issues would
+be a green verdict on work Codacy has not read; that is the failure this reporter exists to
+prevent, and it is pinned by
+`tests/test_codacy_api_report.py::CodacyPullRequestScopeTest`.
+
+### Shape of the pull-request data
+
+The pull-request endpoint returns `CommitDeltaIssue` objects — `{"commitIssue": {...},
+"deltaType": "..."}` — where the repository search returns the issue directly. The artifact
+keeps whichever shape Codacy sent, because it is the evidence; the report unwraps `commitIssue`
+when rendering rows.
+
+### Endpoint reference
+
+Verified against Codacy's published OpenAPI document (`https://api.codacy.com/api/api-docs/swagger.yaml`):
+
+- operationId `listPullRequestIssues`, summary "List issues found in a pull request";
+- path `/analysis/organizations/{provider}/{remoteOrganizationName}/repositories/{repositoryName}/pull-requests/{pullRequestNumber}/issues`;
+- `status` accepts `all`, `new`, `fixed`; `cursor` and `limit` paginate;
+- auth headers `project-token` (`ProjectTokenAuth`) and `api-token` (`ApiKeyAuth`), which are the two this reporter already sends.
+
+The spec lists `https://api.codacy.com/api/v3` as its server while this reporter calls
+`https://app.codacy.com/api/v3`, the host Codacy's own guides use and the one under which the
+existing repository-scoped reports were produced. The base URL is left as it is; both hosts
+serve API v3 and only the working one has local evidence behind it.
+
 If no token is configured the workflow reports `NÃO DISPONÍVEL` and does not pretend that Codacy was queried. `NÃO DISPONÍVEL` is the repository's operational status vocabulary; it is intentionally retained even though the surrounding documentation is English.
 
-Before contacting Codacy, the workflow runs the reporter regression tests. They cover credential preference and account-token fallback, missing-credential candidate selection, cursor pagination, Markdown cell normalization, artifact shape, and create/update behavior for the pull-request comment with mocked APIs.
+Before contacting Codacy, the workflow runs the reporter regression tests. They cover credential preference and account-token fallback on both scopes, missing-credential candidate selection, cursor pagination, the pull-request endpoint's path and `status=new` filter, the `analyzed` fail-closed rule, delta unwrapping, pull-request number validation, Markdown cell normalization, artifact shape, and create/update behavior for the pull-request comment with mocked APIs.
 
 ## Manual setup
 
