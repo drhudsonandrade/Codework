@@ -100,6 +100,30 @@ class CodacyApiReportTest(unittest.TestCase):
         self.assertEqual(len(urls), 2)
         self.assertIn("cursor=next+page", urls[1])
 
+    def test_a_body_that_is_not_json_becomes_a_named_error(self):
+        """A 200 carrying HTML is a proxy or a login page, not a Codacy response.
+
+        `json.load` raised `JSONDecodeError`, which no handler here caught, so it reached
+        `main` as a traceback that reads like a bug in this reporter. Raised by review.
+        """
+        from scripts.codacy_api_report import CodacyAPIError, fetch_issues
+
+        class _RawResponse:
+            """A response whose body is not JSON at all."""
+
+            def __enter__(self):
+                return io.StringIO("<html><body>Sign in</body></html>")
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        def opener(request, timeout=30) -> _RawResponse:
+            return _RawResponse()
+
+        with self.assertRaises(CodacyAPIError) as caught:
+            fetch_issues("gh", "org", "repo", "project", "", opener=opener)
+        self.assertIn("not valid JSON", str(caught.exception))
+
     def test_a_payload_that_is_not_a_json_object_is_refused_before_it_is_read(self):
         """An array or scalar body must raise a named error, not `AttributeError`.
 

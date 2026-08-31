@@ -169,7 +169,16 @@ def _paged_payloads(endpoint: _Endpoint, token_header: str, token: str, *, opene
     while True:
         request = _page_request(endpoint, token_header, token, cursor)
         with opener(request, timeout=30) as response:
-            payload = json.load(response)
+            try:
+                payload = json.load(response)
+            except json.JSONDecodeError as exc:
+                # A 200 carrying something that is not JSON is an answer from a proxy, a login
+                # page or an error template, not from Codacy. `JSONDecodeError` escaped every
+                # handler here and reached `main` as a traceback, which reads like a bug in
+                # this reporter rather than a response it should not have been given.
+                raise CodacyAPIError(
+                    f"Codacy API returned a body that is not valid JSON: {exc}"
+                ) from exc
         # Checked before anything reads a key off it. `data`, `pagination` and `analyzed` are
         # each validated below, but only once `payload` is known to be a mapping: a JSON array
         # or scalar — which an error page or an intercepting proxy can return with a 200 —

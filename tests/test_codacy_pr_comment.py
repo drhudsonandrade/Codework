@@ -1,8 +1,8 @@
 import json
 import shutil
 
-# Imported to execute `scripts/codacy_pr_comment.js` under Node: the upsert logic runs inside
-# a github-script step, and asserting on its source text is not the same as running it.
+# Imported to execute `tests/codacy_pr_comment_driver.js` under Node: the upsert logic runs
+# inside a github-script step, and asserting on its source text is not the same as running it.
 # Bandit's B404 is an advisory on the import alone; the single call site below states why its
 # argv is trusted.
 import subprocess  # nosec B404
@@ -15,42 +15,44 @@ from pathlib import Path
 #: environment between them could separate.
 NODE = shutil.which("node")
 
+#: The committed driver. Every element of the argv below is a fixed path or a JSON string —
+#: nothing is a program assembled at run time. See the comment at the top of that file.
+DRIVER = Path(__file__).resolve().parent / "codacy_pr_comment_driver.js"
+
+#: The module under test, resolved from this file rather than from the working directory, so
+#: the argv does not depend on where the suite was started.
+MODULE = Path(__file__).resolve().parent.parent / "scripts" / "codacy_pr_comment.js"
+
 
 @unittest.skipUnless(NODE, "node is required for github-script behavior tests")
 class CodacyPrCommentTest(unittest.TestCase):
     """The one report comment is created once and updated thereafter."""
 
+    def test_the_driver_and_the_module_under_test_are_both_committed_files(self):
+        """The argv is trusted because these resolve to files here, not because of intent.
+
+        This is what lets the suppression below name a checked property instead of an
+        argument: if either path stopped resolving to a file in this repository, the argv
+        would no longer be what the comment claims, and this test would say so.
+        """
+        self.assertTrue(DRIVER.is_file(), DRIVER)
+        self.assertTrue(MODULE.is_file(), MODULE)
+
     def _run_case(self, existing) -> dict:
         """Run the real upsert against a stub Octokit, with these comments already present.
 
         Bandit's B603 asks a human to confirm the argv is trusted before the call is made.
-        This is that confirmation: `NODE` is resolved from PATH at import and `program` is
-        built here from a repository path and the fixture this test passed in. Nothing in it
-        comes from outside the process, and there is no shell — the list form goes straight
-        to `execve`. The suppression names the single rule and covers the single line.
+        This is that confirmation, and it is now structural rather than a claim about the
+        fixtures: the argv is `NODE` (resolved from PATH at import), the committed driver
+        script, the committed module under test, and one JSON string. Node never interprets
+        an argv element as code — the previous form passed a whole program to `-e`, which it
+        did — and there is no shell, because the list form goes straight to `execve`.
         """
-        module = Path("scripts/codacy_pr_comment.js").resolve()
-        program = f"""
-const {{ upsertCodacyReportComment }} = require({json.dumps(str(module))});
-const calls = [];
-const previous = {json.dumps(existing)};
-const github = {{
-  paginate: async () => previous,
-  rest: {{ issues: {{
-    listComments: async () => {{}},
-    updateComment: async (args) => calls.push(['update', args]),
-    createComment: async (args) => calls.push(['create', args]),
-  }} }}
-}};
-(async () => {{
-  const result = await upsertCodacyReportComment({{
-    github, owner: 'o', repo: 'r', issue_number: 32, report: '# report'
-  }});
-  process.stdout.write(JSON.stringify({{ result, calls }}));
-}})().catch(err => {{ console.error(err); process.exit(1); }});
-"""
         completed = subprocess.run(  # nosec B603  # nosemgrep
-            [NODE, "-e", program], text=True, capture_output=True, check=False
+            [NODE, str(DRIVER), str(MODULE), json.dumps(existing)],
+            text=True,
+            capture_output=True,
+            check=False,
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
         return json.loads(completed.stdout)

@@ -3,7 +3,8 @@
   "entry": [
     "mcp/src/server.ts",
     "mcp/test/**/*.test.ts",
-    "scripts/codacy_pr_comment.js"
+    "scripts/codacy_pr_comment.js",
+    "tests/codacy_pr_comment_driver.js"
   ],
   "rules": {
     "unused-files": "error",

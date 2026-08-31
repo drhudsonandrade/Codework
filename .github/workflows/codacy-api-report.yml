@@ -18,7 +18,11 @@ jobs:
   report:
     runs-on: ubuntu-latest
     concurrency:
-      group: codacy-api-report-${{ github.event.pull_request.number || github.ref }}
+      # `github.ref` is the same for every manual dispatch from a branch, so two
+      # `workflow_dispatch` runs asking about different pull requests shared one group and,
+      # with `cancel-in-progress`, the second cancelled the first. The requested scope is
+      # part of the identity of the run.
+      group: codacy-api-report-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.pull_request || github.ref }}
       cancel-in-progress: true
     env:
       CODACY_PROVIDER: gh
@@ -32,6 +36,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # `tests.test_codacy_pr_comment` is guarded by `skipUnless(node)`. Without this check a
+      # runner image that dropped Node would skip the whole class and the job would still be
+      # green, reporting a passing regression suite that never ran the upsert.
+      - name: Require Node for the comment regression tests
+        shell: bash
+        run: node --version
 
       - name: Run Codacy reporter regression tests
         shell: bash

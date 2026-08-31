@@ -35,7 +35,8 @@ When a token is present it:
 These are different questions with different answers, and confusing them attributes to a
 branch every finding that was already on the default branch. The scope is chosen by the
 `CODACY_PULL_REQUEST` environment variable, which the workflow sets from
-`github.event.pull_request.number`.
+`github.event.pull_request.number` on pull-request events, falling back to the
+`inputs.pull_request` dispatch input on a manual run.
 
 | Run | `CODACY_PULL_REQUEST` | Endpoint | The count means |
 |---|---|---|---|
@@ -55,7 +56,7 @@ demand, without waiting for a new push to that branch.
 VERIFICADO by live run `33434452877`. Codacy refuses `listPullRequestIssues` when it is
 presented with a repository token:
 
-```
+```text
 HTTP 401 {"message":"Account authentication required","error":"Unauthorized","code":"ProjectTokenNotAllowed"}
 ```
 
@@ -114,7 +115,15 @@ serve API v3 and only the working one has local evidence behind it.
 
 If no token is configured the workflow reports `NÃO DISPONÍVEL` and does not pretend that Codacy was queried. `NÃO DISPONÍVEL` is the repository's operational status vocabulary; it is intentionally retained even though the surrounding documentation is English.
 
-Before contacting Codacy, the workflow runs the reporter regression tests. They cover credential preference and account-token fallback on both scopes, missing-credential candidate selection, cursor pagination, refusal of a response body that is not a JSON object, the pull-request endpoint's path and `status=new` filter, the `analyzed` fail-closed rule, delta unwrapping, pull-request number validation, Markdown cell normalization, artifact shape, and create/update behavior for the pull-request comment with mocked APIs.
+Before contacting Codacy, the workflow runs the reporter regression tests. They cover credential preference and account-token fallback on both scopes, missing-credential candidate selection, cursor pagination, refusal of a response body that is not a JSON object, the pull-request endpoint's path and `status=new` filter, the `analyzed` fail-closed rule, delta unwrapping, pull-request number validation, Markdown cell normalization, artifact shape, refusal of a body that is not valid JSON, and create/update behavior for the pull-request comment with mocked APIs.
+
+The comment tests run the real `scripts/codacy_pr_comment.js` under Node through the committed
+driver `tests/codacy_pr_comment_driver.js`, which takes the module path and the fixture as
+argv *data*. Nothing is assembled into a program at run time, so the Bandit suppression at
+that call site rests on a checked property — both paths are asserted to resolve to committed
+files — rather than on a statement of intent. The workflow verifies `node --version` before
+running the suite: the class is guarded by `skipUnless(node)`, and without that check a runner
+image without Node would skip it and still report a green regression job.
 
 ## Manual setup
 
