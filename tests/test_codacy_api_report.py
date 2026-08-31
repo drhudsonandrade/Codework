@@ -128,11 +128,15 @@ class CodacyApiReportTest(unittest.TestCase):
         """
         from scripts.codacy_api_report import CodacyAPIError, fetch_issues
 
-        project, account = "cdcy-project-s3cr3t", "cdcy-account-s3cr3t"
+        # Deliberately low-entropy placeholders. An earlier revision used random-looking
+        # strings here and GitGuardian raised two "Generic High Entropy Secret" incidents
+        # against this file: a fixture that looks like a credential costs a security review
+        # and teaches the scanner nothing. These exercise the same code path.
+        project, account = "PLACEHOLDER-PROJECT-TOKEN", "PLACEHOLDER-ACCOUNT-TOKEN"
         body = (
             b'{"error":"invalid token","request":{"headers":'
-            b'{"project-token":"cdcy-project-s3cr3t",'
-            b'"api-token":"cdcy-account-s3cr3t"}}}'
+            b'{"project-token":"PLACEHOLDER-PROJECT-TOKEN",'
+            b'"api-token":"PLACEHOLDER-ACCOUNT-TOKEN"}}}'
         )
 
         def opener(request, timeout=30):
@@ -148,6 +152,52 @@ class CodacyApiReportTest(unittest.TestCase):
         # The diagnosis must survive the redaction, or the scrub trades one problem for another.
         self.assertIn("HTTP 500", message)
         self.assertIn("invalid token", message)
+
+    def test_a_credential_starting_near_the_truncation_point_is_not_cut_in_half(self):
+        """Truncating before redacting leaves the tail of the secret in the message.
+
+        `_read_http_error` reported at most 1000 characters. A credential beginning at, say,
+        character 990 was therefore sliced by the truncation, and `_redact` — which matches
+        the whole string — no longer found it, so the surviving fragment went into the
+        `CodacyAPIError` and from there to stderr. The read window is now the reported limit
+        plus the longest secret, and the truncation happens after the scrub.
+        """
+        from scripts.codacy_api_report import (
+            MAX_ERROR_BODY_CHARS,
+            CodacyAPIError,
+            fetch_issues,
+        )
+
+        project = "PLACEHOLDER-PROJECT-TOKEN"
+        body = b"x" * (MAX_ERROR_BODY_CHARS - 10) + project.encode() + b"tail"
+
+        def opener(request, timeout=30):
+            raise urllib.error.HTTPError(
+                request.full_url, 500, "server error", {}, io.BytesIO(body)
+            )
+
+        with self.assertRaises(CodacyAPIError) as caught:
+            fetch_issues("gh", "org", "repo", project, "", opener=opener)
+        message = str(caught.exception)
+        self.assertNotIn(project, message)
+        # Not merely absent as a whole string: no fragment of it survives either.
+        for cut in range(6, len(project)):
+            self.assertNotIn(project[:cut], message, f"prefix of length {cut} survived")
+
+    def test_a_credential_that_is_a_prefix_of_another_does_not_expose_its_suffix(self):
+        """Replacing the shorter secret first turns `abcd` into `***d`.
+
+        Two configured credentials can share a prefix, and `_redact` used to substitute them
+        in the order the caller passed them. The order is now longest-first, so the outcome
+        no longer depends on the argument order.
+        """
+        from scripts.codacy_api_report import _redact
+
+        short, long = "PLACEHOLDER-TOKEN", "PLACEHOLDER-TOKEN-EXTENDED"
+        for order in ((short, long), (long, short)):
+            with self.subTest(order=order):
+                redacted = _redact(f"header={long}", *order)
+                self.assertEqual(redacted, "header=***")
 
     def test_a_credential_that_is_empty_is_not_scrubbed_into_every_message(self):
         """An unset secret is the empty string, and replacing "" would redact everything."""

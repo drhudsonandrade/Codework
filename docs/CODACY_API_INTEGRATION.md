@@ -65,6 +65,12 @@ The workflow prefers `CODACY_PROJECT_TOKEN` when both secrets are configured, bu
   otherwise publish the credential into a run history that is world-readable on a public
   repository. Covered by
   `tests/test_codacy_api_report.py::test_the_token_is_scrubbed_from_an_error_body_before_it_reaches_a_log`.
+- The scrub runs before the body is shortened, not after. The reported body is capped at
+  `MAX_ERROR_BODY_CHARS` (1000), but the read window is that cap plus the longest configured
+  secret, so a credential starting just inside the cap is present whole when it is replaced
+  rather than being sliced in half and leaving its tail in the message. Secrets are replaced
+  longest first, so an account token that begins with the project token cannot be reduced to
+  its suffix. Both are covered by regression tests in the same module.
 - Third-party GitHub Actions are pinned to immutable commit SHAs recorded in `locks/actions-lock.json`.
 - The workflow requests only `contents: read` and `pull-requests: write` from `GITHUB_TOKEN`.
 - PR comments contain Codacy findings, not the authentication token.

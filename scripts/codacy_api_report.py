@@ -46,20 +46,41 @@ def _redact(text: str, *secrets: str) -> str:
 
     The empty string is skipped: an unconfigured secret is `""`, and `str.replace("", ...)`
     would splice the placeholder between every character of the message.
+
+    Longest first. Two configured credentials can share a prefix — the account token issued
+    from the same project is the obvious case — and replacing the shorter one first turns
+    `abcd` into `***d`, publishing the suffix of the longer secret. Ordering by length makes
+    the outcome independent of the order the caller happened to pass them in.
     """
-    for secret in secrets:
+    for secret in sorted(secrets, key=len, reverse=True):
         if secret:
             text = text.replace(secret, "***")
     return text
 
 
+#: How much of an error body reaches the message. Enough to diagnose, short enough not to
+#: paste an entire API response into a job log.
+MAX_ERROR_BODY_CHARS = 1000
+
+
 def _read_http_error(exc: urllib.error.HTTPError, *secrets: str) -> str:
-    """The error body, with any credential removed before it can be printed."""
+    """The error body, with any credential removed before it can be printed.
+
+    Read bounded, redact, *then* truncate — in that order. Truncating first would cut a
+    credential that begins just before the limit in half and leave the surviving fragment in
+    the message, which is exactly what this function exists to prevent; so the read window is
+    the reported limit plus the longest secret, which guarantees that any secret starting
+    inside the reported window is present whole when `_redact` runs.
+
+    The read is bounded rather than `exc.read()`: an error body is under the remote server's
+    control, and this one is about to be held in memory and printed.
+    """
+    window = MAX_ERROR_BODY_CHARS + max((len(secret) for secret in secrets), default=0)
     try:
-        body = exc.read().decode("utf-8", "replace")[:1000]
+        body = exc.read(window).decode("utf-8", "replace")
     except Exception:
         return ""
-    return _redact(body, *secrets)
+    return _redact(body, *secrets)[:MAX_ERROR_BODY_CHARS]
 
 
 def _fetch_pages(
