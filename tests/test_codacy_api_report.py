@@ -113,6 +113,55 @@ class CodacyApiReportTest(unittest.TestCase):
         self.assertIn(r"P\|1\`x", issue_row)
         self.assertNotIn("\n", issue_row)
 
+    def test_the_token_is_scrubbed_from_an_error_body_before_it_reaches_a_log(self):
+        """A job log is an output, and this PR promises the token never reaches one.
+
+        `_read_http_error` returns the response body verbatim and `fetch_issues` embeds it in
+        the `CodacyAPIError` message, which `main` prints to stderr — the job log, which is
+        world-readable on a public repository and kept in the run history. An API that echoes
+        the authenticated request in its error body therefore publishes the credential.
+
+        Both `docs/CODACY_API_INTEGRATION.md` ("Tokens are never written to artifacts,
+        comments, repository files, or workflow outputs") and this pull request's own
+        description make that promise, so the body is scrubbed rather than trusted. Reproduced
+        against the pre-fix code with a body echoing `project-token`.
+        """
+        from scripts.codacy_api_report import CodacyAPIError, fetch_issues
+
+        project, account = "cdcy-project-s3cr3t", "cdcy-account-s3cr3t"
+        body = (
+            b'{"error":"invalid token","request":{"headers":'
+            b'{"project-token":"cdcy-project-s3cr3t",'
+            b'"api-token":"cdcy-account-s3cr3t"}}}'
+        )
+
+        def opener(request, timeout=30):
+            raise urllib.error.HTTPError(
+                request.full_url, 500, "server error", {}, io.BytesIO(body)
+            )
+
+        with self.assertRaises(CodacyAPIError) as caught:
+            fetch_issues("gh", "org", "repo", project, account, opener=opener)
+        message = str(caught.exception)
+        self.assertNotIn(project, message)
+        self.assertNotIn(account, message)
+        # The diagnosis must survive the redaction, or the scrub trades one problem for another.
+        self.assertIn("HTTP 500", message)
+        self.assertIn("invalid token", message)
+
+    def test_a_credential_that_is_empty_is_not_scrubbed_into_every_message(self):
+        """An unset secret is the empty string, and replacing "" would redact everything."""
+        from scripts.codacy_api_report import CodacyAPIError, fetch_issues
+
+        def opener(request, timeout=30):
+            raise urllib.error.HTTPError(
+                request.full_url, 500, "server error", {}, io.BytesIO(b"plain detail")
+            )
+
+        with self.assertRaises(CodacyAPIError) as caught:
+            fetch_issues("gh", "org", "repo", "tok", "", opener=opener)
+        self.assertIn("plain detail", str(caught.exception))
+
     def test_artifact_is_documented_by_its_actual_consolidated_shape(self):
         from scripts.codacy_api_report import write_artifacts
 

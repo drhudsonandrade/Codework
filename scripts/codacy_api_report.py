@@ -36,11 +36,30 @@ def _issue_url(provider: str, org: str, repo: str) -> str:
     return f"{API_ROOT}/{quote(provider)}/{quote(org)}/repositories/{quote(repo)}/issues/search"
 
 
-def _read_http_error(exc: urllib.error.HTTPError) -> str:
+def _redact(text: str, *secrets: str) -> str:
+    """Remove every configured credential from text that is about to be logged.
+
+    An `HTTPError` body is not this repository's to trust: an API that echoes the
+    authenticated request in its error payload puts the credential in whatever reads that
+    body. Here that is the `CodacyAPIError` message, which `main` prints to stderr — the job
+    log, which is world-readable on a public repository and kept in the run history.
+
+    The empty string is skipped: an unconfigured secret is `""`, and `str.replace("", ...)`
+    would splice the placeholder between every character of the message.
+    """
+    for secret in secrets:
+        if secret:
+            text = text.replace(secret, "***")
+    return text
+
+
+def _read_http_error(exc: urllib.error.HTTPError, *secrets: str) -> str:
+    """The error body, with any credential removed before it can be printed."""
     try:
-        return exc.read().decode("utf-8", "replace")[:1000]
+        body = exc.read().decode("utf-8", "replace")[:1000]
     except Exception:
         return ""
+    return _redact(body, *secrets)
 
 
 def _fetch_pages(
@@ -111,7 +130,7 @@ def fetch_issues(
             has_fallback = index + 1 < len(candidates)
             if exc.code in AUTH_FAILURE_CODES and has_fallback:
                 continue
-            details = _read_http_error(exc)
+            details = _read_http_error(exc, project_token, account_token)
             suffix = f": {details}" if details else ""
             raise CodacyAPIError(f"Codacy API HTTP {exc.code}{suffix}") from exc
         except urllib.error.URLError as exc:

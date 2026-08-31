@@ -59,6 +59,12 @@ The workflow prefers `CODACY_PROJECT_TOKEN` when both secrets are configured, bu
 
 - Tokens are read only from GitHub Actions secrets and are scoped only to the steps that need them.
 - Tokens are never written to artifacts, comments, repository files, or workflow outputs.
+- A job log is one of those outputs. An `HTTPError` body from Codacy is scrubbed of both
+  configured tokens before it reaches the `CodacyAPIError` message that `main` prints to
+  stderr, because an API that echoes the authenticated request in its error payload would
+  otherwise publish the credential into a run history that is world-readable on a public
+  repository. Covered by
+  `tests/test_codacy_api_report.py::test_the_token_is_scrubbed_from_an_error_body_before_it_reaches_a_log`.
 - Third-party GitHub Actions are pinned to immutable commit SHAs recorded in `locks/actions-lock.json`.
 - The workflow requests only `contents: read` and `pull-requests: write` from `GITHUB_TOKEN`.
 - PR comments contain Codacy findings, not the authentication token.
