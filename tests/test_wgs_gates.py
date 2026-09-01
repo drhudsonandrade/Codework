@@ -25,6 +25,52 @@ def _can_mkfifo() -> bool:
     return True
 
 
+class WgsVerificationFixtureTest(unittest.TestCase):
+    def test_mkfifo_probe_propagates_unexpected_filesystem_errors(self):
+        """Infrastructure faults such as ENOSPC must fail the test, never turn into a skip."""
+        with unittest.mock.patch.object(
+            os,
+            "mkfifo",
+            side_effect=OSError(errno.ENOSPC, "no space left on device"),
+        ):
+            with self.assertRaises(OSError) as caught:
+                _can_mkfifo()
+        self.assertEqual(caught.exception.errno, errno.ENOSPC)
+
+    def test_fastq_resolution_reports_r1_and_r2_refusals_independently(self):
+        """One rejected FASTQ field must not suppress evidence about the other field."""
+        from scripts.wgs_input_gate import validate_manifest
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td).resolve()
+            manifest = root / "sample-manifest.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "sample_id": "S1",
+                        "input_type": "FASTQ",
+                        "r1": str(root / "absolute-r1.fastq"),
+                        "r2": "../outside-r2.fastq",
+                        "read_group": {
+                            "id": "rg1",
+                            "sample": "S1",
+                            "library": "lib1",
+                            "platform": "ILLUMINA",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            result = validate_manifest(manifest)
+
+        self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+        self.assertIn(
+            "r1: absolute input paths are not allowed in sample-manifest.json",
+            result["errors"],
+        )
+        self.assertIn("r2: input path escapes the sample directory", result["errors"])
+
+
 class WgsGateTest(unittest.TestCase):
     def _runtime(self):
         """A runtime-gate fixture whose checks all pass, so a test can vary one thing."""
