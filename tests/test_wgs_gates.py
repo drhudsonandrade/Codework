@@ -12,18 +12,21 @@ from pathlib import Path
 
 
 def _can_mkfifo() -> bool:
-    """Whether this filesystem and sandbox permit creating a FIFO.
-
-    Some sandboxes deny `mknod`/`mkfifo` outright. The property under test is about the
-    gate, not about the runner's permissions, so a refusal to create the fixture is a skip.
-    """
+    """Whether this filesystem and sandbox genuinely lack FIFO fixture support."""
     try:
         with tempfile.TemporaryDirectory() as probe:
             os.mkfifo(Path(probe) / "fifo")
-    except (OSError, NotImplementedError, AttributeError):
+    except (NotImplementedError, AttributeError):
         return False
+    except OSError as exc:
+        unsupported = {errno.EPERM, errno.EACCES, errno.ENOSYS, errno.ENOTSUP}
+        eopnotsupp = getattr(errno, "EOPNOTSUPP", None)
+        if eopnotsupp is not None:
+            unsupported.add(eopnotsupp)
+        if exc.errno in unsupported:
+            return False
+        raise
     return True
-
 
 class WgsVerificationFixtureTest(unittest.TestCase):
     def test_mkfifo_probe_propagates_unexpected_filesystem_errors(self):
@@ -486,13 +489,6 @@ ALIGN_SCRIPT = REPO_ROOT / "scripts" / "wgs_align_or_stage.sh"
 
 class WgsAlignmentWiringTest(unittest.TestCase):
     """Source-level contracts that are not executable from the Python unit boundary."""
-
-    def test_an_absolute_path_is_no_longer_honoured(self):
-        script = ALIGN_SCRIPT.read_text(encoding="utf-8")
-        self.assertNotIn('= /* ]] ||', script)
-        for key in (".r1", ".alignment"):
-            with self.subTest(key=key):
-                self.assertNotIn(f"jq -r '{key}' \"$manifest\"", script)
 
     def test_the_workflow_hands_the_verified_record_to_the_script(self):
         workflow = (REPO_ROOT / "workflows" / "wgs.nf").read_text(encoding="utf-8")

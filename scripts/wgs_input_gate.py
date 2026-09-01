@@ -149,7 +149,7 @@ def resolve(root: Path, value: str | None) -> Path | None:
     if value is None or value == "":
         return None
     if not isinstance(value, str):
-        raise ValueError(f"input path must be a string, got {type(value).__name__}")
+        raise InputRefused(f"input path must be a string, got {type(value).__name__}")
     raw = Path(value)
     if raw.is_absolute():
         raise ValueError("absolute input paths are not allowed in sample-manifest.json")
@@ -287,25 +287,27 @@ def validate_manifest(manifest_path: Path) -> dict:
     # describe a containment breach as an absent file.
     refused = False
     if input_type == "FASTQ":
-        try:
-            r1 = resolve(root, manifest.get("r1"))
-            r2 = resolve(root, manifest.get("r2"))
-        except ValueError as exc:
-            r1 = r2 = None
-            refused = True
-            errors.append(str(exc))
-        if r1 is None or r2 is None:
-            if not refused:
-                errors.append("FASTQ requires r1 and r2")
-        else:
-            ok1, d1 = fastq_probe(root, r1)
-            ok2, d2 = fastq_probe(root, r2)
-            inputs["r1"] = d1
-            inputs["r2"] = d2
-            if not ok1:
-                errors.append("R1 integrity probe failed")
-            if not ok2:
-                errors.append("R2 integrity probe failed")
+        resolved: dict[str, Path | None] = {}
+        resolution_refused = False
+        for key in ("r1", "r2"):
+            try:
+                resolved[key] = resolve(root, manifest.get(key))
+            except ValueError as exc:
+                resolved[key] = None
+                resolution_refused = True
+                errors.append(f"{key}: {exc}")
+        r1 = resolved["r1"]
+        r2 = resolved["r2"]
+        refused = resolution_refused
+        if (r1 is None or r2 is None) and not resolution_refused:
+            errors.append("FASTQ requires r1 and r2")
+        for key, label, path in (("r1", "R1", r1), ("r2", "R2", r2)):
+            if path is None:
+                continue
+            ok, detail = fastq_probe(root, path)
+            inputs[key] = detail
+            if not ok:
+                errors.append(f"{label} integrity probe failed")
     elif input_type in {"BAM", "CRAM"}:
         try:
             alignment = resolve(root, manifest.get("alignment"))
