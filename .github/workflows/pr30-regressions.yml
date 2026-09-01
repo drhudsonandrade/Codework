@@ -24,4 +24,6 @@ jobs:
         with:
           python-version: '3.12'
       - name: Run PR30 regression tests
+        env:
+          PYTHONPATH: tests
         run: python3 -m unittest tests.test_pr30_regressions -v
