@@ -20,13 +20,14 @@ import io
 import sys
 import unittest
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import patch
 
 
 class CoreImportsWithoutAdaptersTest(unittest.TestCase):
     """The core modules import and run with the optional adapter package absent."""
     @staticmethod
-    def _import_named_core_module(module_name: str):
+    def _import_named_core_module(module_name: str) -> ModuleType:
         """Import only one of the fixed core modules exercised by this test."""
         if module_name == "array_pipeline.claims":
             return importlib.import_module("array_pipeline.claims")

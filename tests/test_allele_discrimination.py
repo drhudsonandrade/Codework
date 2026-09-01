@@ -11,6 +11,7 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -73,7 +74,7 @@ FINDING_ABSENT = {
 _DEFAULT_SPEC = object()
 
 
-def _analyse(classifications, findings, heterozygous, spec=_DEFAULT_SPEC):
+def _analyse(classifications, findings, heterozygous, spec=_DEFAULT_SPEC) -> dict[str, Any]:
     """Run the discrimination analysis for the fixture gene against these inputs."""
     effective_spec = SPEC if spec is _DEFAULT_SPEC else spec
     return analyse_gene("G", effective_spec, classifications, findings, heterozygous)

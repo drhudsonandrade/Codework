@@ -15,6 +15,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 from pathlib import Path
+from typing import Any
 
 import normative
 
@@ -694,7 +695,7 @@ class ReportIntegrationTest(unittest.TestCase):
         registry=_DEFAULT_REPORT_REGISTRY,
         *,
         prepare_release: bool = True,
-    ):
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Build the report payload from these rows, optionally without the release prerequisites."""
         from scripts.build_pharmacogenomic_report import build_payload
 

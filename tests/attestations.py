@@ -135,7 +135,7 @@ def consent_record(
     return record
 
 
-def consent_file(root: Path, *, case_id: str, **kwargs: Any) -> Path:
+def consent_file(root: Path, *, case_id: str, **kwargs: object) -> Path:
     """Write a consent record into `root` and return its path."""
     path = Path(root) / "consent-record.json"
     path.write_text(
@@ -218,7 +218,7 @@ def wgs_qc_record(*, case_id: str, vcf_sha256: str = "b" * 64, **overrides: Any)
     return record
 
 
-def wgs_qc_file(root: Path, *, case_id: str, **kwargs: Any) -> Path:
+def wgs_qc_file(root: Path, *, case_id: str, **kwargs: object) -> Path:
     """Write a WGS QC record into `root` and return its path."""
     path = Path(root) / "wgs-qc-record.json"
     path.write_text(
