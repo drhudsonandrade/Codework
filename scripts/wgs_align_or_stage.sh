@@ -22,8 +22,10 @@ sample_dir=$(cd -P "$(dirname "$manifest")" && pwd -P)
 
 # `/dev/fd` is how a verified input reaches the aligner as bytes rather than as a name; a
 # kernel without it cannot make that binding, and the pipeline refuses rather than falling
-# back to the name it just finished proving it cannot trust.
+# back to the name it just finished proving it cannot trust. `readlink` is needed to
+# authorize the physical target of that already-open descriptor before any byte is read.
 [[ -r /dev/fd/0 ]] || { echo 'NÃO DISPONÍVEL: /dev/fd unavailable, cannot bind verified inputs' >&2; exit 2; }
+command -v readlink >/dev/null || { echo 'NÃO DISPONÍVEL: readlink unavailable, cannot verify opened input containment' >&2; exit 2; }
 
 open_verified() {
   # $1 = key under .inputs, $2 = name of the variable that receives the descriptor path.
@@ -32,12 +34,12 @@ open_verified() {
   # sha256sum certifies the bytes at one instant, the tools open the name again later, and
   # anything able to write in the sample directory can repoint the file — or a parent
   # directory — in between. So the file is opened once, here, in the *calling* shell; the
-  # digest is taken through that descriptor; and the tools are given `/dev/fd/N`, which on
-  # Linux reopens the inode the descriptor already holds instead of walking the name again.
-  # The bytes the aligner reads are therefore the bytes that matched the gate's digest.
+  # physical target of that exact descriptor is checked against the sample root; the digest
+  # is taken through the descriptor; and the tools are given `/dev/fd/N`. No later step
+  # walks the mutable sample pathname again.
   # `printf -v` rather than an echoed value because a command substitution runs in a
   # subshell and the descriptor would die with it.
-  local key="$1" outvar="$2" path digest observed fd relative
+  local key="$1" outvar="$2" path digest observed fd relative opened_path
   path=$(jq -r --arg k "$key" '.inputs[$k].path // empty' "$input_qc")
   digest=$(jq -r --arg k "$key" '.inputs[$k].sha256 // empty' "$input_qc")
   [[ -n "$path" && -n "$digest" ]] || {
@@ -52,6 +54,19 @@ open_verified() {
   esac
   exec {fd}< "$path" || {
     echo "NÃO DISPONÍVEL: verified $key is missing or unreadable" >&2; return 3; }
+  opened_path=$(readlink -f "/dev/fd/$fd") || {
+    exec {fd}<&-
+    echo "NÃO DISPONÍVEL: could not verify the opened $key path" >&2
+    return 3
+  }
+  case "$opened_path" in
+    "$sample_dir"/*) ;;
+    *)
+      exec {fd}<&-
+      echo "NÃO DISPONÍVEL: verified $key is outside the sample directory" >&2
+      return 3
+      ;;
+  esac
   observed=$(sha256sum "/dev/fd/$fd" | cut -d" " -f1)
   [[ "$observed" == "$digest" ]] || {
     exec {fd}<&-
