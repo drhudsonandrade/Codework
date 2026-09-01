@@ -138,6 +138,12 @@ cleanup_verified_stage() {
 }
 trap cleanup_verified_stage EXIT
 
+# These variables are populated indirectly by open_verified via printf -v. Initializing
+# them here makes the data flow explicit to ShellCheck and keeps set -u fail-closed.
+r1=
+r2=
+source=
+
 case "$input_type" in
   FASTQ)
     open_verified r1 r1

@@ -35,9 +35,8 @@ class WgsVerificationFixtureTest(unittest.TestCase):
             os,
             "mkfifo",
             side_effect=OSError(errno.ENOSPC, "no space left on device"),
-        ):
-            with self.assertRaises(OSError) as caught:
-                _can_mkfifo()
+        ), self.assertRaises(OSError) as caught:
+            _can_mkfifo()
         self.assertEqual(caught.exception.errno, errno.ENOSPC)
 
     def test_fastq_resolution_reports_r1_and_r2_refusals_independently(self):
@@ -420,6 +419,8 @@ class WgsInputPathContainmentTest(unittest.TestCase):
                 open_contained(root, link)
             ok, detail = fastq_probe(root, link)
             self.assertFalse(ok, detail)
+            self.assertIn("refused", detail["reason"])
+            self.assertNotEqual(detail["reason"], "missing_or_empty")
 
     def test_a_swapped_parent_directory_cannot_redirect_the_open(self):
         from scripts.wgs_input_gate import open_contained
