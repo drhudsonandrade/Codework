@@ -5,17 +5,18 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 align_script="$repo_root/scripts/wgs_align_or_stage.sh"
 
 for tool in bash jq sha256sum; do
-  command -v "$tool" >/dev/null || { echo "SKIP: $tool unavailable"; exit 0; }
+  command -v "$tool" >/dev/null || { echo "FAIL: $tool unavailable" >&2; exit 1; }
 done
 bash_bin=$(command -v bash)
-[[ "$bash_bin" = /* ]] || { echo 'SKIP: absolute bash path unavailable'; exit 0; }
-[[ -r /dev/fd/0 ]] || { echo 'SKIP: /dev/fd unavailable'; exit 0; }
+[[ "$bash_bin" = /* ]] || { echo 'FAIL: absolute bash path unavailable' >&2; exit 1; }
+[[ -r /dev/fd/0 ]] || { echo 'FAIL: /dev/fd unavailable' >&2; exit 1; }
 
 root=$(mktemp -d)
 trap 'rm -rf "$root"' EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 assert_contains() { [[ "$1" == *"$2"* ]] || fail "expected <$2> in <$1>"; }
+assert_not_contains() { [[ "$1" != *"$2"* ]] || fail "unexpected <$2> in <$1>"; }
 assert_no_tools() { [[ ! -s "$1" ]] || fail "alignment tools ran before refusal: $(cat "$1")"; }
 
 make_stubs() {
@@ -76,6 +77,27 @@ JSON
   r2_digest=$(sha256sum "$sample_dir/r2.fastq" | cut -d' ' -f1)
   jq -n --arg status "$status" --arg r1 "$sample_dir/r1.fastq" --arg r2 "$sample_dir/r2.fastq" --arg d1 "$r1_digest" --arg d2 "$r2_digest" \
     '{status:$status,inputs:{r1:{path:$r1,sha256:$d1},r2:{path:$r2,sha256:$d2}}}' >"$case_root/input-qc.json"
+}
+
+alignment_fixture() {
+  local case_root=$1 input_type=$2 status=${3:-VERIFICADO}
+  local sample_dir="$case_root/sample" extension alignment digest
+  case "$input_type" in
+    BAM) extension=bam ;;
+    CRAM) extension=cram ;;
+    *) fail "unsupported alignment fixture type: $input_type" ;;
+  esac
+  mkdir -p "$sample_dir" "$case_root/bin"
+  alignment="$sample_dir/alignment.$extension"
+  printf 'SYNTHETIC-%s-BYTES\n' "$input_type" >"$alignment"
+  printf '>chr1\nACGT\n' >"$case_root/ref.fasta"
+  jq -n --arg input_type "$input_type" --arg alignment "alignment.$extension" \
+    '{sample_id:"S1",input_type:$input_type,alignment:$alignment,read_group:{id:"RG1",sample:"S1",library:"L1",platform:"ILLUMINA"}}' \
+    >"$sample_dir/sample-manifest.json"
+  make_stubs "$case_root/bin"
+  digest=$(sha256sum "$alignment" | cut -d' ' -f1)
+  jq -n --arg status "$status" --arg alignment "$alignment" --arg digest "$digest" \
+    '{status:$status,inputs:{alignment:{path:$alignment,sha256:$digest}}}' >"$case_root/input-qc.json"
 }
 
 run_case() {
@@ -139,7 +161,7 @@ set +e; stderr=$(run_case "$case_root" 2>&1); rc=$?; set -e
 assert_contains "$stderr" 'input gate did not verify this sample'
 assert_no_tools "$case_root/tools.log"
 
-# Positive path: verified bytes reach the aligner.
+# Positive FASTQ path: verified bytes reach the aligner.
 case_root="$root/happy"; fixture "$case_root"
 run_case "$case_root" >/dev/null
 cmp -s "$case_root/r1.seen" "$case_root/sample/r1.fastq" || fail 'R1 bytes did not reach aligner'
@@ -165,5 +187,23 @@ STUB_R1_SEEN="$case_root/r1.seen" STUB_R2_SEEN="$case_root/r2.seen" \
 PATH="$case_root/bin:$PATH" \
   "$bash_bin" "$align_script" "$case_root/sample-link/sample-manifest.json" "$case_root/ref.fasta" "$case_root/out/sample.bam" "$case_root/input-qc.json" >/dev/null
 cmp -s "$case_root/r1.seen" "$case_root/sample/r1.fastq" || fail 'physical sample root containment failed'
+
+# BAM and CRAM must consume the verified alignment descriptor, never the recorded filename.
+for input_type in BAM CRAM; do
+  case "$input_type" in BAM) extension=bam ;; CRAM) extension=cram ;; esac
+  case_root="$root/${input_type,,}-happy"; alignment_fixture "$case_root" "$input_type"
+  run_case "$case_root" >/dev/null
+  tool_log=$(cat "$case_root/tools.log")
+  assert_contains "$tool_log" 'samtools quickcheck -v /dev/fd/'
+  assert_not_contains "$tool_log" "$case_root/sample/alignment.$extension"
+
+  # A changed BAM/CRAM must fail before the first samtools invocation.
+  case_root="$root/${input_type,,}-digest"; alignment_fixture "$case_root" "$input_type"
+  printf 'CHANGED-AFTER-GATE\n' >>"$case_root/sample/alignment.$extension"
+  set +e; stderr=$(run_case "$case_root" 2>&1); rc=$?; set -e
+  ((rc != 0)) || fail "$input_type digest mismatch unexpectedly passed"
+  assert_contains "$stderr" 'alignment changed after the gate verified it'
+  assert_no_tools "$case_root/tools.log"
+done
 
 echo 'WGS alignment boundary regressions: PASS'
