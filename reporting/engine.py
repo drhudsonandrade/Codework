@@ -40,6 +40,25 @@ class ReportReleaseError(RuntimeError):
     """
 
 
+def _assert_serializable_provenance(rendered: dict[str, Any]) -> None:
+    """Re-run provenance immediately before a FINAL bundle crosses a write boundary.
+
+    ``render_document`` validates the source payload, but editorial preparation happens later
+    and may legitimately add renderer disclosures. A caller can also mutate a prepared
+    object. Writers therefore validate the *current* data rather than trusting the earlier
+    gate. The check runs before ``mkdir`` so a refusal leaves no partial output behind.
+    """
+    metadata = rendered.get("metadata") if isinstance(rendered.get("metadata"), dict) else {}
+    if str(metadata.get("mode", "")).upper() != "FINAL":
+        return
+    data = rendered.get("data") if isinstance(rendered.get("data"), dict) else {}
+    blockers = provenance_blockers(data)
+    if blockers:
+        raise ReportReleaseError(
+            "post-render provenance gate failed: " + ", ".join(blockers)
+        )
+
+
 def load_catalog() -> dict[str, dict[str, Any]]:
     """The eleven v3 report models, refusing any catalog that is not exactly 01..11.
 
@@ -343,6 +362,7 @@ def write_bundle(rendered: dict[str, Any], output_dir: Path, *, stem: str | None
     All three share a stem so a reader can tell they describe the same document, and the JSON
     travels beside the rendered text so the payload behind a page is always recoverable.
     """
+    _assert_serializable_provenance(rendered)
     output_dir.mkdir(parents=True, exist_ok=True)
     metadata = rendered["metadata"]
     stem = stem or f"{metadata['report_id']}-{metadata['slug']}"
