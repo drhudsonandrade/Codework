@@ -1,15 +1,16 @@
 {
   "assessed_allele_curation": {
-    "curated_at": "2026-08-19T13:35:30.461122Z",
-    "established": 27,
-    "evidence": "docs/evidence/ASSESSED_ALLELES_CLINVAR.json",
+    "curated_at": "2026-09-01T03:15:24.219240Z",
     "sources": [
       "NCBI dbSNP RefSNP API (api.ncbi.nlm.nih.gov/variation/v0/refsnp) — reference base",
       "NCBI ClinVar via E-utilities (eutils.ncbi.nlm.nih.gov, db=clinvar) — asserted alternate",
       "CPIC allele definitions (config/pgx_allele_definitions.json) — pharmacogenomic targets",
       "EBI GWAS Catalog (www.ebi.ac.uk/gwas/rest/api) — risk allele for association SNPs",
-      "PubMed via NCBI elink — supporting citations per target"
+      "PubMed via NCBI elink — supporting citations per target",
+      "config/assessed_allele_curated_decisions.json — owner-reviewed allele identity, accepted only after live ClinVar accession/coordinate/alternate confirmation"
     ],
+    "evidence": "docs/evidence/ASSESSED_ALLELES_CLINVAR.json",
+    "established": 28,
     "total": 29
   },
   "coordinate_curation": {
@@ -74,6 +75,10 @@
           "26439437",
           "25741868"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": []
       },
       "rsid": "rs1799807",
@@ -130,6 +135,10 @@
           "9302273",
           "6716425"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": []
       },
       "rsid": "rs1803274",
@@ -182,6 +191,10 @@
           "31022120",
           "30585791"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": []
       },
       "rsid": "rs17580",
@@ -233,6 +246,10 @@
           "31980526",
           "31564432"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": []
       },
       "rsid": "rs28929474",
@@ -280,6 +297,10 @@
           "24033266",
           "21381068"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": []
       },
       "rsid": "rs738409",
@@ -337,6 +358,10 @@
           "25775139",
           "25712887"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": [
           "10413320",
           "12742136",
@@ -405,6 +430,10 @@
           "25775139",
           "25712887"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": [
           "10413320",
           "12742136",
@@ -472,6 +501,10 @@
           "29568565",
           "29432897"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": []
       },
       "rsid": "rs9923231",
@@ -528,6 +561,10 @@
           "31857620",
           "31594719"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": [
           "11477075",
           "15970799",
@@ -583,6 +620,10 @@
           "11740341",
           "11279519"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": [
           "15179407"
         ]
@@ -639,6 +680,10 @@
           "18043717",
           "2068113"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": [
           "10744128",
           "10762005",
@@ -703,6 +748,10 @@
           "32725777",
           "32376954"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": []
       },
       "rsid": "rs429358",
@@ -754,6 +803,10 @@
           "25741868",
           "24829003"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": []
       },
       "rsid": "rs7412",
@@ -815,6 +868,10 @@
           "26990548",
           "26251307"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": []
       },
       "rsid": "rs6025",
@@ -870,6 +927,10 @@
           "30247353",
           "28707429"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": []
       },
       "rsid": "rs1799963",
@@ -919,6 +980,10 @@
           "31061747",
           "31022120"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": []
       },
       "rsid": "rs1800562",
@@ -926,7 +991,6 @@
       "assessed_allele_status": "VERIFICADO"
     },
     {
-      "assessed_allele_reason": "published studies disagree on the risk allele — the GWAS Catalogue reports C (34 record(s)), G (30 record(s)) for this variant. This is a documented contradiction in the literature, not a gap in the data, and choosing a side would manufacture agreement",
       "coordinates": {
         "GRCh37": {
           "alternate_allele": "G",
@@ -966,11 +1030,18 @@
           "30311383",
           "30291871"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": []
       },
       "rsid": "rs1799945",
       "scope": "CLINICO",
-      "assessed_allele_status": "NÃO DISPONÍVEL"
+      "assessed_allele_status": "VERIFICADO",
+      "assessed_allele": "G",
+      "assessed_allele_source": "ClinVar",
+      "assessed_allele_evidence": "ASSESSED_ALLELES_CLINVAR.json"
     },
     {
       "assessed_allele": "T",
@@ -1023,6 +1094,10 @@
           "30485432",
           "30348537"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": [
           "23328581"
         ]
@@ -1081,6 +1156,10 @@
           "29152729",
           "28427087"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": [
           "23328581"
         ]
@@ -1139,6 +1218,10 @@
           "30510603",
           "30485432"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": [
           "24648345"
         ]
@@ -1197,6 +1280,10 @@
           "27995989",
           "27454530"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": [
           "28295243"
         ]
@@ -1252,6 +1339,10 @@
           "7862671",
           "1960624"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": [
           "10580024",
           "11372592",
@@ -1314,6 +1405,10 @@
           "9931345",
           "8561894"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": [
           "10580024",
           "11304783",
@@ -1382,6 +1477,10 @@
           "9931346",
           "9931345"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": [
           "10580024",
           "10997970",
@@ -1449,6 +1548,10 @@
           "29720126",
           "29704867"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": [
           "26033531",
           "26878724",
@@ -1535,6 +1638,10 @@
           "21716271",
           "21412232"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": [
           "22027650",
           "8195181"
@@ -1593,6 +1700,10 @@
           "20633831",
           "20585015"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": [
           "16413245",
           "17625515",
@@ -1657,6 +1768,10 @@
           "20633831",
           "20585015"
         ],
+        "clinvar_pubmed_retrieval": {
+          "status": "EXECUTADO",
+          "reason": null
+        },
         "cpic_pubmed": [
           "22027650",
           "7969038",
