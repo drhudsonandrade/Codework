@@ -63,11 +63,11 @@ def _issue_url(provider: str, org: str, repo: str) -> str:
 def _commit_delta_url(provider: str, org: str, repo: str, src_commit: str) -> str:
     """`listCommitDeltaIssues` — the issues one commit introduced or fixed.
 
-    This is how the delta is obtained *without* an account token. Codacy's other delta
-    endpoint, `listPullRequestIssues`, refuses a repository token outright
-    (`401 ProjectTokenNotAllowed`, observed in run 33434452877), but this one sits in the
-    repository analysis tree that `CODACY_PROJECT_TOKEN` is scoped to, and its published
-    contract answers the same question: "List the issues introduced or fixed by a commit …
+    Chosen over Codacy's other delta endpoint, `listPullRequestIssues`, which is documented as
+    account-only and refuses a repository token outright (`401 ProjectTokenNotAllowed`,
+    observed in run 33434452877). This one sits in the repository analysis tree, and its
+    published contract answers the same question: "List the issues introduced or fixed by a
+    commit …
     Codacy will calculate the issues by creating a delta between the source commit and its
     parent commit. As an alternative, you can also provide a destination commit."
 
@@ -79,6 +79,13 @@ def _commit_delta_url(provider: str, org: str, repo: str, src_commit: str) -> st
     swagger.yaml`, operationId `listCommitDeltaIssues`). Its `CommitDeltaIssuesResponse` has
     the same shape as the pull-request one — required `analyzed`, `data` of `CommitDeltaIssue`,
     optional `pagination` — so every fail-closed rule below applies unchanged.
+
+    MEASURED, and it did not go as expected: this repository's token is refused here too
+    (run 33461624729, same `ProjectTokenNotAllowed`). The specification does not distinguish
+    the two endpoints by credential class, so reachability was an assumption until a run
+    tested it. The call is kept because it is the one that can succeed if the token's scope is
+    widened, and because it never presents the project token to an endpoint documented as
+    account-only; the degradation below is what actually runs today.
     """
     return f"{_repository_url(provider, org, repo)}/commits/{_quote(src_commit)}/deltaIssues"
 

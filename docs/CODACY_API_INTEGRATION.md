@@ -35,11 +35,16 @@ When a token is present it:
 These are different questions with different answers, and confusing them attributes to a
 branch every finding that was already on the default branch.
 
-| Run | Endpoint | The count means |
+| Run | Endpoint attempted | The count means |
 |---|---|---|
 | `pull_request` | `listCommitDeltaIssues` on the head SHA, `status=new`, `targetCommitUuid` = base SHA | issues this branch introduces against its base |
 | `workflow_dispatch` with `commit` | the same, on the SHA given | issues that commit introduces |
 | `workflow_dispatch` with `commit` empty | `searchRepositoryIssues` | every open issue in the repository |
+
+**As configured today the first two are refused** (see the credentials section below) and the
+run degrades to the repository backlog with the scope relabelled and a `NÃO DISPONÍVEL` note.
+The authoritative per-PR delta is the summary the Codacy GitHub App publishes on the pull
+request.
 
 The workflow sets `CODACY_COMMIT` from `github.event.pull_request.head.sha` (or the `commit`
 dispatch input) and `CODACY_BASE_COMMIT` from `github.event.pull_request.base.sha` (or
@@ -59,23 +64,34 @@ a pull-request branch, the previous commit *on that branch*. That is the delta o
 of the branch against what it will merge into. Passing the base SHA as `targetCommitUuid` makes
 the answer the one a reviewer is actually asking for.
 
-### Credentials: `CODACY_PROJECT_TOKEN` is sufficient
+### Credentials: what the repository token actually reaches — MEASURED
 
-`CODACY_PROJECT_TOKEN` (a Codacy **Repository** API Token) is the preferred and sufficient
-credential. It reaches the repository analysis tree, which includes both endpoints above.
-
-There is one endpoint it does **not** reach, and the reporter never sends it there.
-`listPullRequestIssues` (`.../pull-requests/{n}/issues`) refuses a repository token —
-VERIFICADO by live run `33434452877`:
+Two delta endpoints exist. **This repository's `CODACY_PROJECT_TOKEN` is refused by both**,
+with the same answer:
 
 ```text
 HTTP 401 {"message":"Account authentication required","error":"Unauthorized","code":"ProjectTokenNotAllowed"}
 ```
 
-That is a credential-*scope* answer, not an invalid token. It is also not a reason to obtain an
-account token: `listCommitDeltaIssues` answers the same question within the scope the
-repository already has, and a regression test asserts no request is ever made to a
-`/pull-requests/` path.
+| Endpoint | Scope | Repository token | Evidence |
+|---|---|---|---|
+| `searchRepositoryIssues` | repository backlog | **accepted** | every run of this workflow |
+| `listPullRequestIssues` | PR delta | refused | run `33434452877` |
+| `listCommitDeltaIssues` | commit delta | refused | run `33461624729` |
+
+The commit-delta endpoint was adopted precisely because it sits in the repository analysis
+tree and was expected to be within the token's scope. It is not, for this token. That is a
+measurement, not a conclusion from the specification — the OpenAPI document does not
+distinguish the two, and the earlier revision of this file asserted a reachability it had not
+tested.
+
+`ProjectTokenNotAllowed` is a credential-*scope* answer, not an invalid token. The repository
+token continues to serve the repository backlog exactly as before.
+
+The reporter still calls `listCommitDeltaIssues` rather than `listPullRequestIssues`: both are
+refused today, but only the former can succeed if the token's scope is ever widened, and it
+keeps the project token away from an endpoint documented as account-only. A regression test
+asserts no request is ever made to a `/pull-requests/` path.
 
 ### Where a pull request's official delta comes from
 
@@ -173,13 +189,13 @@ image without Node would skip it and still report a green regression job.
 
 ### Account token — optional, and not needed for the delta
 
-`CODACY_API_TOKEN` (a Codacy **Account** API Token) is optional. The reporter retains it purely
-as a fallback credential for the repository-scoped endpoints; nothing in this integration
-requires it, because the branch delta comes from `listCommitDeltaIssues`, which the repository
-token reaches.
+`CODACY_API_TOKEN` (a Codacy **Account** API Token) is optional and is not configured here.
 
-Do not add it merely to obtain a pull request's delta — the Codacy GitHub App already publishes
-that on the pull request, and the commit-delta endpoint reproduces it through the API.
+Do not add it merely to read a pull request's delta: the Codacy GitHub App already publishes
+that delta on the pull request itself, with totals, categories and severities, and that
+publication is the authoritative source. Adding an account token would additionally let the
+API return the individual issue list — which is a convenience, not a requirement, and a second
+long-lived credential is not worth introducing for it.
 
 The workflow prefers `CODACY_PROJECT_TOKEN` when both secrets are configured, and does not
 discard a configured account-token recovery path after an authentication rejection.
