@@ -1,0 +1,110 @@
+name: PR30 regenerate HFE curated artifacts
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/curate_assessed_alleles.py'
+      - 'config/assessed_allele_curated_decisions.json'
+      - '.github/workflows/pr30-regenerate-hfe.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'claude/extract-pr22-reference-data'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: claude/extract-pr22-reference-data
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Snapshot current generated artifacts
+        shell: bash
+        run: |
+          cp config/partial_genome_annotation_targets.json "$RUNNER_TEMP/targets.before.json"
+          cp docs/evidence/ASSESSED_ALLELES_CLINVAR.json "$RUNNER_TEMP/evidence.before.json"
+      - name: Regenerate from dbSNP ClinVar CPIC GWAS and curated identity decisions
+        run: python3 scripts/curate_assessed_alleles.py --apply
+      - name: Guard the generated delta and verify HFE contract
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          root = Path.cwd()
+          tmp = Path(os.environ['RUNNER_TEMP'])
+          old_t = json.loads((tmp/'targets.before.json').read_text(encoding='utf-8'))
+          new_t = json.loads((root/'config/partial_genome_annotation_targets.json').read_text(encoding='utf-8'))
+          old_e = json.loads((tmp/'evidence.before.json').read_text(encoding='utf-8'))
+          new_e = json.loads((root/'docs/evidence/ASSESSED_ALLELES_CLINVAR.json').read_text(encoding='utf-8'))
+
+          def by_rsid(payload):
+              return {str(x['rsid']).lower(): x for x in payload['results']}
+
+          old_er, new_er = by_rsid(old_e), by_rsid(new_e)
+          changed_e = sorted(k for k in old_er if old_er[k] != new_er.get(k))
+          added_e = sorted(set(new_er) - set(old_er))
+          removed_e = sorted(set(old_er) - set(new_er))
+          print('changed evidence records:', changed_e)
+          print('added evidence records:', added_e)
+          print('removed evidence records:', removed_e)
+          if changed_e != ['rs1799945'] or added_e or removed_e:
+              raise SystemExit('Refusing commit: live curation changed records beyond rs1799945')
+
+          allowed_e_top = {'curated_at', 'sources', 'method', 'assessed_alleles_established', 'results'}
+          changed_e_top = {k for k in set(old_e) | set(new_e) if old_e.get(k) != new_e.get(k)}
+          print('changed evidence top-level keys:', sorted(changed_e_top))
+          if not changed_e_top.issubset(allowed_e_top):
+              raise SystemExit('Refusing commit: unexpected evidence top-level change')
+
+          old_tt = {str(x['rsid']).lower(): x for x in old_t['targets']}
+          new_tt = {str(x['rsid']).lower(): x for x in new_t['targets']}
+          changed_t = sorted(k for k in old_tt if old_tt[k] != new_tt.get(k))
+          added_t = sorted(set(new_tt) - set(old_tt))
+          removed_t = sorted(set(old_tt) - set(new_tt))
+          print('changed target records:', changed_t)
+          if changed_t != ['rs1799945'] or added_t or removed_t:
+              raise SystemExit('Refusing commit: live curation changed target records beyond rs1799945')
+
+          changed_t_top = {k for k in set(old_t) | set(new_t) if old_t.get(k) != new_t.get(k)}
+          print('changed target top-level keys:', sorted(changed_t_top))
+          if not changed_t_top.issubset({'targets', 'assessed_allele_curation'}):
+              raise SystemExit('Refusing commit: unexpected target-registry top-level change')
+
+          hfe_e = new_er['rs1799945']
+          hfe_t = new_tt['rs1799945']
+          assert new_e['assessed_alleles_established'] == 28, new_e['assessed_alleles_established']
+          assert new_t['assessed_allele_curation']['established'] == 28, new_t['assessed_allele_curation']['established']
+          assert hfe_e['assessed_allele'] == 'G'
+          assert hfe_e['status'] == 'VERIFICADO'
+          assert hfe_t['assessed_allele'] == 'G'
+          assert hfe_t['assessed_allele_status'] == 'VERIFICADO'
+          assert hfe_e['curated_identity_decision']['status'] == 'VERIFICADO'
+          assert hfe_e['curated_identity_decision']['clinvar_accession'] == 'VCV000000010'
+          assert any(
+              x.get('alternate') == 'G' and x.get('accession') == 'VCV000000010'
+              for x in hfe_e['clinvar_records_at_this_coordinate']
+          )
+          print('HFE rs1799945 source regeneration: VERIFIED G / VERIFICADO / established 28')
+          PY
+      - name: Commit only regenerated derived artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add config/partial_genome_annotation_targets.json docs/evidence/ASSESSED_ALLELES_CLINVAR.json
+          if git diff --cached --quiet; then
+            echo 'No generated changes to commit.'
+            exit 0
+          fi
+          git commit -m 'chore: regenerate HFE assessed-allele evidence from source'
+          git push origin HEAD:claude/extract-pr22-reference-data
