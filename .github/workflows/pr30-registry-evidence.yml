@@ -18,27 +18,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Hash and inspect evidence artifacts
+      - name: Hash registry evidence artifacts
         shell: bash
         run: |
           set -euo pipefail
-          sha256sum docs/evidence/GENE_DISEASE_VALIDITY_1STAR.json.gz docs/evidence/PGS_CATALOG_REGISTRY.json.gz
+          sha256sum \
+            docs/evidence/GENE_DISEASE_VALIDITY.json \
+            docs/evidence/GENE_DISEASE_VALIDITY_1STAR.json.gz \
+            docs/evidence/PGS_CATALOG_REGISTRY.json.gz
           python3 - <<'PY'
-          import gzip, json
-          for path in (
-              'docs/evidence/GENE_DISEASE_VALIDITY_1STAR.json.gz',
-              'docs/evidence/PGS_CATALOG_REGISTRY.json.gz',
-          ):
-              with gzip.open(path, 'rt', encoding='utf-8') as fh:
-                  data = json.load(fh)
-              print('ARTIFACT', path)
-              print('TYPE', type(data).__name__)
-              if isinstance(data, dict):
-                  print('TOP_KEYS', sorted(data.keys()))
-                  print('TOTALS', json.dumps(data.get('totals'), ensure_ascii=False, sort_keys=True))
-                  for key, value in data.items():
-                      if isinstance(value, (list, dict)):
-                          print('SIZE', key, len(value))
-                      elif isinstance(value, (str, int, float, bool)) or value is None:
-                          print('SCALAR', key, value)
+          import json
+          from collections import Counter
+          data = json.load(open('docs/evidence/GENE_DISEASE_VALIDITY.json', encoding='utf-8'))
+          genes = data.get('gene_validity', {})
+          print('GENES', len(genes))
+          print('ESTABLISHED', sum(bool(v.get('established')) for v in genes.values()))
+          print('NONE', sum(not bool(v.get('established')) for v in genes.values()))
+          print('ESTABLISHED_BY', json.dumps(Counter(tuple(v.get('established_by') or []) for v in genes.values() if v.get('established')), ensure_ascii=False, sort_keys=True, default=list))
           PY
