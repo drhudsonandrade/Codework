@@ -37,6 +37,10 @@ from typing import Any
 
 import normative
 from reporting import deployment_target
+from reporting.policy_control import (
+    PolicyEvaluationVerificationError,
+    verify_policy_evaluation,
+)
 from reporting.consent import (
     ALLOWED_DOMAINS as ALLOWED_CONSENT_DOMAINS,
     CONSENT_ARTIFACT,
@@ -997,41 +1001,56 @@ class PayloadCompiler:
             verdict["origin"] = "fixture" if self._fixture_consent else "operator-record"
         return verdict
 
-    def _policy_binding_refusal(self, evaluated: dict[str, Any]) -> str | None:
-        """Why this evaluation may not authorise *this* payload, or None if it may.
+    def _validated_policy_evaluation(
+        self, evaluated: dict[str, Any]
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        """Re-execute the Policy Control Plane and bind the result to this payload.
 
-        Mirrors `_witness_binding_refusal`: the witness is bound to the ruleset it judged and
-        the moment it ran, and a policy evaluation needs the same treatment for the same
-        reason. An evaluation with the right plane and gate shape says *a* run succeeded; it
-        says nothing about which ruleset it judged or which case, so without these an
-        evaluation produced once would authorise every report this project ever emits.
-
-        This does not prove authorship. A caller able to write the file can copy these fields
-        too. What it removes is the trivial forgery — a minimal hand-written object with four
-        PASS planes — and the reuse of a real evaluation across rulesets or cases, which is
-        the failure this gate most needs to stop. Cryptographic proof of origin requires a
-        signing scheme this repository does not have; that is named in the PR rather than
-        improvised here.
+        For real payloads, reading an evaluation file is never enough.  The engine output
+        must carry a case/session/input/operation/manifest identity envelope, and this
+        method re-runs the Policy Control Plane over the embedded manifest using the sealed
+        canonical ruleset.  Only that re-executed result is returned.  A fixture may bypass
+        this because fixture anchors can only produce NÃO DISPONÍVEL output and therefore
+        cannot authorize a real claim.
         """
-        if not isinstance(evaluated, dict) or not evaluated:
-            return (
-                "o artefato registrado como avaliação do policy engine não é um objeto JSON "
-                "com conteúdo; um arquivo vazio ou de outro formato não é um veredicto"
+        if self._fixture_verdict:
+            return evaluated, None
+
+        control_artifacts = {
+            POLICY_EVALUATION_ARTIFACT,
+            POST_DEPLOYMENT_WITNESS_ARTIFACT,
+            CONSENT_ARTIFACT,
+        }
+        input_hashes: set[str] = set()
+        for name, candidate in self._artifacts.items():
+            if name in control_artifacts or not isinstance(candidate.payload, dict):
+                continue
+            direct = str(candidate.payload.get("input_sha256") or "").strip()
+            nested_input = candidate.payload.get("input")
+            nested = (
+                str(nested_input.get("sha256") or "").strip()
+                if isinstance(nested_input, dict)
+                else ""
             )
-        ruleset = evaluated.get("ruleset") if isinstance(evaluated.get("ruleset"), dict) else {}
-        observed = ruleset.get("sha256")
-        if observed != normative.RAW_SHA256:
-            return (
-                f"a avaliação foi produzida contra o ruleset {observed!r}, e este relatório "
-                f"declara {normative.RAW_SHA256!r}: uma não autoriza a outra"
+            if direct:
+                input_hashes.add(direct)
+            if nested:
+                input_hashes.add(nested)
+        if len(input_hashes) != 1:
+            return None, (
+                "a avaliação de política não pode ser vinculada aos bytes deste payload: "
+                f"os artefatos científicos declaram {len(input_hashes)} input_sha256 distintos"
             )
-        declared_case = evaluated.get("case_id")
-        if declared_case is not None and str(declared_case) != self.case_id:
-            return (
-                f"a avaliação pertence ao caso {declared_case!r} e este payload é do caso "
-                f"{self.case_id!r}; um veredicto não é transferível entre casos"
+        try:
+            verified = verify_policy_evaluation(
+                evaluated,
+                case_id=self.case_id,
+                input_sha256=next(iter(input_hashes)),
+                required_output="FINAL_AUDITED_REPORT",
             )
-        return None
+        except PolicyEvaluationVerificationError as exc:
+            return None, str(exc)
+        return verified, None
 
     def policy_verdict(self) -> dict[str, Any]:
         """The single normative verdict, read from a registered policy-engine evaluation.
@@ -1075,7 +1094,7 @@ class PayloadCompiler:
         # the result `origin: policy-engine-output` with `status: VERIFICADO`. A hand-written
         # object with four PASS planes was indistinguishable from the engine's verdict, and
         # the hash proves only that the file was read, never where it came from.
-        binding = self._policy_binding_refusal(evaluated)
+        verified, binding = self._validated_policy_evaluation(evaluated)
         if binding is not None:
             return {
                 "ready_for_requested_operation": False,
@@ -1089,9 +1108,11 @@ class PayloadCompiler:
                     "reason": binding,
                 },
             }
-        planes = evaluated.get("planes") if isinstance(evaluated.get("planes"), dict) else {}
+        if verified is None:
+            raise ProvenanceError("verified policy evaluation unexpectedly missing after successful validation")
+        planes = verified.get("planes") if isinstance(verified.get("planes"), dict) else {}
         return {
-            "ready_for_requested_operation": evaluated.get("ready_for_requested_operation") is True,
+            "ready_for_requested_operation": verified.get("ready_for_requested_operation") is True,
             "planes": {
                 name: {
                     "state": str(
@@ -1102,7 +1123,7 @@ class PayloadCompiler:
                 }
                 for name in REQUIRED_PLANES
             },
-            "gates": [g for g in (evaluated.get("gates") or []) if isinstance(g, dict)],
+            "gates": [g for g in (verified.get("gates") or []) if isinstance(g, dict)],
             "source": {
                 "status": "VERIFICADO",
                 "artifact": POLICY_EVALUATION_ARTIFACT,
@@ -1110,7 +1131,8 @@ class PayloadCompiler:
                 "path": artifact.path,
                 # Named on the payload, so a reader can tell a verdict the engine wrote from
                 # the layout-QA fixture without inspecting anchors.
-                "origin": "fixture" if self._fixture_verdict else "policy-engine-output",
+                "origin": "fixture" if self._fixture_verdict else "policy-control-reexecution",
+                "manifest_sha256": (verified.get("binding") or {}).get("manifest_sha256"),
             },
         }
 

@@ -1,8 +1,44 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+import copy
+import hashlib
+import json
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+
+POLICY_EVALUATION_SCHEMA = "genoma-policy-evaluation-v2"
+POLICY_EVALUATION_PRODUCER = "genoma-policy-engine"
+
+
+def canonical_manifest_sha256(manifest: dict[str, Any]) -> str:
+    """Digest the exact logical execution manifest using one deterministic JSON form."""
+    raw = json.dumps(
+        manifest,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def evaluation_binding(manifest: dict[str, Any]) -> dict[str, Any]:
+    """Identity that binds one policy evaluation to the manifest it actually judged."""
+    inputs = manifest.get("inputs") if isinstance(manifest.get("inputs"), list) else []
+    input_hashes = {
+        str(item.get("sha256") or "").strip()
+        for item in inputs
+        if isinstance(item, dict) and str(item.get("sha256") or "").strip()
+    }
+    input_sha256 = next(iter(input_hashes)) if len(input_hashes) == 1 else ""
+    operation = manifest.get("operation") if isinstance(manifest.get("operation"), dict) else {}
+    return {
+        "case_id": str(manifest.get("case_id") or "").strip(),
+        "session_id": str(manifest.get("session_id") or "").strip(),
+        "input_sha256": input_sha256,
+        "operation": copy.deepcopy(operation),
+        "manifest_sha256": canonical_manifest_sha256(manifest),
+    }
 
 
 class OperationalStatus(str, Enum):
@@ -75,6 +111,7 @@ class GateResult:
 @dataclass
 class EvaluationReport:
     ruleset: dict[str, Any]
+    evaluated_manifest: dict[str, Any] = field(default_factory=dict)
     gates: list[GateResult] = field(default_factory=list)
     section_coverage: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -93,7 +130,22 @@ class EvaluationReport:
         return not self.blocking_failures and not self.pending_blockers
 
     def to_dict(self) -> dict[str, Any]:
+        snapshot = copy.deepcopy(self.evaluated_manifest)
+        binding = evaluation_binding(snapshot)
+        producer = {
+            "id": POLICY_EVALUATION_PRODUCER,
+            "version": str(self.metadata.get("engine_version") or ""),
+        }
         return {
+            "schema": POLICY_EVALUATION_SCHEMA,
+            "producer": producer,
+            "case_id": binding["case_id"],
+            "session_id": binding["session_id"],
+            "input_sha256": binding["input_sha256"],
+            "operation": copy.deepcopy(binding["operation"]),
+            "manifest_sha256": binding["manifest_sha256"],
+            "binding": binding,
+            "evaluated_manifest": snapshot,
             "ready_for_requested_operation": self.ready,
             "ruleset": self.ruleset,
             "gates": [g.to_dict() for g in self.gates],

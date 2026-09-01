@@ -1158,5 +1158,41 @@ class MergeCarriesWhatItPublishesTest(unittest.TestCase):
         self.assertEqual("CLINICO", merged["scope"])
 
 
+class StrictReferenceDecodingTest(unittest.TestCase):
+    """Curated reference inputs fail closed rather than replacing malformed UTF-8."""
+
+    def test_gwas_associations_reject_invalid_utf8(self):
+        directory = Path(tempfile.mkdtemp())
+        path = directory / "associations.tsv"
+        path.write_bytes(b"SNPS\tDISEASE/TRAIT\nrs1\tbad\xff\n")
+        with self.assertRaises(UnicodeDecodeError):
+            with TRAITS._open_associations(path) as handle:
+                handle.read()
+
+    def test_gwas_ancestry_rejects_invalid_utf8(self):
+        directory = Path(tempfile.mkdtemp())
+        path = directory / "ancestries.tsv"
+        path.write_bytes(
+            b"STUDY ACCESSION\tBROAD ANCESTRAL CATEGORY\tSTAGE\tNUMBER OF INDIVIDUALS\tINITIAL SAMPLE DESCRIPTION\n"
+            b"GCST1\tEuropean\tinitial\t10\tbad\xff\n"
+        )
+        with self.assertRaises(UnicodeDecodeError):
+            TRAITS.read_ancestries(path)
+
+    def test_clinvar_bulk_rejects_invalid_utf8(self):
+        directory = Path(tempfile.mkdtemp())
+        path = directory / "variant_summary.txt.gz"
+        raw = ("\t".join(COLUMNS) + "\n").encode("utf-8") + b"bad\xff\n"
+        path.write_bytes(gzip.compress(raw))
+        with self.assertRaises(UnicodeDecodeError):
+            EXPAND.scan_clinvar(path)
+
+    def test_clingen_dosage_rejects_invalid_utf8(self):
+        directory = Path(tempfile.mkdtemp())
+        path = directory / "dosage.tsv"
+        path.write_bytes(DOSAGE_HEADER.encode("utf-8") + b"\nHFE\t1\tbad\xff\n")
+        with self.assertRaises(UnicodeDecodeError):
+            EXPAND.read_clingen_dosage(path)
+
 if __name__ == "__main__":
     unittest.main()

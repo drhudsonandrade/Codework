@@ -310,7 +310,7 @@ def read_clingen_dosage(path: Path | None) -> dict[str, dict[str, Any]]:
         return {}
     if not path.is_file():
         raise FileNotFoundError(f"ClinGen dosage list not found: {path}")
-    text = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    text = path.read_text(encoding="utf-8", errors="strict").splitlines()
     header: list[str] | None = None
     rows: list[str] = []
     for line in text:
@@ -729,7 +729,7 @@ def scan_clinvar(
             "pathogenic_at_threshold_snv_rsid": 0,
         }
     )
-    with gzip.open(raw_path, "rt", encoding="utf-8", errors="replace") as fh:
+    with gzip.open(raw_path, "rt", encoding="utf-8", errors="strict") as fh:
         header = fh.readline().rstrip("\n").split("\t")
         idx = {name: i for i, name in enumerate(header)}
         for line in fh:

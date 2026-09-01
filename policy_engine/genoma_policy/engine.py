@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +23,10 @@ class PolicyEngine(CoreGates, EvidenceGates, AuditGates):
         return cls(load_ruleset(ruleset_path), external_manifest=external_manifest)
 
     def evaluate(self, manifest: dict[str, Any]) -> EvaluationReport:
-        report = EvaluationReport(ruleset=self.ruleset.metadata())
+        report = EvaluationReport(
+            ruleset=self.ruleset.metadata(),
+            evaluated_manifest=deepcopy(manifest),
+        )
         report.gates.extend([
             self._ruleset_gate(manifest), self._taxonomy_gate(manifest), self._provenance_gate(manifest),
             self._consent_gate(manifest), self._qc_gate(manifest), self._runtime_resource_gate(manifest),

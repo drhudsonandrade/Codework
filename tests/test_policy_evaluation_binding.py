@@ -1,119 +1,190 @@
-"""A registered file is not a policy verdict just because a caller pointed at it.
-
-`PayloadCompiler.policy_verdict()` copied `ready_for_requested_operation`, the plane states
-and the gate list out of whatever JSON `--policy-evaluation` named, recorded that file's
-SHA-256 beside them, and labelled the result `origin: policy-engine-output` with
-`status: VERIFICADO`. Nothing checked which ruleset the evaluation judged or which case it
-belonged to. So a hand-written object with four PASS planes and one `true` became publication
-authority, and a real evaluation produced for one case authorised every other.
-
-The hash never helped: it is computed from the file after reading it, so it proves the file
-was read, not where it came from.
-
-What these tests pin is the binding, not authorship. A caller able to write the file can copy
-the ruleset hash too — proving origin needs a signing scheme this repository does not have,
-and that is recorded in the PR as an open design question rather than improvised. The binding
-still removes the trivial forgery and the cross-case reuse.
-"""
+"""Policy Control Plane evaluations are data until re-executed at publication."""
 from __future__ import annotations
 
+import copy
+import sys
+import tempfile
 import unittest
+from functools import lru_cache
+from pathlib import Path
 
-import normative
+ROOT = Path(__file__).resolve().parents[1]
+POLICY_ROOT = ROOT / "policy_engine"
+if str(POLICY_ROOT) not in sys.path:
+    sys.path.insert(0, str(POLICY_ROOT))
+
+from genoma_policy.engine import PolicyEngine
+from genoma_policy.gates_common import CRITICAL_FINAL_AUDIT_KEYS
+from genoma_policy.models import evaluation_binding
+from genoma_policy.ruleset import load_ruleset
+from genoma_policy.scaffold import scaffold_manifest
 from reporting.provenance import (
     POLICY_EVALUATION_ARTIFACT,
     REQUIRED_PLANES,
     Artifact,
     PayloadCompiler,
+    ProvenanceError,
 )
+from scripts.materialize_ruleset import materialize
+
+INPUT_SHA = "a" * 64
 
 
-def _evaluation(**overrides):
-    """A bound evaluation of the shape the real engine emits."""
-    payload = {
-        "ready_for_requested_operation": True,
-        "ruleset": {"sha256": normative.RAW_SHA256},
-        "planes": {name: {"state": "PASS"} for name in REQUIRED_PLANES},
-        "gates": [{"gate": "FINAL_AUDIT_GATE", "state": "PASS", "blocking": True}],
+_RULESET_TD = tempfile.TemporaryDirectory()
+
+
+@lru_cache(maxsize=1)
+def _ruleset():
+    """Load the canonical ruleset while keeping its verified materialization alive."""
+    ruleset_path, _evidence = materialize(Path(_RULESET_TD.name))
+    return load_ruleset(ruleset_path)
+
+
+def _manifest(*, case_id: str = "CASE-1", input_sha256: str = INPUT_SHA) -> dict:
+    """A policy manifest that genuinely passes a FINAL_AUDITED_REPORT evaluation."""
+    manifest = scaffold_manifest(_ruleset(), case_id=case_id)
+    manifest["session_id"] = "SESSION-1"
+    manifest["operation"]["output"] = "FINAL_AUDITED_REPORT"
+    manifest["inputs"] = [
+        {"id": "input-1", "kind": "array", "source": "fixture", "sha256": input_sha256}
+    ]
+    manifest["consent"] = {
+        "verified": True,
+        "version": "test-v1",
+        "authorized_domains": ["research"],
     }
-    payload.update(overrides)
-    return payload
+    manifest["qc"] = {
+        "status": "EXECUTADO",
+        "passed": True,
+        "evidence_refs": ["fixture:qc"],
+    }
+    manifest["sources"] = [
+        {
+            "id": "fixture:attestation",
+            "mutable": False,
+            "status": "VERIFICADO",
+            "accessible": True,
+            "locator": "fixture://attestation",
+            "retrieval_evidence": {"method": "fixture", "result_digest": "sha256:fixture"},
+        }
+    ]
+    for attestation in manifest["section_attestations"]:
+        attestation.update(
+            {
+                "applicability": "NOT_APPLICABLE",
+                "status": "VERIFICADO",
+                "decision": "NOT_APPLICABLE",
+                "justification": "not triggered by this fixture",
+                "evidence_refs": [],
+            }
+        )
+        attestation["trace"].update(
+            {"run_id": "SESSION-1", "created_at": "2026-08-22T18:46:00-03:00"}
+        )
+    manifest["final_audit"] = {key: True for key in CRITICAL_FINAL_AUDIT_KEYS}
+    return manifest
 
 
-def _verdict_for(payload, *, case_id="CASE-1"):
-    """The verdict a compiler reaches for this policy evaluation."""
+def real_evaluation(*, case_id: str = "CASE-1", input_sha256: str = INPUT_SHA) -> dict:
+    """The exact envelope emitted by the real Policy Control Plane for a passing manifest."""
+    report = PolicyEngine(_ruleset()).evaluate(_manifest(case_id=case_id, input_sha256=input_sha256))
+    if not report.ready:
+        failures = [g.to_dict() for g in report.gates if g.blocking and g.state.value != "PASS"]
+        raise AssertionError(f"policy fixture is not actually ready: {failures}")
+    return report.to_dict()
+
+
+def _verdict_for(payload: dict, *, case_id: str = "CASE-1", input_sha256: str = INPUT_SHA):
+    """Compile one verdict with a scientific artifact bound to the same primary input."""
     compiler = PayloadCompiler(case_id=case_id, report_id="01")
-    compiler._install_verdict(
-        Artifact.from_payload(POLICY_EVALUATION_ARTIFACT, payload)
-    )
+    compiler._install_verdict(Artifact.from_payload(POLICY_EVALUATION_ARTIFACT, payload))
+    compiler.register(Artifact.from_payload("subject-input", {"input_sha256": input_sha256}))
     return compiler.policy_verdict()
 
 
 class PolicyEvaluationBindingTest(unittest.TestCase):
-    """What binds a policy evaluation to the case and ruleset it may authorise."""
-    def test_a_bound_evaluation_is_accepted(self):
-        """The accepting case, so the refusals below are not passing vacuously."""
-        verdict = _verdict_for(_evaluation())
+    """Only a re-executed, identity-bound Policy Control verdict may authorize publication."""
+
+    def test_real_engine_output_serializes_required_identity(self):
+        evaluation = real_evaluation()
+        self.assertEqual(evaluation["schema"], "genoma-policy-evaluation-v2")
+        self.assertEqual(evaluation["producer"]["id"], "genoma-policy-engine")
+        self.assertTrue(evaluation["producer"]["version"])
+        self.assertEqual(evaluation["case_id"], "CASE-1")
+        self.assertEqual(evaluation["session_id"], "SESSION-1")
+        self.assertEqual(evaluation["input_sha256"], INPUT_SHA)
+        self.assertEqual(evaluation["operation"]["output"], "FINAL_AUDITED_REPORT")
+        self.assertRegex(evaluation["manifest_sha256"], r"^[0-9a-f]{64}$")
+        self.assertEqual(evaluation["binding"], evaluation_binding(evaluation["evaluated_manifest"]))
+
+    def test_a_genuine_matching_evaluation_is_reexecuted_and_accepted(self):
+        verdict = _verdict_for(real_evaluation())
         self.assertTrue(verdict["ready_for_requested_operation"])
         self.assertEqual(verdict["source"]["status"], "VERIFICADO")
+        self.assertEqual(verdict["source"]["origin"], "policy-control-reexecution")
 
-    def test_the_minimal_hand_written_object_is_refused(self):
-        """Exactly the shape that used to become publication authority."""
-        verdict = _verdict_for(
-            {
-                "ready_for_requested_operation": True,
-                "planes": {name: {"state": "PASS"} for name in REQUIRED_PLANES},
-                "gates": [{"gate": "FINAL_AUDIT_GATE", "state": "PASS", "blocking": True}],
-            }
-        )
-        self.assertFalse(verdict["ready_for_requested_operation"])
-        self.assertEqual(verdict["source"]["status"], "NÃO DISPONÍVEL")
-        self.assertIn("ruleset", verdict["source"]["reason"])
-
-    def test_an_evaluation_for_another_ruleset_does_not_authorise_this_one(self):
-        """An evaluation for another ruleset does not authorise this one."""
-        verdict = _verdict_for(_evaluation(ruleset={"sha256": "b" * 64}))
+    def test_legacy_minimal_hand_written_pass_is_refused(self):
+        payload = {
+            "ready_for_requested_operation": True,
+            "ruleset": {"sha256": _ruleset().sha256},
+            "planes": {name: {"state": "PASS"} for name in REQUIRED_PLANES},
+            "gates": [{"gate": "FINAL_AUDIT_GATE", "state": "PASS", "blocking": True}],
+        }
+        verdict = _verdict_for(payload)
         self.assertFalse(verdict["ready_for_requested_operation"])
         self.assertEqual(verdict["source"]["status"], "NÃO DISPONÍVEL")
 
-    def test_an_evaluation_for_another_case_is_not_transferable(self):
-        """A real, correctly-bound evaluation still belongs to the case it judged."""
-        verdict = _verdict_for(_evaluation(case_id="CASE-OTHER"), case_id="CASE-1")
+    def test_complete_manual_pass_with_correct_digest_is_reexecuted_and_refused(self):
+        payload = real_evaluation()
+        payload["evaluated_manifest"]["qc"]["passed"] = False
+        binding = evaluation_binding(payload["evaluated_manifest"])
+        payload["binding"] = binding
+        for key in ("case_id", "session_id", "input_sha256", "operation", "manifest_sha256"):
+            payload[key] = copy.deepcopy(binding[key])
+        # The forged PASS bits are deliberately left untouched.  A digest and plausible
+        # producer metadata do not make them authority; re-execution must disagree and block.
+        self.assertTrue(payload["ready_for_requested_operation"])
+        verdict = _verdict_for(payload)
+        self.assertFalse(verdict["ready_for_requested_operation"])
+        self.assertIn("re-execution", verdict["source"]["reason"])
+
+    def test_cross_case_evaluation_is_not_transferable(self):
+        verdict = _verdict_for(real_evaluation(case_id="CASE-OTHER"), case_id="CASE-1")
         self.assertFalse(verdict["ready_for_requested_operation"])
         self.assertIn("CASE-OTHER", verdict["source"]["reason"])
 
-    def test_an_evaluation_naming_this_case_is_accepted(self):
-        """An evaluation naming this case is accepted."""
-        verdict = _verdict_for(_evaluation(case_id="CASE-1"), case_id="CASE-1")
-        self.assertTrue(verdict["ready_for_requested_operation"])
-
-    def test_an_empty_evaluation_object_is_refused(self):
-        """An empty evaluation object is refused rather than read as no objection."""
-        verdict = _verdict_for({})
+    def test_cross_input_evaluation_is_not_transferable(self):
+        verdict = _verdict_for(real_evaluation(input_sha256="b" * 64), input_sha256=INPUT_SHA)
         self.assertFalse(verdict["ready_for_requested_operation"])
-        self.assertEqual(verdict["source"]["status"], "NÃO DISPONÍVEL")
+        self.assertIn("input SHA-256", verdict["source"]["reason"])
 
-    def test_a_non_object_never_reaches_the_verdict_at_all(self):
-        """Registration refuses it first, which is the earlier and better place.
+    def test_missing_session_identity_is_refused_even_with_pass_bits(self):
+        payload = real_evaluation()
+        payload["evaluated_manifest"]["session_id"] = ""
+        binding = evaluation_binding(payload["evaluated_manifest"])
+        payload["binding"] = binding
+        for key in ("case_id", "session_id", "input_sha256", "operation", "manifest_sha256"):
+            payload[key] = copy.deepcopy(binding[key])
+        verdict = _verdict_for(payload)
+        self.assertFalse(verdict["ready_for_requested_operation"])
+        self.assertIn("session_id", verdict["source"]["reason"])
 
-        Asserted rather than assumed: `policy_verdict` is written to cope with a non-dict
-        payload, but `Artifact.from_payload` rejects one before it can arrive. Both layers
-        are meant to hold, and a test that only exercised the later one would not notice if
-        the earlier guard were removed.
-        """
-        from reporting.provenance import ProvenanceError
+    def test_analysis_operation_cannot_authorize_final_report_publication(self):
+        payload = real_evaluation()
+        payload["evaluated_manifest"]["operation"]["output"] = "ANALYSIS"
+        binding = evaluation_binding(payload["evaluated_manifest"])
+        payload["binding"] = binding
+        for key in ("case_id", "session_id", "input_sha256", "operation", "manifest_sha256"):
+            payload[key] = copy.deepcopy(binding[key])
+        verdict = _verdict_for(payload)
+        self.assertFalse(verdict["ready_for_requested_operation"])
+        self.assertIn("FINAL_AUDITED_REPORT", verdict["source"]["reason"])
 
+    def test_a_non_object_never_reaches_policy_verification(self):
         for payload in ([], "PASS", None, 7):
             with self.subTest(payload=payload):
                 with self.assertRaises(ProvenanceError):
                     Artifact.from_payload(POLICY_EVALUATION_ARTIFACT, payload)
-
-    def test_a_refusal_blocks_every_plane_rather_than_passing_some_through(self):
-        """A partial refusal would let a forged evaluation still tilt the payload."""
-        verdict = _verdict_for(_evaluation(ruleset={"sha256": "c" * 64}))
-        self.assertEqual(
-            {name: {"state": "BLOCKED"} for name in REQUIRED_PLANES}, verdict["planes"]
-        )
 
 
 if __name__ == "__main__":

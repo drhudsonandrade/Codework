@@ -71,10 +71,10 @@ def _open_associations(path: Path) -> io.TextIOWrapper:
     if path.suffix == ".zip":
         archive = zipfile.ZipFile(path)
         name = next(n for n in archive.namelist() if n.endswith(".tsv"))
-        return io.TextIOWrapper(archive.open(name), encoding="utf-8", errors="replace")
+        return io.TextIOWrapper(archive.open(name), encoding="utf-8", errors="strict")
     if path.suffix == ".gz":
-        return io.TextIOWrapper(gzip.open(path, "rb"), encoding="utf-8", errors="replace")
-    return path.open("r", encoding="utf-8", errors="replace")
+        return io.TextIOWrapper(gzip.open(path, "rb"), encoding="utf-8", errors="strict")
+    return path.open("r", encoding="utf-8", errors="strict")
 
 
 def read_ancestries(path: Path) -> dict[str, dict[str, Any]]:
@@ -82,7 +82,7 @@ def read_ancestries(path: Path) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = defaultdict(
         lambda: {"initial": defaultdict(int), "replication": defaultdict(int), "descriptions": set()}
     )
-    with path.open("r", encoding="utf-8", errors="replace") as fh:
+    with path.open("r", encoding="utf-8", errors="strict") as fh:
         for row in csv.DictReader(fh, delimiter="\t"):
             accession = (row.get("STUDY ACCESSION") or "").strip()
             if not accession:
