@@ -84,6 +84,11 @@ jobs:
                   '''    engine, evaluation_binding, _ruleset_lifetime = _runtime()''',
                   'runtime unpack',
               ),
+              (
+                  '''    run(\n        sys.executable,\n        "-m",\n        "unittest",\n        "tests.test_pr30_regressions",\n        "tests.test_reporting_provenance_regressions",\n        "tests.test_authority_regressions",\n        "-v",\n    )''',
+                  '''    run(\n        sys.executable,\n        "-m",\n        "unittest",\n        "tests.test_pr30_regressions",\n        "tests.test_reporting_provenance_regressions",\n        "tests.test_authority_regressions",\n        "-v",\n        env={"PYTHONPATH": f"{ROOT}:{ROOT / 'tests'}"},\n    )''',
+                  'final regression import path',
+              ),
           ]
           for old, new, label in replacements:
               count = text.count(old)
