@@ -305,6 +305,7 @@ def validate_manifest(manifest_path: Path) -> dict:
             if path is None:
                 continue
             ok, detail = fastq_probe(root, path)
+            detail["relative_path"] = path.relative_to(root).as_posix()
             inputs[key] = detail
             if not ok:
                 errors.append(f"{label} integrity probe failed")
@@ -352,6 +353,7 @@ def validate_manifest(manifest_path: Path) -> dict:
         else:
             inputs["alignment"] = {
                 "path": str(alignment),
+                "relative_path": alignment.relative_to(root).as_posix(),
                 "size_bytes": alignment_size,
                 "sha256": alignment_sha,
             }

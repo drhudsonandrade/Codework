@@ -150,6 +150,8 @@ class WgsGateTest(unittest.TestCase):
             result = validate_manifest(manifest)
             self.assertEqual(result["status"], "VERIFICADO")
             self.assertEqual(result["errors"], [])
+            self.assertEqual(result["inputs"]["r1"]["relative_path"], "r1.fastq")
+            self.assertEqual(result["inputs"]["r2"]["relative_path"], "r2.fastq")
 
 
 class WgsInputPathContainmentTest(unittest.TestCase):

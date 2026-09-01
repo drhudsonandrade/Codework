@@ -65,18 +65,22 @@ open_verified() {
   # `/dev/fd/N`, so downstream still consumes an inode-bound descriptor rather than a mutable
   # sample pathname.
   local key="$1" outvar="$2" path digest fd relative staged rc
-  path=$(jq -r --arg k "$key" '.inputs[$k].path // empty' "$input_qc")
+  relative=$(jq -er --arg k "$key" \
+    '.inputs[$k].relative_path | select(type == "string" and length > 0)' \
+    "$input_qc") || {
+    echo "NÃO DISPONÍVEL: input-qc.json records no task-independent path for $key" >&2
+    return 3
+  }
   digest=$(jq -r --arg k "$key" '.inputs[$k].sha256 // empty' "$input_qc")
-  [[ -n "$path" && -n "$digest" ]] || {
+  [[ -n "$digest" ]] || {
     echo "NÃO DISPONÍVEL: input-qc.json records no verified $key" >&2; return 3; }
-  case "$path" in
-    "$sample_dir"/*) ;;
-    *) echo "NÃO DISPONÍVEL: verified $key is outside the sample directory" >&2; return 3 ;;
+  case "$relative" in
+    /*) echo "NÃO DISPONÍVEL: verified $key is outside the sample directory" >&2; return 3 ;;
   esac
-  relative=${path#"$sample_dir"/}
   case "/$relative/" in
     */../*) echo "NÃO DISPONÍVEL: verified $key is outside the sample directory" >&2; return 3 ;;
   esac
+  path="$sample_dir/$relative"
 
   staged="$verified_stage/$key"
   if python3 "$materializer" \

@@ -76,7 +76,7 @@ JSON
   r1_digest=$(sha256sum "$sample_dir/r1.fastq" | cut -d' ' -f1)
   r2_digest=$(sha256sum "$sample_dir/r2.fastq" | cut -d' ' -f1)
   jq -n --arg status "$status" --arg r1 "$sample_dir/r1.fastq" --arg r2 "$sample_dir/r2.fastq" --arg d1 "$r1_digest" --arg d2 "$r2_digest" \
-    '{schema:"genoma-wgs-input-gate-v1",status:$status,sample_id:"S1",input_type:"FASTQ",read_group:{id:"RG1",sample:"S1",library:"L1",platform:"ILLUMINA"},inputs:{r1:{path:$r1,sha256:$d1},r2:{path:$r2,sha256:$d2}}}' >"$case_root/input-qc.json"
+    '{schema:"genoma-wgs-input-gate-v1",status:$status,sample_id:"S1",input_type:"FASTQ",read_group:{id:"RG1",sample:"S1",library:"L1",platform:"ILLUMINA"},inputs:{r1:{path:$r1,relative_path:"r1.fastq",sha256:$d1},r2:{path:$r2,relative_path:"r2.fastq",sha256:$d2}}}' >"$case_root/input-qc.json"
 }
 
 alignment_fixture() {
@@ -96,8 +96,8 @@ alignment_fixture() {
     >"$sample_dir/sample-manifest.json"
   make_stubs "$case_root/bin"
   digest=$(sha256sum "$alignment" | cut -d' ' -f1)
-  jq -n --arg status "$status" --arg input_type "$input_type" --arg alignment "$alignment" --arg digest "$digest" \
-    '{schema:"genoma-wgs-input-gate-v1",status:$status,sample_id:"S1",input_type:$input_type,read_group:{id:"RG1",sample:"S1",library:"L1",platform:"ILLUMINA"},inputs:{alignment:{path:$alignment,sha256:$digest}}}' >"$case_root/input-qc.json"
+  jq -n --arg status "$status" --arg input_type "$input_type" --arg alignment "$alignment" --arg relative "alignment.$extension" --arg digest "$digest" \
+    '{schema:"genoma-wgs-input-gate-v1",status:$status,sample_id:"S1",input_type:$input_type,read_group:{id:"RG1",sample:"S1",library:"L1",platform:"ILLUMINA"},inputs:{alignment:{path:$alignment,relative_path:$relative,sha256:$digest}}}' >"$case_root/input-qc.json"
 }
 
 run_case() {
@@ -151,7 +151,7 @@ assert_no_tools "$case_root/tools.log"
 case_root="$root/outside"; fixture "$case_root"
 printf '@evil\nACGT\n+\nIIII\n' >"$case_root/outside.fastq"
 digest=$(sha256sum "$case_root/outside.fastq" | cut -d' ' -f1)
-jq --arg p "$case_root/outside.fastq" --arg d "$digest" '.inputs.r1.path=$p | .inputs.r1.sha256=$d' "$case_root/input-qc.json" >"$case_root/qc.tmp"
+jq --arg p "$case_root/outside.fastq" --arg d "$digest" '.inputs.r1.path=$p | .inputs.r1.relative_path="../outside.fastq" | .inputs.r1.sha256=$d' "$case_root/input-qc.json" >"$case_root/qc.tmp"
 mv "$case_root/qc.tmp" "$case_root/input-qc.json"
 if stderr=$(run_case "$case_root" 2>&1); then
   fail 'outside path unexpectedly passed'
@@ -164,7 +164,7 @@ case_root="$root/dotdot"; fixture "$case_root"
 printf '@evil\nACGT\n+\nIIII\n' >"$case_root/outside.fastq"
 digest=$(sha256sum "$case_root/outside.fastq" | cut -d' ' -f1)
 traversal_path="$case_root/sample/../outside.fastq"
-jq --arg p "$traversal_path" --arg d "$digest" '.inputs.r1.path=$p | .inputs.r1.sha256=$d' "$case_root/input-qc.json" >"$case_root/qc.tmp"
+jq --arg p "$traversal_path" --arg d "$digest" '.inputs.r1.path=$p | .inputs.r1.relative_path="../outside.fastq" | .inputs.r1.sha256=$d' "$case_root/input-qc.json" >"$case_root/qc.tmp"
 mv "$case_root/qc.tmp" "$case_root/input-qc.json"
 if stderr=$(run_case "$case_root" 2>&1); then
   fail 'dotdot traversal unexpectedly passed'
@@ -178,7 +178,7 @@ printf '@evil\nACGT\n+\nIIII\n' >"$case_root/outside.fastq"
 ln -s "$case_root/outside.fastq" "$case_root/sample/r1-link.fastq"
 digest=$(sha256sum "$case_root/outside.fastq" | cut -d' ' -f1)
 link_path="$case_root/sample/r1-link.fastq"
-jq --arg p "$link_path" --arg d "$digest" '.inputs.r1.path=$p | .inputs.r1.sha256=$d' "$case_root/input-qc.json" >"$case_root/qc.tmp"
+jq --arg p "$link_path" --arg d "$digest" '.inputs.r1.path=$p | .inputs.r1.relative_path="r1-link.fastq" | .inputs.r1.sha256=$d' "$case_root/input-qc.json" >"$case_root/qc.tmp"
 mv "$case_root/qc.tmp" "$case_root/input-qc.json"
 if stderr=$(run_case "$case_root" 2>&1); then
   fail 'outside symlink unexpectedly passed'
@@ -241,6 +241,29 @@ case_root="$root/happy"; fixture "$case_root"
 run_case "$case_root" >/dev/null
 cmp -s "$case_root/r1.seen" "$case_root/sample/r1.fastq" || fail 'R1 bytes did not reach aligner'
 cmp -s "$case_root/r2.seen" "$case_root/sample/r2.fastq" || fail 'R2 bytes did not reach aligner'
+
+# Nextflow executes QC and alignment in different task directories. The absolute path is
+# retained only as provenance; alignment must rebind the gate-authorized relative path to
+# its own staged sample directory and verify the same digest there.
+case_root="$root/cross-task"; fixture "$case_root"
+mkdir -p "$case_root/qc-task"
+cp -a "$case_root/sample" "$case_root/qc-task/sample"
+jq --arg r1 "$case_root/qc-task/sample/r1.fastq" --arg r2 "$case_root/qc-task/sample/r2.fastq" \
+  '.inputs.r1.path=$r1 | .inputs.r2.path=$r2' "$case_root/input-qc.json" >"$case_root/qc.tmp"
+mv "$case_root/qc.tmp" "$case_root/input-qc.json"
+run_case "$case_root" >/dev/null
+cmp -s "$case_root/r1.seen" "$case_root/sample/r1.fastq" || fail 'cross-task R1 rebinding failed'
+cmp -s "$case_root/r2.seen" "$case_root/sample/r2.fastq" || fail 'cross-task R2 rebinding failed'
+
+# An old or forged record without a task-independent path must fail closed.
+case_root="$root/missing-relative-path"; fixture "$case_root"
+jq 'del(.inputs.r1.relative_path)' "$case_root/input-qc.json" >"$case_root/qc.tmp"
+mv "$case_root/qc.tmp" "$case_root/input-qc.json"
+if stderr=$(run_case "$case_root" 2>&1); then
+  fail 'missing relative path unexpectedly passed'
+fi
+assert_contains "$stderr" 'records no task-independent path for r1'
+assert_no_tools "$case_root/tools.log"
 
 # Metadata verified by the input gate must not be re-read from a later-mutated manifest.
 case_root="$root/metadata-drift"; fixture "$case_root"
