@@ -1,0 +1,42 @@
+name: PR30 inspect Codacy annotations
+
+on:
+  pull_request:
+    paths:
+      - '**'
+
+permissions:
+  contents: read
+  checks: read
+
+jobs:
+  inspect:
+    if: github.event.pull_request.head.ref == 'claude/extract-pr22-reference-data'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Wait for Codacy and print annotations
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 40); do
+            checks="$(gh api -H 'Accept: application/vnd.github+json' "/repos/$REPO/commits/$SHA/check-runs?per_page=100")"
+            id="$(jq -r '.check_runs[] | select(.name | test("Codacy"; "i")) | .id' <<<"$checks" | head -1)"
+            status="$(jq -r '.check_runs[] | select(.name | test("Codacy"; "i")) | .status' <<<"$checks" | head -1)"
+            conclusion="$(jq -r '.check_runs[] | select(.name | test("Codacy"; "i")) | .conclusion // ""' <<<"$checks" | head -1)"
+            echo "attempt=$attempt codacy_id=${id:-none} status=${status:-none} conclusion=${conclusion:-none}"
+            if [[ -n "${id:-}" && "$status" == "completed" ]]; then
+              echo '--- CODACY CHECK ---'
+              jq -r --argjson id "$id" '.check_runs[] | select(.id == $id) | {id,name,status,conclusion,details_url,output}' <<<"$checks"
+              echo '--- CODACY ANNOTATIONS ---'
+              gh api -H 'Accept: application/vnd.github+json' --paginate "/repos/$REPO/check-runs/$id/annotations?per_page=100" | jq -s 'add'
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'Codacy did not complete before timeout' >&2
+          exit 1
