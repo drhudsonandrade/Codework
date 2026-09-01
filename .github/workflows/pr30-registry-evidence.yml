@@ -35,6 +35,7 @@ jobs:
               print('TYPE', type(data).__name__)
               if isinstance(data, dict):
                   print('TOP_KEYS', sorted(data.keys()))
+                  print('TOTALS', json.dumps(data.get('totals'), ensure_ascii=False, sort_keys=True))
                   for key, value in data.items():
                       if isinstance(value, (list, dict)):
                           print('SIZE', key, len(value))
