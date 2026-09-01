@@ -1,0 +1,54 @@
+name: PR30 blocker repair
+
+on:
+  push:
+    branches:
+      - claude/extract-pr22-reference-data
+    paths:
+      - .github/workflows/pr30-blocker-repair.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Install reporting dependencies
+        run: python3 -m pip install --disable-pip-version-check -r reporting/requirements.txt
+
+      - name: Run RED-GREEN blocker repair verification
+        run: python3 .github/pr30_blocker_repair.py
+
+      - name: Commit verified repair and remove temporary runner
+        env:
+          PUSH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/pr30-blocker-repair.yml .github/pr30_blocker_repair.py
+          git add policy_engine/genoma_policy/models.py \
+                  policy_engine/genoma_policy/engine.py \
+                  reporting/policy_control.py \
+                  reporting/provenance.py \
+                  scripts/build_trait_targets.py \
+                  scripts/expand_clinvar_targets.py \
+                  scripts/prepare_report_release.py \
+                  tests/test_policy_evaluation_binding.py \
+                  tests/test_target_expansion.py \
+                  tests/test_report_release_assembly.py
+          git diff --cached --check
+          git commit -m "fix(pr30): bind policy authority and reject corrupt reference data"
+          git push "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${GITHUB_REF_NAME}"
