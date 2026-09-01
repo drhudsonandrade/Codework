@@ -1,0 +1,39 @@
+name: PR30 inspect remaining Codacy annotation
+
+on:
+  push:
+    branches:
+      - claude/extract-pr22-reference-data
+    paths:
+      - .github/workflows/pr30-inspect-codacy-one.yml
+
+permissions:
+  contents: read
+  checks: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Print latest Codacy annotations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA="${GITHUB_SHA}"
+          for attempt in {1..30}; do
+            RUN_ID="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs" --paginate --jq '.check_runs[] | select(.name == "Codacy Static Code Analysis") | .id' | tail -n1)"
+            if [ -n "${RUN_ID:-}" ]; then
+              STATUS="$(gh api "repos/${GITHUB_REPOSITORY}/check-runs/${RUN_ID}" --jq '.status + ":" + (.conclusion // "")')"
+              if [[ "$STATUS" == completed:* ]]; then
+                echo "Codacy run: ${RUN_ID} ${STATUS}"
+                gh api "repos/${GITHUB_REPOSITORY}/check-runs/${RUN_ID}/annotations" --paginate
+                exit 0
+              fi
+            fi
+            sleep 10
+          done
+          echo "Codacy check not completed in time" >&2
+          exit 1
