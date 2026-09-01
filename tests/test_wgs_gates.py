@@ -8,6 +8,7 @@ import tempfile
 import threading
 import unittest
 import unittest.mock
+from collections.abc import Callable
 from pathlib import Path
 
 
@@ -28,6 +29,24 @@ def _can_mkfifo() -> bool:
         raise
     return True
 
+
+def _capture_expected_exception(
+    test_case: unittest.TestCase,
+    expected_type: type[Exception],
+    operation: Callable[[], object],
+) -> Exception:
+    """Return the expected exception and fail explicitly on success or a wrong type."""
+    try:
+        operation()
+    except expected_type as exc:
+        return exc
+    except Exception as exc:
+        test_case.fail(
+            f"expected {expected_type.__name__}, got {type(exc).__name__}: {exc}"
+        )
+    test_case.fail(f"{expected_type.__name__} was not raised")
+
+
 class WgsVerificationFixtureTest(unittest.TestCase):
     def test_mkfifo_probe_propagates_unexpected_filesystem_errors(self):
         """Infrastructure faults such as ENOSPC must fail the test, never turn into a skip."""
@@ -35,9 +54,9 @@ class WgsVerificationFixtureTest(unittest.TestCase):
             os,
             "mkfifo",
             side_effect=OSError(errno.ENOSPC, "no space left on device"),
-        ), self.assertRaises(OSError) as caught:
-            _can_mkfifo()
-        self.assertEqual(caught.exception.errno, errno.ENOSPC)
+        ):
+            caught = _capture_expected_exception(self, OSError, _can_mkfifo)
+        self.assertEqual(caught.errno, errno.ENOSPC)
 
     def test_fastq_resolution_reports_r1_and_r2_refusals_independently(self):
         """One rejected FASTQ field must not suppress evidence about the other field."""
@@ -198,9 +217,15 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             root.mkdir()
             (Path(td).resolve() / "outside.fastq").write_bytes(b"@outside\nACGT\n+\nIIII\n")
             for escape in ("..", "nested/../.."):
-                with self.subTest(escape=escape), self.assertRaises(ValueError) as caught:
-                    open_contained(root, root.joinpath(escape, "outside.fastq"))
-                self.assertIn("escapes the sample directory", str(caught.exception))
+                with self.subTest(escape=escape):
+                    caught = _capture_expected_exception(
+                        self,
+                        ValueError,
+                        lambda: open_contained(
+                            root, root.joinpath(escape, "outside.fastq")
+                        ),
+                    )
+                    self.assertIn("escapes the sample directory", str(caught))
 
     def test_a_containment_refusal_is_not_recorded_as_a_missing_file(self):
         """The Evidence Plane must not describe a containment breach as an absent file.
@@ -338,15 +363,18 @@ class WgsInputPathContainmentTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td).resolve()
             for escape in ("../outside.fastq.gz", "nested/../../outside.bam", "../"):
-                with self.subTest(escape=escape), self.assertRaises(ValueError):
-                    resolve(root, escape)
+                with self.subTest(escape=escape):
+                    _capture_expected_exception(
+                        self, ValueError, lambda: resolve(root, escape)
+                    )
 
     def test_absolute_path_is_not_ambient_authority(self):
         from scripts.wgs_input_gate import resolve
         with tempfile.TemporaryDirectory() as td:
             root = Path(td).resolve()
-            with self.assertRaises(ValueError):
-                resolve(root, "/etc/passwd")
+            _capture_expected_exception(
+                self, ValueError, lambda: resolve(root, "/etc/passwd")
+            )
 
     def test_symlink_out_of_the_sample_root_is_refused(self):
         from scripts.wgs_input_gate import resolve
@@ -357,8 +385,9 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             root = outer_root / "sample"
             root.mkdir()
             (root / "r1.fastq").symlink_to(secret)
-            with self.assertRaises(ValueError):
-                resolve(root, "r1.fastq")
+            _capture_expected_exception(
+                self, ValueError, lambda: resolve(root, "r1.fastq")
+            )
 
     def test_a_symlink_loop_is_a_domain_refusal_not_a_traceback(self):
         from scripts.wgs_input_gate import resolve
@@ -366,25 +395,30 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             root = Path(td).resolve()
             (root / "loop").symlink_to(root / "loop2")
             (root / "loop2").symlink_to(root / "loop")
-            with self.assertRaises(ValueError):
-                resolve(root, "loop/r1.fastq")
+            _capture_expected_exception(
+                self, ValueError, lambda: resolve(root, "loop/r1.fastq")
+            )
 
     def test_a_non_string_input_is_a_domain_refusal_not_a_traceback(self):
         from scripts.wgs_input_gate import resolve
         with tempfile.TemporaryDirectory() as td:
             root = Path(td).resolve()
             for value in (123, True, ["r1.fastq"], {"path": "r1.fastq"}, 1.5):
-                with self.subTest(value=value), self.assertRaises(ValueError):
-                    resolve(root, value)
+                with self.subTest(value=value):
+                    _capture_expected_exception(
+                        self, ValueError, lambda: resolve(root, value)
+                    )
 
     def test_a_falsy_non_string_is_a_wrong_type_not_a_missing_field(self):
         from scripts.wgs_input_gate import resolve
         with tempfile.TemporaryDirectory() as td:
             root = Path(td).resolve()
             for value in (False, 0, 0.0, [], {}):
-                with self.subTest(value=value), self.assertRaises(ValueError) as caught:
-                    resolve(root, value)
-                self.assertIn("must be a string", str(caught.exception))
+                with self.subTest(value=value):
+                    caught = _capture_expected_exception(
+                        self, ValueError, lambda: resolve(root, value)
+                    )
+                    self.assertIn("must be a string", str(caught))
             self.assertIsNone(resolve(root, None))
             self.assertIsNone(resolve(root, ""))
 
@@ -417,8 +451,9 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             fastq.write_text("@r1/1\nACGT\n+\nIIII\n", encoding="utf-8")
             link = root / "link.fastq"
             link.symlink_to(fastq)
-            with self.assertRaises(ValueError):
-                open_contained(root, link)
+            _capture_expected_exception(
+                self, ValueError, lambda: open_contained(root, link)
+            )
             ok, detail = fastq_probe(root, link)
             self.assertFalse(ok, detail)
             self.assertIn("refused", detail["reason"])
@@ -439,8 +474,9 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             contained = nested / "r1.fastq"
             shutil.rmtree(nested)
             nested.symlink_to(elsewhere)
-            with self.assertRaises(ValueError):
-                open_contained(root, contained)
+            _capture_expected_exception(
+                self, ValueError, lambda: open_contained(root, contained)
+            )
 
     def test_a_non_string_fastq_field_fails_closed_end_to_end(self):
         from scripts.wgs_input_gate import validate_manifest

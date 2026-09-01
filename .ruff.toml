@@ -1,2 +1,1 @@
-[lint.per-file-ignores]
-"tests/test_wgs_gates.py" = ["PT027"]
+
