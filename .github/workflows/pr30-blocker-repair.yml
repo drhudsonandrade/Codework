@@ -107,7 +107,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm .github/workflows/pr30-blocker-repair.yml .github/pr30_blocker_repair.py
+          git rm -f .github/workflows/pr30-blocker-repair.yml .github/pr30_blocker_repair.py
           git add policy_engine/genoma_policy/models.py \
                   policy_engine/genoma_policy/engine.py \
                   reporting/policy_control.py \
