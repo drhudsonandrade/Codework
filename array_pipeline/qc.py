@@ -861,9 +861,11 @@ def inspect_array(
     except UnicodeDecodeError as exc:
         # Named, with the file and the offending byte, instead of the bare codec error the
         # strict decoder raises. The operator has to know which file to re-export.
+        error_start = int(exc.start)
+        offending_byte = exc.object[error_start:error_start + 1]
         raise ValueError(
-            f"{path.name} is not valid UTF-8: byte {exc.object[exc.start:exc.start + 1]!r} at "
-            f"position {exc.start}. Genotype rows are read strictly, because a replaced byte "
+            f"{path.name} is not valid UTF-8: byte {offending_byte!r} at "
+            f"position {error_start}. Genotype rows are read strictly, because a replaced byte "
             "in an rsid or a chromosome still joins — against the wrong key — and nothing "
             "downstream can tell a repaired file from an intact one. Re-export the file or "
             "convert it to UTF-8 before running QC."

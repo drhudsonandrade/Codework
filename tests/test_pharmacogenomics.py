@@ -682,20 +682,24 @@ class ConditionalLayerReachesTheReportTest(unittest.TestCase):
         self.assertIn("BCHE: sem diplótipo condicional", section)
 
 
+_DEFAULT_REPORT_REGISTRY = object()
+
+
 class ReportIntegrationTest(unittest.TestCase):
     """The passport as the pharmacogenomic report consumes it."""
     def _payload(
         self,
         root: Path,
         rows: str = CLEAN_ROWS,
-        registry: dict | None = REGISTRY,
+        registry=_DEFAULT_REPORT_REGISTRY,
         *,
         prepare_release: bool = True,
     ):
         """Build the report payload from these rows, optionally without the release prerequisites."""
         from scripts.build_pharmacogenomic_report import build_payload
 
-        matrix_path, passport, _ = _artifacts(root, rows, registry=registry)
+        effective_registry = REGISTRY if registry is _DEFAULT_REPORT_REGISTRY else registry
+        matrix_path, passport, _ = _artifacts(root, rows, registry=effective_registry)
         passport_path = write_passport(passport, root / "passport.json")
         payload = build_payload(
             passport_path, matrix_path, policy_evaluation_file(root),

@@ -70,9 +70,13 @@ FINDING_ABSENT = {
 }
 
 
-def _analyse(classifications, findings, heterozygous, spec=SPEC):
+_DEFAULT_SPEC = object()
+
+
+def _analyse(classifications, findings, heterozygous, spec=_DEFAULT_SPEC):
     """Run the discrimination analysis for the fixture gene against these inputs."""
-    return analyse_gene("G", spec, classifications, findings, heterozygous)
+    effective_spec = SPEC if spec is _DEFAULT_SPEC else spec
+    return analyse_gene("G", effective_spec, classifications, findings, heterozygous)
 
 
 class FunctionBucketTest(unittest.TestCase):

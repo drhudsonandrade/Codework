@@ -93,7 +93,8 @@ class AnalyseArrayBuildContractTest(unittest.TestCase):
         parameter = inspect.signature(analyse_array).parameters["build"]
         self.assertIs(parameter.default, inspect.Parameter.empty)
         with self.assertRaises(TypeError):
-            analyse_array(Path("unused.txt"))
+            missing_build_kwargs: dict[str, object] = {}
+            analyse_array(Path("unused.txt"), **missing_build_kwargs)
 
     @staticmethod
     def _homozygous_run(count: int = 100_001, step: int = 2_000):

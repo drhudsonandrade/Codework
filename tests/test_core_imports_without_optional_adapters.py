@@ -26,6 +26,19 @@ from unittest.mock import patch
 class CoreImportsWithoutAdaptersTest(unittest.TestCase):
     """The core modules import and run with the optional adapter package absent."""
     @staticmethod
+    def _import_named_core_module(module_name: str):
+        """Import only one of the fixed core modules exercised by this test."""
+        if module_name == "array_pipeline.claims":
+            return importlib.import_module("array_pipeline.claims")
+        if module_name == "array_pipeline.completeness":
+            return importlib.import_module("array_pipeline.completeness")
+        if module_name == "array_pipeline.pharmacogenomics":
+            return importlib.import_module("array_pipeline.pharmacogenomics")
+        if module_name == "array_pipeline.annotation":
+            return importlib.import_module("array_pipeline.annotation")
+        raise ValueError(f"module outside fixed core-test allowlist: {module_name}")
+
+    @staticmethod
     def _import_with_adapters_missing(module_name: str):
         """Import `module_name` fresh, with `evidence_adapters` unavailable."""
         real_import = builtins.__import__
@@ -41,7 +54,7 @@ class CoreImportsWithoutAdaptersTest(unittest.TestCase):
                 if loaded.startswith(("array_pipeline", "evidence_adapters")):
                     del sys.modules[loaded]
             with patch.object(builtins, "__import__", side_effect=refuse_adapters):
-                return importlib.import_module(module_name)
+                return CoreImportsWithoutAdaptersTest._import_named_core_module(module_name)
 
     def test_the_core_modules_import_with_the_adapter_package_absent(self):
         """Each core module imports with the adapter package absent."""
