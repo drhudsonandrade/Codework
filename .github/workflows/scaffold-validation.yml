@@ -36,9 +36,11 @@ jobs:
         run: python3 scripts/validate_repo.py
       - name: Validate shell and Python
         run: |
-          bash -n scripts/*.sh
+          bash -n scripts/*.sh tests/test_wgs_align_or_stage.sh
           python3 -m compileall -q policy_engine/genoma_policy scripts evidence_adapters
           python3 -m unittest discover -s tests -v
+      - name: Exercise WGS alignment trust boundary
+        run: bash tests/test_wgs_align_or_stage.sh
       - name: Build and test MCP
         working-directory: mcp
         run: |
