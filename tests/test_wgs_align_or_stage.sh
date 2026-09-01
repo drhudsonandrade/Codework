@@ -134,6 +134,19 @@ fi
 assert_contains "$stderr" 'outside the sample directory'
 assert_no_tools "$case_root/tools.log"
 
+# A textual `..` traversal must not satisfy the sample-directory prefix check.
+case_root="$root/dotdot"; fixture "$case_root"
+printf '@evil\nACGT\n+\nIIII\n' >"$case_root/outside.fastq"
+digest=$(sha256sum "$case_root/outside.fastq" | cut -d' ' -f1)
+traversal_path="$case_root/sample/../outside.fastq"
+jq --arg p "$traversal_path" --arg d "$digest" '.inputs.r1.path=$p | .inputs.r1.sha256=$d' "$case_root/input-qc.json" >"$case_root/qc.tmp"
+mv "$case_root/qc.tmp" "$case_root/input-qc.json"
+if stderr=$(run_case "$case_root" 2>&1); then
+  fail 'dotdot traversal unexpectedly passed'
+fi
+assert_contains "$stderr" 'outside the sample directory'
+assert_no_tools "$case_root/tools.log"
+
 # Digest drift must be caught before tools.
 case_root="$root/digest"; fixture "$case_root"
 printf '@read1\nTTTT\n+\nIIII\n' >"$case_root/sample/r1.fastq"
