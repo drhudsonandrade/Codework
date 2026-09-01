@@ -20,7 +20,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Repair and verify type annotations
+      - name: Repair and verify requested type annotations
         run: python3 .github/pr30_type_repair.py
 
       - name: Commit repaired files and remove temporary runner
