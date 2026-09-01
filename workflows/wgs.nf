@@ -114,7 +114,8 @@ process ALIGN_OR_STAGE {
       bash '${workflow.projectDir}/scripts/wgs_align_or_stage.sh' \
         '${sample_dir}/sample-manifest.json' \
         '${ref_root}/Homo_sapiens_assembly38.fasta' \
-        aligned/sample.bam
+        aligned/sample.bam \
+        '${input_qc}'
     """
 }
 
