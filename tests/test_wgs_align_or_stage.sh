@@ -7,6 +7,8 @@ align_script="$repo_root/scripts/wgs_align_or_stage.sh"
 for tool in bash jq sha256sum; do
   command -v "$tool" >/dev/null || { echo "SKIP: $tool unavailable"; exit 0; }
 done
+bash_bin=$(command -v bash)
+[[ "$bash_bin" = /* ]] || { echo 'SKIP: absolute bash path unavailable'; exit 0; }
 [[ -r /dev/fd/0 ]] || { echo 'SKIP: /dev/fd unavailable'; exit 0; }
 
 root=$(mktemp -d)
@@ -83,7 +85,7 @@ run_case() {
   STUB_R1_SEEN="$case_root/r1.seen" \
   STUB_R2_SEEN="$case_root/r2.seen" \
   PATH="$case_root/bin:$PATH" \
-    bash "$align_script" \
+    "$bash_bin" "$align_script" \
       "$case_root/sample/sample-manifest.json" \
       "$case_root/ref.fasta" \
       "$case_root/out/sample.bam" \
@@ -125,6 +127,18 @@ set +e; stderr=$(run_case "$case_root" 2>&1); rc=$?; set -e
 assert_contains "$stderr" 'records no verified r1'
 assert_no_tools "$case_root/tools.log"
 
+# The harness must not allow its stub-first PATH to replace the interpreter itself.
+case_root="$root/bash-hijack"; fixture "$case_root" 'NÃO DISPONÍVEL'
+cat >"$case_root/bin/bash" <<'SH'
+#!/bin/sh
+exit 99
+SH
+chmod 0755 "$case_root/bin/bash"
+set +e; stderr=$(run_case "$case_root" 2>&1); rc=$?; set -e
+((rc != 99)) || fail 'stub-first PATH replaced the trusted bash interpreter'
+assert_contains "$stderr" 'input gate did not verify this sample'
+assert_no_tools "$case_root/tools.log"
+
 # Positive path: verified bytes reach the aligner.
 case_root="$root/happy"; fixture "$case_root"
 run_case "$case_root" >/dev/null
@@ -139,7 +153,7 @@ STUB_SWAP_TARGET="$case_root/sample/r1.fastq" \
 STUB_LOG="$case_root/tools.log" STUB_SAMPLE=S1 \
 STUB_R1_SEEN="$case_root/r1.seen" STUB_R2_SEEN="$case_root/r2.seen" \
 PATH="$case_root/bin:$PATH" \
-  bash "$align_script" "$case_root/sample/sample-manifest.json" "$case_root/ref.fasta" "$case_root/out/sample.bam" "$case_root/input-qc.json" >/dev/null
+  "$bash_bin" "$align_script" "$case_root/sample/sample-manifest.json" "$case_root/ref.fasta" "$case_root/out/sample.bam" "$case_root/input-qc.json" >/dev/null
 assert_contains "$(cat "$case_root/sample/r1.fastq")" 'SWAPPED-BY-THE-ATTACKER'
 cmp -s "$case_root/r1.seen" "$original" || fail 'aligner reopened the repointed filename'
 
@@ -149,7 +163,7 @@ ln -s "$case_root/sample" "$case_root/sample-link"
 STUB_LOG="$case_root/tools.log" STUB_SAMPLE=S1 \
 STUB_R1_SEEN="$case_root/r1.seen" STUB_R2_SEEN="$case_root/r2.seen" \
 PATH="$case_root/bin:$PATH" \
-  bash "$align_script" "$case_root/sample-link/sample-manifest.json" "$case_root/ref.fasta" "$case_root/out/sample.bam" "$case_root/input-qc.json" >/dev/null
+  "$bash_bin" "$align_script" "$case_root/sample-link/sample-manifest.json" "$case_root/ref.fasta" "$case_root/out/sample.bam" "$case_root/input-qc.json" >/dev/null
 cmp -s "$case_root/r1.seen" "$case_root/sample/r1.fastq" || fail 'physical sample root containment failed'
 
 echo 'WGS alignment boundary regressions: PASS'
