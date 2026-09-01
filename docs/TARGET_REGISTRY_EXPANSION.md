@@ -22,28 +22,29 @@ que só deva ver consenso curado.
 No corte de 1★: **4.408 genes**, dos quais **3.895** com relação gene-doença estabelecida —
 2.535 recessivos, 1.602 dominantes, 163 ligados ao X.
 
-Com o corte de 2★, que era o padrão anterior: genes cobertos de 16 para **3.082**, dos quais **2.965** têm relação gene-doença
-estabelecida por ao menos um registro curado — eram 2.776 com ClinGen e GenCC apenas.
-Restam **117** genes sem nenhum registro que os estabeleça, e o sistema não converte variante
-em achado clínico em nenhum deles.
+Com o corte de 2★, que era o padrão anterior, o artefato de alvos versionado
+`config/targets_clinvar_plp.json.gz` permite reproduzir **54.845 rsids e 3.082 genes**.
+Esse é o limite do que o HEAD atual sustenta para esse corte.
 
-| quem sustentou o gene | genes |
-|---|---:|
-| ClinGen + GenCC + PanelApp | 1.455 |
-| GenCC + PanelApp | 859 |
-| ClinGen + GenCC + PanelApp + ClinGen Dosage | 344 |
-| **PanelApp sozinho** | **188** |
-| ClinGen + PanelApp | 63 |
-| GenCC + PanelApp + ClinGen Dosage | 46 |
-| outros arranjos | 10 |
-| **nenhum** | **117** |
+> **Medição histórica não verificada — validade gene-doença no corte 2★.** Uma revisão
+> anterior deste documento publicou **2.965 genes estabelecidos**, **117 sem relação
+> estabelecida** e uma decomposição por ClinGen/GenCC/PanelApp/ClinGen Dosage/gnomAD. O
+> repositório atual não contém um artefato de validade gene-doença para o mesmo universo de
+> 3.082 genes que permita reproduzir essas contagens. `docs/evidence/GENE_DISEASE_VALIDITY.json`
+> contém apenas **16 genes (7 estabelecidos, 9 não estabelecidos)** e, portanto, não é o
+> denominador correspondente ao painel 2★. As contagens 2.965/117 e sua antiga tabela por
+> fonte ficam preservadas apenas como histórico de uma execução não reproduzível e **não são
+> evidência de release**. Elas só podem voltar como verificadas quando um artefato versionado,
+> com SHA-256 e comando reproduzível, materializar esse mesmo corte.
 
-Em 2.704 genes o PanelApp coincide com o GenCC. Isso está marcado, não somado: o export do
-GenCC já agrega as submissões do PanelApp, então dois nomes ali são um corpo de curadoria
-aparecendo duas vezes. A curadoria de dosagem do ClinGen não estabeleceu nenhum gene sozinho
-— ela contribui modo de herança com citação em 1.111 genes, que é o que se pediu dela. A
-restrição populacional do gnomAD cobre 2.811 genes, dos quais 690 são intolerantes a perda de
-função (pLI ≥ 0,90), e não estabelece nenhum.
+No artefato **1★** que está efetivamente versionado, as contagens de validade são
+reproduzíveis: **4.408 genes**, **3.895 com validade estabelecida**, **540 estabelecidos
+apenas pelo PanelApp**, **3 apenas pelo GenCC**, **0 apenas por ClinGen Dosage**, **3.249**
+com sobreposição PanelApp/GenCC, **1.289** com curadoria de dosagem, **3.990** com métrica de
+restrição do gnomAD e **1.004** com pLI ≥ 0,90. Esses números vêm de
+`docs/evidence/GENE_DISEASE_VALIDITY_1STAR.json.gz`; PanelApp sobreposto ao GenCC continua
+marcado como uma única base de curadoria, e gnomAD continua sem poder estabelecer relação
+gene-doença.
 
 ## Os registros curados que decidem o que vira achado
 
@@ -360,6 +361,13 @@ não é.
 | `config/targets_merged_panel_1star.json.gz` | `d9d57f109c212c5248bd680e5044e093dee352a13fa11c0731cf731e35e2c40a` |
 | `config/targets_gwas_traits.json` | `920ee4ad18ca5c17546a240ba89b1e226d20d18ee280352d37ee1879c6cd18e9` |
 | `docs/evidence/PANELAPP_CURATION.json.gz` | `ed5d495c68ec50782848873f5c7960d8532db30cd3045605157aea4c9449d54c` |
+| `docs/evidence/GENE_DISEASE_VALIDITY_1STAR.json.gz` | `39aedaa763db55812ee4bf230e8c02068da012b034ffa7d78d23fff64c42a925` |
+| `docs/evidence/PGS_CATALOG_REGISTRY.json.gz` | `a3f4c61c672850e0f18d915d6e4460d7731ca859e2e2f3de25aa9d959f024cbd` |
+
+Os SHA-256 da tabela são dos **bytes dos arquivos versionados**. Alguns JSON também carregam
+um campo interno `sha256` para o payload lógico; esse digest interno tem outro escopo e não
+substitui o hash do arquivo `.json`/`.json.gz` armazenado no repositório. Os dois novos hashes
+foram reexecutados neste HEAD com `sha256sum`.
 
 Para comparar uma nova coleta com o publicado, gere os artefatos, confira o SHA-256 contra a
 tabela e trate qualquer divergência como fonte atualizada, não como erro de reprodução.
