@@ -1,4 +1,4 @@
-name: PR30 inspect remaining Codacy annotation
+name: PR30 repair final Codacy finding
 
 on:
   push:
@@ -8,32 +8,52 @@ on:
       - .github/workflows/pr30-inspect-codacy-one.yml
 
 permissions:
-  contents: read
-  checks: read
+  contents: write
 
 jobs:
-  inspect:
+  repair:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
-      - name: Print latest Codacy annotations
+      - name: Checkout branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Replace static-invalid negative call
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("tests/test_homozygosity_reader_cleanup.py")
+          text = path.read_text(encoding="utf-8")
+          old = '''        with self.assertRaises(TypeError):\n            missing_build_kwargs: dict[str, object] = {}\n            analyse_array(Path("unused.txt"), **missing_build_kwargs)\n'''
+          new = '''        with self.assertRaises(TypeError):\n            inspect.signature(analyse_array).bind(Path("unused.txt"))\n'''
+          if text.count(old) != 1:
+              raise SystemExit("expected exactly one old negative-call block")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+
+      - name: Verify repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          python3 -m unittest -v tests.test_homozygosity_reader_cleanup
+          python3 scripts/validate_repo.py
+
+      - name: Commit repair and remove temporary workflow
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          SHA="${GITHUB_SHA}"
-          for attempt in {1..30}; do
-            RUN_ID="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs" --paginate --jq '.check_runs[] | select(.name == "Codacy Static Code Analysis") | .id' | tail -n1)"
-            if [ -n "${RUN_ID:-}" ]; then
-              STATUS="$(gh api "repos/${GITHUB_REPOSITORY}/check-runs/${RUN_ID}" --jq '.status + ":" + (.conclusion // "")')"
-              if [[ "$STATUS" == completed:* ]]; then
-                echo "Codacy run: ${RUN_ID} ${STATUS}"
-                gh api "repos/${GITHUB_REPOSITORY}/check-runs/${RUN_ID}/annotations" --paginate
-                exit 0
-              fi
-            fi
-            sleep 10
-          done
-          echo "Codacy check not completed in time" >&2
-          exit 1
+          git rm -f .github/workflows/pr30-inspect-codacy-one.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/test_homozygosity_reader_cleanup.py
+          git diff --cached --check
+          git commit -m "fix(pr30): satisfy final Codacy contract check"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:claude/extract-pr22-reference-data
