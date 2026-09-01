@@ -6,6 +6,9 @@ ref=${2:?reference fasta required}
 out=${3:?output BAM required}
 input_qc=${4:?verified input-qc.json required}
 
+script_dir=$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+materializer="$script_dir/wgs_materialize_verified_input.py"
+
 # `pwd -P` because the gate records physically resolved paths: with a symlinked sample
 # directory the logical `pwd` prints the link and the containment test below then rejects
 # every verified input, or — worse, if the link is repointed — accepts one from elsewhere.
@@ -25,26 +28,28 @@ sample_dir=$(cd -P "$(dirname "$manifest")" && pwd -P)
 [[ "$(jq -r '.status' "$input_qc")" == "VERIFICADO" ]] || {
   echo "NÃO DISPONÍVEL: input gate did not verify this sample" >&2; exit 2; }
 
-# `/dev/fd` is how a verified input reaches the aligner as bytes rather than as a name; a
-# kernel without it cannot make that binding, and the pipeline refuses rather than falling
-# back to the name it just finished proving it cannot trust. `readlink` is needed to
-# authorize the physical target of that already-open descriptor before any byte is read.
-[[ -r /dev/fd/0 ]] || { echo 'NÃO DISPONÍVEL: /dev/fd unavailable, cannot bind verified inputs' >&2; exit 2; }
-command -v readlink >/dev/null || { echo 'NÃO DISPONÍVEL: readlink unavailable, cannot verify opened input containment' >&2; exit 2; }
+# The secure materializer reuses the gate's component-by-component opener, which applies
+# O_NOFOLLOW to every component, O_NONBLOCK to the final open, and S_ISREG to that same
+# descriptor. That prevents a post-gate FIFO/device/symlink replacement from either blocking
+# this process or becoming an authorized WGS input. The verified bytes are copied into a
+# private task directory; only that controlled regular file is opened by Bash afterwards.
+command -v python3 >/dev/null || {
+  echo 'NÃO DISPONÍVEL: python3 unavailable for verified input staging' >&2; exit 2; }
+[[ -f "$materializer" ]] || {
+  echo 'NÃO DISPONÍVEL: verified input materializer unavailable' >&2; exit 2; }
+[[ -r /dev/fd/0 ]] || {
+  echo 'NÃO DISPONÍVEL: /dev/fd unavailable, cannot bind verified inputs' >&2; exit 2; }
 
 open_verified() {
   # $1 = key under .inputs, $2 = name of the variable that receives the descriptor path.
   #
-  # Hashing the name and then handing the same name to bwa-mem2/samtools proves nothing:
-  # sha256sum certifies the bytes at one instant, the tools open the name again later, and
-  # anything able to write in the sample directory can repoint the file — or a parent
-  # directory — in between. So the file is opened once, here, in the *calling* shell; the
-  # physical target of that exact descriptor is checked against the sample root; the digest
-  # is taken through the descriptor; and the tools are given `/dev/fd/N`. No later step
-  # walks the mutable sample pathname again.
-  # `printf -v` rather than an echoed value because a command substitution runs in a
-  # subshell and the descriptor would die with it.
-  local key="$1" outvar="$2" path digest observed fd relative opened_path
+  # The sample pathname is never opened with a blocking Bash redirection. Python opens it
+  # through `open_contained`, materializes the already-open regular file to a private task
+  # file while hashing the same source descriptor, and only publishes that stage file when
+  # the digest equals the gate record. Bash then opens the private file and tools receive
+  # `/dev/fd/N`, so downstream still consumes an inode-bound descriptor rather than a mutable
+  # sample pathname.
+  local key="$1" outvar="$2" path digest fd relative staged rc
   path=$(jq -r --arg k "$key" '.inputs[$k].path // empty' "$input_qc")
   digest=$(jq -r --arg k "$key" '.inputs[$k].sha256 // empty' "$input_qc")
   [[ -n "$path" && -n "$digest" ]] || {
@@ -57,25 +62,26 @@ open_verified() {
   case "/$relative/" in
     */../*) echo "NÃO DISPONÍVEL: verified $key is outside the sample directory" >&2; return 3 ;;
   esac
-  exec {fd}< "$path" || {
-    echo "NÃO DISPONÍVEL: verified $key is missing or unreadable" >&2; return 3; }
-  opened_path=$(readlink -f "/dev/fd/$fd") || {
-    exec {fd}<&-
-    echo "NÃO DISPONÍVEL: could not verify the opened $key path" >&2
+
+  staged="$verified_stage/$key"
+  if python3 "$materializer" \
+      --root "$sample_dir" \
+      --source "$path" \
+      --expected-sha256 "$digest" \
+      --output "$staged"; then
+    :
+  else
+    rc=$?
+    if [[ "$rc" -eq 4 ]]; then
+      echo "NÃO DISPONÍVEL: $key changed after the gate verified it" >&2
+    else
+      echo "NÃO DISPONÍVEL: verified $key is missing, unreadable, or unsafe" >&2
+    fi
     return 3
-  }
-  case "$opened_path" in
-    "$sample_dir"/*) ;;
-    *)
-      exec {fd}<&-
-      echo "NÃO DISPONÍVEL: verified $key is outside the sample directory" >&2
-      return 3
-      ;;
-  esac
-  observed=$(sha256sum "/dev/fd/$fd" | cut -d" " -f1)
-  [[ "$observed" == "$digest" ]] || {
-    exec {fd}<&-
-    echo "NÃO DISPONÍVEL: $key changed after the gate verified it" >&2; return 3; }
+  fi
+
+  exec {fd}< "$staged" || {
+    echo "NÃO DISPONÍVEL: verified $key staging could not be opened" >&2; return 3; }
   printf -v "$outvar" '/dev/fd/%s' "$fd"
 }
 
@@ -92,6 +98,12 @@ platform_unit=$(jq -r '.read_group.platform_unit // "GENOMA"' "$input_qc")
 [[ -s "$ref" ]] || { echo "NÃO DISPONÍVEL: reference FASTA missing" >&2; exit 2; }
 [[ -n "$sample" && "$sample" != null ]] || { echo "NÃO DISPONÍVEL: sample_id missing" >&2; exit 2; }
 mkdir -p "$(dirname "$out")"
+verified_stage=$(mktemp -d "$(dirname "$out")/.verified-inputs.XXXXXX")
+chmod 0700 "$verified_stage"
+cleanup_verified_stage() {
+  rm -rf -- "$verified_stage"
+}
+trap cleanup_verified_stage EXIT
 
 case "$input_type" in
   FASTQ)
