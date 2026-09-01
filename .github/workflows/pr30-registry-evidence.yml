@@ -1,0 +1,43 @@
+name: PR30 registry evidence provenance
+
+on:
+  push:
+    branches:
+      - claude/extract-pr22-reference-data
+    paths:
+      - .github/workflows/pr30-registry-evidence.yml
+
+permissions:
+  contents: read
+
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Hash and inspect evidence artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum docs/evidence/GENE_DISEASE_VALIDITY_1STAR.json.gz docs/evidence/PGS_CATALOG_REGISTRY.json.gz
+          python3 - <<'PY'
+          import gzip, json
+          for path in (
+              'docs/evidence/GENE_DISEASE_VALIDITY_1STAR.json.gz',
+              'docs/evidence/PGS_CATALOG_REGISTRY.json.gz',
+          ):
+              with gzip.open(path, 'rt', encoding='utf-8') as fh:
+                  data = json.load(fh)
+              print('ARTIFACT', path)
+              print('TYPE', type(data).__name__)
+              if isinstance(data, dict):
+                  print('TOP_KEYS', sorted(data.keys()))
+                  for key, value in data.items():
+                      if isinstance(value, (list, dict)):
+                          print('SIZE', key, len(value))
+                      elif isinstance(value, (str, int, float, bool)) or value is None:
+                          print('SCALAR', key, value)
+          PY
