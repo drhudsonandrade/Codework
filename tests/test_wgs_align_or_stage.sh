@@ -76,7 +76,7 @@ JSON
   r1_digest=$(sha256sum "$sample_dir/r1.fastq" | cut -d' ' -f1)
   r2_digest=$(sha256sum "$sample_dir/r2.fastq" | cut -d' ' -f1)
   jq -n --arg status "$status" --arg r1 "$sample_dir/r1.fastq" --arg r2 "$sample_dir/r2.fastq" --arg d1 "$r1_digest" --arg d2 "$r2_digest" \
-    '{status:$status,inputs:{r1:{path:$r1,sha256:$d1},r2:{path:$r2,sha256:$d2}}}' >"$case_root/input-qc.json"
+    '{schema:"genoma-wgs-input-gate-v1",status:$status,sample_id:"S1",input_type:"FASTQ",read_group:{id:"RG1",sample:"S1",library:"L1",platform:"ILLUMINA"},inputs:{r1:{path:$r1,sha256:$d1},r2:{path:$r2,sha256:$d2}}}' >"$case_root/input-qc.json"
 }
 
 alignment_fixture() {
@@ -96,8 +96,8 @@ alignment_fixture() {
     >"$sample_dir/sample-manifest.json"
   make_stubs "$case_root/bin"
   digest=$(sha256sum "$alignment" | cut -d' ' -f1)
-  jq -n --arg status "$status" --arg alignment "$alignment" --arg digest "$digest" \
-    '{status:$status,inputs:{alignment:{path:$alignment,sha256:$digest}}}' >"$case_root/input-qc.json"
+  jq -n --arg status "$status" --arg input_type "$input_type" --arg alignment "$alignment" --arg digest "$digest" \
+    '{schema:"genoma-wgs-input-gate-v1",status:$status,sample_id:"S1",input_type:$input_type,read_group:{id:"RG1",sample:"S1",library:"L1",platform:"ILLUMINA"},inputs:{alignment:{path:$alignment,sha256:$digest}}}' >"$case_root/input-qc.json"
 }
 
 run_case() {
@@ -201,6 +201,18 @@ case_root="$root/happy"; fixture "$case_root"
 run_case "$case_root" >/dev/null
 cmp -s "$case_root/r1.seen" "$case_root/sample/r1.fastq" || fail 'R1 bytes did not reach aligner'
 cmp -s "$case_root/r2.seen" "$case_root/sample/r2.fastq" || fail 'R2 bytes did not reach aligner'
+
+# Metadata verified by the input gate must not be re-read from a later-mutated manifest.
+case_root="$root/metadata-drift"; fixture "$case_root"
+jq '.read_group.library="ATTACKER-LIB" | .read_group.platform="ATTACKER-PLATFORM"' \
+  "$case_root/sample/sample-manifest.json" >"$case_root/manifest.tmp"
+mv "$case_root/manifest.tmp" "$case_root/sample/sample-manifest.json"
+run_case "$case_root" >/dev/null
+tool_log=$(cat "$case_root/tools.log")
+assert_contains "$tool_log" 'LB:L1'
+assert_contains "$tool_log" 'PL:ILLUMINA'
+assert_not_contains "$tool_log" 'ATTACKER-LIB'
+assert_not_contains "$tool_log" 'ATTACKER-PLATFORM'
 
 # TOCTOU regression: repointing the name after digest must not alter bytes read.
 case_root="$root/toctou"; fixture "$case_root"
