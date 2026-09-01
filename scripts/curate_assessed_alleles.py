@@ -15,10 +15,13 @@ The assessed allele is not something to type from memory. It is derived here:
 3. The two are joined **by coordinate**, not by text. A plain rsid search in ClinVar returns
    unrelated records — querying `rs6025` also returns an LRRK2 variant — so a record counts
    only when its SPDI position equals the dbSNP GRCh38 position for that rsid.
+4. A small, versioned owner-reviewed decision file may settle **allele identity only** when
+   classification labels are heterogeneous. Such a decision is accepted only if the live
+   ClinVar record at the dbSNP coordinate independently confirms the exact accession and
+   alternate; it cannot override clinical significance or manufacture an absent record.
 
-Where ClinVar carries no assertion, or carries assertions for more than one alternate, the
-target is left without an assessed allele and the reason is recorded. Picking one would be
-inventing the clinical question the locus is being asked.
+Where neither a source assertion nor a validated curated identity decision establishes one
+alternate, the target is left without an assessed allele and the reason is recorded.
 """
 from __future__ import annotations
 
@@ -39,7 +42,6 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.https_transport import is_https, policy_opener
-
 from scripts.verify_provenance_markers import fetch_refsnp, frequency_alleles, placements
 
 EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
@@ -51,7 +53,9 @@ GWAS_CATALOG = "https://www.ebi.ac.uk/gwas/rest/api"
 MAX_CITATIONS = 10
 DEFAULT_TARGETS = ROOT / "config/partial_genome_annotation_targets.json"
 DEFAULT_EVIDENCE = ROOT / "docs/evidence/ASSESSED_ALLELES_CLINVAR.json"
+DEFAULT_CURATED_DECISIONS = ROOT / "config/assessed_allele_curated_decisions.json"
 SCHEMA = "genoma-assessed-allele-curation-v1"
+CURATED_DECISIONS_SCHEMA = "genoma-assessed-allele-curated-decisions-v1"
 
 REQUEST_INTERVAL_SECONDS = 0.4
 BASES = frozenset("ACGT")
@@ -91,6 +95,45 @@ class CurationError(RuntimeError):
     """A curation input could not be read, or the sources disagree irreconcilably."""
 
 
+def _load_curated_decisions(path: Path | None) -> dict[str, dict[str, Any]]:
+    """Load owner-reviewed allele-identity decisions as data, never as output overrides.
+
+    Validation here is intentionally structural only. ``curate_target`` performs the decisive
+    check against the live coordinate-matched ClinVar records before a decision may affect a
+    result. This means changing the JSON alone cannot make an unsupported allele VERIFICADO.
+    """
+    if path is None or not Path(path).exists():
+        return {}
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or payload.get("schema") != CURATED_DECISIONS_SCHEMA:
+        raise CurationError(
+            f"curated decision file must use schema {CURATED_DECISIONS_SCHEMA}"
+        )
+    curations = payload.get("curations")
+    if not isinstance(curations, dict):
+        raise CurationError("curated decision file must contain an object named curations")
+    out: dict[str, dict[str, Any]] = {}
+    for raw_rsid, raw in curations.items():
+        rsid = str(raw_rsid).lower().strip()
+        if not re.fullmatch(r"rs\d+", rsid) or not isinstance(raw, dict):
+            raise CurationError(f"invalid curated decision entry: {raw_rsid!r}")
+        allele = str(raw.get("assessed_allele") or "").upper()
+        accession = str(raw.get("clinvar_accession") or "").strip()
+        basis = str(raw.get("basis") or "").strip()
+        if allele not in BASES:
+            raise CurationError(f"{rsid}: curated assessed_allele must be a single A/C/G/T base")
+        if not re.fullmatch(r"VCV\d+", accession):
+            raise CurationError(f"{rsid}: curated ClinVar accession is malformed")
+        if raw.get("status") != "VERIFICADO":
+            raise CurationError(f"{rsid}: curated decision must explicitly state VERIFICADO")
+        if not basis:
+            raise CurationError(f"{rsid}: curated decision must state its basis")
+        out[rsid] = dict(raw)
+        out[rsid]["assessed_allele"] = allele
+        out[rsid]["clinvar_accession"] = accession
+    return out
+
+
 def _get(url: str, *, attempts: int = 4) -> dict[str, Any]:
     """One JSON request to a public registry, retrying transient failures.
 
@@ -101,11 +144,6 @@ def _get(url: str, *, attempts: int = 4) -> dict[str, Any]:
     request = urllib.request.Request(
         url, headers={"Accept": "application/json", "User-Agent": "genoma-assessed-allele/1.0"}
     )
-    # Refuse any transport but HTTPS before the request is opened. `urlopen` honours
-    # `file:`, `ftp:` and `data:` as readily as `https:`, so a URL that reached this function
-    # from a constant someone edited, a CLI flag or a manifest could make a *download* read
-    # the local filesystem and hand the bytes to the caller as if a registry had published
-    # them. The scheme is the one property that decides which of those happens.
     if not is_https(request.full_url):
         raise CurationError(f"refusing a non-HTTPS transport: {url}")
 
@@ -114,9 +152,6 @@ def _get(url: str, *, attempts: int = 4) -> dict[str, Any]:
         try:
             with policy_opener(is_https, "the CPIC API").open(request, timeout=45) as response:  # nosec B310
                 return json.loads(response.read().decode("utf-8"))
-        # HTTPError subclasses URLError, so a permanent 400/404 used to fall into the retry
-        # loop and burn four attempts with 1s, 2s and 4s of waiting before failing anyway.
-        # `scripts/build_pgx_registry.py` already draws this line; the same policy applies.
         except urllib.error.HTTPError as exc:
             if exc.code != 429 and not 500 <= exc.code < 600:
                 raise CurationError(
@@ -177,20 +212,7 @@ def clinvar_records(rsid: str) -> list[dict[str, Any]]:
 
 
 def clinvar_citations(uids: list[str]) -> dict[str, Any]:
-    """PubMed ids ClinVar links to these records, newest first, plus whether the lookup ran.
-
-    This returned a bare list and turned a failed `elink` call into `[]`. An empty list then
-    meant two different things in the curated record — "ClinVar links no publications to
-    these accessions" and "the lookup failed and nobody knows" — and the target was still
-    published VERIFICADO either way, because the allele assignment comes from CPIC's
-    definition rather than from the citations. So the Evidence Plane asserted an absence of
-    supporting literature that had never been established.
-
-    The retrieval outcome is now recorded beside the ids. The curation is not blocked on it:
-    the citations are supporting references a reader can follow, not the basis of the
-    assignment, and refusing a locus because PubMed was briefly unreachable would be an
-    over-refusal. What must not happen is publishing the gap as a finding.
-    """
+    """PubMed ids ClinVar links to these records, newest first, plus whether the lookup ran."""
     if not uids:
         return {"status": "EXECUTADO", "pmids": [], "reason": None}
     try:
@@ -211,20 +233,13 @@ def clinvar_citations(uids: list[str]) -> dict[str, Any]:
         for db in linkset.get("linksetdbs", []):
             if db.get("linkname") == "clinvar_pubmed":
                 pmids.extend(str(x) for x in db.get("links", []))
-    # elink returns them newest first; de-duplicate while keeping that order.
     seen: set[str] = set()
     ordered = [p for p in pmids if not (p in seen or seen.add(p))]
     return {"status": "EXECUTADO", "pmids": ordered[:MAX_CITATIONS], "reason": None}
 
 
 def gwas_risk_alleles(rsid: str) -> dict[str, Any]:
-    """Risk alleles the GWAS Catalog reports for this variant, with study p-values.
-
-    An association SNP has no ClinVar assertion, so without this it could never be
-    assessed. The catalogue is also the source that shows when the literature *disagrees*:
-    rs4307059 is reported with risk allele T in one study and C in two others, which is a
-    documented contradiction rather than a gap, and far more useful than silence.
-    """
+    """Risk alleles the GWAS Catalog reports for this variant, with study p-values."""
     try:
         payload = _get(f"{GWAS_CATALOG}/singleNucleotidePolymorphisms/{rsid}/associations")
     except CurationError:
@@ -256,11 +271,7 @@ def gwas_risk_alleles(rsid: str) -> dict[str, Any]:
 
 
 def _classification(record: dict[str, Any]) -> str:
-    """The clinical significance ClinVar states, under whichever key this record uses.
-
-    ClinVar moved germline and somatic classifications into separate blocks and kept the old
-    flat key, so all three spellings are tried before concluding the record says nothing.
-    """
+    """The clinical significance ClinVar states, under whichever key this record uses."""
     for key in ("germline_classification", "clinical_significance", "somatic_classification"):
         block = record.get(key)
         if isinstance(block, dict) and block.get("description"):
@@ -269,11 +280,7 @@ def _classification(record: dict[str, Any]) -> str:
 
 
 def _spdi(record: dict[str, Any]) -> tuple[str, int, str, str] | None:
-    """The canonical SPDI as (sequence, position, deleted, inserted), or None if absent.
-
-    None rather than a partial tuple: a coordinate missing one of its four parts cannot be
-    compared against anything, and filling the gap with a default would invent a position.
-    """
+    """The canonical SPDI as (sequence, position, deleted, inserted), or None if absent."""
     variation = (record.get("variation_set") or [{}])[0]
     raw = variation.get("canonical_spdi") or ""
     parts = raw.split(":")
@@ -286,17 +293,10 @@ def _spdi(record: dict[str, Any]) -> tuple[str, int, str, str] | None:
 
 
 def registry_source(rsid: str, registry: dict[str, Any] | None) -> str:
-    """Which source actually defined this rsid in the PGx registry.
-
-    The registry holds CPIC data for most genes and a ClinVar fallback for the ones CPIC
-    does not publish (BCHE). Labelling everything "CPIC" because it came out of that file
-    would misattribute the provenance of exactly the entries whose provenance is unusual.
-    """
+    """Which source actually defined this rsid in the PGx registry."""
     for spec in (registry or {}).get("genes", {}).values():
         for definition in (spec.get("alleles") or {}).values():
             if any(str(x.get("rsid", "")).lower() == rsid for x in definition.get("defining", [])):
-                # `variant_source` is set only by the ClinVar fallback in
-                # build_pgx_registry.py; a CPIC-derived gene leaves it absent.
                 if str(spec.get("variant_source") or "").strip():
                     return "ClinVar (fallback)"
                 return "CPIC"
@@ -304,16 +304,8 @@ def registry_source(rsid: str, registry: dict[str, Any] | None) -> str:
 
 
 def cpic_variant_alleles(rsid: str, registry: dict[str, Any] | None) -> dict[str, list[str]]:
-    """Which named CPIC alleles this rsid defines, and with which base.
-
-    CPIC is the right source for a pharmacogenomic target. ClinVar classifies TPMT*3B as
-    `Benign/Likely benign` — correctly, for *disease* — while CPIC defines it as a
-    no-function allele that changes thiopurine dosing. Reading only ClinVar therefore left
-    real pharmacogenetic targets with no assessed allele.
-    """
+    """Which named CPIC alleles this rsid defines, and with which base."""
     out: dict[str, list[str]] = {}
-    # `.values()`: a busca é por rsid em qualquer gene, então o nome do gene não entra
-    # no resultado nem na decisão.
     for spec in (registry or {}).get("genes", {}).values():
         for allele, definition in (spec.get("alleles") or {}).items():
             for position in definition.get("defining", []):
@@ -322,12 +314,66 @@ def cpic_variant_alleles(rsid: str, registry: dict[str, Any] | None) -> dict[str
     return out
 
 
-def curate_target(rsid: str, pgx_registry: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Join dbSNP's reference base with the alternate a source actually asserts.
+def _apply_curated_identity_decision(
+    rsid: str,
+    base: dict[str, Any],
+    matched: list[dict[str, Any]],
+    decision: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Apply an owner-reviewed allele identity only after ClinVar independently agrees.
 
-    CPIC first for pharmacogenomic targets, then ClinVar, and dbSNP allele frequency to
-    separate a real clinical alternate from a rare substitution sharing the coordinate.
+    This is the key safeguard against "forcing the JSON": the curated file is not sufficient
+    evidence by itself. The live coordinate join must contain the same alternate under the
+    same ClinVar accession. Classification is deliberately not rewritten; the decision says
+    which alternate this target interrogates, not whether every condition submission agrees
+    on pathogenicity.
     """
+    if not decision:
+        return None
+    allele = str(decision.get("assessed_allele") or "").upper()
+    accession = str(decision.get("clinvar_accession") or "")
+    matching = [
+        record
+        for record in matched
+        if record.get("alternate") == allele and str(record.get("accession") or "") == accession
+    ]
+    if not matching:
+        raise CurationError(
+            f"{rsid}: curated decision requests {allele}/{accession}, but the live ClinVar "
+            "coordinate join does not confirm that accession and alternate"
+        )
+    if allele == base.get("reference_allele"):
+        raise CurationError(f"{rsid}: curated assessed allele equals the dbSNP reference base")
+
+    result = dict(base)
+    result.update(
+        {
+            "assessed_allele": allele,
+            "status": "VERIFICADO",
+            "source": "ClinVar",
+            "reason": (
+                str(decision.get("basis") or "").strip()
+                + " The live curation run independently confirmed the same ClinVar accession, "
+                "GRCh38 coordinate and alternate before applying this identity decision."
+            ),
+            "curated_identity_decision": {
+                "status": "VERIFICADO",
+                "clinvar_accession": accession,
+                "source_url": decision.get("source_url"),
+                "canonical_spdi": decision.get("canonical_spdi"),
+                "scope": "assessed-allele identity only; clinical significance is not overridden",
+            },
+        }
+    )
+    return result
+
+
+def curate_target(
+    rsid: str,
+    pgx_registry: dict[str, Any] | None = None,
+    curated_decisions: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Join dbSNP's reference base with the alternate a source actually asserts."""
     refsnp = fetch_refsnp(rsid)
     time.sleep(REQUEST_INTERVAL_SECONDS)
     grch38 = placements(refsnp).get("GRCh38")
@@ -339,7 +385,6 @@ def curate_target(rsid: str, pgx_registry: dict[str, Any] | None = None) -> dict
             "reason": "dbSNP has no GRCh38 placement with a single-base reference allele",
         }
 
-    # SPDI positions are 0-based; the placement is 1-based.
     expected_position = int(grch38["position"]) - 1
     expected_sequence = str(grch38.get("seq_id") or "")
     reference = grch38["reference_allele"]
@@ -353,8 +398,6 @@ def curate_target(rsid: str, pgx_registry: dict[str, Any] | None = None) -> dict
         if spdi is None:
             continue
         sequence, position, deleted, inserted = spdi
-        # Coordinate join: sequence, position and reference must all describe the same
-        # GRCh38 placement. A numeric position alone is not globally unique.
         if (
             not expected_sequence
             or sequence != expected_sequence
@@ -363,7 +406,7 @@ def curate_target(rsid: str, pgx_registry: dict[str, Any] | None = None) -> dict
         ):
             continue
         if inserted == reference or inserted not in BASES:
-            continue  # the reference-identity record, or an indel
+            continue
         classification = _classification(record)
         asserts = _is_asserting_classification(classification)
         if record.get("uid"):
@@ -393,8 +436,6 @@ def curate_target(rsid: str, pgx_registry: dict[str, Any] | None = None) -> dict
     cpic = cpic_variant_alleles(rsid, pgx_registry)
     base["cpic_defined_alleles"] = cpic
 
-    # References, so a reader can go to the primary literature rather than trusting this
-    # file. CPIC ships PMIDs per allele; ClinVar links its own; both are recorded.
     cpic_pmids: list[str] = []
     for gene_spec in (pgx_registry or {}).get("genes", {}).values():
         for allele, definition in (gene_spec.get("alleles") or {}).items():
@@ -405,15 +446,21 @@ def curate_target(rsid: str, pgx_registry: dict[str, Any] | None = None) -> dict
     base["references"] = {
         "clinvar_accessions": sorted({str(m["accession"]) for m in matched if m.get("accession")}),
         "clinvar_pubmed": citations["pmids"],
-        # Whether the lookup above actually ran. Without it an empty `clinvar_pubmed`
-        # asserts that ClinVar links no publications, which a failed request never
-        # established.
         "clinvar_pubmed_retrieval": {
             "status": citations["status"],
             "reason": citations["reason"],
         },
         "cpic_pubmed": sorted(set(cpic_pmids))[:MAX_CITATIONS],
     }
+
+    curated = _apply_curated_identity_decision(
+        rsid,
+        base,
+        matched,
+        (curated_decisions or {}).get(rsid),
+    )
+    if curated is not None:
+        return curated
 
     if len(cpic) == 1:
         allele, names = next(iter(cpic.items()))
@@ -432,9 +479,6 @@ def curate_target(rsid: str, pgx_registry: dict[str, Any] | None = None) -> dict
         )
         return base
     if len(cpic) > 1:
-        # The same two-source test used below for ClinVar. rs1142345 defines TPMT*3A/*3C
-        # with C and TPMT*41 with G, but dbSNP observes only C in a cohort — so requiring
-        # population support disambiguates without arbitrating between the definitions.
         observed = sorted(a for a in cpic if frequencies.get(a, 0.0) > 0.0)
         if len(observed) == 1:
             detail = "; ".join(
@@ -470,10 +514,6 @@ def curate_target(rsid: str, pgx_registry: dict[str, Any] | None = None) -> dict
         )
         return base
 
-    # Frequency separates a real clinical alternate from a rare substitution that happens to
-    # share the coordinate. rs4244285 carries 19 ClinVar records asserting A (CYP2C19*2) and
-    # one asserting T; counting records would be arbitration, but requiring the alternate to
-    # be observed in a population cohort is a second independent source agreeing.
     supported = sorted(a for a in asserting if frequencies.get(a, 0.0) > 0.0)
     if len(asserting) > 1 and len(supported) == 1:
         base.update(
@@ -491,7 +531,6 @@ def curate_target(rsid: str, pgx_registry: dict[str, Any] | None = None) -> dict
         return base
 
     if not asserting:
-        # An association SNP carries no ClinVar assertion; the GWAS Catalogue is its source.
         gwas = gwas_risk_alleles(rsid)
         base["gwas_catalog"] = gwas
         risk = gwas.get("risk_alleles") or {}
@@ -564,37 +603,48 @@ def curate_target(rsid: str, pgx_registry: dict[str, Any] | None = None) -> dict
     return base
 
 
-def curate(targets_path: Path, pgx_registry_path: Path | None = None) -> dict[str, Any]:
-    """Determine, per target, which allele the locus is scored against — or that none is.
-
-    Every outcome is recorded with its basis, including the refusals: a locus whose sources
-    disagree comes out with no assessed allele *and* the disagreement, because that is what
-    lets a later reader tell "not pathogenic" from "we could not establish which allele".
-    """
+def curate(
+    targets_path: Path,
+    pgx_registry_path: Path | None = None,
+    curated_decisions_path: Path | None = DEFAULT_CURATED_DECISIONS,
+) -> dict[str, Any]:
+    """Determine, per target, which allele the locus is scored against — or that none is."""
     payload = json.loads(Path(targets_path).read_text(encoding="utf-8"))
     registry = (
         json.loads(Path(pgx_registry_path).read_text(encoding="utf-8"))
         if pgx_registry_path and Path(pgx_registry_path).exists()
         else None
     )
-    results = [curate_target(str(t["rsid"]).lower(), registry) for t in payload["targets"]]
+    curated_decisions = _load_curated_decisions(curated_decisions_path)
+    results = [
+        curate_target(str(t["rsid"]).lower(), registry, curated_decisions)
+        for t in payload["targets"]
+    ]
     verified = [r for r in results if r["status"] == "VERIFICADO"]
+    sources = [
+        "NCBI dbSNP RefSNP API (api.ncbi.nlm.nih.gov/variation/v0/refsnp) — reference base",
+        "NCBI ClinVar via E-utilities (eutils.ncbi.nlm.nih.gov, db=clinvar) — asserted alternate",
+        "CPIC allele definitions (config/pgx_allele_definitions.json) — pharmacogenomic targets",
+        "EBI GWAS Catalog (www.ebi.ac.uk/gwas/rest/api) — risk allele for association SNPs",
+        "PubMed via NCBI elink — supporting citations per target",
+    ]
+    if curated_decisions:
+        sources.append(
+            "config/assessed_allele_curated_decisions.json — owner-reviewed allele identity, "
+            "accepted only after live ClinVar accession/coordinate/alternate confirmation"
+        )
     return {
         "schema": SCHEMA,
         "curated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "sources": [
-            "NCBI dbSNP RefSNP API (api.ncbi.nlm.nih.gov/variation/v0/refsnp) — reference base",
-            "NCBI ClinVar via E-utilities (eutils.ncbi.nlm.nih.gov, db=clinvar) — asserted alternate",
-            "CPIC allele definitions (config/pgx_allele_definitions.json) — pharmacogenomic targets",
-            "EBI GWAS Catalog (www.ebi.ac.uk/gwas/rest/api) — risk allele for association SNPs",
-            "PubMed via NCBI elink — supporting citations per target",
-        ],
+        "sources": sources,
         "method": (
             "dbSNP supplies the plus-strand reference base from the SPDI deleted_sequence; "
             "ClinVar supplies the alternate from canonical_spdi. The two are joined by "
-            "coordinate, never by text, because an rsid text search in ClinVar also returns "
-            "unrelated variants. A target with no asserted alternate, or with more than one, "
-            "is left without an assessed allele and the reason is recorded."
+            "coordinate, never by text. Pharmacogenomic and association sources are used in "
+            "their own domains. A versioned owner-reviewed allele-identity decision may be "
+            "applied only when the live ClinVar coordinate join independently confirms its "
+            "exact accession and alternate; it never overrides clinical significance. A "
+            "target not established by these rules remains without an assessed allele."
         ),
         "targets_curated": len(results),
         "assessed_alleles_established": len(verified),
@@ -610,8 +660,6 @@ def _apply_target_assessment(
     """Apply one curation result without separating an allele from its attestation."""
     if record and record["assessed_allele"]:
         target.pop("assessed_allele_reason", None)
-        # The refusal branch below drops this; the success branch did not, so a target could
-        # cite the references of a previous allele beside the new one.
         target.pop("assessed_allele_references", None)
         target["assessed_allele"] = record["assessed_allele"]
         target["assessed_allele_status"] = "VERIFICADO"
@@ -637,10 +685,15 @@ def main() -> int:
     parser.add_argument("--targets", default=str(DEFAULT_TARGETS))
     parser.add_argument("--output", default=str(DEFAULT_EVIDENCE))
     parser.add_argument("--pgx-registry", default=str(ROOT / "config/pgx_allele_definitions.json"))
+    parser.add_argument("--curated-decisions", default=str(DEFAULT_CURATED_DECISIONS))
     parser.add_argument("--apply", action="store_true", help="write assessed_allele into the registry")
     args = parser.parse_args()
 
-    evidence = curate(Path(args.targets), Path(args.pgx_registry))
+    evidence = curate(
+        Path(args.targets),
+        Path(args.pgx_registry),
+        Path(args.curated_decisions) if args.curated_decisions else None,
+    )
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
