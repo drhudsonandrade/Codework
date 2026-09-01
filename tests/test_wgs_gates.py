@@ -35,16 +35,12 @@ def _capture_expected_exception(
     expected_type: type[Exception],
     operation: Callable[[], object],
 ) -> Exception:
-    """Return the expected exception and fail explicitly on success or a wrong type."""
+    """Return the expected exception; missing or unexpected exceptions fail the test."""
     try:
         operation()
     except expected_type as exc:
         return exc
-    except Exception as exc:
-        test_case.fail(
-            f"expected {expected_type.__name__}, got {type(exc).__name__}: {exc}"
-        )
-    test_case.fail(f"{expected_type.__name__} was not raised")
+    raise test_case.failureException(f"{expected_type.__name__} was not raised")
 
 
 class WgsVerificationFixtureTest(unittest.TestCase):
@@ -221,7 +217,7 @@ class WgsInputPathContainmentTest(unittest.TestCase):
                     caught = _capture_expected_exception(
                         self,
                         ValueError,
-                        lambda: open_contained(
+                        lambda escape=escape: open_contained(
                             root, root.joinpath(escape, "outside.fastq")
                         ),
                     )
@@ -365,7 +361,7 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             for escape in ("../outside.fastq.gz", "nested/../../outside.bam", "../"):
                 with self.subTest(escape=escape):
                     _capture_expected_exception(
-                        self, ValueError, lambda: resolve(root, escape)
+                        self, ValueError, lambda escape=escape: resolve(root, escape)
                     )
 
     def test_absolute_path_is_not_ambient_authority(self):
@@ -406,7 +402,7 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             for value in (123, True, ["r1.fastq"], {"path": "r1.fastq"}, 1.5):
                 with self.subTest(value=value):
                     _capture_expected_exception(
-                        self, ValueError, lambda: resolve(root, value)
+                        self, ValueError, lambda value=value: resolve(root, value)
                     )
 
     def test_a_falsy_non_string_is_a_wrong_type_not_a_missing_field(self):
@@ -416,7 +412,7 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             for value in (False, 0, 0.0, [], {}):
                 with self.subTest(value=value):
                     caught = _capture_expected_exception(
-                        self, ValueError, lambda: resolve(root, value)
+                        self, ValueError, lambda value=value: resolve(root, value)
                     )
                     self.assertIn("must be a string", str(caught))
             self.assertIsNone(resolve(root, None))
