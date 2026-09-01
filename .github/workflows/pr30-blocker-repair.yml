@@ -6,6 +6,7 @@ on:
       - claude/extract-pr22-reference-data
     paths:
       - .github/workflows/pr30-blocker-repair.yml
+      - .github/pr30_blocker_repair.py
 
 permissions:
   contents: write
@@ -28,6 +29,35 @@ jobs:
 
       - name: Install reporting dependencies
         run: python3 -m pip install --disable-pip-version-check -r reporting/requirements.txt
+
+      - name: Align permanent test fixture with known-good Policy Engine manifest
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/pr30_blocker_repair.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''    manifest["operation"].update(
+                  {
+                      "name": "report_publication",
+                      "analysis_relevant": True,
+                      "requires_real_calling": False,
+                      "output": "FINAL_AUDITED_REPORT",
+                  }
+              )'''
+          new = '''    manifest["operation"]["output"] = "FINAL_AUDITED_REPORT"'''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one permanent operation fixture, found {text.count(old)}')
+          text = text.replace(old, new, 1)
+          old_diag = '''    if not report.ready:
+                  raise AssertionError("policy fixture is not actually ready")'''
+          new_diag = '''    if not report.ready:
+                  failures = [g.to_dict() for g in report.gates if g.blocking and g.state.value != "PASS"]
+                  raise AssertionError(f"policy fixture is not actually ready: {failures}")'''
+          if text.count(old_diag) != 1:
+              raise SystemExit(f'expected exactly one readiness assertion, found {text.count(old_diag)}')
+          path.write_text(text.replace(old_diag, new_diag, 1), encoding='utf-8')
+          PY
 
       - name: Run RED-GREEN blocker repair verification
         run: python3 .github/pr30_blocker_repair.py
