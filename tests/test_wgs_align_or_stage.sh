@@ -116,8 +116,9 @@ run_case() {
 
 # Refused gate verdict must stop before any alignment tool.
 case_root="$root/status"; fixture "$case_root" 'NÃO DISPONÍVEL'
-set +e; stderr=$(run_case "$case_root" 2>&1); rc=$?; set -e
-((rc != 0)) || fail 'non-VERIFICADO gate unexpectedly passed'
+if stderr=$(run_case "$case_root" 2>&1); then
+  fail 'non-VERIFICADO gate unexpectedly passed'
+fi
 assert_contains "$stderr" 'input gate did not verify this sample'
 assert_no_tools "$case_root/tools.log"
 
@@ -127,16 +128,18 @@ printf '@evil\nACGT\n+\nIIII\n' >"$case_root/outside.fastq"
 digest=$(sha256sum "$case_root/outside.fastq" | cut -d' ' -f1)
 jq --arg p "$case_root/outside.fastq" --arg d "$digest" '.inputs.r1.path=$p | .inputs.r1.sha256=$d' "$case_root/input-qc.json" >"$case_root/qc.tmp"
 mv "$case_root/qc.tmp" "$case_root/input-qc.json"
-set +e; stderr=$(run_case "$case_root" 2>&1); rc=$?; set -e
-((rc != 0)) || fail 'outside path unexpectedly passed'
+if stderr=$(run_case "$case_root" 2>&1); then
+  fail 'outside path unexpectedly passed'
+fi
 assert_contains "$stderr" 'outside the sample directory'
 assert_no_tools "$case_root/tools.log"
 
 # Digest drift must be caught before tools.
 case_root="$root/digest"; fixture "$case_root"
 printf '@read1\nTTTT\n+\nIIII\n' >"$case_root/sample/r1.fastq"
-set +e; stderr=$(run_case "$case_root" 2>&1); rc=$?; set -e
-((rc != 0)) || fail 'digest mismatch unexpectedly passed'
+if stderr=$(run_case "$case_root" 2>&1); then
+  fail 'digest mismatch unexpectedly passed'
+fi
 assert_contains "$stderr" 'changed after the gate verified it'
 assert_no_tools "$case_root/tools.log"
 
@@ -144,8 +147,9 @@ assert_no_tools "$case_root/tools.log"
 case_root="$root/missing-digest"; fixture "$case_root"
 jq 'del(.inputs.r1.sha256)' "$case_root/input-qc.json" >"$case_root/qc.tmp"
 mv "$case_root/qc.tmp" "$case_root/input-qc.json"
-set +e; stderr=$(run_case "$case_root" 2>&1); rc=$?; set -e
-((rc != 0)) || fail 'missing digest unexpectedly passed'
+if stderr=$(run_case "$case_root" 2>&1); then
+  fail 'missing digest unexpectedly passed'
+fi
 assert_contains "$stderr" 'records no verified r1'
 assert_no_tools "$case_root/tools.log"
 
@@ -156,7 +160,11 @@ cat >"$case_root/bin/bash" <<'SH'
 exit 99
 SH
 chmod 0755 "$case_root/bin/bash"
-set +e; stderr=$(run_case "$case_root" 2>&1); rc=$?; set -e
+if stderr=$(run_case "$case_root" 2>&1); then
+  fail 'non-VERIFICADO gate unexpectedly passed'
+else
+  rc=$?
+fi
 ((rc != 99)) || fail 'stub-first PATH replaced the trusted bash interpreter'
 assert_contains "$stderr" 'input gate did not verify this sample'
 assert_no_tools "$case_root/tools.log"
@@ -200,8 +208,9 @@ for input_type in BAM CRAM; do
   # A changed BAM/CRAM must fail before the first samtools invocation.
   case_root="$root/${input_type,,}-digest"; alignment_fixture "$case_root" "$input_type"
   printf 'CHANGED-AFTER-GATE\n' >>"$case_root/sample/alignment.$extension"
-  set +e; stderr=$(run_case "$case_root" 2>&1); rc=$?; set -e
-  ((rc != 0)) || fail "$input_type digest mismatch unexpectedly passed"
+  if stderr=$(run_case "$case_root" 2>&1); then
+    fail "$input_type digest mismatch unexpectedly passed"
+  fi
   assert_contains "$stderr" 'alignment changed after the gate verified it'
   assert_no_tools "$case_root/tools.log"
 done
