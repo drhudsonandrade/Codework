@@ -122,6 +122,16 @@ fi
 assert_contains "$stderr" 'input gate did not verify this sample'
 assert_no_tools "$case_root/tools.log"
 
+# A record from another or malformed gate schema must never be treated as this gate's verdict.
+case_root="$root/schema"; fixture "$case_root"
+jq '.schema="other-input-gate-v9"' "$case_root/input-qc.json" >"$case_root/qc.tmp"
+mv "$case_root/qc.tmp" "$case_root/input-qc.json"
+if stderr=$(run_case "$case_root" 2>&1); then
+  fail 'wrong input gate schema unexpectedly passed'
+fi
+assert_contains "$stderr" 'input gate schema'
+assert_no_tools "$case_root/tools.log"
+
 # Recorded path outside the sample directory must be refused before tools.
 case_root="$root/outside"; fixture "$case_root"
 printf '@evil\nACGT\n+\nIIII\n' >"$case_root/outside.fastq"
