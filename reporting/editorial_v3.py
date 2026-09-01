@@ -9,6 +9,8 @@ from typing import Any
 
 from .editorial_v3_hifi import DESIGN, write_editorial_bundle as _programmatic_write_editorial_bundle
 from . import template_v3 as _template_v3
+from .post_render_provenance import bind_execution_manifest_updates
+from .provenance import provenance_blockers
 
 _TEMPLATE_LOCK = threading.RLock()
 _ORIGINAL_LOADER = _template_v3.load_reference_manifest
@@ -121,6 +123,27 @@ class UnapprovedRendererError(RuntimeError):
 _PROGRAMMATIC_RENDERER = "aproximação programática (fora do pacote de modelos aprovado)"
 
 
+def _assert_final_provenance(rendered: dict[str, Any]) -> None:
+    """Fail closed if FINAL data drifted after the original publication gate.
+
+    The initial gate runs inside ``render_document``. Editorial preparation may legitimately
+    add renderer-disclosure keys afterwards, and callers may also accidentally mutate the
+    payload between preparation and a writer. Every FINAL serialization boundary therefore
+    checks the current data again. The import is local to avoid the engine/editorial cycle.
+    """
+    metadata = rendered.get("metadata") if isinstance(rendered.get("metadata"), dict) else {}
+    if str(metadata.get("mode", "")).upper() != "FINAL":
+        return
+    data = rendered.get("data") if isinstance(rendered.get("data"), dict) else {}
+    blockers = provenance_blockers(data)
+    if blockers:
+        from .engine import ReportReleaseError
+
+        raise ReportReleaseError(
+            "post-render provenance gate failed: " + ", ".join(blockers)
+        )
+
+
 def _disclose_programmatic_render(
     rendered: dict[str, Any], *, final_authorization: str | None = None
 ) -> dict[str, Any]:
@@ -153,6 +176,7 @@ def _disclose_programmatic_render(
     if isinstance(existing, dict) and existing.get("RENDERER") == _PROGRAMMATIC_RENDERER:
         recorded = existing.get("PROGRAMMATIC_FINAL_AUTHORIZATION")
         if not final_mode or (isinstance(recorded, str) and recorded.strip()):
+            _assert_final_provenance(disclosed)
             return disclosed
     if final_mode and (
         not isinstance(final_authorization, str) or not final_authorization.strip()
@@ -163,15 +187,32 @@ def _disclose_programmatic_render(
             "programmatic_final_authorization to the publisher for a disclosed QA artifact."
         )
 
-    manifest = data.get("execution_manifest")
-    if not isinstance(manifest, dict):
-        manifest = {"status": str(manifest) if manifest else "NÃO DISPONÍVEL"}
-    manifest["RENDERER"] = _PROGRAMMATIC_RENDERER
-    manifest["TEMPLATE_PACK_V3"] = "NÃO DISPONÍVEL"
-    manifest["PARIDADE_VISUAL"] = "NÃO DISPONÍVEL"
+    updates: dict[str, Any] = {
+        "RENDERER": _PROGRAMMATIC_RENDERER,
+        "TEMPLATE_PACK_V3": "NÃO DISPONÍVEL",
+        "PARIDADE_VISUAL": "NÃO DISPONÍVEL",
+    }
     if final_mode:
-        manifest["PROGRAMMATIC_FINAL_AUTHORIZATION"] = final_authorization.strip()
-    data["execution_manifest"] = manifest
+        updates["PROGRAMMATIC_FINAL_AUTHORIZATION"] = final_authorization.strip()
+        data = bind_execution_manifest_updates(
+            data,
+            updates,
+            basis=(
+                "disclosure recorded by reporting.editorial_v3 after the initial publication "
+                "gate; values describe renderer/run context, not a genomic measurement"
+            ),
+        )
+    else:
+        # MODEL has no clinical provenance contract because it is explicitly not a result.
+        # Preserve the visible renderer disclosure without fabricating anchors for a payload
+        # that was never compiled as FINAL.
+        manifest = data.get("execution_manifest")
+        if not isinstance(manifest, dict):
+            manifest = {"status": str(manifest) if manifest else "NÃO DISPONÍVEL"}
+        manifest.update(updates)
+        data["execution_manifest"] = manifest
+    disclosed["data"] = data
+
     # `render_document` built `markdown` and `html` from `data` before this function ran, and
     # this function only edits `data`. `write_bundle` then wrote the updated data into the
     # JSON while writing the *pre-disclosure* Markdown and HTML — so an authorized
@@ -180,6 +221,7 @@ def _disclose_programmatic_render(
     # approximation. The derived views are rebuilt from the disclosed payload so all three
     # agree.
     _rerender_derived_views(disclosed)
+    _assert_final_provenance(disclosed)
     return disclosed
 
 
@@ -212,10 +254,13 @@ def prepare_editorial_render(
 ) -> dict[str, Any]:
     """Return the single payload all output writers must serialize."""
     if _template_v3.template_mode_requested(rendered):
+        _assert_final_provenance(rendered)
         return rendered
-    return _disclose_programmatic_render(
+    prepared = _disclose_programmatic_render(
         rendered, final_authorization=programmatic_final_authorization
     )
+    _assert_final_provenance(prepared)
+    return prepared
 
 
 def write_editorial_bundle(
@@ -232,15 +277,20 @@ def write_editorial_bundle(
     PDF or coordinate inventory differs from its pinned identity.
     """
     if not _template_v3.template_mode_requested(rendered):
+        prepared = prepare_editorial_render(
+            rendered,
+            programmatic_final_authorization=programmatic_final_authorization,
+        )
+        _assert_final_provenance(prepared)
         return _programmatic_write_editorial_bundle(
-            prepare_editorial_render(
-                rendered,
-                programmatic_final_authorization=programmatic_final_authorization,
-            ),
+            prepared,
             output_dir,
             stem=stem,
         )
 
+    # Validate before creating even the output directory. A FINAL payload that drifted after
+    # render must leave no partial PDF/DOCX/editorial JSON behind.
+    _assert_final_provenance(rendered)
     output_dir.mkdir(parents=True, exist_ok=True)
     metadata = rendered["metadata"]
     stem = stem or f"{metadata['report_id']}-{metadata['slug']}"
