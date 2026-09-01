@@ -30,33 +30,57 @@ jobs:
       - name: Install reporting dependencies
         run: python3 -m pip install --disable-pip-version-check -r reporting/requirements.txt
 
-      - name: Align permanent test fixture with known-good Policy Engine manifest
+      - name: Align TDD fixtures with the real Policy Engine lifecycle
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
           path = Path('.github/pr30_blocker_repair.py')
           text = path.read_text(encoding='utf-8')
-          old = '''    manifest["operation"].update(
-                  {
-                      "name": "report_publication",
-                      "analysis_relevant": True,
-                      "requires_real_calling": False,
-                      "output": "FINAL_AUDITED_REPORT",
-                  }
-              )'''
-          new = '''    manifest["operation"]["output"] = "FINAL_AUDITED_REPORT"'''
-          if text.count(old) != 1:
-              raise SystemExit(f'expected exactly one permanent operation fixture, found {text.count(old)}')
-          text = text.replace(old, new, 1)
-          old_diag = '''    if not report.ready:
-                  raise AssertionError("policy fixture is not actually ready")'''
-          new_diag = '''    if not report.ready:
-                  failures = [g.to_dict() for g in report.gates if g.blocking and g.state.value != "PASS"]
-                  raise AssertionError(f"policy fixture is not actually ready: {failures}")'''
-          if text.count(old_diag) != 1:
-              raise SystemExit(f'expected exactly one readiness assertion, found {text.count(old_diag)}')
-          path.write_text(text.replace(old_diag, new_diag, 1), encoding='utf-8')
+
+          replacements = [
+              (
+                  '''    manifest["operation"].update(\n        {\n            "name": "report_publication",\n            "analysis_relevant": True,\n            "requires_real_calling": False,\n            "output": "FINAL_AUDITED_REPORT",\n        }\n    )''',
+                  '''    manifest["operation"]["output"] = "FINAL_AUDITED_REPORT"''',
+                  'known-good operation fixture',
+              ),
+              (
+                  '''    if not report.ready:\n        raise AssertionError("policy fixture is not actually ready")''',
+                  '''    if not report.ready:\n        failures = [g.to_dict() for g in report.gates if g.blocking and g.state.value != "PASS"]\n        raise AssertionError(f"policy fixture is not actually ready: {failures}")''',
+                  'readiness diagnostics',
+              ),
+              (
+                  '''@lru_cache(maxsize=1)\ndef _ruleset():\n    """Load the canonical ruleset from the sealed repository transport once for this suite."""\n    with tempfile.TemporaryDirectory() as td:\n        ruleset_path, _evidence = materialize(Path(td))\n        return load_ruleset(ruleset_path)''',
+                  '''_RULESET_TD = tempfile.TemporaryDirectory()\n\n\n@lru_cache(maxsize=1)\ndef _ruleset():\n    """Load the canonical ruleset while keeping its verified materialization alive."""\n    ruleset_path, _evidence = materialize(Path(_RULESET_TD.name))\n    return load_ruleset(ruleset_path)''',
+                  'persistent test ruleset',
+              ),
+              (
+                  '''def _runtime() -> tuple[Any, Any]:''',
+                  '''def _runtime() -> tuple[Any, Any, Any]:''',
+                  'runtime return shape',
+              ),
+              (
+                  '''        with TemporaryDirectory() as td:\n            ruleset_path, _evidence = materialize(Path(td))\n            ruleset = load_ruleset(ruleset_path)\n            verify_external_manifest(ruleset, hash_manifest)\n        engine = PolicyEngine(ruleset, external_manifest=hash_manifest)''',
+                  '''        td = TemporaryDirectory()\n        ruleset_path, _evidence = materialize(Path(td.name))\n        ruleset = load_ruleset(ruleset_path)\n        verify_external_manifest(ruleset, hash_manifest)\n        engine = PolicyEngine(ruleset, external_manifest=hash_manifest)''',
+                  'persistent production ruleset',
+              ),
+              (
+                  '''    return engine, evaluation_binding''',
+                  '''    return engine, evaluation_binding, td''',
+                  'retain tempdir with cached runtime',
+              ),
+              (
+                  '''    engine, evaluation_binding = _runtime()''',
+                  '''    engine, evaluation_binding, _ruleset_lifetime = _runtime()''',
+                  'runtime unpack',
+              ),
+          ]
+          for old, new, label in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one match, found {count}')
+              text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
           PY
 
       - name: Run RED-GREEN blocker repair verification
