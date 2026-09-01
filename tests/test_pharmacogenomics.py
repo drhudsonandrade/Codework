@@ -702,8 +702,18 @@ class ReportIntegrationTest(unittest.TestCase):
         effective_registry = REGISTRY if registry is _DEFAULT_REPORT_REGISTRY else registry
         matrix_path, passport, _ = _artifacts(root, rows, registry=effective_registry)
         passport_path = write_passport(passport, root / "passport.json")
+        from tests.test_policy_evaluation_binding import real_evaluation
+
+        matrix_payload = json.loads(matrix_path.read_text(encoding="utf-8"))
+        policy = policy_evaluation_file(
+            root,
+            real_evaluation(
+                case_id=str(matrix_payload["case_id"]),
+                input_sha256=str(matrix_payload["input_sha256"]),
+            ),
+        )
         payload = build_payload(
-            passport_path, matrix_path, policy_evaluation_file(root),
+            passport_path, matrix_path, policy,
             consent=consent_for(root, matrix_path),
         )
         # This integration fixture exercises FINAL rendering. The compiler deliberately
@@ -814,7 +824,7 @@ class ReportIntegrationTest(unittest.TestCase):
         self.assertIn("Requisição de sequenciamento", SECTIONS)
 
     def test_cli_forwards_exact_control_artifacts_and_fails_when_release_is_blocked(self):
-        """The CLI forwards the control artifacts unchanged and exits non-zero when release is blocked."""
+        """The CLI binds the exact control artifacts and exits non-zero when release is blocked."""
         from scripts.build_pharmacogenomic_report import main
 
         with tempfile.TemporaryDirectory() as td:
@@ -845,8 +855,10 @@ class ReportIntegrationTest(unittest.TestCase):
 
             payload = json.loads(payload_out.read_text(encoding="utf-8"))
         self.assertEqual(
-            payload["policy_evaluation"]["source"]["origin"], "policy-engine-output"
+            payload["policy_evaluation"]["source"]["status"], "NÃO DISPONÍVEL"
         )
+        self.assertNotIn("origin", payload["policy_evaluation"]["source"])
+        self.assertIn("schema", payload["policy_evaluation"]["source"]["reason"])
         self.assertEqual(payload["consent"]["origin"], "operator-record")
         self.assertEqual(payload["policy_evaluation"]["source"]["sha256"], expected_policy_sha)
         self.assertEqual(payload["post_deployment"]["witness_sha256"], expected_witness_sha)
