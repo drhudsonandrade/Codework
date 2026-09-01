@@ -1,0 +1,18 @@
+{
+  "schema": "genoma-assessed-allele-curated-decisions-v1",
+  "reviewed_at": "2026-09-01",
+  "scope": "Owner-reviewed assessed-allele identity decisions. These records may establish which alternate allele a target interrogates only when the live curation pipeline independently confirms the same canonical ClinVar accession, coordinate and alternate. They do not override or upgrade clinical significance.",
+  "curations": {
+    "rs1799945": {
+      "gene": "HFE",
+      "assessed_allele": "G",
+      "status": "VERIFICADO",
+      "clinvar_accession": "VCV000000010",
+      "clinvar_variation_id": 10,
+      "canonical_change": "NM_000410.4(HFE):c.187C>G (p.His63Asp)",
+      "canonical_spdi": "NC_000006.12:26090950:C:G",
+      "source_url": "https://www.ncbi.nlm.nih.gov/clinvar/variation/10/",
+      "basis": "ClinVar Variation ID 10 identifies the HFE p.His63Asp variant as C>G at the canonical GRCh38 coordinate. The owner-reviewed decision establishes assessed-allele identity G for this clinical target; it does not resolve the heterogeneous/conflicting condition-level clinical-significance submissions."
+    }
+  }
+}
