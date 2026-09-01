@@ -73,12 +73,16 @@ open_verified() {
     echo "NÃO DISPONÍVEL: $key changed after the gate verified it" >&2; return 3; }
   printf -v "$outvar" '/dev/fd/%s' "$fd"
 }
-input_type=$(jq -r '.input_type | ascii_upcase' "$manifest")
-sample=$(jq -r '.sample_id' "$manifest")
-rgid=$(jq -r '.read_group.id' "$manifest")
-library=$(jq -r '.read_group.library' "$manifest")
-platform=$(jq -r '.read_group.platform' "$manifest")
-platform_unit=$(jq -r '.read_group.platform_unit // "GENOMA"' "$manifest")
+
+# The gate already validated and snapshotted this identity. Re-reading the mutable raw
+# manifest here would let post-gate edits change the read group actually handed to the
+# aligner while the pipeline still claimed to be consuming the VERIFICADO record.
+input_type=$(jq -r '.input_type | ascii_upcase' "$input_qc")
+sample=$(jq -r '.sample_id' "$input_qc")
+rgid=$(jq -r '.read_group.id' "$input_qc")
+library=$(jq -r '.read_group.library' "$input_qc")
+platform=$(jq -r '.read_group.platform' "$input_qc")
+platform_unit=$(jq -r '.read_group.platform_unit // "GENOMA"' "$input_qc")
 
 [[ -s "$ref" ]] || { echo "NÃO DISPONÍVEL: reference FASTA missing" >&2; exit 2; }
 [[ -n "$sample" && "$sample" != null ]] || { echo "NÃO DISPONÍVEL: sample_id missing" >&2; exit 2; }
