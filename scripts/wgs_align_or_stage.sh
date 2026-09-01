@@ -37,7 +37,7 @@ open_verified() {
   # The bytes the aligner reads are therefore the bytes that matched the gate's digest.
   # `printf -v` rather than an echoed value because a command substitution runs in a
   # subshell and the descriptor would die with it.
-  local key="$1" outvar="$2" path digest observed fd
+  local key="$1" outvar="$2" path digest observed fd relative
   path=$(jq -r --arg k "$key" '.inputs[$k].path // empty' "$input_qc")
   digest=$(jq -r --arg k "$key" '.inputs[$k].sha256 // empty' "$input_qc")
   [[ -n "$path" && -n "$digest" ]] || {
@@ -45,6 +45,10 @@ open_verified() {
   case "$path" in
     "$sample_dir"/*) ;;
     *) echo "NÃO DISPONÍVEL: verified $key is outside the sample directory" >&2; return 3 ;;
+  esac
+  relative=${path#"$sample_dir"/}
+  case "/$relative/" in
+    */../*) echo "NÃO DISPONÍVEL: verified $key is outside the sample directory" >&2; return 3 ;;
   esac
   exec {fd}< "$path" || {
     echo "NÃO DISPONÍVEL: verified $key is missing or unreadable" >&2; return 3; }
