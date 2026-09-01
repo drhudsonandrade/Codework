@@ -11,6 +11,11 @@ input_qc=${4:?verified input-qc.json required}
 # every verified input, or — worse, if the link is repointed — accepts one from elsewhere.
 sample_dir=$(cd -P "$(dirname "$manifest")" && pwd -P)
 
+# The alignment boundary consumes only this gate schema. A foreign or malformed JSON record
+# must not be able to become authority merely by carrying a VERIFICADO status string.
+[[ "$(jq -r '.schema // empty' "$input_qc")" == "genoma-wgs-input-gate-v1" ]] || {
+  echo "NÃO DISPONÍVEL: unexpected input gate schema" >&2; exit 2; }
+
 # The gate resolved, contained and hashed the inputs. This script used to ignore all of that
 # and re-read the raw manifest with jq, explicitly honouring an absolute path and checking no
 # digest — so whatever containment the gate established stopped at its own process boundary
