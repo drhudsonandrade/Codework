@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import sys
 from pathlib import Path
@@ -17,11 +18,36 @@ INPUT_REFUSED = 5
 INPUT_MISSING = 6
 INPUT_UNREADABLE = 7
 
+_EXIT_CODES = {
+    "INVALID_ARGUMENT": INVALID_ARGUMENT,
+    "STAGING_UNAVAILABLE": STAGING_UNAVAILABLE,
+    "DIGEST_MISMATCH": DIGEST_MISMATCH,
+    "INPUT_REFUSED": INPUT_REFUSED,
+    "INPUT_MISSING": INPUT_MISSING,
+    "INPUT_UNREADABLE": INPUT_UNREADABLE,
+}
 
-def _unlink_if_present(path: Path) -> None:
+
+def exit_code_contract() -> dict[str, int]:
+    """Return the single machine-readable authority for shell-visible exit codes."""
+    return dict(_EXIT_CODES)
+
+
+def _unlink_if_present(path: Path) -> OSError | None:
+    """Best-effort cleanup whose failure remains explicit to the caller."""
     try:
         path.unlink()
     except FileNotFoundError:
+        return None
+    except OSError as exc:
+        return exc
+    return None
+
+
+def _close_source(source) -> None:
+    try:
+        source.close()
+    except OSError:
         pass
 
 
@@ -55,7 +81,16 @@ def materialize(root: Path, source_path: Path, expected_sha256: str, output: Pat
         )
         return INPUT_UNREADABLE
 
-    output.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        output.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        _close_source(source)
+        print(
+            f"NÃO DISPONÍVEL: verified staging directory unavailable: {type(exc).__name__}",
+            file=sys.stderr,
+        )
+        return STAGING_UNAVAILABLE
+
     digest = hashlib.sha256()
     try:
         descriptor = os.open(
@@ -64,7 +99,7 @@ def materialize(root: Path, source_path: Path, expected_sha256: str, output: Pat
             0o600,
         )
     except OSError as exc:
-        source.close()
+        _close_source(source)
         print(
             f"NÃO DISPONÍVEL: verified staging file cannot be created: {type(exc).__name__}",
             file=sys.stderr,
@@ -79,7 +114,14 @@ def materialize(root: Path, source_path: Path, expected_sha256: str, output: Pat
             target.flush()
             os.fsync(target.fileno())
     except (OSError, ValueError) as exc:
-        _unlink_if_present(output)
+        cleanup_error = _unlink_if_present(output)
+        if cleanup_error is not None:
+            print(
+                "NÃO DISPONÍVEL: verified staging cleanup unavailable after copy failure: "
+                f"{type(cleanup_error).__name__}",
+                file=sys.stderr,
+            )
+            return STAGING_UNAVAILABLE
         print(
             f"NÃO DISPONÍVEL: verified input staging failed: {type(exc).__name__}",
             file=sys.stderr,
@@ -87,18 +129,41 @@ def materialize(root: Path, source_path: Path, expected_sha256: str, output: Pat
         return STAGING_UNAVAILABLE
 
     if digest.hexdigest() != expected:
-        _unlink_if_present(output)
+        cleanup_error = _unlink_if_present(output)
+        if cleanup_error is not None:
+            print(
+                "NÃO DISPONÍVEL: verified staging cleanup unavailable after digest mismatch: "
+                f"{type(cleanup_error).__name__}",
+                file=sys.stderr,
+            )
+            return STAGING_UNAVAILABLE
         return DIGEST_MISMATCH
     return 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--root", required=True)
-    parser.add_argument("--source", required=True)
-    parser.add_argument("--expected-sha256", required=True)
-    parser.add_argument("--output", required=True)
+    parser.add_argument("--print-exit-codes", action="store_true")
+    parser.add_argument("--root")
+    parser.add_argument("--source")
+    parser.add_argument("--expected-sha256")
+    parser.add_argument("--output")
     args = parser.parse_args()
+
+    if args.print_exit_codes:
+        print(json.dumps(exit_code_contract(), sort_keys=True, separators=(",", ":")))
+        return 0
+
+    required = {
+        "--root": args.root,
+        "--source": args.source,
+        "--expected-sha256": args.expected_sha256,
+        "--output": args.output,
+    }
+    missing = [name for name, value in required.items() if value is None]
+    if missing:
+        parser.error(f"the following arguments are required: {', '.join(missing)}")
+
     return materialize(
         Path(args.root),
         Path(args.source),
