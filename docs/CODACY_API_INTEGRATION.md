@@ -8,7 +8,7 @@ Expose Codacy findings through GitHub Actions so reviewers and connected GitHub 
 
 Preferred secret: `CODACY_PROJECT_TOKEN` (repository-scoped Codacy API token).
 
-Fallback secret: `CODACY_API_TOKEN` (Codacy account API token).
+Optional fallback secret: `CODACY_API_TOKEN` (Codacy account API token). Not required — see below.
 
 Never commit either token to the repository.
 
@@ -30,60 +30,90 @@ When a token is present it:
 6. uploads both files as the `codacy-api-report` artifact for 30 days;
 7. on pull requests, creates or updates one bot comment containing the report.
 
-## Scope: repository backlog vs. pull-request delta
+## Scope: repository backlog vs. branch delta
 
 These are different questions with different answers, and confusing them attributes to a
-branch every finding that was already on the default branch. The scope is chosen by the
-`CODACY_PULL_REQUEST` environment variable, which the workflow sets from
-`github.event.pull_request.number` on pull-request events, falling back to the
-`inputs.pull_request` dispatch input on a manual run.
+branch every finding that was already on the default branch.
 
-| Run | `CODACY_PULL_REQUEST` | Endpoint | The count means |
-|---|---|---|---|
-| `pull_request` | the PR number | `listPullRequestIssues` with `status=new` | issues this pull request introduces |
-| `workflow_dispatch` with the `pull_request` input | that number | `listPullRequestIssues` with `status=new` | issues that pull request introduces |
-| `workflow_dispatch` with the input empty | empty | `searchRepositoryIssues` | every open issue in the repository |
+| Run | Endpoint | The count means |
+|---|---|---|
+| `pull_request` | `listCommitDeltaIssues` on the head SHA, `status=new`, `targetCommitUuid` = base SHA | issues this branch introduces against its base |
+| `workflow_dispatch` with `commit` | the same, on the SHA given | issues that commit introduces |
+| `workflow_dispatch` with `commit` empty | `searchRepositoryIssues` | every open issue in the repository |
 
-An unset or empty variable selects the repository scope. Any other non-numeric or non-positive
-value is refused rather than silently falling back to it, so a misconfigured workflow cannot
-publish a repository-wide backlog total under a pull request's name.
-
-The manual dispatch input exists so the delta for any open pull request can be obtained on
-demand, without waiting for a new push to that branch.
-
-### The pull-request endpoint requires an *account* token
-
-VERIFICADO by live run `33434452877`. Codacy refuses `listPullRequestIssues` when it is
-presented with a repository token:
-
-```text
-HTTP 401 {"message":"Account authentication required","error":"Unauthorized","code":"ProjectTokenNotAllowed"}
-```
-
-So `CODACY_PROJECT_TOKEN` reaches every repository-scoped endpoint and no pull-request one.
-`CODACY_API_TOKEN` is therefore not merely a fallback for this feature — it is the only
-credential that can answer "what did this pull request introduce?".
-
-When Codacy rejects the pull-request endpoint **and no account token is configured at all**,
-the run degrades to the repository scope rather than failing every pull request over a secret
-the repository has never held. The degradation is explicit and cannot be mistaken for a delta:
-the report and the artifact both drop to `scope: repository`, and both carry a `NÃO DISPONÍVEL`
-note stating that the counts are the backlog and naming the missing secret. The pull-request
-label is never kept over a repository-wide count.
-
-When an account token **is** configured and Codacy still rejects the request, that is a real
-authentication failure and the run fails.
+The workflow sets `CODACY_COMMIT` from `github.event.pull_request.head.sha` (or the `commit`
+dispatch input) and `CODACY_BASE_COMMIT` from `github.event.pull_request.base.sha` (or
+`base_commit`). `CODACY_PULL_REQUEST` is only a **label** for the report.
 
 `codacy-issues.json` records which scope produced it: `{"scope": "repository", "data": [...]}`
 or `{"scope": "pull-request", "pullRequest": N, "analyzed": bool, "data": [...]}`. The report's
 header states the same thing in words.
 
+Both SHAs are validated as hexadecimal commit strings before use, and a value that is not one
+is refused rather than interpolated into the request path and answered with a bare 404.
+
+### Why the base SHA matters
+
+Left to its default, Codacy takes the delta between the source commit and **its parent** — on
+a pull-request branch, the previous commit *on that branch*. That is the delta of one push, not
+of the branch against what it will merge into. Passing the base SHA as `targetCommitUuid` makes
+the answer the one a reviewer is actually asking for.
+
+### Credentials: `CODACY_PROJECT_TOKEN` is sufficient
+
+`CODACY_PROJECT_TOKEN` (a Codacy **Repository** API Token) is the preferred and sufficient
+credential. It reaches the repository analysis tree, which includes both endpoints above.
+
+There is one endpoint it does **not** reach, and the reporter never sends it there.
+`listPullRequestIssues` (`.../pull-requests/{n}/issues`) refuses a repository token —
+VERIFICADO by live run `33434452877`:
+
+```text
+HTTP 401 {"message":"Account authentication required","error":"Unauthorized","code":"ProjectTokenNotAllowed"}
+```
+
+That is a credential-*scope* answer, not an invalid token. It is also not a reason to obtain an
+account token: `listCommitDeltaIssues` answers the same question within the scope the
+repository already has, and a regression test asserts no request is ever made to a
+`/pull-requests/` path.
+
+### Where a pull request's official delta comes from
+
+The Codacy GitHub App already publishes a summary comment and a check run on every pull
+request, carrying the total of new issues with their categories and severities. **That
+publication is the authoritative per-PR delta** and needs no API call at all — read the pull
+request's comments and locate the `codacy-production` comment.
+
+Use this vocabulary when reporting, and do not blur it:
+
+- **CONFIRMADO PELO CODACY NA PR** — from the Codacy publication on that pull request.
+- **CONFIRMADO VIA CODACY API** — from a query actually executed with `CODACY_PROJECT_TOKEN`.
+- **INFERIDO** — repository issues cross-referenced against the branch's files or commits.
+
+An inference is never reported as "new issues da PR".
+
+If the GitHub publication gives only the aggregate and the exact, individual list of that pull
+request's new issues is indispensable and the commit delta cannot supply it, declare:
+
+> NÃO DISPONÍVEL COM REPOSITORY API TOKEN NA API v3.
+
+Only in that case is it worth explaining that `listPullRequestIssues` requires an Account API
+Token. Do not request a new credential while the published summary or the commit delta answers
+the question.
+
+### Degradation
+
+When Codacy refuses the delta endpoint, the run does not fail and does not silently substitute
+one number for another: it falls back to the repository backlog, **relabels the scope to
+`repository`** in both the report and the artifact, and carries a `NÃO DISPONÍVEL` note that
+states the counts are not the delta and quotes the refusal so it can be diagnosed. The
+pull-request label is never kept over a repository-wide count.
+
 ### The `analyzed` flag is load-bearing
 
-`PullRequestIssuesResponse` carries a required `analyzed` boolean — "True if Codacy already
-analyzed the latest commit" — and documents `data` as an "empty list if Codacy didn't analyze
-the latest commit yet". An unanalysed pull request and a clean one therefore return the same
-empty list.
+`CommitDeltaIssuesResponse` carries a required `analyzed` boolean — "True if Codacy already
+analyzed the commit" — and documents `data` as an "empty list if Codacy didn't analyze the
+commit yet". An unanalysed commit and a clean one therefore return the same empty list.
 
 The reporter carries the flag out of the fetch and refuses to print a count when it is false,
 emitting `NÃO DISPONÍVEL` instead. A response that omits the field, or sends a non-boolean, is
@@ -92,9 +122,9 @@ be a green verdict on work Codacy has not read; that is the failure this reporte
 prevent, and it is pinned by
 `tests/test_codacy_api_report.py::CodacyPullRequestScopeTest`.
 
-### Shape of the pull-request data
+### Shape of the delta data
 
-The pull-request endpoint returns `CommitDeltaIssue` objects — `{"commitIssue": {...},
+The commit-delta endpoint returns `CommitDeltaIssue` objects — `{"commitIssue": {...},
 "deltaType": "..."}` — where the repository search returns the issue directly. The artifact
 keeps whichever shape Codacy sent, because it is the evidence; the report unwraps `commitIssue`
 when rendering rows.
@@ -103,9 +133,10 @@ when rendering rows.
 
 Verified against Codacy's published OpenAPI document (`https://api.codacy.com/api/api-docs/swagger.yaml`):
 
-- operationId `listPullRequestIssues`, summary "List issues found in a pull request";
-- path `/analysis/organizations/{provider}/{remoteOrganizationName}/repositories/{repositoryName}/pull-requests/{pullRequestNumber}/issues`;
-- `status` accepts `all`, `new`, `fixed`; `cursor` and `limit` paginate;
+- operationId `listCommitDeltaIssues`, summary "List the issues introduced or fixed by a commit";
+- path `/analysis/organizations/{provider}/{remoteOrganizationName}/repositories/{repositoryName}/commits/{srcCommitUuid}/deltaIssues`;
+- `status` accepts `all`, `new`, `fixed`; `targetCommitUuid` selects the destination commit; `cursor` and `limit` paginate;
+- response `CommitDeltaIssuesResponse`: required `analyzed` and `data` (of `CommitDeltaIssue` = `{commitIssue, deltaType}`), optional `pagination`;
 - auth headers `project-token` (`ProjectTokenAuth`) and `api-token` (`ApiKeyAuth`), which are the two this reporter already sends.
 
 The spec lists `https://api.codacy.com/api/v3` as its server while this reporter calls
@@ -115,7 +146,7 @@ serve API v3 and only the working one has local evidence behind it.
 
 If no token is configured the workflow reports `NÃO DISPONÍVEL` and does not pretend that Codacy was queried. `NÃO DISPONÍVEL` is the repository's operational status vocabulary; it is intentionally retained even though the surrounding documentation is English.
 
-Before contacting Codacy, the workflow runs the reporter regression tests. They cover credential preference and account-token fallback on both scopes, missing-credential candidate selection, cursor pagination, refusal of a response body that is not a JSON object, the pull-request endpoint's path and `status=new` filter, the `analyzed` fail-closed rule, delta unwrapping, pull-request number validation, Markdown cell normalization, artifact shape, refusal of a body that is not valid JSON, and create/update behavior for the pull-request comment with mocked APIs.
+Before contacting Codacy, the workflow runs the reporter regression tests. They cover credential preference and account-token fallback on both scopes, missing-credential candidate selection, cursor pagination, refusal of a response body that is not a JSON object, the commit-delta endpoint's path with its `status=new` filter and `targetCommitUuid`, the refusal of anything that is not a commit SHA, the guarantee that no request reaches a `/pull-requests/` path, the `analyzed` fail-closed rule, delta unwrapping, pull-request number validation, Markdown cell normalization, artifact shape, refusal of a body that is not valid JSON, and create/update behavior for the pull-request comment with mocked APIs.
 
 The comment tests run the real `scripts/codacy_pr_comment.js` under Node through the committed
 driver `tests/codacy_pr_comment_driver.js`, which takes the module path and the fixture as
@@ -140,18 +171,18 @@ image without Node would skip it and still report a green regression job.
 9. Save.
 10. Open GitHub `Actions` → `Codacy API Report` → `Run workflow` to validate the connection.
 
-### Account token — required for pull-request scope
+### Account token — optional, and not needed for the delta
 
-Create an account API token in Codacy under `My Account` → `Access Management` → `API Tokens`,
-then store it in GitHub as the repository secret `CODACY_API_TOKEN` (`Settings` → `Secrets and
-variables` → `Actions` → `New repository secret`). Paste it only into that field; it must never
-be sent anywhere else.
+`CODACY_API_TOKEN` (a Codacy **Account** API Token) is optional. The reporter retains it purely
+as a fallback credential for the repository-scoped endpoints; nothing in this integration
+requires it, because the branch delta comes from `listCommitDeltaIssues`, which the repository
+token reaches.
 
-This is not optional for the pull-request delta. As recorded above, Codacy answers
-`listPullRequestIssues` only to an account token; without this secret the reporter can produce
-the repository backlog and nothing else.
+Do not add it merely to obtain a pull request's delta — the Codacy GitHub App already publishes
+that on the pull request, and the commit-delta endpoint reproduces it through the API.
 
-The workflow prefers `CODACY_PROJECT_TOKEN` when both secrets are configured, and does not discard the configured account-token recovery path after an authentication or authorization rejection.
+The workflow prefers `CODACY_PROJECT_TOKEN` when both secrets are configured, and does not
+discard a configured account-token recovery path after an authentication rejection.
 
 ## Security notes
 

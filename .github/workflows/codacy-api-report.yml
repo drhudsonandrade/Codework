@@ -4,7 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       pull_request:
-        description: 'Pull request number to report on. Leave empty for the repository-wide backlog.'
+        description: 'Pull request number, used only to label the report.'
+        required: false
+        type: string
+      commit:
+        description: 'Head commit SHA to take the delta from. Leave empty for the repository-wide backlog.'
+        required: false
+        type: string
+      base_commit:
+        description: 'Base commit SHA the delta is measured against. Defaults to the head commit''s parent.'
         required: false
         type: string
   pull_request:
@@ -28,11 +36,21 @@ jobs:
       CODACY_PROVIDER: gh
       CODACY_ORG: ${{ github.repository_owner }}
       CODACY_REPO: ${{ github.event.repository.name }}
-      # Selects the scope of the report. On a pull request this is the PR number, and the
-      # reporter asks Codacy which issues that pull request introduced. A manual dispatch may
-      # name any pull request, or leave the input empty for the repository-wide backlog. The
-      # two totals answer different questions and must never be quoted for one another.
+      # The pull-request number is a *label* for the report. It is never sent to Codacy:
+      # `listPullRequestIssues` refuses a repository token, and this repository configures only
+      # CODACY_PROJECT_TOKEN.
       CODACY_PULL_REQUEST: ${{ github.event.pull_request.number || inputs.pull_request }}
+      # These two select the scope. With a source commit the reporter asks
+      # `listCommitDeltaIssues` — repository-scoped, so the project token reaches it — for the
+      # issues this branch introduces against its base. Empty means the repository-wide
+      # backlog. The two totals answer different questions and must never be quoted for one
+      # another.
+      #
+      # The base SHA, not the parent commit: left to its default Codacy compares the head
+      # against its own predecessor on the branch, which is the delta of the last push rather
+      # than of the branch against what it will merge into.
+      CODACY_COMMIT: ${{ github.event.pull_request.head.sha || inputs.commit }}
+      CODACY_BASE_COMMIT: ${{ github.event.pull_request.base.sha || inputs.base_commit }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

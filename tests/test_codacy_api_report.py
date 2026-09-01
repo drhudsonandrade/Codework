@@ -7,6 +7,10 @@ from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import patch
 
+#: Two commit SHAs standing in for a pull request's head and its base.
+HEAD = "2957025d42e8daadf937d4044516f991d21deea4"
+BASE = "eedcda6d2d6f7c009e40affa010161d3fd40ae94"
+
 
 class _Response:
     def __init__(self, payload):
@@ -295,19 +299,30 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
 
     The repository search called with a body of `{}` returns the whole backlog. Quoting that
     total beside a pull request credits the branch with every finding already on the default
-    branch — a mistake this project has actually made — so the pull-request delta has to come
-    from the endpoint that computes it.
+    branch — a mistake this project has actually made — so the delta has to come from the
+    endpoint that computes it.
+
+    That endpoint is `listCommitDeltaIssues`, not `listPullRequestIssues`. The latter refuses a
+    repository token (`401 ProjectTokenNotAllowed`), and this repository configures only
+    `CODACY_PROJECT_TOKEN`; the former lives in the repository analysis tree that token is
+    scoped to and answers the same question about a commit range.
     """
 
-    def test_the_official_pull_request_endpoint_is_called_with_the_new_status_filter(self):
-        """Path and filter are pinned, because a near-miss returns a plausible wrong number.
+    def test_the_commit_delta_endpoint_is_called_with_the_new_status_and_the_base_commit(self):
+        """Path, filter and base are pinned, because a near-miss returns a plausible wrong number.
 
         Verified against Codacy's published OpenAPI document: operationId
-        `listPullRequestIssues`, path `.../repositories/{repo}/pull-requests/{n}/issues`, with
-        `status` taking `all | new | fixed`. A URL that omitted `status=new` would return the
-        pull request's issues *including* pre-existing ones and still look like a delta.
+        `listCommitDeltaIssues`, path `.../repositories/{repo}/commits/{sha}/deltaIssues`, with
+        `status` taking `all | new | fixed` and an optional `targetCommitUuid`.
+
+        Each part is load-bearing. Without `status=new` the answer includes issues the branch
+        only inherited. Without `targetCommitUuid` Codacy compares against the source commit's
+        *parent* — the delta of the last push, not of the branch against what it merges into.
+        Either omission still returns a number that looks like a delta.
+
+        The pull-request path must never appear: it refuses this credential outright.
         """
-        from scripts.codacy_api_report import fetch_pull_request_issues
+        from scripts.codacy_api_report import fetch_commit_delta_issues
 
         seen = []
 
@@ -315,16 +330,18 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
             seen.append((request.get_method(), request.full_url, request.data))
             return _Response({"analyzed": True, "data": [], "pagination": {}})
 
-        analyzed, issues = fetch_pull_request_issues(
-            "gh", "org", "repo", 32, "project", "", opener=opener
+        analyzed, issues = fetch_commit_delta_issues(
+            "gh", "org", "repo", HEAD, "project", "", target_commit=BASE, opener=opener
         )
         self.assertTrue(analyzed)
         self.assertEqual(issues, [])
         method, url, body = seen[0]
         self.assertEqual(method, "GET")
         self.assertIsNone(body)
-        self.assertIn("/repositories/repo/pull-requests/32/issues", url)
+        self.assertIn(f"/repositories/repo/commits/{HEAD}/deltaIssues", url)
         self.assertIn("status=new", url)
+        self.assertIn(f"targetCommitUuid={BASE}", url)
+        self.assertNotIn("/pull-requests/", url)
 
     def test_an_unanalyzed_pull_request_is_never_reported_as_having_no_issues(self):
         """`analyzed: false` and "clean" are the same empty list, and must not read the same.
@@ -334,13 +351,13 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
         Codacy has not read — the single failure this reporter exists to prevent — so the flag
         travels with the data and suppresses the count.
         """
-        from scripts.codacy_api_report import build_report, fetch_pull_request_issues
+        from scripts.codacy_api_report import build_report, fetch_commit_delta_issues
 
         def opener(request, timeout=30):
             return _Response({"analyzed": False, "data": [], "pagination": {}})
 
-        analyzed, issues = fetch_pull_request_issues(
-            "gh", "org", "repo", 32, "project", "", opener=opener
+        analyzed, issues = fetch_commit_delta_issues(
+            "gh", "org", "repo", HEAD, "project", "", target_commit=BASE, opener=opener
         )
         self.assertFalse(analyzed)
 
@@ -355,7 +372,7 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
         self.assertNotIn("NÃO DISPONÍVEL", clean)
 
     def test_a_missing_analyzed_flag_is_refused_rather_than_assumed_true(self):
-        from scripts.codacy_api_report import CodacyAPIError, fetch_pull_request_issues
+        from scripts.codacy_api_report import CodacyAPIError, fetch_commit_delta_issues
 
         # A factory again, not a keyword default. Binding the loop variable as `payload=payload`
         # works, but puts a mutable dict in a signature — pylint W0102, and the finding Codacy
@@ -374,14 +391,14 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
                 opener = make_opener(payload)
 
                 with self.assertRaises(CodacyAPIError) as caught:
-                    fetch_pull_request_issues(
-                        "gh", "org", "repo", 32, "project", "", opener=opener
+                    fetch_commit_delta_issues(
+                        "gh", "org", "repo", HEAD, "project", "", opener=opener
                     )
                 self.assertIn("analyzed", str(caught.exception))
 
     def test_one_unanalyzed_page_makes_the_whole_paginated_answer_unanalyzed(self):
         """Combining pages with `and`, not last-page-wins."""
-        from scripts.codacy_api_report import fetch_pull_request_issues
+        from scripts.codacy_api_report import fetch_commit_delta_issues
 
         pages = [
             {"analyzed": False, "data": [], "pagination": {"cursor": "p2"}},
@@ -391,8 +408,8 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
         def opener(request, timeout=30):
             return _Response(pages.pop(0))
 
-        analyzed, _ = fetch_pull_request_issues(
-            "gh", "org", "repo", 32, "project", "", opener=opener
+        analyzed, _ = fetch_commit_delta_issues(
+            "gh", "org", "repo", HEAD, "project", "", target_commit=BASE, opener=opener
         )
         self.assertFalse(analyzed)
 
@@ -403,7 +420,7 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
         through `commitIssue` to find the severity and path. Without that, every row of a
         pull-request report renders as `Unknown`.
         """
-        from scripts.codacy_api_report import build_report, fetch_pull_request_issues
+        from scripts.codacy_api_report import build_report, fetch_commit_delta_issues
 
         pages = [
             {
@@ -439,8 +456,8 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
             urls.append(request.full_url)
             return _Response(pages.pop(0))
 
-        analyzed, issues = fetch_pull_request_issues(
-            "gh", "org", "repo", 32, "project", "", opener=opener
+        analyzed, issues = fetch_commit_delta_issues(
+            "gh", "org", "repo", HEAD, "project", "", target_commit=BASE, opener=opener
         )
         self.assertTrue(analyzed)
         self.assertEqual(len(issues), 2)
@@ -476,19 +493,47 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
         self.assertEqual(payload["pullRequest"], 30)
         self.assertIs(payload["analyzed"], False)
 
-    def test_a_pull_request_number_that_is_not_a_positive_integer_is_refused(self):
-        """A bad number would be interpolated into the path and answered with a bare 404."""
-        from scripts.codacy_api_report import CodacyAPIError, fetch_pull_request_issues
+    def test_a_value_that_is_not_a_commit_sha_is_refused_before_any_request(self):
+        """A bad SHA would be interpolated into the path and answered with a bare 404.
+
+        Both SHAs arrive from workflow environment variables. A ref name, an empty expression
+        substituted into a non-empty string, or a non-string from a programmatic caller must
+        each produce an error naming the misconfiguration — not a 404, and not a `TypeError`
+        from the regex, which is what a bare `re.match` gives for a non-string.
+        """
+        from scripts.codacy_api_report import CodacyAPIError, fetch_commit_delta_issues
 
         def opener(request, timeout=30):
             raise AssertionError(f"no request should be made: {request.full_url}")
 
-        for value in (0, -1, "32", 3.0, None, True):
-            with self.subTest(value=value):
+        bad = ("", "refs/pull/30/merge", "abc", "zzzzzzz", HEAD + "0", 30, 3.0, None, True)
+        for value in bad:
+            with self.subTest(source=value):
                 with self.assertRaises(CodacyAPIError):
-                    fetch_pull_request_issues(
+                    fetch_commit_delta_issues(
                         "gh", "org", "repo", value, "project", "", opener=opener
                     )
+        # The target SHA is validated on the same terms, not merely passed through.
+        for value in bad[1:]:
+            with self.subTest(target=value):
+                with self.assertRaises(CodacyAPIError):
+                    fetch_commit_delta_issues(
+                        "gh", "org", "repo", HEAD, "project", "",
+                        target_commit=value, opener=opener,
+                    )
+
+    def test_an_abbreviated_sha_is_accepted(self):
+        """Codacy documents the path segment as a "UUID or SHA string"; short SHAs are valid."""
+        from scripts.codacy_api_report import fetch_commit_delta_issues
+
+        urls = []
+
+        def opener(request, timeout=30) -> _Response:
+            urls.append(request.full_url)
+            return _Response({"analyzed": True, "data": [], "pagination": {}})
+
+        fetch_commit_delta_issues("gh", "org", "repo", HEAD[:7], "project", "", opener=opener)
+        self.assertIn(f"/commits/{HEAD[:7]}/deltaIssues", urls[0])
 
     def test_the_configured_pull_request_variable_is_parsed_or_refused(self):
         """An unset variable is the repository scope; a malformed one is never silently that.
@@ -510,7 +555,7 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
 
     def test_the_account_token_fallback_covers_the_pull_request_endpoint_too(self):
         """The fallback is shared, so it must be shown to apply to both scopes."""
-        from scripts.codacy_api_report import fetch_pull_request_issues
+        from scripts.codacy_api_report import fetch_commit_delta_issues
 
         seen = []
 
@@ -522,8 +567,8 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
                 )
             return _Response({"analyzed": True, "data": [], "pagination": {}})
 
-        analyzed, _ = fetch_pull_request_issues(
-            "gh", "org", "repo", 32, "project", "account", opener=opener
+        analyzed, _ = fetch_commit_delta_issues(
+            "gh", "org", "repo", HEAD, "project", "account", opener=opener
         )
         self.assertTrue(analyzed)
         self.assertEqual(len(seen), 2)
@@ -536,15 +581,16 @@ class CodacyScopeDegradationTest(unittest.TestCase):
     Observed live: Codacy answers `listPullRequestIssues` with
     `401 {"code":"ProjectTokenNotAllowed"}` for a repository token. The endpoint is answered
     only to an account token. A deployment holding just `CODACY_PROJECT_TOKEN` can therefore
-    reach every repository-scoped endpoint and no pull-request one.
+    reach every repository-scoped endpoint and no pull-request one. The delta therefore comes
+    from `listCommitDeltaIssues`; these cases cover what happens if Codacy refuses that one too.
     """
 
     @staticmethod
     def _opener(pull_request_status=401, repository_payload=None) -> Callable[..., _Response]:
-        """An opener that rejects the pull-request endpoint and serves the repository one."""
+        """An opener that rejects the delta endpoint and serves the repository search."""
 
         def opener(request, timeout=30) -> _Response:
-            if "/pull-requests/" in request.full_url:
+            if "/deltaIssues" in request.full_url:
                 raise urllib.error.HTTPError(
                     request.full_url,
                     pull_request_status,
@@ -556,12 +602,12 @@ class CodacyScopeDegradationTest(unittest.TestCase):
 
         return opener
 
-    def test_a_rejected_pull_request_endpoint_raises_a_typed_auth_error(self):
-        from scripts.codacy_api_report import CodacyAuthError, fetch_pull_request_issues
+    def test_a_rejected_delta_endpoint_raises_a_typed_auth_error(self):
+        from scripts.codacy_api_report import CodacyAuthError, fetch_commit_delta_issues
 
         with self.assertRaises(CodacyAuthError):
-            fetch_pull_request_issues(
-                "gh", "org", "repo", 32, "project", "", opener=self._opener()
+            fetch_commit_delta_issues(
+                "gh", "org", "repo", HEAD, "project", "", opener=self._opener()
             )
 
     def test_a_non_auth_failure_is_not_a_typed_auth_error(self):
@@ -577,22 +623,25 @@ class CodacyScopeDegradationTest(unittest.TestCase):
             fetch_issues("gh", "org", "repo", "project", "", opener=opener)
         self.assertNotIsInstance(caught.exception, CodacyAuthError)
 
-    def test_without_an_account_token_the_run_degrades_and_says_so_loudly(self):
-        """Degrading is allowed; relabelling a backlog as a pull request's delta is not.
+    def test_a_refused_delta_degrades_to_the_backlog_and_says_so_loudly(self):
+        """Degrading is allowed; relabelling a backlog as a branch's delta is not.
 
-        The alternative to degrading would be failing every pull-request run over a secret the
-        repository has never had. What it must never do is keep the pull-request label: the
-        report and the artifact both drop to `repository` scope and carry a note saying the
-        counts are not the delta.
+        The alternative to degrading is producing no report at all when Codacy refuses the
+        delta endpoint. What it must never do is keep the pull-request label: the report and
+        the artifact both drop to `repository` scope and carry a note saying, in words, that
+        the counts are not the delta — and naming the refusal so it can be diagnosed.
         """
         from scripts.codacy_api_report import build_report, collect
 
-        collected = collect("gh", "org", "repo", 32, "project", "", opener=self._opener())
+        collected = collect(
+            "gh", "org", "repo", 32, "project", "", src_commit=HEAD, opener=self._opener()
+        )
         self.assertIsNone(collected.pull_request)
         self.assertEqual(collected.issues, [{"id": "backlog"}])
         self.assertIn("NÃO DISPONÍVEL", collected.note)
-        self.assertIn("CODACY_API_TOKEN", collected.note)
-        self.assertIn("not this pull request's new issues", collected.note)
+        self.assertIn("not this branch's new issues", collected.note)
+        # The refusal itself survives into the note, or the degradation is undiagnosable.
+        self.assertIn("401", collected.note)
 
         report = build_report(
             "org", "repo", collected.issues, pull_request=collected.pull_request,
@@ -602,17 +651,37 @@ class CodacyScopeDegradationTest(unittest.TestCase):
         self.assertNotIn("Scope: **pull request", report)
         self.assertIn("NÃO DISPONÍVEL", report)
 
-    def test_with_an_account_token_configured_a_rejection_is_a_real_failure(self):
-        """Both credentials rejected means broken auth, not an unconfigured capability."""
-        from scripts.codacy_api_report import CodacyAuthError, collect
+    def test_the_project_token_is_never_sent_to_the_pull_request_endpoint(self):
+        """Codacy refuses a repository token there, so the reporter must not present it.
 
-        with self.assertRaises(CodacyAuthError):
-            collect("gh", "org", "repo", 32, "project", "account", opener=self._opener())
+        The pull-request number is carried as a label for the report and nothing else. This
+        asserts on the URLs actually requested, so a future change that reintroduced the
+        account-token-only endpoint would be caught rather than merely discouraged in a
+        comment.
+        """
+        from scripts.codacy_api_report import collect
+
+        urls = []
+
+        def opener(request, timeout=30) -> _Response:
+            urls.append(request.full_url)
+            return _Response({"analyzed": True, "data": [], "pagination": {}})
+
+        collect(
+            "gh", "org", "repo", 30, "project", "", src_commit=HEAD,
+            target_commit=BASE, opener=opener,
+        )
+        self.assertTrue(urls)
+        for url in urls:
+            self.assertNotIn("/pull-requests/", url)
+        self.assertIn("/deltaIssues", urls[0])
 
     def test_the_degradation_is_recorded_in_the_artifact_not_only_in_the_prose(self):
         from scripts.codacy_api_report import collect, write_artifacts
 
-        collected = collect("gh", "org", "repo", 32, "project", "", opener=self._opener())
+        collected = collect(
+            "gh", "org", "repo", 32, "project", "", src_commit=HEAD, opener=self._opener()
+        )
         with tempfile.TemporaryDirectory() as td:
             _, issues_path = write_artifacts(
                 "org", "repo", collected.issues, directory=Path(td),

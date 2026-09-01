@@ -25,12 +25,13 @@ class CodacyAPIError(RuntimeError):
 class CodacyAuthError(CodacyAPIError):
     """Codacy rejected every configured credential for this endpoint.
 
-    Distinguished from other failures because it is the one that can mean "this endpoint needs
-    a credential nobody configured" rather than "something is broken". Codacy answers
+    Distinguished from other failures because it is the one that can mean "this endpoint is
+    outside the credential's scope" rather than "something is broken". Codacy answers
     `listPullRequestIssues` only to an account token, refusing a repository token with
-    `401 ProjectTokenNotAllowed` — observed live in run 33434452877 — so a deployment that has
-    only `CODACY_PROJECT_TOKEN` can reach every repository-scoped endpoint and none of the
-    pull-request ones. The caller needs to tell that apart from a rejected token.
+    `401 ProjectTokenNotAllowed` — observed live in run 33434452877. That is why the delta is
+    taken from `listCommitDeltaIssues` instead, which sits in the repository analysis tree the
+    project token is scoped to; this class exists so a scope refusal on the delta can be told
+    apart from a broken credential and reported rather than crashing the run.
     """
 
 
@@ -59,16 +60,27 @@ def _issue_url(provider: str, org: str, repo: str) -> str:
     return f"{_repository_url(provider, org, repo)}/issues/search"
 
 
-def _pull_request_issue_url(provider: str, org: str, repo: str, pull_request: int) -> str:
-    """`listPullRequestIssues` — the issues Codacy attributes to one pull request.
+def _commit_delta_url(provider: str, org: str, repo: str, src_commit: str) -> str:
+    """`listCommitDeltaIssues` — the issues one commit introduced or fixed.
+
+    This is how the delta is obtained *without* an account token. Codacy's other delta
+    endpoint, `listPullRequestIssues`, refuses a repository token outright
+    (`401 ProjectTokenNotAllowed`, observed in run 33434452877), but this one sits in the
+    repository analysis tree that `CODACY_PROJECT_TOKEN` is scoped to, and its published
+    contract answers the same question: "List the issues introduced or fixed by a commit …
+    Codacy will calculate the issues by creating a delta between the source commit and its
+    parent commit. As an alternative, you can also provide a destination commit."
+
+    The distinction from `searchRepositoryIssues` is the whole point: a body of `{}` there
+    returns the repository's entire backlog, and quoting that total beside a branch would
+    credit it with every finding that was already on the default branch.
 
     Verified against Codacy's published OpenAPI document (`api.codacy.com/api/api-docs/
-    swagger.yaml`, operationId `listPullRequestIssues`, summary "List issues found in a pull
-    request"). This is the distinction the repository-scoped endpoint cannot make: a body of
-    `{}` there returns the repository's whole backlog, and reporting that total as a pull
-    request's own delta would attribute to a branch every finding that was already on main.
+    swagger.yaml`, operationId `listCommitDeltaIssues`). Its `CommitDeltaIssuesResponse` has
+    the same shape as the pull-request one — required `analyzed`, `data` of `CommitDeltaIssue`,
+    optional `pagination` — so every fail-closed rule below applies unchanged.
     """
-    return f"{_repository_url(provider, org, repo)}/pull-requests/{pull_request}/issues"
+    return f"{_repository_url(provider, org, repo)}/commits/{_quote(src_commit)}/deltaIssues"
 
 
 def _redact(text: str, *secrets: str) -> str:
@@ -122,7 +134,7 @@ class _Endpoint(NamedTuple):
     """One Codacy endpoint and how it is called, apart from the credential and the cursor.
 
     The two scopes differ in shape, not just in path: the repository search is a POST carrying
-    a JSON filter body, the pull-request listing a GET carrying query parameters. Holding that
+    a JSON filter body, the commit-delta listing a GET carrying query parameters. Holding that
     difference in one value keeps the pagination loop identical for both instead of growing a
     parameter for each way they diverge.
     """
@@ -134,7 +146,7 @@ class _Endpoint(NamedTuple):
 
 
 #: Identifies this reporter in Codacy's request logs. Bumped when the request shape changes.
-USER_AGENT = "Codework-Codacy-API-Report/1.2"
+USER_AGENT = "Codework-Codacy-API-Report/1.3"
 
 
 def _page_request(
@@ -226,38 +238,39 @@ def _fetch_pages(
     return issues
 
 
-def _fetch_pull_request_pages(
+def _fetch_delta_pages(
     base: str,
     token_header: str,
     token: str,
     *,
+    params: dict[str, str],
     opener: Callable = urllib.request.urlopen,
 ) -> tuple[bool, list[dict]]:
-    """The pull request's new issues, paired with whether Codacy has analysed its head.
+    """A delta endpoint's new issues, paired with whether Codacy has analysed the commit.
 
     `analyzed` is not advisory. The published schema documents `data` as an "empty list if
-    Codacy didn't analyze the latest commit yet", so an unanalysed pull request and a clean one
-    are indistinguishable by the issue list alone. Reporting the first as the second would
-    announce a green result for work Codacy has not looked at, which is the one claim this
-    reporter exists to make impossible — so the flag is carried out of here and a missing or
-    non-boolean flag is refused rather than assumed true.
+    Codacy didn't analyze the commit yet", so an unanalysed commit and a clean one are
+    indistinguishable by the issue list alone. Reporting the first as the second would announce
+    a green result for work Codacy has not looked at, which is the one claim this reporter
+    exists to make impossible — so the flag is carried out of here and a missing or non-boolean
+    flag is refused rather than assumed true.
 
     Pages are combined with `and`: if any page of a paginated answer reports an unanalysed
-    head, the whole answer is unanalysed.
+    commit, the whole answer is unanalysed.
     """
-    endpoint = _Endpoint(base=base, method="GET", params={"status": "new"})
+    endpoint = _Endpoint(base=base, method="GET", params=params)
     issues: list[dict] = []
     analyzed: bool | None = None
     for payload in _paged_payloads(endpoint, token_header, token, opener=opener):
         page_analyzed = payload.get("analyzed")
         if not isinstance(page_analyzed, bool):
             raise CodacyAPIError(
-                "Codacy API omitted the required `analyzed` field for the pull request"
+                "Codacy API omitted the required `analyzed` field for the commit delta"
             )
         analyzed = page_analyzed if analyzed is None else (analyzed and page_analyzed)
         issues.extend(_page_issues(payload))
     if analyzed is None:
-        raise CodacyAPIError("Codacy API returned no pages for the pull request")
+        raise CodacyAPIError("Codacy API returned no pages for the commit delta")
     return analyzed, issues
 
 
@@ -311,30 +324,54 @@ def fetch_issues(
     )
 
 
-def fetch_pull_request_issues(
+#: A commit SHA as Codacy accepts it in a path segment: hexadecimal, full or abbreviated.
+_COMMIT_SHA = re.compile(r"^[0-9a-fA-F]{7,40}$")
+
+
+def fetch_commit_delta_issues(
     provider: str,
     org: str,
     repo: str,
-    pull_request: int,
+    src_commit: str,
     project_token: str,
     account_token: str,
     *,
+    target_commit: str = "",
     opener: Callable = urllib.request.urlopen,
 ) -> tuple[bool, list[dict]]:
-    """Fetch the issues Codacy attributes to one pull request, with its `analyzed` flag.
+    """The issues a commit introduced, with the flag saying whether Codacy analysed it.
 
-    The pull request number is validated here rather than interpolated on trust: it reaches
-    this function from a workflow environment variable, and a value that is not a positive
-    integer would otherwise be pasted into the request path and answered with a 404 whose real
-    cause — a misconfigured workflow — would be invisible in the report.
+    `target_commit` is the base the delta is taken against. Left empty, Codacy compares against
+    the source commit's parent, which on a pull-request branch is the previous commit *on that
+    branch* — the delta of one push, not of the whole branch. Passing the pull request's base
+    SHA makes the answer the delta of the branch against what it will merge into, which is the
+    question a reviewer is actually asking.
+
+    Both SHAs are validated rather than interpolated on trust: they reach this function from
+    workflow environment variables, and a value that is not a commit SHA would be pasted into
+    the request path and answered with a 404 whose real cause — a misconfigured workflow —
+    would be invisible in the report.
     """
-    if isinstance(pull_request, bool) or not isinstance(pull_request, int) or pull_request < 1:
-        raise CodacyAPIError(f"invalid pull request number: {pull_request!r}")
-    base = _pull_request_issue_url(provider, org, repo, pull_request)
+    for label, value in (("source", src_commit), ("target", target_commit)):
+        # `isinstance` first: `re.match` raises `TypeError` on a non-string, which would
+        # replace the error naming the misconfiguration with one naming the regex.
+        if not isinstance(value, str):
+            raise CodacyAPIError(f"invalid {label} commit SHA: {value!r}")
+        if value and not _COMMIT_SHA.match(value):
+            raise CodacyAPIError(f"invalid {label} commit SHA: {value!r}")
+    if not src_commit:
+        raise CodacyAPIError("no source commit configured for the delta query")
+
+    base = _commit_delta_url(provider, org, repo, src_commit)
+    params = {"status": "new"}
+    if target_commit:
+        params["targetCommitUuid"] = target_commit
     return _with_credentials(
         project_token,
         account_token,
-        lambda header, token: _fetch_pull_request_pages(base, header, token, opener=opener),
+        lambda header, token: _fetch_delta_pages(
+            base, header, token, params=params, opener=opener
+        ),
     )
 
 
@@ -517,16 +554,14 @@ def parse_pull_request(raw: str) -> int | None:
     return int(text)
 
 
-def _no_account_token_note(pull_request: int) -> str:
-    """Why a pull-request run is reporting the repository backlog instead of a delta."""
+def _delta_refused_note(pull_request: int | None, detail: str) -> str:
+    """Why a delta run is reporting the repository backlog instead of the branch's own issues."""
+    subject = f"pull request #{pull_request}" if pull_request else "commit"
     return (
-        f"**NÃO DISPONÍVEL — pull request #{pull_request} delta.** Codacy refused "
-        "`listPullRequestIssues` for the configured repository token "
-        "(`401 ProjectTokenNotAllowed`); that endpoint is answered only to an account token, "
-        "and no `CODACY_API_TOKEN` secret is configured. **The counts above are the repository "
-        "backlog, not this pull request's new issues** — do not quote them as the delta. To "
-        "obtain the delta, add a Codacy account API token as the repository secret "
-        "`CODACY_API_TOKEN` (see `docs/CODACY_API_INTEGRATION.md`)."
+        f"**NÃO DISPONÍVEL — {subject} delta.** Codacy refused `listCommitDeltaIssues` for the "
+        f"configured credential ({detail}). **The counts above are the repository backlog, not "
+        "this branch's new issues** — do not quote them as the delta. The delta published by "
+        "the Codacy GitHub App on the pull request itself remains the authoritative summary."
     )
 
 
@@ -547,39 +582,44 @@ def collect(
     project_token: str,
     account_token: str,
     *,
+    src_commit: str = "",
+    target_commit: str = "",
     opener: Callable = urllib.request.urlopen,
 ) -> Collected:
-    """Fetch at the requested scope, degrading to the repository backlog only when it is honest.
+    """Fetch the branch delta when a commit is configured, else the repository backlog.
 
-    The degradation is narrow on purpose. It applies when Codacy rejects the pull-request
-    endpoint *and no account token was ever configured* — an unconfigured optional capability,
-    not a fault, and one whose only alternative would be to fail every pull-request run over a
-    secret the repository has never had. A rejection with an account token present is a real
-    authentication failure and is raised.
+    The delta comes from `listCommitDeltaIssues`, which the repository token reaches. The
+    pull-request number is carried only as a *label* for the report — it is never sent to
+    `listPullRequestIssues`, the endpoint that refuses a repository token outright, so the
+    project token is never presented to a credential class it is not scoped for.
 
-    When it degrades, the scope reported is `repository` and the note says so in the report and
-    in the artifact. It never keeps the pull-request label over a repository-wide count: that
-    substitution — quoting the backlog as a branch's delta — is the specific error this whole
-    change exists to make impossible, and a fallback that committed it would be worse than the
-    bug it works around.
+    Degradation is narrow on purpose: only an authentication refusal falls back, and only to
+    the repository backlog with the scope relabelled and a note saying so. It never keeps the
+    pull-request label over a repository-wide count — that substitution, quoting the backlog as
+    a branch's delta, is the specific error this whole change exists to make impossible.
     """
-    if pull_request is None:
+    if not src_commit:
         return Collected(
             None, True, fetch_issues(provider, org, repo, project_token, account_token, opener=opener), ""
         )
     try:
-        analyzed, issues = fetch_pull_request_issues(
-            provider, org, repo, pull_request, project_token, account_token, opener=opener
+        analyzed, issues = fetch_commit_delta_issues(
+            provider,
+            org,
+            repo,
+            src_commit,
+            project_token,
+            account_token,
+            target_commit=target_commit,
+            opener=opener,
         )
         return Collected(pull_request, analyzed, issues, "")
-    except CodacyAuthError:
-        if account_token:
-            raise
+    except CodacyAuthError as exc:
         return Collected(
             None,
             True,
             fetch_issues(provider, org, repo, project_token, account_token, opener=opener),
-            _no_account_token_note(pull_request),
+            _delta_refused_note(pull_request, str(exc)),
         )
 
 
@@ -595,6 +635,8 @@ def main() -> int:
         parse_pull_request(os.environ.get("CODACY_PULL_REQUEST", "")),
         os.environ.get("CODACY_PROJECT_TOKEN", ""),
         os.environ.get("CODACY_API_TOKEN", ""),
+        src_commit=os.environ.get("CODACY_COMMIT", "").strip(),
+        target_commit=os.environ.get("CODACY_BASE_COMMIT", "").strip(),
     )
 
     report_path, _ = write_artifacts(
