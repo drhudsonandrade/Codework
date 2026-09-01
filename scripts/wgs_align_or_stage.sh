@@ -72,11 +72,29 @@ open_verified() {
     :
   else
     rc=$?
-    if [[ "$rc" -eq 4 ]]; then
-      echo "NÃO DISPONÍVEL: $key changed after the gate verified it" >&2
-    else
-      echo "NÃO DISPONÍVEL: verified $key is missing, unreadable, or unsafe" >&2
-    fi
+    case "$rc" in
+      2)
+        echo "NÃO DISPONÍVEL: input-qc.json records an invalid SHA-256 for $key" >&2
+        ;;
+      3)
+        echo "NÃO DISPONÍVEL: verified $key staging is unavailable" >&2
+        ;;
+      4)
+        echo "NÃO DISPONÍVEL: $key changed after the gate verified it" >&2
+        ;;
+      5)
+        echo "NÃO DISPONÍVEL: verified $key is outside the sample directory or was refused by secure containment" >&2
+        ;;
+      6)
+        echo "NÃO DISPONÍVEL: verified $key is missing" >&2
+        ;;
+      7)
+        echo "NÃO DISPONÍVEL: verified $key is unreadable" >&2
+        ;;
+      *)
+        echo "NÃO DISPONÍVEL: verified $key materializer failed unexpectedly" >&2
+        ;;
+    esac
     return 3
   fi
 
