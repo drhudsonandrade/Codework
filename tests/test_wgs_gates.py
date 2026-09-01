@@ -40,7 +40,7 @@ def _capture_expected_exception(
         operation()
     except expected_type as exc:
         return exc
-    raise test_case.failureException(f"{expected_type.__name__} was not raised")
+    return test_case.fail(f"{expected_type.__name__} was not raised")
 
 
 class WgsVerificationFixtureTest(unittest.TestCase):
