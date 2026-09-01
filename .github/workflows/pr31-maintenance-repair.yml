@@ -1,0 +1,178 @@
+name: PR31 maintenance repair
+
+on:
+  push:
+    branches:
+      - claude/fix-pr30-pr22-pr20-lbwp6a
+    paths:
+      - .github/workflows/pr31-maintenance-repair.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: claude/fix-pr30-pr22-pr20-lbwp6a
+          fetch-depth: 0
+      - name: Apply narrow PR31 repairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          shell = Path('scripts/wgs_align_or_stage.sh')
+          text = shell.read_text(encoding='utf-8')
+          anchor = '''[[ -r /dev/fd/0 ]] || {
+            echo 'NÃO DISPONÍVEL: /dev/fd unavailable, cannot bind verified inputs' >&2; exit 2; }
+
+          open_verified() {
+          '''
+          replacement = '''[[ -r /dev/fd/0 ]] || {
+            echo 'NÃO DISPONÍVEL: /dev/fd unavailable, cannot bind verified inputs' >&2; exit 2; }
+
+          # Exit-code semantics have one authority: the Python materializer exports its current
+          # contract and this shell consumes it. A future Python renumbering therefore cannot
+          # silently relabel digest drift, containment refusal, absence, or unreadability.
+          materializer_contract=$(python3 "$materializer" --print-exit-codes) || {
+            echo 'NÃO DISPONÍVEL: verified input materializer exit-code contract unavailable' >&2; exit 2; }
+          materializer_codes=$(jq -er '
+            [.INVALID_ARGUMENT, .STAGING_UNAVAILABLE, .DIGEST_MISMATCH, .INPUT_REFUSED, .INPUT_MISSING, .INPUT_UNREADABLE] as $codes
+            | if (($codes | length) == 6 and ($codes | unique | length) == 6 and all($codes[]; type == "number" and floor == . and . > 0))
+              then ($codes | @tsv)
+              else error("invalid materializer exit-code contract")
+              end
+          ' <<<"$materializer_contract") || {
+            echo 'NÃO DISPONÍVEL: invalid verified input materializer exit-code contract' >&2; exit 2; }
+          IFS=$'\t' read -r materializer_invalid_argument materializer_staging_unavailable \
+            materializer_digest_mismatch materializer_input_refused materializer_input_missing \
+            materializer_input_unreadable <<<"$materializer_codes"
+
+          open_verified() {
+          '''
+          if anchor not in text:
+              raise SystemExit('shell contract anchor not found')
+          text = text.replace(anchor, replacement, 1)
+
+          old_case = '''    case "$rc" in
+                2)
+                  echo "NÃO DISPONÍVEL: input-qc.json records an invalid SHA-256 for $key" >&2
+                  ;;
+                3)
+                  echo "NÃO DISPONÍVEL: verified $key staging is unavailable" >&2
+                  ;;
+                4)
+                  echo "NÃO DISPONÍVEL: $key changed after the gate verified it" >&2
+                  ;;
+                5)
+                  echo "NÃO DISPONÍVEL: verified $key is outside the sample directory or was refused by secure containment" >&2
+                  ;;
+                6)
+                  echo "NÃO DISPONÍVEL: verified $key is missing" >&2
+                  ;;
+                7)
+                  echo "NÃO DISPONÍVEL: verified $key is unreadable" >&2
+                  ;;
+                *)
+                  echo "NÃO DISPONÍVEL: verified $key materializer failed unexpectedly" >&2
+                  ;;
+              esac
+          '''
+          new_case = '''    case "$rc" in
+                "$materializer_invalid_argument")
+                  echo "NÃO DISPONÍVEL: input-qc.json records an invalid SHA-256 for $key" >&2
+                  ;;
+                "$materializer_staging_unavailable")
+                  echo "NÃO DISPONÍVEL: verified $key staging is unavailable" >&2
+                  ;;
+                "$materializer_digest_mismatch")
+                  echo "NÃO DISPONÍVEL: $key changed after the gate verified it" >&2
+                  ;;
+                "$materializer_input_refused")
+                  echo "NÃO DISPONÍVEL: verified $key is outside the sample directory or was refused by secure containment" >&2
+                  ;;
+                "$materializer_input_missing")
+                  echo "NÃO DISPONÍVEL: verified $key is missing" >&2
+                  ;;
+                "$materializer_input_unreadable")
+                  echo "NÃO DISPONÍVEL: verified $key is unreadable" >&2
+                  ;;
+                *)
+                  echo "NÃO DISPONÍVEL: verified $key materializer failed unexpectedly" >&2
+                  ;;
+              esac
+          '''
+          if old_case not in text:
+              raise SystemExit('numeric materializer case not found')
+          shell.write_text(text.replace(old_case, new_case, 1), encoding='utf-8')
+
+          boundary = Path('tests/test_wgs_align_or_stage.sh')
+          text = boundary.read_text(encoding='utf-8')
+          old_fifo = '''((rc != 124)) || fail 'verified-input open blocked on FIFO replacement'
+          assert_no_tools "$case_root/tools.log"
+          '''
+          new_fifo = '''((rc != 124)) || fail 'verified-input open blocked on FIFO replacement'
+          ((rc == 3)) || fail "FIFO replacement returned $rc, expected classified refusal code 3"
+          assert_contains "$stderr" 'NÃO DISPONÍVEL'
+          assert_contains "$stderr" 'refused by secure containment'
+          assert_no_tools "$case_root/tools.log"
+          '''
+          if old_fifo not in text:
+              raise SystemExit('FIFO assertion anchor not found')
+          boundary.write_text(text.replace(old_fifo, new_fifo, 1), encoding='utf-8')
+
+          gates = Path('tests/test_wgs_gates.py')
+          text = gates.read_text(encoding='utf-8')
+          replacements = {
+              '''                with self.subTest(escape=escape):
+                              with self.assertRaises(ValueError) as caught:
+                                  open_contained(root, root.joinpath(escape, "outside.fastq"))
+                              self.assertIn("escapes the sample directory", str(caught.exception))
+          ''': '''                with self.subTest(escape=escape), self.assertRaises(ValueError) as caught:
+                              open_contained(root, root.joinpath(escape, "outside.fastq"))
+                          self.assertIn("escapes the sample directory", str(caught.exception))
+          ''',
+              '''                with self.subTest(escape=escape):
+                              with self.assertRaises(ValueError):
+                                  resolve(root, escape)
+          ''': '''                with self.subTest(escape=escape), self.assertRaises(ValueError):
+                              resolve(root, escape)
+          ''',
+              '''                with self.subTest(value=value):
+                              with self.assertRaises(ValueError):
+                                  resolve(root, value)
+          ''': '''                with self.subTest(value=value), self.assertRaises(ValueError):
+                              resolve(root, value)
+          ''',
+              '''                with self.subTest(value=value):
+                              with self.assertRaises(ValueError) as caught:
+                                  resolve(root, value)
+                              self.assertIn("must be a string", str(caught.exception))
+          ''': '''                with self.subTest(value=value), self.assertRaises(ValueError) as caught:
+                              resolve(root, value)
+                          self.assertIn("must be a string", str(caught.exception))
+          ''',
+          }
+          for old, new in replacements.items():
+              if old in text:
+                  text = text.replace(old, new, 1)
+          gates.write_text(text, encoding='utf-8')
+          PY
+
+          python3 -m compileall -q scripts tests
+          bash -n scripts/wgs_align_or_stage.sh tests/test_wgs_align_or_stage.sh
+          git diff --check
+      - name: Commit repairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'pr31-maintenance-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add scripts/wgs_align_or_stage.sh tests/test_wgs_align_or_stage.sh tests/test_wgs_gates.py
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix(wgs): preserve materializer verification semantics'
+          git push origin HEAD:claude/fix-pr30-pr22-pr20-lbwp6a
