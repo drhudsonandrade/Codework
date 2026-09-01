@@ -53,10 +53,9 @@ MAX_GAP_KB = 1000.0
 #: never the *density*, so fifty homozygous calls scattered over five megabases satisfied it
 #: — which is what the module's own preamble calls "a 2 Mb gap with four markers in it".
 #:
-#: Measured on the first real array: the two longest tracts averaged 98.7 and 70.1 kb between
-#: markers against a sample median of 2.11 kb — 47x and 33x — and together they were 68% of
-#: the reported F_ROH. Both sat on chromosome 9, over the pericentromeric heterochromatin
-#: that arrays barely tile. They were coverage holes counted as homozygous genome.
+#: This is a policy bound, not an empirical benchmark. A tract whose average marker spacing
+#: is far above the sample's own median is treated as insufficiently measured instead of
+#: letting a low-density coverage hole dominate the reported homozygous fraction.
 #:
 #: The bound is relative to the sample rather than absolute because array densities differ by
 #: an order of magnitude between platforms, and a threshold in kilobases would be either

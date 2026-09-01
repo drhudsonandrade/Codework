@@ -848,10 +848,10 @@ def build_clinical_findings(
 
     by_rsid = {str(x["rsid"]).lower(): x for x in evidence.get("loci", [])}
 
-    # Validity is computed once per gene and stored once. Copying it into every finding cost
-    # 391 MB and 2.8 GB of peak memory on the 54,845-locus registry, because a gene with
-    # hundreds of catalogued variants carried hundreds of identical copies of its ClinGen and
-    # GenCC curations. Normalising loses nothing: every finding names its gene.
+    # Validity is computed once per gene and stored once. Repeating the same validity block
+    # at every locus duplicates evidence and makes resource use grow with repeated records.
+    # Normalising loses nothing: every finding names its gene and the evidence remains
+    # addressable from the shared gene-level block.
     validity_cache: dict[str, dict[str, Any]] = {}
 
     def validity_for(gene: Any) -> dict[str, Any]:

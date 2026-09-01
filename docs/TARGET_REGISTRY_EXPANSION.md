@@ -150,7 +150,15 @@ def load(p):
     return json.loads(gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw)
 two = load("config/targets_clinvar_plp.json.gz")
 one = load("config/targets_clinvar_plp_1star.json.gz")
-genes = lambda d: {t[k] for t in d["targets"] for k in ("gene",) if isinstance(t.get(k), str) and t[k]}
+def genes(document):
+    values = set()
+    for target in document["targets"]:
+        target_genes = target.get("genes", [])
+        if isinstance(target_genes, str):
+            target_genes = [target_genes]
+        if isinstance(target_genes, list):
+            values.update(gene for gene in target_genes if isinstance(gene, str) and gene)
+    return values
 r2 = {t["rsid"] for t in two["targets"]}; r1 = {t["rsid"] for t in one["targets"]}
 print(len(r2), len(genes(two)))
 print(len(r1 - r2), len(genes(one) - genes(two)))
@@ -173,10 +181,11 @@ exige `--min-review-stars 1` para materializar explicitamente a alternativa ampl
 
 ## Por que o release em massa, e não a API
 
-Curar 3.137 genes via E-utilities são ~10 mil requisições, uma hora de tráfego limitado, e
-um rate limit de distância de um registro pela metade que *parece* completo.
-`variant_summary.txt.gz` é o mesmo dado num download versionado: ou o arquivo está lá ou não
-está. O mesmo vale para o GenCC e para o GWAS Catalog.
+A rota por E-utilities exige muitas requisições e pode terminar parcialmente sob limites de
+tráfego sem produzir um artefato único que materialize o release consultado.
+`variant_summary.txt.gz` oferece o mesmo tipo de dado em um download materializável: ou o
+arquivo completo está disponível ou a execução deve recusar. O mesmo princípio vale para os
+artefatos usados do GenCC e do GWAS Catalog.
 
 ## Filtros do ClinVar, e por que cada um é recusa e não conveniência
 
@@ -195,8 +204,8 @@ OBSERVADO, nunca a NÃO DETECTADO.
 
 ## A junção por coordenada, nas duas rotas
 
-A rota da API acha registros por **busca textual** de rsid, que devolve variantes não
-relacionadas — em `rs4244285` devolveu doze. Esses registros não trazem coordenada própria e
+A rota da API acha registros por **busca textual** de rsid, que pode devolver variantes não
+relacionadas ao locus pretendido. Esses registros não trazem coordenada própria e
 só entram se o acesso constar do conjunto já verificado na coordenada do alvo.
 
 A rota em massa lê acesso, classificação e coordenada da **mesma linha** do release. Não há
@@ -241,81 +250,33 @@ detectado" é ambíguo quando duas variantes clinicamente distintas ocupam uma p
 
 ## Escala observada numa execução de demonstração
 
-**Ilustrativo, não verificado.** Os números abaixo vieram de uma execução local que não está
-versionada: não há artefato de saída, SHA-256 de entrada, comando pinado nem versões de
-ambiente em `docs/evidence/` que os sustentem, e nenhum teste ou gate os valida. Não são
-evidência de release, e não devem ser citados como desempenho garantido. O que a seção
-documenta são os três defeitos que a escala expôs. **Só um dos três é verificável neste
-repositório neste SHA**, e a distinção está marcada em cada um abaixo — a afirmação anterior
-de que as três correções "entraram no código, essas sim com teste" não se sustentava: nenhum
-caminho de teste era citado, e ao procurá-los duas das três correções não foram localizadas
-aqui.
+Os benchmarks quantitativos da execução histórica foram removidos deste documento porque o
+repositório não contém o artefato de saída, SHA-256 das entradas, versões do ambiente e
+comando pinado necessários para reproduzi-los. Eles não são evidência do HEAD atual e não
+podem ser usados como alegação de desempenho.
 
-Cadeia completa — QC, matriz de completude, passaporte PGx, junção clínica e os dez payloads
-— sobre um array de 700.000 SNPs contra o painel de 55.916 alvos, com o registro expandido
-como padrão:
-
-```text
-14 de 14 etapas OK, nenhuma bloqueada      (observação não verificada)
-tempo: 20,5 s   |   pico de memória: 676 MB
-matriz de completude: 23 MB   |   junção clínica: 59 MB
-```
-
-Chegar aí exigiu três correções que só a escala expôs, e as três eram defeitos reais:
-
-**O arquivo de evidência não era legível.** *(VERIFICÁVEL AQUI.)* `build_clinical_findings`
-lia a evidência com `read_text`, e o arquivo em massa tem 88 MB e viaja comprimido. O erro
-era um `UnicodeDecodeError` sobre o byte `0x8b` — que não diz nada sobre a causa, e é a razão
-de o registro expandido nunca ter sido o padrão. Agora passa pelo mesmo leitor que decide
-compressão pelo número mágico do próprio arquivo:
-`array_pipeline/clinical_findings.py`, chamada a `read_manifest_bytes`.
-
-O teste que sustenta esta correção é
-`tests/test_clinical_findings_regressions.py::test_the_gene_disease_evidence_may_arrive_compressed`,
-adicionado ao registrar esta errata — antes dela **não havia teste algum** exercitando o
-caminho comprimido, e a alegação de cobertura estava errada. Execute com:
+O comportamento reproduzível preservado dessa investigação é o suporte a evidência
+comprimida: `build_clinical_findings` lê o manifesto por `read_manifest_bytes`, que detecta
+compressão pelo conteúdo do arquivo. O contrato é exercitado por
+`tests/test_clinical_findings_regressions.py::test_the_gene_disease_evidence_may_arrive_compressed`.
+Execute apenas esse conjunto com:
 
 ```bash
 python3 -m unittest discover -s tests -p test_clinical_findings_regressions.py
 ```
 
-**O relatório 05 estava bloqueado em toda execução orquestrada.** *(NÃO VERIFICÁVEL AQUI.)*
-`probe_path` seria posicional em `build_payload` e o orquestrador não o passava: um
-`TypeError` na chamada, lido como recusa do relatório. Procurado neste SHA, o identificador
-`probe_path` não ocorre em nenhum arquivo do repositório, e não há construtor para o
-relatório 05 em `scripts/` — os únicos presentes são `build_one_page_summary.py` (relatório
-10) e `build_pharmacogenomic_report.py` (relatório 06). O parágrafo permanece como narrativa
-de uma execução de demonstração, sem código ou teste aqui que o sustente.
-
-**Relatório 09 — observação histórica não verificável.** Como acima, não há construtor do
-relatório 09 neste repositório nem implementação localizável, em `array_pipeline/` ou
-`reporting/`, do comportamento de agregação descrito pela execução de demonstração. Sem
-artefato de saída, SHA-256 de entrada, comando pinado e teste versionado, essa narrativa não
-é atribuída ao HEAD atual. As contagens, limites de enumeração e reduções de tamanho antes
-publicados foram removidos; só podem voltar como resultado quando houver evidência
-reproduzível ligada ao SHA que os produz.
-
-A primeira versão da junção clínica custava **391 MB e 2,8 GB de pico**, porque o bloco de
-validade de cada gene era copiado em cada locus e loci nunca interrogados carregavam detalhe
-que não têm. Normalizar — validade uma vez por gene em `gene_validity`, e para locus não
-interrogado só identidade e motivo — trouxe para 40 MB sem perder informação: o detalhe está
-no arquivo de evidência, citado por SHA-256, e a omissão é declarada em cada achado.
+As antigas narrativas de execução referentes aos relatórios 05 e 09 também permanecem fora
+do conjunto verificável deste HEAD: não há aqui artefato versionado e reproducer correspondente
+que autorize atribuir resultados quantitativos a esses caminhos.
 
 ## Taxa de detecção, que era o objetivo
 
-O relatório 03 citava um denominador sem poder interrogá-lo. Agora consegue, e emite a taxa
-a cada execução. A citação abaixo é a saída de uma execução de demonstração —
-**ilustrativa, não verificada**, sem artefato, SHA-256 ou comando pinado em `docs/evidence/`
-por trás dela. O que é contratual é o formato e o denominador serem interrogáveis, não estes
-valores:
-
-> 2.236 de 162.943 variantes classificadas P/LP no ClinVar foram interrogadas, em 732 genes
-> recessivos curados. Genes mais cobertos: ATM 58/3864; BRCA1 48/4302; BRCA2 44/5744;
-> PAH 32/900; CFTR 24/1496.
-
-É contagem de **variantes**, não de frequência alélica — variantes raras dominam a contagem e
-comuns dominam a frequência, então isso limita quanto do catálogo foi coberto e nada diz
-sobre quanto do risco foi. O texto do relatório diz isso em toda emissão.
+O relatório 03 emite, em cada execução, o numerador de variantes interrogadas e o denominador
+do catálogo aplicável. Os valores históricos de uma execução local foram removidos porque
+não há artefato de saída, SHA-256 de entrada e comando pinado que permitam reproduzi-los neste
+HEAD. O contrato verificável é que numerador e denominador sejam derivados dos artefatos da
+própria execução e que a saída os descreva como contagem de variantes, não como frequência
+alélica.
 
 ## Reproduzir
 
