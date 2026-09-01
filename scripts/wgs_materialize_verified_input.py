@@ -10,9 +10,12 @@ from pathlib import Path
 
 from wgs_input_gate import InputMissing, InputRefused, InputUnreadable, open_contained
 
-DIGEST_MISMATCH = 4
-INPUT_UNAVAILABLE = 3
 INVALID_ARGUMENT = 2
+STAGING_UNAVAILABLE = 3
+DIGEST_MISMATCH = 4
+INPUT_REFUSED = 5
+INPUT_MISSING = 6
+INPUT_UNREADABLE = 7
 
 
 def _unlink_if_present(path: Path) -> None:
@@ -32,13 +35,25 @@ def materialize(root: Path, source_path: Path, expected_sha256: str, output: Pat
     nofollow = getattr(os, "O_NOFOLLOW", 0)
     if not nofollow:
         print("NÃO DISPONÍVEL: O_NOFOLLOW unavailable for verified staging", file=sys.stderr)
-        return INPUT_UNAVAILABLE
+        return STAGING_UNAVAILABLE
 
     try:
         source = open_contained(root, source_path)
-    except (InputMissing, InputRefused, InputUnreadable, OSError, ValueError) as exc:
-        print(f"NÃO DISPONÍVEL: verified input cannot be opened safely: {type(exc).__name__}", file=sys.stderr)
-        return INPUT_UNAVAILABLE
+    except InputRefused as exc:
+        print(f"NÃO DISPONÍVEL: verified input refused by secure containment: {exc}", file=sys.stderr)
+        return INPUT_REFUSED
+    except InputMissing as exc:
+        print(f"NÃO DISPONÍVEL: verified input is missing: {exc}", file=sys.stderr)
+        return INPUT_MISSING
+    except InputUnreadable as exc:
+        print(f"NÃO DISPONÍVEL: verified input is unreadable: {exc}", file=sys.stderr)
+        return INPUT_UNREADABLE
+    except OSError as exc:
+        print(
+            f"NÃO DISPONÍVEL: verified input open failed: {type(exc).__name__}",
+            file=sys.stderr,
+        )
+        return INPUT_UNREADABLE
 
     output.parent.mkdir(parents=True, exist_ok=True)
     digest = hashlib.sha256()
@@ -50,8 +65,11 @@ def materialize(root: Path, source_path: Path, expected_sha256: str, output: Pat
         )
     except OSError as exc:
         source.close()
-        print(f"NÃO DISPONÍVEL: verified staging file cannot be created: {type(exc).__name__}", file=sys.stderr)
-        return INPUT_UNAVAILABLE
+        print(
+            f"NÃO DISPONÍVEL: verified staging file cannot be created: {type(exc).__name__}",
+            file=sys.stderr,
+        )
+        return STAGING_UNAVAILABLE
 
     try:
         with source, os.fdopen(descriptor, "wb") as target:
@@ -62,8 +80,11 @@ def materialize(root: Path, source_path: Path, expected_sha256: str, output: Pat
             os.fsync(target.fileno())
     except (OSError, ValueError) as exc:
         _unlink_if_present(output)
-        print(f"NÃO DISPONÍVEL: verified input staging failed: {type(exc).__name__}", file=sys.stderr)
-        return INPUT_UNAVAILABLE
+        print(
+            f"NÃO DISPONÍVEL: verified input staging failed: {type(exc).__name__}",
+            file=sys.stderr,
+        )
+        return STAGING_UNAVAILABLE
 
     if digest.hexdigest() != expected:
         _unlink_if_present(output)
