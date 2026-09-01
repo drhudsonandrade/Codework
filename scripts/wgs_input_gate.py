@@ -227,6 +227,20 @@ def fastq_probe(root: Path, path: Path) -> tuple[bool, dict]:
         return False, {"path": str(path), "reason": type(exc).__name__}
 
 
+def _invalid_manifest_verdict(error: str) -> dict:
+    """Return the stable fail-closed document for a manifest that cannot be interpreted."""
+    return {
+        "schema": "genoma-wgs-input-gate-v1",
+        "status": "NÃO DISPONÍVEL",
+        "sample_id": None,
+        "input_type": None,
+        "read_group": {},
+        "inputs": {},
+        "errors": [error],
+        "note": "FASTQ is probed here; complete BAM/CRAM/read-group integrity is re-executed after alignment before variant calling.",
+    }
+
+
 def validate_manifest(manifest_path: Path) -> dict:
     """Turn one sample manifest into the gate's verdict, never into a traceback.
 
@@ -240,8 +254,19 @@ def validate_manifest(manifest_path: Path) -> dict:
     root, say) would otherwise compare against its logical path and refuse every legitimate
     input in it.
     """
-    root = manifest_path.parent.resolve()
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    try:
+        root = manifest_path.parent.resolve()
+        manifest_text = manifest_path.read_text(encoding="utf-8")
+        manifest = json.loads(manifest_text)
+    except json.JSONDecodeError:
+        return _invalid_manifest_verdict("sample-manifest.json contains invalid JSON")
+    except (OSError, UnicodeError, RuntimeError) as exc:
+        return _invalid_manifest_verdict(
+            f"sample-manifest.json could not be read: {type(exc).__name__}"
+        )
+    if not isinstance(manifest, dict):
+        return _invalid_manifest_verdict("sample-manifest.json JSON root must be an object")
+
     errors: list[str] = []
     sample_id = str(manifest.get("sample_id") or "").strip()
     input_type = str(manifest.get("input_type") or "").upper()
