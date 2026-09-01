@@ -30,6 +30,16 @@ jobs:
       - name: Install reporting dependencies
         run: python3 -m pip install --disable-pip-version-check -r reporting/requirements.txt
 
+      - name: Materialize canonical ruleset for policy tests
+        run: |
+          mkdir -p "$RUNNER_TEMP/genoma-normative"
+          python3 scripts/materialize_ruleset.py \
+            --output-dir "$RUNNER_TEMP/genoma-normative" \
+            --evidence "$RUNNER_TEMP/ruleset-materialization.json"
+          echo "GENOMA_RULESET_PATH=$RUNNER_TEMP/genoma-normative/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt" >> "$GITHUB_ENV"
+          echo "GENOMA_RULESET_SHA_MANIFEST=$GITHUB_WORKSPACE/manifests/RULESET_V3.4.sha256" >> "$GITHUB_ENV"
+          echo "GENOMA_EXPECT_CANONICAL_SHA=1" >> "$GITHUB_ENV"
+
       - name: Align TDD fixtures with the real Policy Engine lifecycle
         run: |
           python3 - <<'PY'
