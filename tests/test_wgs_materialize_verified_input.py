@@ -54,7 +54,7 @@ class WgsMaterializerFailureClassificationTest(unittest.TestCase):
         self.assertFalse(output.exists())
 
     def test_missing_input_returns_input_missing_without_staging(self):
-        temporary, root, source, expected, output = self._fixture()
+        temporary, root, _source, expected, output = self._fixture()
         self.addCleanup(temporary.cleanup)
 
         rc = materializer.materialize(root, root / "missing.fastq", expected, output)
@@ -79,7 +79,7 @@ class WgsMaterializerFailureClassificationTest(unittest.TestCase):
         self.assertFalse(output.exists())
 
     def test_digest_mismatch_removes_staging(self):
-        temporary, root, source, expected, output = self._fixture()
+        temporary, root, source, _expected, output = self._fixture()
         self.addCleanup(temporary.cleanup)
 
         rc = materializer.materialize(root, source, "0" * 64, output)
