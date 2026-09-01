@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 align_script="$repo_root/scripts/wgs_align_or_stage.sh"
 
-for tool in bash jq sha256sum readlink; do
+for tool in bash jq sha256sum readlink timeout; do
   command -v "$tool" >/dev/null || { echo "FAIL: $tool unavailable" >&2; exit 1; }
 done
 bash_bin=$(command -v bash)
@@ -114,6 +114,21 @@ run_case() {
       "$case_root/input-qc.json"
 }
 
+run_case_with_timeout() {
+  local case_root=$1
+  timeout 2s env \
+    STUB_LOG="$case_root/tools.log" \
+    STUB_SAMPLE=S1 \
+    STUB_R1_SEEN="$case_root/r1.seen" \
+    STUB_R2_SEEN="$case_root/r2.seen" \
+    PATH="$case_root/bin:$PATH" \
+    "$bash_bin" "$align_script" \
+      "$case_root/sample/sample-manifest.json" \
+      "$case_root/ref.fasta" \
+      "$case_root/out/sample.bam" \
+      "$case_root/input-qc.json"
+}
+
 # Refused gate verdict must stop before any alignment tool.
 case_root="$root/status"; fixture "$case_root" 'NÃO DISPONÍVEL'
 if stderr=$(run_case "$case_root" 2>&1); then
@@ -169,6 +184,18 @@ if stderr=$(run_case "$case_root" 2>&1); then
   fail 'outside symlink unexpectedly passed'
 fi
 assert_contains "$stderr" 'outside the sample directory'
+assert_no_tools "$case_root/tools.log"
+
+# Replacing a gate-verified input with a FIFO must be refused quickly, never block on open.
+case_root="$root/fifo-replacement"; fixture "$case_root"
+rm "$case_root/sample/r1.fastq"
+mkfifo "$case_root/sample/r1.fastq"
+if stderr=$(run_case_with_timeout "$case_root" 2>&1); then
+  fail 'FIFO replacement unexpectedly passed'
+else
+  rc=$?
+fi
+((rc != 124)) || fail 'verified-input open blocked on FIFO replacement'
 assert_no_tools "$case_root/tools.log"
 
 # Digest drift must be caught before tools.
