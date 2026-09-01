@@ -148,10 +148,9 @@ class WgsInputPathContainmentTest(unittest.TestCase):
             root.mkdir()
             (Path(td).resolve() / "outside.fastq").write_bytes(b"@outside\nACGT\n+\nIIII\n")
             for escape in ("..", "nested/../.."):
-                with self.subTest(escape=escape):
-                    with self.assertRaises(ValueError) as caught:
-                        open_contained(root, root.joinpath(escape, "outside.fastq"))
-                    self.assertIn("escapes the sample directory", str(caught.exception))
+                with self.subTest(escape=escape), self.assertRaises(ValueError) as caught:
+                    open_contained(root, root.joinpath(escape, "outside.fastq"))
+                self.assertIn("escapes the sample directory", str(caught.exception))
 
     def test_a_containment_refusal_is_not_recorded_as_a_missing_file(self):
         """The Evidence Plane must not describe a containment breach as an absent file.
@@ -289,9 +288,8 @@ class WgsInputPathContainmentTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td).resolve()
             for escape in ("../outside.fastq.gz", "nested/../../outside.bam", "../"):
-                with self.subTest(escape=escape):
-                    with self.assertRaises(ValueError):
-                        resolve(root, escape)
+                with self.subTest(escape=escape), self.assertRaises(ValueError):
+                    resolve(root, escape)
 
     def test_absolute_path_is_not_ambient_authority(self):
         from scripts.wgs_input_gate import resolve
@@ -326,19 +324,17 @@ class WgsInputPathContainmentTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td).resolve()
             for value in (123, True, ["r1.fastq"], {"path": "r1.fastq"}, 1.5):
-                with self.subTest(value=value):
-                    with self.assertRaises(ValueError):
-                        resolve(root, value)
+                with self.subTest(value=value), self.assertRaises(ValueError):
+                    resolve(root, value)
 
     def test_a_falsy_non_string_is_a_wrong_type_not_a_missing_field(self):
         from scripts.wgs_input_gate import resolve
         with tempfile.TemporaryDirectory() as td:
             root = Path(td).resolve()
             for value in (False, 0, 0.0, [], {}):
-                with self.subTest(value=value):
-                    with self.assertRaises(ValueError) as caught:
-                        resolve(root, value)
-                    self.assertIn("must be a string", str(caught.exception))
+                with self.subTest(value=value), self.assertRaises(ValueError) as caught:
+                    resolve(root, value)
+                self.assertIn("must be a string", str(caught.exception))
             self.assertIsNone(resolve(root, None))
             self.assertIsNone(resolve(root, ""))
 

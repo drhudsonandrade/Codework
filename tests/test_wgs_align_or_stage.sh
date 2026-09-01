@@ -196,6 +196,9 @@ else
   rc=$?
 fi
 ((rc != 124)) || fail 'verified-input open blocked on FIFO replacement'
+((rc == 3)) || fail "FIFO replacement returned $rc, expected classified refusal code 3"
+assert_contains "$stderr" 'NÃO DISPONÍVEL'
+assert_contains "$stderr" 'refused by secure containment'
 assert_no_tools "$case_root/tools.log"
 
 # Digest drift must be caught before tools.

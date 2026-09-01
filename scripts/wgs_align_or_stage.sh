@@ -40,6 +40,21 @@ command -v python3 >/dev/null || {
 [[ -r /dev/fd/0 ]] || {
   echo 'NÃO DISPONÍVEL: /dev/fd unavailable, cannot bind verified inputs' >&2; exit 2; }
 
+# Exit-code semantics have one authority: the Python materializer exports its current
+# contract and this shell consumes it. A future Python renumbering therefore cannot
+# silently relabel digest drift, containment refusal, absence, or unreadability.
+materializer_contract=$(python3 "$materializer" --print-exit-codes) || {
+  echo 'NÃO DISPONÍVEL: verified input materializer exit-code contract unavailable' >&2; exit 2; }
+materializer_codes=$(jq -er '
+  [.INVALID_ARGUMENT, .STAGING_UNAVAILABLE, .DIGEST_MISMATCH, .INPUT_REFUSED, .INPUT_MISSING, .INPUT_UNREADABLE] as $codes
+  | if (($codes | length) == 6 and ($codes | unique | length) == 6 and all($codes[]; type == "number" and floor == . and . > 0))
+    then ($codes | @tsv)
+    else error("invalid materializer exit-code contract")
+    end
+' <<<"$materializer_contract") || {
+  echo 'NÃO DISPONÍVEL: invalid verified input materializer exit-code contract' >&2; exit 2; }
+IFS=$'	' read -r materializer_invalid_argument materializer_staging_unavailable   materializer_digest_mismatch materializer_input_refused materializer_input_missing   materializer_input_unreadable <<<"$materializer_codes"
+
 open_verified() {
   # $1 = key under .inputs, $2 = name of the variable that receives the descriptor path.
   #
@@ -73,22 +88,22 @@ open_verified() {
   else
     rc=$?
     case "$rc" in
-      2)
+      "$materializer_invalid_argument")
         echo "NÃO DISPONÍVEL: input-qc.json records an invalid SHA-256 for $key" >&2
         ;;
-      3)
+      "$materializer_staging_unavailable")
         echo "NÃO DISPONÍVEL: verified $key staging is unavailable" >&2
         ;;
-      4)
+      "$materializer_digest_mismatch")
         echo "NÃO DISPONÍVEL: $key changed after the gate verified it" >&2
         ;;
-      5)
+      "$materializer_input_refused")
         echo "NÃO DISPONÍVEL: verified $key is outside the sample directory or was refused by secure containment" >&2
         ;;
-      6)
+      "$materializer_input_missing")
         echo "NÃO DISPONÍVEL: verified $key is missing" >&2
         ;;
-      7)
+      "$materializer_input_unreadable")
         echo "NÃO DISPONÍVEL: verified $key is unreadable" >&2
         ;;
       *)
