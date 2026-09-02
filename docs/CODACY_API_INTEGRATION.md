@@ -46,9 +46,13 @@ failed or processing state, or with the verified final report, so an old clean-l
 is not left current. Superseded activity for the same producer run and attempt may be cancelled to avoid
 redundant publication work; the resolver always re-reads the live terminal state. If a later publisher step fails after the trusted checkout succeeded, an
 `always()` terminal step attempts to revalidate the PR/run tuple and replace the pending
-state with an explicit publisher-failure state. Checkout, resolver or GitHub API failures
-remain visible as failed checks; the workflow does not claim that a comment update succeeded
-when it could not perform one.
+state with an explicit publisher-failure state. A cancelled consumer does not attempt cleanup:
+every successor for that exact producer attempt starts from trusted code, revalidates the live
+tuple and repairs or invalidates the owned comment before querying Codacy or publishing a final
+report. If another lifecycle event cancels that successor, the newest successor repeats the same
+repair; the completed event therefore owns the terminal state. Checkout, resolver or GitHub API
+failures remain visible as failed checks; the workflow does not claim that a comment update
+succeeded when it could not perform one.
 The pull request's files and artifacts are never executed by the privileged job. Top-level
 permissions are empty, and write access exists only on the publishing job.
 
