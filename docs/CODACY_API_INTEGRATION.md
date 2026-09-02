@@ -12,22 +12,21 @@ The integration is deliberately split into two workflows.
 | Workflow | Event | Code executed | Secrets | GitHub permissions |
 |---|---|---|---|---|
 | `codacy-api-report-tests.yml` | `pull_request` | pull-request revision | none | `contents: read` |
-| `codacy-api-report.yml` | requested/in-progress/completed `workflow_run` of the unprivileged tests | trusted default-branch `github.sha` | `codacy-report` publisher only | resolver: `actions: read`, `contents: read`, `pull-requests: read`; publisher: `actions: read`, `contents: read`, `pull-requests: write` |
+| `codacy-api-report.yml` | completed `workflow_run` of the unprivileged tests | trusted default-branch `github.sha` | `codacy-report` publisher only | resolver: `actions: read`, `contents: read`, `pull-requests: read`; publisher: `actions: read`, `contents: read`, `pull-requests: write` |
 
 The test workflow exercises the Python reporter, the workflow trust-boundary regression and
 the JavaScript comment behavior. Its checkout sets `persist-credentials: false`; it cannot
 read a Codacy secret or write a pull-request comment.
 
-The consumer is loaded from the trusted default branch when the unprivileged pull-request
-workflow is requested, starts or completes. A resolver job with no secrets checks out only
-the default-branch `github.sha`, verifies the upstream workflow path and resolves one live,
+The consumer is loaded from the trusted default branch only when the unprivileged
+pull-request workflow completes. A resolver job with no secrets checks out only the
+default-branch `github.sha`, verifies the upstream workflow path and resolves one live,
 open PR against the default branch. It re-reads the run through the Actions API and binds the
 PR to the live run ID, run number, attempt, workflow path and `workflow_run.head_sha`. An
-event from an older rerun attempt is stale; `in_progress` also invalidates the old report
-because GitHub does not emit `requested` for a rerun. Publishers for the same head repository
-and branch use `queue: max`, preserving up to 100 pending events without cancelling an
-in-progress publisher. GitHub does not guarantee dispatch order, so serialization is not
-treated as freshness evidence: the resolver paginates every producer run returned for the
+event from an older rerun attempt is stale. Publishers for the same head repository and
+branch use `cancel-in-progress: true`, so a newer completed producer run supersedes an older
+publication still in progress. GitHub does not guarantee dispatch order, so cancellation is
+not treated as freshness evidence: the resolver paginates every producer run returned for the
 same SHA and accepts only the unique newest `(run_number, run_attempt)` for the resolved head
 repository, branch and PR association. A truncated, changing or over-limit run listing fails
 closed. The validated coordinates are carried into the publisher and re-read before each
@@ -40,10 +39,11 @@ ID, run number and run attempt — reach the publishing job from the resolver. T
 the fixed provider, organization and repository context from the trusted workflow. That job
 checks out the same trusted default-branch code. It re-fetches the PR and producer attempt
 after the Codacy query and again immediately before commenting, and refuses an artifact or
-comment if that identity changed. A requested, in-progress, cancelled, failed or successfully
-completed current run replaces any older owned report with the corresponding explicit
-`NÃO DISPONÍVEL` pending, cancelled, failed or processing state, so an old clean-looking result is not
-left current. If a later publisher step fails after the trusted checkout succeeded, an
+comment if that identity changed. A cancelled, failed or successfully completed current run replaces any older owned report
+with the corresponding explicit `NÃO DISPONÍVEL` cancelled or failed state, or with the
+verified final report, so an old clean-looking result is not left current. Intermediate
+requested/in-progress comments are intentionally omitted because they do not change the final
+gate result. If a later publisher step fails after the trusted checkout succeeded, an
 `always()` terminal step attempts to revalidate the PR/run tuple and replace the pending
 state with an explicit publisher-failure state. Checkout, resolver or GitHub API failures
 remain visible as failed checks; the workflow does not claim that a comment update succeeded
