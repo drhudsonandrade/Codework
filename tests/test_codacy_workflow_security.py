@@ -54,9 +54,12 @@ def _top_level_scalar_map(workflow: str, key: str) -> dict[str, str]:
     """Parse one top-level scalar map and reject duplicate or nested entries."""
     lines = workflow.splitlines()
     marker = f"{key}:"
-    indexes = [index for index, line in enumerate(lines) if line == marker]
+    key_pattern = re.compile(rf"^{re.escape(key)}\\s*:")
+    indexes = [index for index, line in enumerate(lines) if key_pattern.match(line)]
     if len(indexes) != 1:
         _fail(f"expected exactly one top-level {key!r} map, got {len(indexes)}")
+    if lines[indexes[0]] != marker:
+        _fail(f"top-level {key!r} must use a block map")
     result: dict[str, str] = {}
     for line in lines[indexes[0] + 1 :]:
         stripped = line.strip()
@@ -248,6 +251,21 @@ jobs:
             _top_level_scalar_map(workflow, "concurrency"),
             {"group": "producer-attempt", "cancel-in-progress": "false"},
         )
+
+    def test_concurrency_parser_rejects_a_duplicate_inline_map(self):
+        workflow = """
+concurrency:
+  group: producer-attempt
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+concurrency: {group: bypass, cancel-in-progress: false}
+"""
+        with self.assertRaisesRegex(
+            AssertionError, "expected exactly one top-level 'concurrency' map"
+        ):
+            _top_level_scalar_map(workflow, "concurrency")
 
     def test_every_yaml_form_of_an_untrusted_github_expression_reaches_the_gate(self):
         fixtures = (
