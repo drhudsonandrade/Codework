@@ -80,16 +80,12 @@ per-locus matrix, because they are limits of the platform rather than gaps in th
 ## Running it
 
 ```bash
-python3 scripts/build_completeness_report.py \
-  --input array.csv.gz \
-  --qc array-qc.json \
-  --targets config/partial_genome_annotation_targets.json \
-  --matrix-out completeness.json \
-  --payload-out payload-09.json
+python3 -c 'from pathlib import Path; from array_pipeline.completeness import build_completeness_matrix, write_matrix; write_matrix(build_completeness_matrix(Path("array.csv.gz"), Path("array-qc.json"), Path("config/partial_genome_annotation_targets.json")), Path("completeness.json"))'
 ```
 
-The payload is compiled through `PayloadCompiler`, so every printed value is anchored (see
-`docs/PROVENANCE_GATE.md`) and a hand-edited count is refused at render time.
+The resulting matrix records the input, QC and target-registry hashes used to derive each
+count. Downstream report payloads must still pass the provenance gate described in
+`docs/PROVENANCE_GATE.md`.
 
 The matrix is `VERIFICADO` only when the array's `LIMITED_INTERPRETATION_GATE` passed:
 coverage is a measurement and cannot outrank the QC that established it.

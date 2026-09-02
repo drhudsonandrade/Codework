@@ -60,7 +60,7 @@ class ReportReleaseAssemblyTest(unittest.TestCase):
 
         manifest = _manifest()
         manifest["final_audit"][next(iter(manifest["final_audit"]))] = False
-        policy = PolicyEngine(_ruleset()).evaluate(manifest).to_dict()
+        policy = PolicyEngine(_ruleset()).evaluate(manifest).to_internal_dict()
 
         self.assertFalse(policy["ready_for_requested_operation"])
         result = assemble_release(curated(), policy)

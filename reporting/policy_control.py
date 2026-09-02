@@ -135,7 +135,7 @@ def verify_policy_evaluation(
         )
 
     try:
-        recomputed = engine.evaluate(copy.deepcopy(manifest)).to_dict()
+        recomputed = engine.evaluate(copy.deepcopy(manifest)).to_internal_dict()
     except (RuntimeError, TypeError, ValueError) as exc:
         raise PolicyEvaluationVerificationError(
             f"Policy Control Plane re-execution failed: {exc}"

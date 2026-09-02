@@ -175,6 +175,13 @@ def validate_curation(curation: dict[str, Any]) -> list[str]:
     because a malformed entry discovered at gate time reads as a failed analysis rather than
     as an authoring mistake.
     """
+    from scripts.sealed_ruleset import SealedRulesetError
+
+    try:
+        canonical_hashes = _canonical_section_hashes()
+    except SealedRulesetError as exc:
+        raise CurationError("não foi possível verificar o ruleset selado canônico") from exc
+
     problems: list[str] = []
     for key, entry in sorted(curation.get("sections", {}).items(), key=lambda kv: int(kv[0])):
         prefix = f"section {key}"
@@ -193,7 +200,7 @@ def validate_curation(curation: dict[str, Any]) -> list[str]:
         if not str(entry.get("justification") or "").strip():
             problems.append(f"{prefix}: justification is required")
         declared_hash = entry.get("rule_sha256")
-        expected_hash = _canonical_section_hashes().get(int(key))
+        expected_hash = canonical_hashes.get(int(key))
         if (
             not isinstance(declared_hash, str)
             or len(declared_hash) != 64

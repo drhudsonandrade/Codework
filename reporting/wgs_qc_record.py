@@ -240,8 +240,11 @@ def validate_record(
     else:
         for band in ("alta_confianca", "confianca_moderada", "baixa_cobertura",
                      "mapeamento_dificil", "nao_resolvidas"):
-            if band not in coverage_map:
-                problems.append(f"reliability_map.{band}: ausente")
+            if not str(coverage_map.get(band) or "").strip():
+                problems.append(
+                    f"reliability_map.{band}: obrigatório; informe o valor ou a forma "
+                    f"{UNAVAILABLE}"
+                )
     return problems
 
 

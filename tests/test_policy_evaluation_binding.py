@@ -94,7 +94,7 @@ def real_evaluation(*, case_id: str = "CASE-1", input_sha256: str = INPUT_SHA) -
     if not report.ready:
         failures = [g.to_dict() for g in report.gates if g.blocking and g.state.value != "PASS"]
         raise AssertionError(f"policy fixture is not actually ready: {failures}")
-    return report.to_dict()
+    return report.to_internal_dict()
 
 
 def _verdict_for(payload: dict, *, case_id: str = "CASE-1", input_sha256: str = INPUT_SHA):
@@ -123,6 +123,20 @@ class PolicyEvaluationBindingTest(unittest.TestCase):
         self.assertEqual(evaluation["operation"]["output"], "FINAL_AUDITED_REPORT")
         self.assertRegex(evaluation["manifest_sha256"], r"^[0-9a-f]{64}$")
         self.assertEqual(evaluation["binding"], evaluation_binding(evaluation["evaluated_manifest"]))
+
+    def test_public_evaluation_omits_manifest_and_case_identity(self):
+        report = PolicyEngine(_ruleset()).evaluate(_manifest())
+        public = report.to_dict()
+        self.assertRegex(public["manifest_sha256"], r"^[0-9a-f]{64}$")
+        for sensitive in (
+            "case_id",
+            "session_id",
+            "input_sha256",
+            "operation",
+            "binding",
+            "evaluated_manifest",
+        ):
+            self.assertNotIn(sensitive, public)
 
     def test_a_genuine_matching_evaluation_is_reexecuted_and_accepted(self):
         verdict = _verdict_for(real_evaluation())

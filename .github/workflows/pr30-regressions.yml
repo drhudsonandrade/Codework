@@ -26,7 +26,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install reporting dependencies
-        run: python3 -m pip install --disable-pip-version-check -r reporting/requirements.txt
+        run: python3 -m pip install --disable-pip-version-check --require-hashes -r reporting/requirements.txt
       - name: Run PR30 regression tests
         env:
           PYTHONPATH: tests

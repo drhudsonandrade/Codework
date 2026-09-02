@@ -3,9 +3,6 @@
 These tests deliberately exercise the shipped curation artifacts and the real publication
 writers. They pin the owner-reviewed HFE curation and require every post-render mutation to be
 covered by provenance before any JSON/Markdown/HTML/PDF/DOCX artifact is written.
-
-The first CI run of this file is intentionally RED: it proves the tests detect the pre-fix
-state before production code is changed.
 """
 from __future__ import annotations
 

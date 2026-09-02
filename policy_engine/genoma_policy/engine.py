@@ -7,7 +7,6 @@ from typing import Any
 from .gates_audit import AuditGates
 from .gates_core import CoreGates
 from .gates_evidence import EvidenceGates
-from .gates_common import CRITICAL_FINAL_AUDIT_KEYS
 from .models import EvaluationReport
 from .ruleset import Ruleset, load_ruleset
 from .version import __version__

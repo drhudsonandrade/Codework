@@ -441,9 +441,13 @@ class PgxPanelIdentityTest(unittest.TestCase):
         for field, value, expected in cases:
             with self.subTest(field=field):
                 invalid = self._registry()
-                item = invalid["genes"]["G"]["alleles"]["G*2"]["defining"][0]
-                item[field] = value
-                with self.assertRaisesRegex(ValueError, rf"rs1.*{expected}"):
+                for allele in invalid["genes"]["G"]["alleles"].values():
+                    for item in allele["defining"]:
+                        if item["rsid"] == "rs1":
+                            item[field] = value
+                with self.assertRaisesRegex(
+                    ValueError, rf"rs1 has invalid GRCh38 {expected}"
+                ):
                     build_pgx_panel.build_panel(invalid)
 
 

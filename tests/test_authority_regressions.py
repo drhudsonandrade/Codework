@@ -204,7 +204,7 @@ class SectionCurationValidationTest(unittest.TestCase):
             return {
                 "applicability": "NOT_APPLICABLE",
                 "decision": "NOT_APPLICABLE",
-                "status": UNAVAILABLE,
+                "status": "NÃO DISPONÍVEL",
                 "justification": reason,
                 "rule_sha256": "a" * 64,
                 "evidence_refs": [],

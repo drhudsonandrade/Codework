@@ -96,6 +96,28 @@ class ManifestIdentityMergeTest(unittest.TestCase):
         # target publishing an assessed-allele *status* with no assessed allele under it.
         self.assertNotIn("assessed_allele_status", target)
 
+    def test_inherited_conflicts_survive_a_later_merge(self):
+        first = self._target(10)
+        for key in list(first):
+            if key == "assessed_allele" or key.startswith("assessed_allele_"):
+                first.pop(key)
+        first["assessed_allele_conflict"] = ["A", "T"]
+        first["identity_conflict"] = ["reference_allele"]
+        first.pop("reference_allele")
+
+        payload = self._merge(first, self._target(10, assessed="G", reference="C"))
+        target = payload["targets"][0]
+        self.assertEqual(target["assessed_allele_conflict"], ["A", "G", "T"])
+        self.assertIn("reference_allele", target["identity_conflict"])
+        self.assertNotIn("reference_allele", target)
+        self.assertEqual(payload["totals"]["assessed_allele_conflicts"], 1)
+        self.assertTrue(
+            any(
+                item["rsid"] == "rs1" and item["field"] == "reference_allele"
+                for item in payload["identity_conflicts"]
+            )
+        )
+
     def test_version_is_bound_to_input_content(self):
         """The merged manifest's version is bound to the input content, not to the clock.
 

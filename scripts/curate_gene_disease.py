@@ -75,6 +75,7 @@ CLINGEN_CSV = "https://search.clinicalgenome.org/kb/gene-validity/download"
 GENCC_TSV = "https://search.thegencc.org/download/action/submissions-export-tsv"
 EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 GWAS = "https://www.ebi.ac.uk/gwas/rest/api"
+GWAS_AUTHORITY = urllib.parse.urlsplit(GWAS).netloc.lower()
 
 #: Validity classifications strong enough to speak of the relationship as established. Both
 #: registries use the same words, so the set is shared.
@@ -506,6 +507,12 @@ def _ancestry_of(study: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _is_authorized_gwas_link(url: str) -> bool:
+    """Accept only HTTPS study links on the configured GWAS Catalog authority."""
+    parsed = urllib.parse.urlsplit(url)
+    return parsed.scheme.lower() == "https" and parsed.netloc.lower() == GWAS_AUTHORITY
+
+
 def fetch_gwas_associations(rsid: str) -> dict[str, Any]:
     """Associations for one locus, grouped by EFO trait and priced by strength and ancestry."""
     try:
@@ -581,6 +588,10 @@ def fetch_gwas_associations(rsid: str) -> dict[str, Any]:
         if link:
             time.sleep(REQUEST_INTERVAL_SECONDS)
             try:
+                if not _is_authorized_gwas_link(str(link)):
+                    raise CurationError(
+                        "GWAS Catalog retornou link de estudo fora da autoridade autorizada"
+                    )
                 entry["ancestry"] = _ancestry_of(_json(link))
                 entry["ancestry"]["status"] = "VERIFICADO"
             except CurationError as exc:

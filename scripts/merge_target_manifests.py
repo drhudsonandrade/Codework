@@ -155,6 +155,28 @@ def merge(paths: list[Path]) -> dict[str, Any]:
             existing = merged[rsid]
             origin[rsid].append(registry)
 
+            inherited_identity = {
+                str(field)
+                for field in (existing.get("identity_conflict") or [])
+                if str(field) in IDENTITY_FIELDS
+            }
+            field_conflicts = conflicted_identity.setdefault(rsid, set())
+            field_conflicts.update(inherited_identity)
+            for field in sorted(inherited_identity):
+                if not any(
+                    item["rsid"] == rsid and item["field"] == field
+                    for item in identity_conflicts
+                ):
+                    identity_conflicts.append(
+                        {
+                            "rsid": rsid,
+                            "field": field,
+                            "registries": list(origin[rsid]),
+                            "values": [],
+                            "inherited": True,
+                        }
+                    )
+
             old = str(existing.get("assessed_allele") or "").strip().upper()
             new = str(incoming.get("assessed_allele") or "").strip().upper()
             recorded = {
@@ -162,6 +184,15 @@ def merge(paths: list[Path]) -> dict[str, Any]:
                 for value in (existing.get("assessed_allele_conflict") or [])
                 if str(value).strip()
             }
+            if recorded and not any(item["rsid"] == rsid for item in conflicts):
+                conflicts.append(
+                    {
+                        "rsid": rsid,
+                        "registries": list(origin[rsid]),
+                        "assessed_alleles": sorted(recorded),
+                        "inherited": True,
+                    }
+                )
             if new and recorded:
                 recorded.add(new)
                 values = sorted(recorded)
@@ -228,7 +259,6 @@ def merge(paths: list[Path]) -> dict[str, Any]:
             for field in IDENTITY_FIELDS:
                 old_value = existing.get(field)
                 new_value = incoming.get(field)
-                field_conflicts = conflicted_identity.setdefault(rsid, set())
                 if field in field_conflicts:
                     continue
                 if old_value not in (None, "", [], {}) and new_value not in (None, "", [], {}):

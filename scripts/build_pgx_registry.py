@@ -382,7 +382,7 @@ def fetch_gene(symbol: str) -> dict[str, Any]:
 
     record: dict[str, Any] = {
         # Complete with respect to CPIC's catalogue, which is what the citation covers.
-        "complete_panel": bool(built) and all(
+        "complete_panel": bool(built) and not skipped_no_rsid and all(
             definition.get("definition_complete", True) for definition in built.values()
         ),
         "complete_panel_scope": "CPIC",

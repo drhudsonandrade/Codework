@@ -527,28 +527,65 @@ def validate_core_runtime_dependencies(root: Path, errors: list[str]) -> None:
     # inside the repository and so counted as local.
     allowed -= OPTIONAL_LOCAL_PACKAGES
 
-    for package in CORE_PACKAGES:
-        for path in sorted((root / package).rglob("*.py")):
-            try:
-                tree = ast.parse(path.read_text(encoding="utf-8"))
-            except (OSError, SyntaxError) as exc:
-                errors.append(f"core module could not be parsed: {path.relative_to(root)}: {exc}")
-                continue
-            for node in _import_time_statements(tree.body):
-                if isinstance(node, ast.Import):
-                    names = [alias.name.split(".")[0] for alias in node.names]
-                elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-                    names = [node.module.split(".")[0]]
+    def module_paths(module: str) -> list[Path]:
+        """Files Python executes while importing one absolute local module."""
+        parts = module.split(".")
+        found: list[Path] = []
+        for index in range(1, len(parts) + 1):
+            package_init = root.joinpath(*parts[:index], "__init__.py")
+            if package_init.is_file():
+                found.append(package_init)
+        module_file = root.joinpath(*parts).with_suffix(".py")
+        if module_file.is_file():
+            found.append(module_file)
+        return found
+
+    pending = [
+        path
+        for package in CORE_PACKAGES
+        for path in sorted((root / package).rglob("*.py"))
+    ]
+    visited: set[Path] = set()
+    while pending:
+        path = pending.pop()
+        if path in visited:
+            continue
+        visited.add(path)
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError) as exc:
+            errors.append(f"core module could not be parsed: {path.relative_to(root)}: {exc}")
+            continue
+        for node in _import_time_statements(tree.body):
+            modules: list[str] = []
+            if isinstance(node, ast.Import):
+                modules = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                if node.level == 0:
+                    modules = [node.module]
+                    modules.extend(f"{node.module}.{alias.name}" for alias in node.names)
                 else:
-                    continue
-                for name in names:
-                    if name not in allowed:
-                        errors.append(
-                            f"core module {path.relative_to(root)} imports {name!r} at module "
-                            "scope; the scientific core must have no external runtime "
-                            "dependency. Guard it with try/except ImportError and refuse "
-                            "NÃO DISPONÍVEL, or declare and pin it and change this contract."
-                        )
+                    relative = path.relative_to(root).with_suffix("").parts[:-1]
+                    keep = max(len(relative) - node.level + 1, 0)
+                    base = ".".join((*relative[:keep], node.module))
+                    modules = [base]
+                    modules.extend(f"{base}.{alias.name}" for alias in node.names)
+            for module in modules:
+                name = module.split(".")[0]
+                if name in OPTIONAL_LOCAL_PACKAGES:
+                    errors.append(
+                        f"core module {path.relative_to(root)} imports {name!r} at module "
+                        "scope; optional local packages must be lazy and fail closed"
+                    )
+                elif name in local_modules:
+                    pending.extend(module_paths(module))
+                elif name not in allowed:
+                    errors.append(
+                        f"core module {path.relative_to(root)} imports {name!r} at module "
+                        "scope; the scientific core must have no external runtime "
+                        "dependency. Guard it with try/except ImportError and refuse "
+                        "NÃO DISPONÍVEL, or declare and pin it and change this contract."
+                    )
 
 
 def validate(root: Path) -> list[str]:

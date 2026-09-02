@@ -54,20 +54,59 @@ class ClinvarCoordinateIdentityTests(unittest.TestCase):
         """A dbSNP failure is local to one locus and does not abort the curation."""
         from scripts.verify_provenance_markers import MarkerVerificationError
 
-        with patch.object(
-            CURATE,
-            "fetch_clinvar_conditions",
-            side_effect=[
-                MarkerVerificationError("temporary dbSNP failure"),
-                {"status": "VERIFICADO", "records": [{"accession": "VCV2"}]},
-            ],
+        search = {"esearchresult": {"count": "1", "idlist": ["1"]}}
+        summary = _summary("NC_000001.11", 100, "A")
+        placement = {
+            "GRCh38": {
+                "seq_id": "NC_000001.11",
+                "position": 101,
+                "reference_allele": "A",
+            }
+        }
+        with (
+            patch.object(
+                CURATE,
+                "fetch_refsnp",
+                side_effect=[
+                    MarkerVerificationError("temporary dbSNP failure"),
+                    {"refsnp_id": "2"},
+                ],
+            ),
+            patch.object(CURATE, "placements", return_value=placement),
+            patch.object(CURATE, "_json", side_effect=[search, summary]),
+            patch.object(CURATE.time, "sleep"),
         ):
             first = CURATE._clinvar_for_locus("rs1")
             second = CURATE._clinvar_for_locus("rs2")
         self.assertEqual(first["status"], CURATE.UNAVAILABLE)
         self.assertIn("temporary dbSNP failure", first["reason"])
         self.assertEqual(second["status"], "VERIFICADO")
-        self.assertEqual(second["records"][0]["accession"], "VCV2")
+        self.assertEqual(second["records"][0]["accession"], "VCV000000001")
+
+    def test_cross_host_gwas_study_link_is_not_requested(self):
+        payload = {
+            "_embedded": {
+                "associations": [
+                    {
+                        "pvalue": 1e-9,
+                        "efoTraits": [{"trait": "fixture", "shortForm": "EFO_1"}],
+                        "_links": {
+                            "study": {"href": "https://example.invalid/studies/1"}
+                        },
+                        "loci": [],
+                    }
+                ]
+            }
+        }
+        with (
+            patch.object(CURATE, "_json", return_value=payload) as fetched,
+            patch.object(CURATE.time, "sleep"),
+        ):
+            result = CURATE.fetch_gwas_associations("rs1")
+        self.assertEqual(fetched.call_count, 1)
+        ancestry = result["traits"][0]["ancestry"]
+        self.assertEqual(ancestry["status"], CURATE.UNAVAILABLE)
+        self.assertIn("autoridade autorizada", ancestry["reason"])
 
     def test_clinvar_pagination_collects_every_uid(self):
         """ClinVar pagination collects every uid, not only the first page."""

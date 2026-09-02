@@ -343,7 +343,12 @@ class WitnessNamesTheDeploymentItVerifiedTest(unittest.TestCase):
         """QA renders the PASS face without a deployment; it must not claim a commit."""
         verdict = provenance.witness_verdict(
             {
-                **{key: value for key, value in WITNESS_REQUIRED_ITEMS},
+                "passed": 0,
+                "total": 0,
+                "suite": "fixture",
+                "post_deployment_status": "PASS",
+                "all_pass": True,
+                "critical_failures": 0,
                 "post_deployment_gate": {"gate": "POST_DEPLOYMENT_GATE", "state": "PASS"},
             },
             sha256="a" * 64,

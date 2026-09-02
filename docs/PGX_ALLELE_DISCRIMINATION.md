@@ -37,7 +37,7 @@ python3 scripts/build_pharmacogenomic_report.py \
 
 Sem `--pgx-panel` o passaporte continua funcionando e **declara na própria face** que a
 cobertura mede só os alvos curados (`panel_matrix.status = NÃO DISPONÍVEL`). A ausência do
-painel nunca equivale a cobertura completa.
+painel nunca equivale à cobertura completa.
 
 ## Segunda causa: a recusa era binária onde o dado é quantitativo
 
@@ -62,7 +62,7 @@ tempo encontrando.
 Os alelos não discrimináveis são precificados pela tabela de frequência do próprio CPIC, por
 grupo biogeográfico:
 
-```
+```text
 residual = P(um cromossomo carrega alelo de função alterada que este painel não vê)
 ```
 
@@ -91,7 +91,7 @@ Emitido em campo próprio (`discrimination.conditional_diplotype`), **nunca** em
 O segundo elemento não é `*1`. É `[NÃO DETECTADO]` — vocabulário do relatório 09, que afirma
 "interrogado e ausente", que é o que de fato se sabe:
 
-```
+```text
 CYP2C19*2/[NÃO DETECTADO]
   "*2 detectado em um cromossomo; o outro cromossomo não carrega nenhum dos 15 alelos
    discrimináveis, e permanece indistinguível de 30 alelos não interrogados"

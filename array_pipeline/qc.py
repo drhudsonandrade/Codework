@@ -1125,11 +1125,7 @@ def inspect_array(
 
 
 def write_outputs(result: dict[str, Any], outdir: Path) -> dict[str, str]:
-    """Write the QC record deterministically and return the digest of each file written.
-
-    The digests are returned rather than recomputed by the caller so the manifest cites the
-    bytes this function actually wrote.
-    """
+    """Write the QC artifacts deterministically and return their filesystem paths."""
     outdir.mkdir(parents=True, exist_ok=True)
     qc = outdir / "array-qc.json"
     qc.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")

@@ -149,7 +149,7 @@ def _read_markers_from_array(path: Path, wanted: set[str]) -> dict[str, dict[str
                 continue
             seen.add(rsid)
             status = (row.get("STATUS") or "").strip()
-            if status in UNRESOLVED_OVERLAP_STATUSES:
+            if status.lower() in UNRESOLVED_OVERLAP_STATUSES:
                 continue
             found[rsid] = {
                 "chromosome": (row.get("CHROMOSOME") or "").strip().upper(),

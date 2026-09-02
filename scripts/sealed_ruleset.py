@@ -213,7 +213,7 @@ def _verify_identity(raw: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
         "raw_sha256": digest,
         "raw_size_bytes": len(raw),
         "section_count": len(sections),
-        "section_range": [0, normative.LAST_SECTION],
+        "section_range": [0, EXPECTED_SECTIONS - 1],
     }
 
 

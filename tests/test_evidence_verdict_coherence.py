@@ -25,7 +25,15 @@ UNAVAILABLE = "NÃO DISPONÍVEL"
 
 #: Keys whose value a reader takes as this artifact's judgement rather than a measurement.
 VERDICT_KEYS = frozenset(
-    {"result", "status", "verdict", "structural_parity", "within_envelope", "outcome"}
+    {
+        "result",
+        "status",
+        "verdict",
+        "structural_parity",
+        "within_envelope",
+        "outcome",
+        "all_pass",
+    }
 )
 
 #: Strings that read as an approval. `True` is handled separately: `1 == True` in Python,
@@ -74,7 +82,7 @@ def _blocks(node: object, prefix: str = ""):
 
 def _declares_unavailable(block: dict) -> bool:
     """Whether this object says of itself that it is not available."""
-    return any(block.get(key) == UNAVAILABLE for key in ("result", "status"))
+    return any(block.get(key) == UNAVAILABLE for key in VERDICT_KEYS)
 
 
 def _passing_verdicts(block: dict, prefix: str = "") -> list[str]:
@@ -164,6 +172,20 @@ class EvidenceVerdictCoherenceTest(unittest.TestCase):
             self._offending(document),
             ["a.b.c.verdict", "runs[0].outcome"],
         )
+
+    def test_all_pass_cannot_approve_unavailable_evidence(self):
+        self.assertEqual(
+            self._offending({"status": UNAVAILABLE, "all_pass": True}),
+            ["all_pass"],
+        )
+
+    def test_every_verdict_key_can_declare_unavailability(self):
+        for key in ("verdict", "outcome"):
+            with self.subTest(key=key):
+                self.assertEqual(
+                    self._offending({key: UNAVAILABLE, "status": "PASS"}),
+                    ["status"],
+                )
 
     def test_a_source_status_under_a_refused_block_is_not_an_incoherence(self):
         """The scope this rule deliberately does not have.

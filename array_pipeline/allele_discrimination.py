@@ -423,6 +423,24 @@ def sequencing_requisition(
     # no amount of sequencing at CPIC's positions would resolve it.
     undefinable = sorted(name for name, missing in remaining.items() if not missing)
 
+    if not open_alleles and undefinable:
+        return {
+            "status": UNAVAILABLE,
+            "gene": gene,
+            "reference_population": group or UNAVAILABLE,
+            "positions": [],
+            "position_count": 0,
+            "alleles_resolved": [],
+            "alleles_unresolvable": undefinable,
+            "structural_alleles_excluded": sorted(
+                spec.get("structural_alleles_excluded") or []
+            ),
+            "reason": (
+                "o catálogo contém alelos de função alterada ou incerta sem posições "
+                "definidoras utilizáveis; nenhuma requisição dirigida pode ser construída"
+            ),
+        }
+
     while open_alleles:
         candidates: dict[str, tuple[float, int]] = {}
         for name in open_alleles:

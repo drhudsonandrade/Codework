@@ -47,6 +47,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from array_pipeline.qc import _ZipBackedTextStream, _check_zip_member
 from array_pipeline.targets import load_target_manifest, sha256_json
 from scripts.merge_target_manifests import SCOPE_RANK
 
@@ -70,8 +71,20 @@ def _open_associations(path: Path) -> io.TextIOWrapper:
     """
     if path.suffix == ".zip":
         archive = zipfile.ZipFile(path)
-        name = next(n for n in archive.namelist() if n.endswith(".tsv"))
-        return io.TextIOWrapper(archive.open(name), encoding="utf-8", errors="strict")
+        names = [name for name in archive.namelist() if name.endswith(".tsv")]
+        if len(names) != 1:
+            archive.close()
+            raise ValueError("GWAS associations ZIP must contain exactly one TSV member")
+        member = archive.getinfo(names[0])
+        try:
+            _check_zip_member(member)
+            raw = archive.open(member)
+        except Exception:
+            archive.close()
+            raise
+        return _ZipBackedTextStream(
+            raw, archive, encoding="utf-8", errors="strict"
+        )
     if path.suffix == ".gz":
         return io.TextIOWrapper(gzip.open(path, "rb"), encoding="utf-8", errors="strict")
     return path.open("r", encoding="utf-8", errors="strict")
@@ -413,7 +426,7 @@ def build(
     manifest["sha256"] = sha256_json({k: v for k, v in manifest.items() if k != "sha256"})
 
     evidence = {
-        "schema": "genoma-gene-disease-validity-v1",
+        "schema": "genoma-trait-associations-gwas-v1",
         "curated_at": generated,
         "sources": sources,
         "method": (

@@ -252,7 +252,7 @@ class TemplateV3ContractTest(unittest.TestCase):
             # Semgrep's subprocess audit matches the name `TimeoutExpired`, but this
             # constructs the exception used as a `side_effect`; nothing is executed, and
             # the real call it stands in for is patched out by this very statement.
-            side_effect=template_v3.subprocess.TimeoutExpired(  # nosemgrep
+            side_effect=template_v3.subprocess.TimeoutExpired(  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use.dangerous-subprocess-use
                 cmd=["pdftoppm"], timeout=POPPLER_TIMEOUT_SECONDS
             ),
         ):

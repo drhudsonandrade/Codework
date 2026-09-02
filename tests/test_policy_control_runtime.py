@@ -11,18 +11,13 @@ from reporting import policy_control
 
 
 class PolicyControlRuntimeTest(unittest.TestCase):
-    def setUp(self) -> None:
-        _engine, _binding, lifetime = policy_control._runtime()
-        lifetime.cleanup()
-        policy_control._runtime.cache_clear()
-
     def tearDown(self) -> None:
         policy_control._runtime.cache_clear()
 
     def test_runtime_uses_the_shared_canonical_manifest_path(self):
         policy_control._runtime.cache_clear()
         relative = Path("alternate-manifests") / "canonical.sha256"
-        temporary = mock.Mock(name="temporary_directory", name_value="unused")
+        temporary = mock.Mock(name="temporary_directory")
         temporary.name = "policy-runtime"
         ruleset = object()
         engine = object()

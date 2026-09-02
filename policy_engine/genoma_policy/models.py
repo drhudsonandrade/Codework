@@ -131,23 +131,18 @@ class EvaluationReport:
     def ready(self) -> bool:
         return not self.blocking_failures and not self.pending_blockers
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, *, include_evaluated_manifest: bool = False) -> dict[str, Any]:
+        """Serialize a public evaluation, omitting case and manifest data by default."""
         snapshot = copy.deepcopy(self.evaluated_manifest)
         binding = evaluation_binding(snapshot)
         producer = {
             "id": POLICY_EVALUATION_PRODUCER,
             "version": str(self.metadata.get("engine_version") or ""),
         }
-        return {
+        payload = {
             "schema": POLICY_EVALUATION_SCHEMA,
             "producer": producer,
-            "case_id": binding["case_id"],
-            "session_id": binding["session_id"],
-            "input_sha256": binding["input_sha256"],
-            "operation": copy.deepcopy(binding["operation"]),
             "manifest_sha256": binding["manifest_sha256"],
-            "binding": binding,
-            "evaluated_manifest": snapshot,
             "ready_for_requested_operation": self.ready,
             "ruleset": self.ruleset,
             "gates": [g.to_dict() for g in self.gates],
@@ -155,3 +150,19 @@ class EvaluationReport:
             "metadata": self.metadata,
             "planes": self.planes,
         }
+        if include_evaluated_manifest:
+            payload.update(
+                {
+                    "case_id": binding["case_id"],
+                    "session_id": binding["session_id"],
+                    "input_sha256": binding["input_sha256"],
+                    "operation": copy.deepcopy(binding["operation"]),
+                    "binding": binding,
+                    "evaluated_manifest": snapshot,
+                }
+            )
+        return payload
+
+    def to_internal_dict(self) -> dict[str, Any]:
+        """Serialize the sealed internal artifact required for deterministic re-execution."""
+        return self.to_dict(include_evaluated_manifest=True)

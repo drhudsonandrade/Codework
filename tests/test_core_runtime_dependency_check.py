@@ -42,7 +42,9 @@ except ImportError:
 
 class CoreRuntimeDependencyCheckTest(unittest.TestCase):
     """The runtime dependency check over the core packages."""
-    def _errors_for(self, source: str) -> list[str]:
+    def _errors_for(
+        self, source: str, *, extra_modules: dict[str, str] | None = None
+    ) -> list[str]:
         """Run the real check over a throwaway core package containing `source`."""
         errors: list[str] = []
         with tempfile.TemporaryDirectory() as td:
@@ -50,6 +52,13 @@ class CoreRuntimeDependencyCheckTest(unittest.TestCase):
             for package in validate_repo.CORE_PACKAGES:
                 (root / package).mkdir()
                 (root / package / "__init__.py").write_text("", encoding="utf-8")
+            for package in validate_repo.OPTIONAL_LOCAL_PACKAGES:
+                (root / package).mkdir(exist_ok=True)
+                (root / package / "__init__.py").write_text("", encoding="utf-8")
+            for module, module_source in (extra_modules or {}).items():
+                module_path = root.joinpath(*module.split(".")).with_suffix(".py")
+                module_path.parent.mkdir(parents=True, exist_ok=True)
+                module_path.write_text(module_source, encoding="utf-8")
             (root / validate_repo.CORE_PACKAGES[0] / "module.py").write_text(
                 source, encoding="utf-8"
             )
@@ -218,6 +227,14 @@ class CoreRuntimeDependencyCheckTest(unittest.TestCase):
         for package in sorted(validate_repo.OPTIONAL_LOCAL_PACKAGES):
             with self.subTest(package=package):
                 self.assert_refused(f"import {package}\n", name=package)
+
+    def test_external_import_in_local_intermediate_is_refused(self):
+        errors = self._errors_for(
+            "from bridge import helper\n",
+            extra_modules={"bridge.__init__": "", "bridge.helper": "import numpy\n"},
+        )
+        self.assertTrue(errors)
+        self.assertTrue(any("numpy" in error for error in errors))
 
     def test_the_real_repository_passes_this_check(self):
         """The check is worth nothing if it only ever runs against fixtures."""
