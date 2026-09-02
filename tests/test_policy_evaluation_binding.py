@@ -18,8 +18,8 @@ from genoma_policy.gates_common import CRITICAL_FINAL_AUDIT_KEYS
 from genoma_policy.models import evaluation_binding
 from genoma_policy.ruleset import load_ruleset
 from genoma_policy.scaffold import scaffold_manifest
+
 from reporting.provenance import (
-    CONSENT_ARTIFACT,
     POLICY_EVALUATION_ARTIFACT,
     REQUIRED_PLANES,
     Artifact,
@@ -28,7 +28,7 @@ from reporting.provenance import (
     fixture_payload,
 )
 from scripts.materialize_ruleset import materialize
-from tests.attestations import consent_record
+from tests.attestations import consent_file, policy_evaluation_file
 
 INPUT_SHA = "a" * 64
 
@@ -99,10 +99,14 @@ def real_evaluation(*, case_id: str = "CASE-1", input_sha256: str = INPUT_SHA) -
 
 def _verdict_for(payload: dict, *, case_id: str = "CASE-1", input_sha256: str = INPUT_SHA):
     """Compile one verdict with a scientific artifact bound to the same primary input."""
-    compiler = PayloadCompiler(case_id=case_id, report_id="01")
-    compiler._install_verdict(Artifact.from_payload(POLICY_EVALUATION_ARTIFACT, payload))
-    compiler.register(Artifact.from_payload("subject-input", {"input_sha256": input_sha256}))
-    return compiler.policy_verdict()
+    with tempfile.TemporaryDirectory() as td:
+        compiler = PayloadCompiler(
+            case_id=case_id,
+            report_id="01",
+            policy_evaluation=policy_evaluation_file(Path(td), payload),
+        )
+        compiler.register(Artifact.from_payload("subject-input", {"input_sha256": input_sha256}))
+        return compiler.policy_verdict()
 
 
 class PolicyEvaluationBindingTest(unittest.TestCase):
@@ -127,22 +131,20 @@ class PolicyEvaluationBindingTest(unittest.TestCase):
         self.assertEqual(verdict["source"]["origin"], "policy-control-reexecution")
 
     def test_nested_input_hash_binds_consent_and_policy_to_the_same_bytes(self):
-        compiler = PayloadCompiler(case_id="CASE-1", report_id="01")
-        compiler._install_verdict(
-            Artifact.from_payload(POLICY_EVALUATION_ARTIFACT, real_evaluation())
-        )
-        compiler._install_consent(
-            Artifact.from_payload(
-                CONSENT_ARTIFACT,
-                consent_record(case_id="CASE-1", input_sha256=INPUT_SHA),
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            compiler = PayloadCompiler(
+                case_id="CASE-1",
+                report_id="01",
+                policy_evaluation=policy_evaluation_file(root, real_evaluation()),
+                consent=consent_file(root, case_id="CASE-1", input_sha256=INPUT_SHA),
             )
-        )
-        compiler.register(
-            Artifact.from_payload("subject-input", {"input": {"sha256": INPUT_SHA}})
-        )
+            compiler.register(
+                Artifact.from_payload("subject-input", {"input": {"sha256": INPUT_SHA}})
+            )
 
-        self.assertTrue(compiler.consent_scope()["covers"])
-        self.assertTrue(compiler.policy_verdict()["ready_for_requested_operation"])
+            self.assertTrue(compiler.consent_scope()["covers"])
+            self.assertTrue(compiler.policy_verdict()["ready_for_requested_operation"])
 
     def test_fixture_policy_source_is_never_reported_as_verified(self):
         payload = fixture_payload(
