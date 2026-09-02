@@ -41,6 +41,8 @@ jobs:
           python3 -m unittest discover -s tests -v
       - name: Exercise WGS alignment trust boundary
         run: bash tests/test_wgs_align_or_stage.sh
+      - name: Test Codacy comment behavior
+        run: node --test tests/test_codacy_pr_comment.js
       - name: Build and test MCP
         working-directory: mcp
         run: |
