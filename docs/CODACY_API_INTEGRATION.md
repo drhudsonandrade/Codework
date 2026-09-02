@@ -23,10 +23,10 @@ workflow is requested, starts or completes. A resolver job with no secrets check
 the default-branch `github.sha`, verifies the upstream workflow path and resolves one live,
 open PR against the default branch. It re-reads the run through the Actions API and binds the
 PR to the live run ID, run number, attempt, workflow path and `workflow_run.head_sha`. An
-event from an older rerun attempt is stale. Activity events for the same producer
-`workflow_run.id` use `cancel-in-progress: true`, so a later lifecycle event supersedes work
-still running for that exact producer run. Different producer run IDs never share a
-concurrency group and therefore cannot cancel one another. GitHub does not guarantee dispatch
+event from an older rerun attempt is stale. Activity events for the same producer `workflow_run.id` and `run_attempt` use
+`cancel-in-progress: true`, so a later lifecycle event supersedes work still running for that
+exact producer attempt. Different producer run IDs or rerun attempts never share a concurrency
+group and therefore cannot cancel one another. GitHub does not guarantee dispatch
 order, so cancellation is not treated as freshness evidence: the resolver paginates every producer run returned for the
 same SHA and accepts only the unique newest `(run_number, run_attempt)` for the resolved head
 repository, branch and PR association. A truncated, changing or over-limit run listing fails
@@ -43,7 +43,7 @@ after the Codacy query and again immediately before commenting, and refuses an a
 comment if that identity changed. A requested, in-progress, cancelled, failed or successfully completed current run replaces
 any older owned report with the corresponding explicit `NÃO DISPONÍVEL` pending, cancelled,
 failed or processing state, or with the verified final report, so an old clean-looking result
-is not left current. Superseded activity for the same producer run may be cancelled to avoid
+is not left current. Superseded activity for the same producer run and attempt may be cancelled to avoid
 redundant publication work; the resolver always re-reads the live terminal state. If a later publisher step fails after the trusted checkout succeeded, an
 `always()` terminal step attempts to revalidate the PR/run tuple and replace the pending
 state with an explicit publisher-failure state. Checkout, resolver or GitHub API failures
