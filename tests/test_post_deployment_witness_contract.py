@@ -347,7 +347,8 @@ class WitnessNamesTheDeploymentItVerifiedTest(unittest.TestCase):
                 "total": 0,
                 "suite": "fixture",
                 "post_deployment_status": "PASS",
-                "all_pass": True,
+                # `all_pass` is a witness-schema field, not a credential.
+                "all_pass": True,  # nosec B105
                 "critical_failures": 0,
                 "post_deployment_gate": {"gate": "POST_DEPLOYMENT_GATE", "state": "PASS"},
             },
