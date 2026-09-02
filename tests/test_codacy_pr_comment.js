@@ -387,6 +387,8 @@ test('only the newest producer run may publish for the same commit', async () =>
   const runs = [newer, older];
   const oldGithub = makeResolverGithub(pullRequest, older, head, {}, runs).github;
   const newGithub = makeResolverGithub(pullRequest, newer, head, {}, runs).github;
+  const deletedFork = { ...pullRequest, head: { ...pullRequest.head, repo: null } };
+  const deletedForkGithub = makeResolverGithub(deletedFork, newer, head, {}, runs).github;
 
   assert.equal(
     await isCurrentCodacyPublication({
@@ -417,6 +419,21 @@ test('only the newest producer run may publish for the same commit', async () =>
       run_attempt: 1,
     }),
     true,
+  );
+  assert.equal(
+    await isCurrentCodacyPublication({
+      github: deletedForkGithub,
+      owner: 'owner',
+      repo: 'repo',
+      issue_number: 32,
+      head,
+      base: 'b'.repeat(40),
+      defaultBranch: 'main',
+      run_id: 124,
+      run_number: 8,
+      run_attempt: 1,
+    }),
+    false,
   );
 
   const stale = await resolveCodacyPullRequest({

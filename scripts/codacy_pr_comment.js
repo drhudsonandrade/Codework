@@ -6,14 +6,14 @@ const PRODUCER_WORKFLOW = 'codacy-api-report-tests.yml';
 const PRODUCER_PATH = `.github/workflows/${PRODUCER_WORKFLOW}`;
 const PRODUCER_PAGE_SIZE = 100;
 const MAX_PRODUCER_RUNS = 1000;
-const STATUS_MESSAGES = Object.freeze({
-  pending: 'the required pull-request tests are still running for this commit.',
-  processing: 'the required pull-request tests passed and the trusted publisher is processing this commit.',
-  cancelled: 'the required pull-request tests were cancelled before completion for this commit.',
-  failed: 'the required pull-request tests did not complete successfully for this commit.',
-  'missing-token': 'the trusted publisher has no environment-scoped Codacy API credential.',
-  'publisher-failed': 'the trusted publisher failed before it could produce a current report.',
-});
+const STATUS_MESSAGES = new Map([
+  ['pending', 'the required pull-request tests are still running for this commit.'],
+  ['processing', 'the required pull-request tests passed and the trusted publisher is processing this commit.'],
+  ['cancelled', 'the required pull-request tests were cancelled before completion for this commit.'],
+  ['failed', 'the required pull-request tests did not complete successfully for this commit.'],
+  ['missing-token', 'the trusted publisher has no environment-scoped Codacy API credential.'],
+  ['publisher-failed', 'the trusted publisher failed before it could produce a current report.'],
+]);
 const PENDING_RUN_STATUSES = new Set([
   'requested',
   'queued',
@@ -21,16 +21,16 @@ const PENDING_RUN_STATUSES = new Set([
   'waiting',
   'in_progress',
 ]);
-const COMPLETED_RUN_STATES = Object.freeze({
-  success: 'publish',
-  cancelled: 'interrupted',
-});
-const RUN_REPORT_STATES = Object.freeze({
-  pending: 'pending',
-  publish: 'processing',
-  interrupted: 'cancelled',
-  failed: 'failed',
-});
+const COMPLETED_RUN_STATES = new Map([
+  ['success', 'publish'],
+  ['cancelled', 'interrupted'],
+]);
+const RUN_REPORT_STATES = new Map([
+  ['pending', 'pending'],
+  ['publish', 'processing'],
+  ['interrupted', 'cancelled'],
+  ['failed', 'failed'],
+]);
 
 function requireValid(condition, message) {
   if (!condition) {
@@ -114,7 +114,11 @@ function hasMatchingProducerIdentity(run, pr, head) {
   return [
     producer.event === 'pull_request',
     producer.head_sha === head,
-    hasProducerHeadIdentity(producer, pr.head.repo.full_name, pr.head.ref),
+    hasProducerHeadIdentity(
+      producer,
+      pr?.head?.repo?.full_name,
+      pr?.head?.ref,
+    ),
     associated.length === 0 || associated.some((item) => item?.number === pr.number),
   ].every(Boolean);
 }
@@ -231,13 +235,13 @@ function hasValidCommitPair(pr) {
 }
 
 function buildCodacyStatusReport(head, state) {
-  if (!SHA_PATTERN.test(head) || !Object.hasOwn(STATUS_MESSAGES, state)) {
+  if (!SHA_PATTERN.test(head) || !STATUS_MESSAGES.has(state)) {
     throw new TypeError('A valid commit SHA and known Codacy report state are required.');
   }
   return [
     '# Codacy API report',
     '',
-    `**NÃO DISPONÍVEL** — ${STATUS_MESSAGES[state]}`,
+    `**NÃO DISPONÍVEL** — ${STATUS_MESSAGES.get(state)}`,
     '',
     `Source commit: \`${head}\`.`,
   ].join('\n');
@@ -245,10 +249,34 @@ function buildCodacyStatusReport(head, state) {
 
 function codacyStatusForRunState(state) {
   requireValid(
-    Object.hasOwn(RUN_REPORT_STATES, state),
+    RUN_REPORT_STATES.has(state),
     'A known workflow-run state is required.',
   );
-  return RUN_REPORT_STATES[state];
+  return RUN_REPORT_STATES.get(state);
+}
+
+function validatePublicationIdentity({ run_id, run_number, run_attempt, head, base }) {
+  requireValid(
+    [
+      isPositiveInteger(run_id),
+      isPositiveInteger(run_number),
+      isPositiveInteger(run_attempt),
+      SHA_PATTERN.test(head),
+      SHA_PATTERN.test(base),
+    ].every(Boolean),
+    'A validated publication identity is required.',
+  );
+}
+
+function hasCurrentPublicationIdentity(pr, liveRun, identity) {
+  return [
+    hasCurrentPullRequestIdentity(pr, identity),
+    hasProducerHeadIdentity(
+      liveRun,
+      pr?.head?.repo?.full_name,
+      pr?.head?.ref,
+    ),
+  ].every(Boolean);
 }
 
 async function isCurrentCodacyPullRequest({
@@ -293,16 +321,7 @@ async function isCurrentCodacyPublication({
   run_number,
   run_attempt,
 }) {
-  requireValid(
-    [
-      isPositiveInteger(run_id),
-      isPositiveInteger(run_number),
-      isPositiveInteger(run_attempt),
-      SHA_PATTERN.test(head),
-      SHA_PATTERN.test(base),
-    ].every(Boolean),
-    'A validated publication identity is required.',
-  );
+  validatePublicationIdentity({ run_id, run_number, run_attempt, head, base });
   const { data: liveRun } = await github.rest.actions.getWorkflowRun({
     owner,
     repo,
@@ -321,13 +340,11 @@ async function isCurrentCodacyPublication({
     repo,
     pull_number: issue_number,
   });
-  if (
-    !hasCurrentPullRequestIdentity(
-      pr,
-      { owner, repo, head, base, defaultBranch },
-    )
-    || !hasProducerHeadIdentity(liveRun, pr.head.repo.full_name, pr.head.ref)
-  ) {
+  if (!hasCurrentPublicationIdentity(
+    pr,
+    liveRun,
+    { owner, repo, head, base, defaultBranch },
+  )) {
     return false;
   }
   return isNewestProducerRun({ github, owner, repo, liveRun, pr, head });
@@ -453,7 +470,7 @@ function workflowRunState({ workflowRun, liveRun, current }) {
     liveRun.status === 'completed',
     `Unexpected workflow run status: ${liveRun.status}`,
   );
-  return COMPLETED_RUN_STATES[liveRun.conclusion] ?? 'failed';
+  return COMPLETED_RUN_STATES.get(liveRun.conclusion) ?? 'failed';
 }
 
 async function resolveCodacyPullRequest({
