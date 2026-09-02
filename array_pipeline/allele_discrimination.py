@@ -39,6 +39,7 @@ label this module does not recognise is counted as uncertain — never as normal
 """
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from array_pipeline.completeness import INTERPRETABLE
@@ -113,11 +114,15 @@ def _numeric(table: Any) -> dict[str, float]:
     """
     if not isinstance(table, dict):
         return {}
-    return {
-        str(group): float(value)
-        for group, value in table.items()
-        if isinstance(value, (int, float)) and not isinstance(value, bool)
-    }
+    valid: dict[str, float] = {}
+    for group, value in table.items():
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            continue
+        number = float(value)
+        if not math.isfinite(number) or not 0.0 <= number <= 1.0:
+            continue
+        valid[str(group)] = number
+    return valid
 
 
 def _interpretable(classification: Any) -> bool:
