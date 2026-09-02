@@ -10,6 +10,8 @@ on:
 # the environment-scoped publisher only a validated PR number/head/base tuple.
 permissions: {}
 
+# A cancelled lifecycle consumer performs no cleanup. The next event for this
+# exact producer attempt revalidates live state and repairs the owned PR comment.
 concurrency:
   group: codacy-api-report-${{ github.event.workflow_run.head_repository.id }}-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
   cancel-in-progress: true
@@ -88,7 +90,7 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Invalidate prior report before processing
+      - name: Repair or invalidate prior report before processing
         if: >-
           needs.resolve.outputs.state == 'pending' ||
           needs.resolve.outputs.state == 'interrupted' ||
