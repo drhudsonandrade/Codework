@@ -178,6 +178,7 @@ def _clinvar_for(
     rsid: str,
     locus_evidence: dict[str, Any],
     allowed: set[str],
+    assessed_alleles: set[str],
 ) -> dict[str, Any]:
     """ClinVar records for this locus, admitted only on a coordinate they can be checked at.
 
@@ -189,18 +190,38 @@ def _clinvar_for(
     no coordinate of their own, so they are admitted only if their accession appears in the
     set already verified to sit at the target's GRCh38 coordinate.
 
-    The **bulk route** reads accession, classification and coordinate from one row of
-    ClinVar's own release. There is no cross-source join to get wrong, and the record carries
-    its coordinate, so it is admitted when that coordinate matches the locus's. This is a
-    check performed here, not a flag the evidence file can set to exempt itself: a record with
-    no coordinate falls back to the allowlist however the file describes its provenance.
+    The **bulk route** reads accession, classification, coordinate and alternate allele from
+    one row of ClinVar's own release. There is no cross-source join to get wrong, and the
+    record carries its identity, so it is admitted only when both coordinate and allele match
+    the assessed target. The API route is held to the same allele match. A legacy record that
+    carries no alternate allele is refused rather than treated as equivalent at a multiallelic
+    locus.
     """
     all_records = (locus_evidence.get("clinvar") or {}).get("records", [])
     locus_coordinate = _coordinate(locus_evidence.get("grch38"))
 
+    expected_alleles = {
+        str(allele).strip().upper()
+        for allele in assessed_alleles
+        if str(allele).strip()
+    }
     records: list[dict[str, Any]] = []
     by_coordinate = 0
+    discarded_by_allele = 0
     for record in all_records:
+        coordinate_check = record.get("coordinate_check")
+        alternate = str(
+            record.get("alternate_allele")
+            or (
+                coordinate_check.get("alternate_allele")
+                if isinstance(coordinate_check, dict)
+                else ""
+            )
+            or ""
+        ).strip().upper()
+        if not expected_alleles or alternate not in expected_alleles:
+            discarded_by_allele += 1
+            continue
         record_coordinate = _coordinate(record.get("grch38"))
         if record_coordinate is not None and locus_coordinate is not None:
             if record_coordinate == locus_coordinate:
@@ -219,7 +240,9 @@ def _clinvar_for(
             "asserts_pathogenic": False,
             "reason": (
                 "nenhum registro do ClinVar para este locus pôde ser confirmado na coordenada "
-                f"do alvo ({discarded} descartados); a junção é por coordenada, nunca por texto"
+                f"do alvo e no alelo avaliado ({discarded} descartados, "
+                f"{discarded_by_allele} por identidade alélica); a junção exige coordenada "
+                "e alelo, nunca apenas texto"
             ),
         }
     classifications = sorted({str(r.get("classification")) for r in records})
@@ -909,7 +932,20 @@ def build_clinical_findings(
             continue
 
         locus_evidence = by_rsid.get(rsid, {})
-        clinvar = _clinvar_for(rsid, locus_evidence, allowed_by_rsid.get(rsid, set()))
+        assessed_alleles = {
+            str(allele).strip().upper()
+            for allele in (
+                list(entry.get("assessed_alleles") or [])
+                + ([entry.get("assessed_allele")] if entry.get("assessed_allele") else [])
+            )
+            if str(allele).strip()
+        }
+        clinvar = _clinvar_for(
+            rsid,
+            locus_evidence,
+            allowed_by_rsid.get(rsid, set()),
+            assessed_alleles,
+        )
         validity = validity_for(gene)
         interpretation = _interpretation(entry, clinvar, validity, sex)
         findings.append(
