@@ -1066,6 +1066,8 @@ def build(
                             "last_evaluated": r["last_evaluated"],
                             "conditions": r["conditions"],
                             "genes": r["genes"],
+                            "reference_allele": r["reference_allele"],
+                            "alternate_allele": r["alternate_allele"],
                             "grch38": r["grch38"],
                         }
                         for r in records
