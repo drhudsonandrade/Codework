@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import subprocess
 import sys
 import tempfile
@@ -152,9 +153,11 @@ class FrequencyDomainTest(unittest.TestCase):
 
 class DirectSmokeInvocationTest(unittest.TestCase):
     def test_production_entrypoint_can_be_executed_by_path(self):
+        environment = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
         result = subprocess.run(
             [sys.executable, "scripts/run_live_post_deployment_smoke.py", "--help"],
             cwd=ROOT,
+            env=environment,
             text=True,
             capture_output=True,
             timeout=30,
