@@ -152,6 +152,15 @@ class FrequencyDomainTest(unittest.TestCase):
 
 
 class DirectSmokeInvocationTest(unittest.TestCase):
+    def test_script_establishes_the_repository_root_without_transitive_side_effects(self):
+        source = (
+            ROOT / "scripts" / "run_live_post_deployment_smoke.py"
+        ).read_text(encoding="utf-8")
+        self.assertLess(
+            source.index("sys.path.insert"),
+            source.index("from bootstrap_attestation"),
+        )
+
     def test_production_entrypoint_can_be_executed_by_path(self):
         environment = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
         with tempfile.TemporaryDirectory() as td:
