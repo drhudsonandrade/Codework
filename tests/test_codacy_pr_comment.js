@@ -143,10 +143,10 @@ test('accepts only the same open PR head and base on the default branch', async 
     true,
   );
 
-  for (const [field, value] of [
-    ['head', 'c'.repeat(40)],
-    ['base', 'd'.repeat(40)],
-    ['defaultBranch', 'release'],
+  for (const override of [
+    { head: 'c'.repeat(40) },
+    { base: 'd'.repeat(40) },
+    { defaultBranch: 'release' },
   ]) {
     const request = {
       github,
@@ -156,8 +156,8 @@ test('accepts only the same open PR head and base on the default branch', async 
       head,
       base,
       defaultBranch: 'main',
+      ...override,
     };
-    request[field] = value;
     assert.equal(await isCurrentCodacyPullRequest(request), false);
   }
 });
@@ -513,16 +513,16 @@ test('does not label a cancelled producer as a failed test run', async () => {
 test('rejects every live workflow identity mismatch', async () => {
   const head = 'a'.repeat(40);
   const pullRequest = makePullRequest(head);
-  for (const [field, value] of [
-    ['path', '.github/workflows/other.yml'],
-    ['head_sha', 'c'.repeat(40)],
-    ['event', 'push'],
+  for (const liveIdentity of [
+    { path: '.github/workflows/other.yml' },
+    { head_sha: 'c'.repeat(40) },
+    { event: 'push' },
   ]) {
     const { github } = makeResolverGithub(
       pullRequest,
       undefined,
       head,
-      { [field]: value },
+      liveIdentity,
     );
     await assert.rejects(
       resolveCodacyPullRequest({
