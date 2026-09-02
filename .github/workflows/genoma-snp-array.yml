@@ -14,6 +14,7 @@ on:
       - 'tests/test_partial_genome_annotation.py'
       - 'tests/test_array_scientific_data_plane.py'
       - 'tests/test_array_provenance_attestation.py'
+      - 'tests/test_pr30_qodo_regressions.py'
       - '.github/workflows/genoma-snp-array.yml'
   push:
     branches: [main]
@@ -29,6 +30,7 @@ on:
       - 'tests/test_partial_genome_annotation.py'
       - 'tests/test_array_scientific_data_plane.py'
       - 'tests/test_array_provenance_attestation.py'
+      - 'tests/test_pr30_qodo_regressions.py'
       - '.github/workflows/genoma-snp-array.yml'
   workflow_dispatch:
 
@@ -47,7 +49,7 @@ jobs:
       - name: Validate repository contract
         run: python3 scripts/validate_repo.py
       - name: Run SNP-array and annotation unit tests
-        run: python3 -m unittest tests.test_snp_array_qc tests.test_partial_genome_annotation tests.test_array_scientific_data_plane tests.test_array_provenance_attestation -v
+        run: python3 -m unittest tests.test_snp_array_qc tests.test_partial_genome_annotation tests.test_array_scientific_data_plane tests.test_array_provenance_attestation tests.test_pr30_qodo_regressions -v
       - name: Execute synthetic harmonized partial-genome smoke
         shell: bash
         run: |
