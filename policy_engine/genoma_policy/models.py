@@ -32,9 +32,11 @@ def evaluation_binding(manifest: dict[str, Any]) -> dict[str, Any]:
     }
     input_sha256 = next(iter(input_hashes)) if len(input_hashes) == 1 else ""
     operation = manifest.get("operation") if isinstance(manifest.get("operation"), dict) else {}
+    case_id = manifest.get("case_id")
+    session_id = manifest.get("session_id")
     return {
-        "case_id": str(manifest.get("case_id") or "").strip(),
-        "session_id": str(manifest.get("session_id") or "").strip(),
+        "case_id": case_id.strip() if isinstance(case_id, str) else "",
+        "session_id": session_id.strip() if isinstance(session_id, str) else "",
         "input_sha256": input_sha256,
         "operation": copy.deepcopy(operation),
         "manifest_sha256": canonical_manifest_sha256(manifest),

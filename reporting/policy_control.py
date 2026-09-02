@@ -29,7 +29,11 @@ def _runtime() -> tuple[Any, Any, Any]:
     try:
         from policy_engine.genoma_policy.engine import PolicyEngine
         from policy_engine.genoma_policy.models import evaluation_binding
-        from policy_engine.genoma_policy.ruleset import load_ruleset, verify_external_manifest
+        from policy_engine.genoma_policy.paths import CANONICAL_MANIFEST_RELATIVE
+        from policy_engine.genoma_policy.ruleset import (
+            load_ruleset,
+            verify_external_manifest,
+        )
         from scripts.materialize_ruleset import materialize
     except (ImportError, ModuleNotFoundError) as exc:
         raise PolicyEvaluationVerificationError(
@@ -37,7 +41,8 @@ def _runtime() -> tuple[Any, Any, Any]:
         ) from exc
 
     root = Path(__file__).resolve().parents[1]
-    hash_manifest = root / "manifests" / "RULESET_V3.4.sha256"
+    hash_manifest = root / CANONICAL_MANIFEST_RELATIVE
+    td: TemporaryDirectory[str] | None = None
     try:
         td = TemporaryDirectory()
         ruleset_path, _evidence = materialize(Path(td.name))
@@ -45,6 +50,8 @@ def _runtime() -> tuple[Any, Any, Any]:
         verify_external_manifest(ruleset, hash_manifest)
         engine = PolicyEngine(ruleset, external_manifest=hash_manifest)
     except (OSError, RuntimeError, ValueError) as exc:
+        if td is not None:
+            td.cleanup()
         raise PolicyEvaluationVerificationError(
             f"canonical Policy Control Plane could not be materialized and verified: {exc}"
         ) from exc
@@ -65,6 +72,8 @@ def verify_policy_evaluation(
     Plane itself independently reaches the same result for the same case, session, input and
     requested operation.
     """
+    if not isinstance(case_id, str) or not case_id.strip():
+        raise PolicyEvaluationVerificationError("report case_id must be a non-empty string")
     if not isinstance(evaluation, dict) or not evaluation:
         raise PolicyEvaluationVerificationError("policy evaluation is not a non-empty JSON object")
     if evaluation.get("schema") != POLICY_EVALUATION_SCHEMA:
@@ -99,12 +108,13 @@ def verify_policy_evaluation(
                 f"policy evaluation top-level {key} disagrees with its manifest binding"
             )
 
-    bound_case = str(expected_binding.get("case_id") or "").strip()
+    bound_case = expected_binding.get("case_id")
+    bound_case = bound_case.strip() if isinstance(bound_case, str) else ""
     if not bound_case:
         raise PolicyEvaluationVerificationError("policy evaluation case_id is missing")
-    if bound_case != str(case_id):
+    if bound_case != case_id.strip():
         raise PolicyEvaluationVerificationError(
-            f"policy evaluation belongs to case {bound_case!r}, not {str(case_id)!r}"
+            f"policy evaluation belongs to case {bound_case!r}, not {case_id.strip()!r}"
         )
     session_id = str(expected_binding.get("session_id") or "").strip()
     if not session_id:

@@ -19,13 +19,16 @@ from genoma_policy.models import evaluation_binding
 from genoma_policy.ruleset import load_ruleset
 from genoma_policy.scaffold import scaffold_manifest
 from reporting.provenance import (
+    CONSENT_ARTIFACT,
     POLICY_EVALUATION_ARTIFACT,
     REQUIRED_PLANES,
     Artifact,
     PayloadCompiler,
     ProvenanceError,
+    fixture_payload,
 )
 from scripts.materialize_ruleset import materialize
+from tests.attestations import consent_record
 
 INPUT_SHA = "a" * 64
 
@@ -122,6 +125,34 @@ class PolicyEvaluationBindingTest(unittest.TestCase):
         self.assertTrue(verdict["ready_for_requested_operation"])
         self.assertEqual(verdict["source"]["status"], "VERIFICADO")
         self.assertEqual(verdict["source"]["origin"], "policy-control-reexecution")
+
+    def test_nested_input_hash_binds_consent_and_policy_to_the_same_bytes(self):
+        compiler = PayloadCompiler(case_id="CASE-1", report_id="01")
+        compiler._install_verdict(
+            Artifact.from_payload(POLICY_EVALUATION_ARTIFACT, real_evaluation())
+        )
+        compiler._install_consent(
+            Artifact.from_payload(
+                CONSENT_ARTIFACT,
+                consent_record(case_id="CASE-1", input_sha256=INPUT_SHA),
+            )
+        )
+        compiler.register(
+            Artifact.from_payload("subject-input", {"input": {"sha256": INPUT_SHA}})
+        )
+
+        self.assertTrue(compiler.consent_scope()["covers"])
+        self.assertTrue(compiler.policy_verdict()["ready_for_requested_operation"])
+
+    def test_fixture_policy_source_is_never_reported_as_verified(self):
+        payload = fixture_payload(
+            case_id="CASE-1",
+            report_id="01",
+            summary="fixture",
+            basis="layout QA fixture",
+        )
+
+        self.assertEqual(payload["policy_evaluation"]["source"]["status"], "NÃO DISPONÍVEL")
 
     def test_legacy_minimal_hand_written_pass_is_refused(self):
         payload = {

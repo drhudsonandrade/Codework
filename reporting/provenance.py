@@ -647,9 +647,9 @@ class PayloadCompiler:
         composed in memory by the builder would be the builder granting itself the authority
         each of them exists to withhold, so they can only enter as a file someone else wrote.
         """
-        if not str(case_id).strip():
+        if not isinstance(case_id, str) or not case_id.strip():
             raise ProvenanceError("case_id is required")
-        self.case_id = str(case_id)
+        self.case_id = case_id.strip()
         self.report_id = str(report_id)
         self._artifacts: dict[str, Artifact] = {}
         self._anchors: dict[str, Anchor] = {}
@@ -947,18 +947,7 @@ class PayloadCompiler:
             if self._fixture_consent:
                 input_sha256 = "fixture"
             else:
-                control_artifacts = {
-                    CONSENT_ARTIFACT,
-                    POLICY_EVALUATION_ARTIFACT,
-                    POST_DEPLOYMENT_WITNESS_ARTIFACT,
-                }
-                input_hashes = {
-                    str(candidate.payload.get("input_sha256") or "").strip()
-                    for name, candidate in self._artifacts.items()
-                    if name not in control_artifacts
-                    and isinstance(candidate.payload, dict)
-                    and str(candidate.payload.get("input_sha256") or "").strip()
-                }
+                input_hashes = self._scientific_input_sha256s()
                 if len(input_hashes) != 1:
                     return {
                         "covers": False,
@@ -1001,6 +990,25 @@ class PayloadCompiler:
             verdict["origin"] = "fixture" if self._fixture_consent else "operator-record"
         return verdict
 
+    def _scientific_input_sha256s(self) -> set[str]:
+        """Resolve every declared scientific-input digest through one canonical path."""
+        control_artifacts = {
+            CONSENT_ARTIFACT,
+            POLICY_EVALUATION_ARTIFACT,
+            POST_DEPLOYMENT_WITNESS_ARTIFACT,
+        }
+        input_hashes: set[str] = set()
+        for name, candidate in self._artifacts.items():
+            if name in control_artifacts or not isinstance(candidate.payload, dict):
+                continue
+            direct = candidate.payload.get("input_sha256")
+            nested_input = candidate.payload.get("input")
+            nested = nested_input.get("sha256") if isinstance(nested_input, dict) else None
+            for value in (direct, nested):
+                if isinstance(value, str) and value.strip():
+                    input_hashes.add(value.strip())
+        return input_hashes
+
     def _validated_policy_evaluation(
         self, evaluated: dict[str, Any]
     ) -> tuple[dict[str, Any] | None, str | None]:
@@ -1016,26 +1024,7 @@ class PayloadCompiler:
         if self._fixture_verdict:
             return evaluated, None
 
-        control_artifacts = {
-            POLICY_EVALUATION_ARTIFACT,
-            POST_DEPLOYMENT_WITNESS_ARTIFACT,
-            CONSENT_ARTIFACT,
-        }
-        input_hashes: set[str] = set()
-        for name, candidate in self._artifacts.items():
-            if name in control_artifacts or not isinstance(candidate.payload, dict):
-                continue
-            direct = str(candidate.payload.get("input_sha256") or "").strip()
-            nested_input = candidate.payload.get("input")
-            nested = (
-                str(nested_input.get("sha256") or "").strip()
-                if isinstance(nested_input, dict)
-                else ""
-            )
-            if direct:
-                input_hashes.add(direct)
-            if nested:
-                input_hashes.add(nested)
+        input_hashes = self._scientific_input_sha256s()
         if len(input_hashes) != 1:
             return None, (
                 "a avaliação de política não pode ser vinculada aos bytes deste payload: "
@@ -1125,7 +1114,7 @@ class PayloadCompiler:
             },
             "gates": [g for g in (verified.get("gates") or []) if isinstance(g, dict)],
             "source": {
-                "status": "VERIFICADO",
+                "status": UNAVAILABLE if self._fixture_verdict else "VERIFICADO",
                 "artifact": POLICY_EVALUATION_ARTIFACT,
                 "sha256": artifact.sha256,
                 "path": artifact.path,

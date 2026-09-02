@@ -4,12 +4,19 @@ import unittest
 from tests.test_policy_evaluation_binding import INPUT_SHA, real_evaluation
 
 
-def curated(*, consent: bool = True, evidence: bool = True):
+def curated(
+    *,
+    case_id: object = "CASE-1",
+    consent: bool = True,
+    consent_scope: bool = True,
+    evidence: bool = True,
+):
     return {
-        "case_id": "CASE-1",
+        "case_id": case_id,
         "array_artifacts": {"input_sha256": INPUT_SHA},
         "publication_gate": {
             "consent_verified": consent,
+            "consent_scope_verified": consent_scope,
             "qc_verified": True,
             "evidence_verified": evidence,
             "placeholders_resolved": True,
@@ -37,6 +44,22 @@ class ReportReleaseAssemblyTest(unittest.TestCase):
         self.assertEqual(result["report_release_status"], "NÃO DISPONÍVEL")
         self.assertIn("consent_verified", result["report_release_blockers"])
         self.assertIn("evidence_verified", result["report_release_blockers"])
+
+    def test_policy_pass_cannot_override_consent_scope_refusal(self):
+        from scripts.prepare_report_release import assemble_release
+
+        result = assemble_release(curated(consent_scope=False), real_evaluation())
+        self.assertFalse(result["publication_gate"]["passed"])
+        self.assertEqual(result["report_release_status"], "NÃO DISPONÍVEL")
+        self.assertIn("consent_scope_verified", result["report_release_blockers"])
+
+    def test_numeric_case_identity_cannot_authorize_release(self):
+        from scripts.prepare_report_release import assemble_release
+
+        result = assemble_release(curated(case_id=7), real_evaluation(case_id=7))
+        self.assertFalse(result["publication_gate"]["passed"])
+        self.assertEqual(result["report_release_status"], "NÃO DISPONÍVEL")
+        self.assertIn("policy_evaluation_binding", result["report_release_blockers"])
 
     def test_forged_complete_pass_is_blocked_by_policy_reexecution(self):
         from genoma_policy.models import evaluation_binding

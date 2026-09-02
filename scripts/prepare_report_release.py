@@ -17,7 +17,13 @@ from reporting.policy_control import (
     verify_policy_evaluation,
 )
 
-REQUIRED_PUBLICATION = ("consent_verified", "qc_verified", "evidence_verified", "placeholders_resolved")
+REQUIRED_PUBLICATION = (
+    "consent_verified",
+    "consent_scope_verified",
+    "qc_verified",
+    "evidence_verified",
+    "placeholders_resolved",
+)
 REQUIRED_PLANES = ("policy_control", "scientific_data", "evidence", "audit")
 
 
@@ -49,7 +55,8 @@ def assemble_release(curated: dict[str, Any], policy: dict[str, Any]) -> dict[st
     result = copy.deepcopy(curated)
     blockers: list[str] = []
 
-    case_id = str(curated.get("case_id") or "").strip()
+    raw_case_id = curated.get("case_id")
+    case_id = raw_case_id.strip() if isinstance(raw_case_id, str) else ""
     input_sha256 = _curated_input_sha256(curated)
     try:
         if not case_id:
