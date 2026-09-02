@@ -49,7 +49,7 @@ jobs:
       - name: Validate repository contract
         run: python3 scripts/validate_repo.py
       - name: Run SNP-array and annotation unit tests
-        run: python3 -m unittest tests.test_snp_array_qc tests.test_partial_genome_annotation tests.test_array_scientific_data_plane tests.test_array_provenance_attestation tests.test_pr30_qodo_regressions -v
+        run: python3 -m unittest tests.test_snp_array_qc tests.test_partial_genome_annotation tests.test_array_scientific_data_plane tests.test_array_provenance_attestation tests.test_pharmacogenomics tests.test_clinical_findings_regressions tests.test_allele_discrimination tests.test_post_deployment_target_binding tests.test_pr30_qodo_regressions -v
       - name: Execute synthetic harmonized partial-genome smoke
         shell: bash
         run: |
