@@ -14,12 +14,17 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from bootstrap_attestation import BootstrapAttestationError, verify_bootstrap_attestation
 from project_instructions_attestation import (
