@@ -54,7 +54,7 @@ def _top_level_scalar_map(workflow: str, key: str) -> dict[str, str]:
     """Parse one top-level scalar map and reject duplicate or nested entries."""
     lines = workflow.splitlines()
     marker = f"{key}:"
-    key_pattern = re.compile(rf"^{re.escape(key)}\\s*:")
+    key_pattern = re.compile(rf"^{re.escape(key)}\s*:")
     indexes = [index for index, line in enumerate(lines) if key_pattern.match(line)]
     if len(indexes) != 1:
         _fail(f"expected exactly one top-level {key!r} map, got {len(indexes)}")
