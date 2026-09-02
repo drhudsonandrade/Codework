@@ -84,6 +84,7 @@ def _orientation(row: dict[str, str], schema: str, qc: dict[str, Any]) -> tuple[
     """Determine whether one array row can be compared with plus-strand registries."""
     inputs = qc.get("input", {})
     strand = inputs.get("strand")
+    strand_evidence = inputs.get("strand_evidence")
     # Prefer the verdict the QC published. The old proxy — "the evidence string is not the
     # literal 'NÃO DISPONÍVEL'" — is satisfied by any non-empty text, including an
     # attestation that failed structural verification.
