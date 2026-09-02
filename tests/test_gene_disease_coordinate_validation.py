@@ -108,6 +108,10 @@ class ClinvarCoordinateIdentityTests(unittest.TestCase):
         self.assertEqual(ancestry["status"], CURATE.UNAVAILABLE)
         self.assertIn("autoridade autorizada", ancestry["reason"])
 
+    def test_malformed_gwas_study_link_is_refused(self):
+        """A malformed authority cannot escape the fail-closed URL gate."""
+        self.assertFalse(CURATE._is_authorized_gwas_link("https://[::1"))
+
     def test_clinvar_pagination_collects_every_uid(self):
         """ClinVar pagination collects every uid, not only the first page."""
         placement = {

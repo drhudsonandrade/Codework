@@ -509,7 +509,10 @@ def _ancestry_of(study: dict[str, Any]) -> dict[str, Any]:
 
 def _is_authorized_gwas_link(url: str) -> bool:
     """Accept only HTTPS study links on the configured GWAS Catalog authority."""
-    parsed = urllib.parse.urlsplit(url)
+    try:
+        parsed = urllib.parse.urlsplit(url)
+    except ValueError:
+        return False
     return parsed.scheme.lower() == "https" and parsed.netloc.lower() == GWAS_AUTHORITY
 
 

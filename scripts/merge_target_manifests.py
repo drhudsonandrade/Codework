@@ -154,15 +154,40 @@ def merge(paths: list[Path]) -> dict[str, Any]:
 
             existing = merged[rsid]
             origin[rsid].append(registry)
+            old = str(existing.get("assessed_allele") or "").strip().upper()
+            new = str(incoming.get("assessed_allele") or "").strip().upper()
+            recorded = {
+                str(value).strip().upper()
+                for value in (
+                    list(existing.get("assessed_allele_conflict") or [])
+                    + list(incoming.get("assessed_allele_conflict") or [])
+                )
+                if str(value).strip()
+            }
 
             inherited_identity = {
                 str(field)
-                for field in (existing.get("identity_conflict") or [])
+                for field in (
+                    list(existing.get("identity_conflict") or [])
+                    + list(incoming.get("identity_conflict") or [])
+                )
                 if str(field) in IDENTITY_FIELDS
             }
             field_conflicts = conflicted_identity.setdefault(rsid, set())
             field_conflicts.update(inherited_identity)
             for field in sorted(inherited_identity):
+                existing.pop(field, None)
+                existing["identity_conflict"] = sorted(field_conflicts)
+                if field == "reference_allele":
+                    for key in list(existing):
+                        if key == "assessed_allele" or key.startswith(
+                            "assessed_allele_"
+                        ):
+                            existing.pop(key, None)
+                    existing["assessed_allele_reason"] = (
+                        "alelo avaliado removido porque um registro herdado declara "
+                        "conflito sobre o alelo de referência"
+                    )
                 if not any(
                     item["rsid"] == rsid and item["field"] == field
                     for item in identity_conflicts
@@ -177,36 +202,33 @@ def merge(paths: list[Path]) -> dict[str, Any]:
                         }
                     )
 
-            old = str(existing.get("assessed_allele") or "").strip().upper()
-            new = str(incoming.get("assessed_allele") or "").strip().upper()
-            recorded = {
-                str(value).strip().upper()
-                for value in (existing.get("assessed_allele_conflict") or [])
-                if str(value).strip()
-            }
-            if recorded and not any(item["rsid"] == rsid for item in conflicts):
-                conflicts.append(
-                    {
-                        "rsid": rsid,
-                        "registries": list(origin[rsid]),
-                        "assessed_alleles": sorted(recorded),
-                        "inherited": True,
-                    }
-                )
-            if new and recorded:
-                recorded.add(new)
+            if recorded:
+                recorded.update(value for value in (old, new) if value)
                 values = sorted(recorded)
+                for key in list(existing):
+                    if key == "assessed_allele" or key.startswith("assessed_allele_"):
+                        existing.pop(key, None)
                 existing["assessed_allele_conflict"] = values
                 existing["assessed_allele_reason"] = (
                     f"registros divergem sobre o alelo avaliado deste locus "
                     f"({', '.join(values)}, em {', '.join(origin[rsid])}); escolher um seria "
                     "arbitrar um conflito, e o locus não admite NÃO DETECTADO"
                 )
-                for conflict in conflicts:
-                    if conflict["rsid"] == rsid:
-                        conflict["assessed_alleles"] = values
-                        conflict["registries"] = list(origin[rsid])
-                        break
+                conflict = next(
+                    (item for item in conflicts if item["rsid"] == rsid), None
+                )
+                if conflict is None:
+                    conflicts.append(
+                        {
+                            "rsid": rsid,
+                            "registries": list(origin[rsid]),
+                            "assessed_alleles": values,
+                            "inherited": True,
+                        }
+                    )
+                else:
+                    conflict["assessed_alleles"] = values
+                    conflict["registries"] = list(origin[rsid])
             elif old and new and old != new:
                 conflicts.append(
                     {
