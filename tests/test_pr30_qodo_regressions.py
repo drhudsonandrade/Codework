@@ -155,7 +155,7 @@ class DirectSmokeInvocationTest(unittest.TestCase):
     def test_production_entrypoint_can_be_executed_by_path(self):
         environment = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
         result = subprocess.run(
-            [sys.executable, "scripts/run_live_post_deployment_smoke.py", "--help"],
+            [sys.executable, "-I", "scripts/run_live_post_deployment_smoke.py", "--help"],
             cwd=ROOT,
             env=environment,
             text=True,
