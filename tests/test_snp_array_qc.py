@@ -188,7 +188,7 @@ class ArrayQCTest(unittest.TestCase):
         the rules live in one place, plus a check that something usable survives the
         palindromic exclusion.
         """
-        p = self._write("RSID,CHROMOSOME,POSITION,RESULT\nrs1,1,100,TC\n")
+        p = self._write("RSID,CHROMOSOME,POSITION,RESULT\nrs1799807,3,165548529,CC\n")
         build_evidence = self._verified_evidence(p, asserted_value="GRCh37")
         strand_evidence = self._verified_evidence(p, asserted_value="forward")
         good = json.loads(
@@ -223,6 +223,11 @@ class ArrayQCTest(unittest.TestCase):
                     result["metrics"]["strand_contradiction_check"], "NÃO DISPONÍVEL"
                 )
                 self.assertEqual(result["operational_status"], "NÃO DISPONÍVEL")
+                self.assertTrue(result["baseline_marker_observations"])
+                self.assertTrue(all(
+                    marker["orientation_operational_status"] == "NÃO DISPONÍVEL"
+                    for marker in result["baseline_marker_observations"]
+                ))
 
     def test_an_unreadable_marker_table_blocks_instead_of_disappearing(self):
         """The one check against a lying attestation must not vanish with its data file.

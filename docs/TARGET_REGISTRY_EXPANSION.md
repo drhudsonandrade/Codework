@@ -20,7 +20,9 @@ pinado em `docs/evidence/` que o sustente. O par de 2★ continua selecionável 
 que só deva ver consenso curado.
 
 No corte de 1★: **4.408 genes**, dos quais **3.895** com relação gene-doença estabelecida —
-2.535 recessivos, 1.602 dominantes, 163 ligados ao X.
+2.535 aparecem em relações recessivas, 1.602 em dominantes e 163 em ligadas ao X. Essas
+categorias se sobrepõem: as 4.300 ocorrências representam 3.895 genes únicos e não são
+conjuntos disjuntos.
 
 Com o corte de 2★, que era o padrão anterior, o artefato de alvos versionado
 `config/targets_clinvar_plp.json.gz` permite reproduzir **54.845 rsids e 3.082 genes**.
@@ -122,9 +124,9 @@ saída diz que faltava a maior parte do escore. Abaixo de **95%** de cobertura o
 em vez de emitir.
 
 Nenhum peso é copiado para este repositório. Cada escore é citado pela URL do arquivo
-harmonizado e pela **própria licença**, que não é uniforme: 6.879 são de citação, mas 31 são
-CC BY-NC-ND, 7 são só para uso acadêmico e 1 é restrito a pesquisa. Um registro que achatasse
-isso autorizaria um uso que o autor proibiu.
+harmonizado e pela **própria licença**, que não é uniforme: 6.879 são de citação, 31 são CC
+BY-NC-ND, 7 são só para uso acadêmico, 1 é restrito a pesquisa e 54 não declaram licença no
+catálogo. Um registro que achatasse isso autorizaria um uso que o autor proibiu.
 
 ## O nível de revisão do ClinVar viaja com o alvo
 
@@ -292,7 +294,7 @@ python3 scripts/expand_clinvar_targets.py \
     --gnomad-constraint gnomad.v4.1.constraint_metrics.tsv \
     --min-review-stars 1 \
     --targets-out config/targets_clinvar_plp_1star.json.gz \
-    --evidence-out docs/evidence/GENE_DISEASE_VALIDITY_BULK_1STAR.json.gz
+    --evidence-out docs/evidence/GENE_DISEASE_VALIDITY_1STAR.json.gz
 python3 scripts/build_trait_targets.py \
     --associations gwas-catalog-associations_ontology-annotated-full.zip \
     --ancestries gwas-catalog-download-ancestries-v1.0.3.1.txt

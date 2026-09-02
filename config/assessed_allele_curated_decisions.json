@@ -6,7 +6,7 @@
     "rs1799945": {
       "gene": "HFE",
       "assessed_allele": "G",
-      "status": "VERIFICADO",
+      "status": "PROPOSTO",
       "clinvar_accession": "VCV000000010",
       "clinvar_variation_id": 10,
       "canonical_change": "NM_000410.4(HFE):c.187C>G (p.His63Asp)",

@@ -124,8 +124,11 @@ def _load_curated_decisions(path: Path | None) -> dict[str, dict[str, Any]]:
             raise CurationError(f"{rsid}: curated assessed_allele must be a single A/C/G/T base")
         if not re.fullmatch(r"VCV\d+", accession):
             raise CurationError(f"{rsid}: curated ClinVar accession is malformed")
-        if raw.get("status") != "VERIFICADO":
-            raise CurationError(f"{rsid}: curated decision must explicitly state VERIFICADO")
+        if raw.get("status") != "PROPOSTO":
+            raise CurationError(
+                f"{rsid}: owner-reviewed identity must remain PROPOSTO until the live "
+                "validator independently confirms it"
+            )
         if not basis:
             raise CurationError(f"{rsid}: curated decision must state its basis")
         out[rsid] = dict(raw)
@@ -150,12 +153,12 @@ def _get(url: str, *, attempts: int = 4) -> dict[str, Any]:
     last: Exception | None = None
     for attempt in range(attempts):
         try:
-            with policy_opener(is_https, "the CPIC API").open(request, timeout=45) as response:  # nosec B310
+            with policy_opener(is_https, "the public registry API").open(request, timeout=45) as response:  # nosec B310
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             if exc.code != 429 and not 500 <= exc.code < 600:
                 raise CurationError(
-                    f"eutils fetch failed for {url} with non-retriable HTTP status {exc.code}"
+                    f"registry fetch failed for {url} with non-retriable HTTP status {exc.code}"
                 ) from exc
             last = exc
             if attempt < attempts - 1:
@@ -164,7 +167,7 @@ def _get(url: str, *, attempts: int = 4) -> dict[str, Any]:
             last = exc
             if attempt < attempts - 1:
                 time.sleep(2**attempt)
-    raise CurationError(f"eutils fetch failed for {url} after {attempts} attempts: {last}")
+    raise CurationError(f"registry fetch failed for {url} after {attempts} attempts: {last}")
 
 
 def clinvar_records(rsid: str) -> list[dict[str, Any]]:
@@ -332,6 +335,7 @@ def _apply_curated_identity_decision(
         return None
     allele = str(decision.get("assessed_allele") or "").upper()
     accession = str(decision.get("clinvar_accession") or "")
+    expected_spdi = str(decision.get("canonical_spdi") or "").strip()
     matching = [
         record
         for record in matched
@@ -341,6 +345,16 @@ def _apply_curated_identity_decision(
         raise CurationError(
             f"{rsid}: curated decision requests {allele}/{accession}, but the live ClinVar "
             "coordinate join does not confirm that accession and alternate"
+        )
+    live_spdis = {
+        str(record.get("canonical_spdi") or "").strip()
+        for record in matching
+        if str(record.get("canonical_spdi") or "").strip()
+    }
+    if not expected_spdi or expected_spdi not in live_spdis:
+        raise CurationError(
+            f"{rsid}: curated canonical SPDI {expected_spdi!r} is not confirmed by the "
+            f"live ClinVar records for {accession}: {sorted(live_spdis)}"
         )
     if allele == base.get("reference_allele"):
         raise CurationError(f"{rsid}: curated assessed allele equals the dbSNP reference base")
@@ -360,7 +374,7 @@ def _apply_curated_identity_decision(
                 "status": "VERIFICADO",
                 "clinvar_accession": accession,
                 "source_url": decision.get("source_url"),
-                "canonical_spdi": decision.get("canonical_spdi"),
+                "canonical_spdi": expected_spdi,
                 "scope": "assessed-allele identity only; clinical significance is not overridden",
             },
         }
@@ -641,9 +655,11 @@ def curate(
             "dbSNP supplies the plus-strand reference base from the SPDI deleted_sequence; "
             "ClinVar supplies the alternate from canonical_spdi. The two are joined by "
             "coordinate, never by text. Pharmacogenomic and association sources are used in "
-            "their own domains. A versioned owner-reviewed allele-identity decision may be "
+            "their own domains. When multiple asserted alternate bases compete and dbSNP "
+            "reports frequency for exactly one, that base is selected as the assessed allele. "
+            "A versioned owner-reviewed allele-identity decision may be "
             "applied only when the live ClinVar coordinate join independently confirms its "
-            "exact accession and alternate; it never overrides clinical significance. A "
+            "exact accession, alternate and canonical SPDI; it never overrides clinical significance. A "
             "target not established by these rules remains without an assessed allele."
         ),
         "targets_curated": len(results),

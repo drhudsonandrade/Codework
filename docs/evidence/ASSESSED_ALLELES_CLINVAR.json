@@ -1,7 +1,7 @@
 {
   "assessed_alleles_established": 28,
   "curated_at": "2026-09-01T03:15:24.219240Z",
-  "method": "dbSNP supplies the plus-strand reference base from the SPDI deleted_sequence; ClinVar supplies the alternate from canonical_spdi. The two are joined by coordinate, never by text. Pharmacogenomic and association sources are used in their own domains. A versioned owner-reviewed allele-identity decision may be applied only when the live ClinVar coordinate join independently confirms its exact accession and alternate; it never overrides clinical significance. A target not established by these rules remains without an assessed allele.",
+  "method": "dbSNP supplies the plus-strand reference base from the SPDI deleted_sequence; ClinVar supplies the alternate from canonical_spdi. The two are joined by coordinate, never by text. Pharmacogenomic and association sources are used in their own domains. When multiple asserted alternate bases compete and dbSNP reports frequency for exactly one, that base is selected as the assessed allele. A versioned owner-reviewed allele-identity decision may be applied only when the live ClinVar coordinate join independently confirms its exact accession, alternate and canonical SPDI; it never overrides clinical significance. A target not established by these rules remains without an assessed allele.",
   "results": [
     {
       "assessed_allele": "C",

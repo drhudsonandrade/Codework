@@ -41,7 +41,7 @@ class ReportReleaseError(RuntimeError):
 
 
 def _assert_serializable_provenance(rendered: dict[str, Any]) -> None:
-    """Re-run provenance immediately before a FINAL bundle crosses a write boundary.
+    """Re-run provenance and derived-view checks at a FINAL write boundary.
 
     ``render_document`` validates the source payload, but editorial preparation happens later
     and may legitimately add renderer disclosures. A caller can also mutate a prepared
@@ -57,6 +57,16 @@ def _assert_serializable_provenance(rendered: dict[str, Any]) -> None:
         raise ReportReleaseError(
             "post-render provenance gate failed: " + ", ".join(blockers)
         )
+    report_id = str(metadata.get("report_id") or "")
+    model = load_catalog().get(report_id)
+    if model is None:
+        raise ReportReleaseError(f"unknown FINAL report model: {report_id!r}")
+    expected_markdown = _final_markdown(report_id, model, data)
+    if rendered.get("markdown") != expected_markdown:
+        raise ReportReleaseError("rendered markdown no longer matches the bundled payload")
+    expected_html = _to_html(expected_markdown, model["title"])
+    if rendered.get("html") != expected_html:
+        raise ReportReleaseError("rendered HTML no longer matches the bundled payload")
 
 
 def load_catalog() -> dict[str, dict[str, Any]]:

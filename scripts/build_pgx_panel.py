@@ -63,10 +63,24 @@ def build_panel(registry: dict[str, Any]) -> dict[str, Any]:
                 alleles_at[rsid].add(allele)
                 if base:
                     bases_at[rsid].add(base)
+                position = item.get("position")
+                chromosome = str(item.get("chromosome") or "").strip()
+                accession = str(item.get("reference_accession") or "").strip()
+                normalized_chromosome = chromosome.lower().removeprefix("chr").upper()
+                if isinstance(position, bool) or not isinstance(position, int) or position <= 0:
+                    raise ValueError(f"{rsid} has invalid GRCh38 position: {position!r}")
+                if normalized_chromosome not in {
+                    *(str(number) for number in range(1, 23)), "X", "Y", "M", "MT"
+                }:
+                    raise ValueError(f"{rsid} has invalid GRCh38 chromosome: {chromosome!r}")
+                if not accession.startswith("NC_") or "." not in accession:
+                    raise ValueError(
+                        f"{rsid} has invalid GRCh38 reference_accession: {accession!r}"
+                    )
                 candidate_identity = {
-                    "position": item.get("position"),
-                    "chromosome": item.get("chromosome"),
-                    "reference_accession": item.get("reference_accession"),
+                    "position": position,
+                    "chromosome": chromosome,
+                    "reference_accession": accession,
                     "cpic_location": item.get("cpic_location"),
                     "chromosome_location": item.get("chromosome_location"),
                 }

@@ -138,6 +138,32 @@ class PassportScopeTest(unittest.TestCase):
         # F5 is ClinVar-only; it is a clinical target but not a pharmacogenomic one.
         self.assertNotIn("F5", genes)
 
+    def test_empty_allele_catalog_cannot_imply_reference_reference(self):
+        """A complete flag over zero definitions establishes no reference haplotype."""
+        from array_pipeline.pharmacogenomics import _diplotype_for
+
+        result = _diplotype_for(
+            "GENE",
+            {"complete_panel": True, "reference_allele": "*1", "alleles": {}},
+            [],
+            [],
+            [],
+        )
+        self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+        self.assertIsNone(result["value"])
+        self.assertTrue(any("nenhum alelo" in reason for reason in result["reasons"]))
+
+    def test_qc_reservations_travel_with_the_passport(self):
+        """The reason for the matrix status remains attached to its PGx restatement."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            matrix_path, _passport, _ = _artifacts(root, CLEAN_ROWS)
+            matrix = json.loads(matrix_path.read_text(encoding="utf-8"))
+            matrix["qc_reservations"] = ["BUILD_STRAND_GATE: tabela indisponível"]
+            matrix_path.write_text(json.dumps(matrix), encoding="utf-8")
+            passport = build_pharmacogenomic_passport(matrix_path, root / "targets.json")
+        self.assertEqual(passport["qc_reservations"], matrix["qc_reservations"])
+
     def test_the_passport_cannot_outrank_the_matrix_that_fed_it(self):
         """The passport cannot claim a stronger status than the completeness matrix it was built from."""
         with tempfile.TemporaryDirectory() as td:
@@ -527,6 +553,7 @@ class AnesthesiaScopeTest(unittest.TestCase):
         self.assertIn("CACNA1S", text)
         self.assertIn("succinylcholine", text)
         self.assertIn("não libera nem contraindica", text)
+        self.assertIn("NÃO DISPONÍVEL", text)
 
     def test_one_page_names_a_refused_compiled_passport(self):
         """The one-page summary distinguishes a refused passport from no passport at all."""

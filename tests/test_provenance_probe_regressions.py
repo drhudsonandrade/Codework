@@ -8,6 +8,7 @@ from pathlib import Path
 from array_pipeline.provenance_probe import (
     ProvenanceProbeError,
     _read_markers_from_array,
+    attestation_from_probe,
     load_markers,
 )
 
@@ -113,7 +114,34 @@ class ProvenanceProbeRegressionTest(unittest.TestCase):
             with self.assertRaisesRegex(
                 ProvenanceProbeError, "two distinct alleles"
             ):
-                load_markers(path)
+                        load_markers(path)
+
+    def test_proposed_marker_table_cannot_issue_a_verified_attestation(self):
+        """A successful probe over unverified marker metadata is not an attestation."""
+        result = {
+            "evaluated_at": "2026-09-02T00:00:00Z",
+            "input_sha256": "a" * 64,
+            "marker_table": {
+                "id": "fixture",
+                "version": "1",
+                "sha256": "b" * 64,
+                "verification_status": "PROPOSTO",
+            },
+            "build": {
+                "status": "VERIFICADO",
+                "value": "GRCh38",
+                "grch37_matches": 0,
+                "grch38_matches": 3,
+            },
+            "strand": {
+                "status": "VERIFICADO",
+                "value": "forward",
+                "plus_matches": 3,
+                "minus_matches": 0,
+            },
+        }
+        self.assertIsNone(attestation_from_probe(result, "reference_build"))
+        self.assertIsNone(attestation_from_probe(result, "strand"))
 
     def test_duplicate_and_unresolved_markers_are_discarded(self):
         """Duplicate and unresolved markers are discarded rather than probed."""

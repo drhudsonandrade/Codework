@@ -149,4 +149,4 @@ def rule_id(section: int) -> str:
 
     if not 0 <= section <= LAST_SECTION:
         raise ValueError(f"section out of normative range 0..{LAST_SECTION}: {section}")
-    return f"GENOMA-V3.4-S{section:03d}"
+    return f"GENOMA-{VERSION.upper()}-S{section:03d}"

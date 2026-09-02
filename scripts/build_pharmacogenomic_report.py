@@ -167,7 +167,8 @@ def _anesthesia_text(card: dict) -> str:
         f"{o['gene']} {_locus_text(o)}" for o in card.get("observations", [])
     )
     return (
-        f"Observações: {observations}. {_anesthesia_gaps(card)}{card.get('clearance_policy', '')}"
+        f"Status do cartão: {card.get('status', UNAVAILABLE)}. Observações: {observations}. "
+        f"{_anesthesia_gaps(card)}{card.get('clearance_policy', '')}"
     ).strip()
 
 

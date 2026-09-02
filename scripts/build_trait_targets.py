@@ -267,8 +267,8 @@ def build(
             continue
         chromosome, position = next(iter(positions))
 
-        # CURIOSIDADE wins a tie only if the locus has no PREDISPOSICAO association; a locus
-        # that is both is clinical-adjacent and belongs in the stronger scope.
+        # `SCOPE_RANK` orders strongest to weakest, so a locus associated with both
+        # PREDISPOSICAO and CURIOSIDADE remains in the stronger PREDISPOSICAO scope.
         scopes = {r["scope"] for r in records}
         scope = min(scopes, key=SCOPE_RANK.index)
         alleles = {r["risk_allele"] for r in records if r["risk_allele"]}

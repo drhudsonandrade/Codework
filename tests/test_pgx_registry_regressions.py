@@ -60,6 +60,35 @@ class CpicRetryPolicyTest(unittest.TestCase):
         self.assertEqual(opener.open.call_count, 2)
         slept.assert_called_once_with(1)
 
+    def test_assessed_allele_fetch_errors_name_the_registry_not_cpic(self):
+        """The shared NCBI/GWAS transport does not misattribute failures to CPIC."""
+        factory, _ = opener_factory(urllib.error.URLError("offline"))
+        with patch.object(curate_assessed_alleles, "policy_opener", factory):
+            with self.assertRaisesRegex(
+                curate_assessed_alleles.CurationError, "registry fetch failed"
+            ):
+                curate_assessed_alleles._get(
+                    "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi", attempts=1
+                )
+
+    def test_curated_identity_requires_the_live_canonical_spdi(self):
+        """Accession and alternate are insufficient when the pinned SPDI disagrees."""
+        decision = {
+            "assessed_allele": "G",
+            "clinvar_accession": "VCV000000010",
+            "canonical_spdi": "NC_000006.12:26090950:C:G",
+            "basis": "fixture",
+        }
+        matched = [{
+            "alternate": "G",
+            "accession": "VCV000000010",
+            "canonical_spdi": "NC_000006.12:26090951:C:G",
+        }]
+        with self.assertRaisesRegex(curate_assessed_alleles.CurationError, "canonical SPDI"):
+            curate_assessed_alleles._apply_curated_identity_decision(
+                "rs1799945", {"reference_allele": "C"}, matched, decision
+            )
+
 
 class TransportSchemeTest(unittest.TestCase):
     """No fetcher opens a URL whose scheme is not the one it was written for.
@@ -396,6 +425,14 @@ class PgxPanelIdentityTest(unittest.TestCase):
         second_registry["version"] = "2"
         second = build_pgx_panel.build_panel(second_registry)
         self.assertNotEqual(first["version"], second["version"])
+
+    def test_invalid_grch38_identity_is_rejected(self):
+        """A target cannot be verified without a usable GRCh38 coordinate identity."""
+        invalid = self._registry()
+        item = invalid["genes"]["G"]["alleles"]["G*2"]["defining"][0]
+        item["position"] = 0
+        with self.assertRaisesRegex(ValueError, "rs1.*position"):
+            build_pgx_panel.build_panel(invalid)
 
 
 if __name__ == "__main__":

@@ -65,6 +65,12 @@ VCF_CURATION_PATH = ROOT / "config/section_attestations_wgs_vcf.json"
 #: would have passed on them. Judgements made about one operation certifying another is the
 #: inheritance this gate exists to prevent.
 CURATIONS = (ARRAY_CURATION_PATH, VCF_CURATION_PATH)
+CURATION_SCHEMA_HINTS = {
+    ARRAY_CURATION_PATH: frozenset({
+        "harmonized_genera_myheritage_v1", "raw_snp_array_v1"
+    }),
+    VCF_CURATION_PATH: frozenset({"wgs_vcf_projection_v1"}),
+}
 
 ALLOWED_APPLICABILITY = ("APPLICABLE", "NOT_APPLICABLE", "UNRESOLVED")
 ALLOWED_DECISIONS = ("SATISFIED", "BLOCKED", "NOT_APPLICABLE", "UNRESOLVED")
@@ -93,7 +99,13 @@ def curation_for_schema(schema: str | None) -> Path | None:
     """
     matches: list[Path] = []
     for candidate in CURATIONS:
-        payload = load_curation(candidate)
+        try:
+            payload = load_curation(candidate)
+        except CurationError:
+            schema_hints = CURATION_SCHEMA_HINTS.get(candidate)
+            if schema_hints is None or str(schema) in schema_hints:
+                raise
+            continue
         if str(schema) in (payload.get("applies_to_schemas") or []):
             matches.append(candidate)
     if len(matches) > 1:
@@ -296,12 +308,13 @@ def coverage_report(curation: dict[str, Any]) -> dict[str, Any]:
             key = str(entry.get("applicability"))
             by_applicability[key] = by_applicability.get(key, 0) + 1
     missing = pending(curation)
+    problems = validate_curation(curation)
     return {
         "total_rules": normative.SECTION_COUNT,
         "curated": len(sections),
         "pending": len(missing),
         "pending_sections": missing[:20],
         "by_applicability": by_applicability,
-        "problems": validate_curation(curation),
-        "status": "COMPLETA" if not missing and not validate_curation(curation) else "PENDENTE",
+        "problems": problems,
+        "status": "COMPLETA" if not missing and not problems else "PENDENTE",
     }

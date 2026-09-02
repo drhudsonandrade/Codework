@@ -62,25 +62,33 @@ class TemplateFillAssayTest(unittest.TestCase):
             },
         )
 
-    def test_clinical_counts_use_their_declared_fields(self):
-        """The clinical counts are taken from the fields the findings actually declare."""
+    def test_only_counts_defined_by_the_finding_contract_are_derived(self):
+        """Dead aliases outside the compiled finding contract remain explicitly unavailable."""
         payload = {
             "findings": [
                 {
                     "priority": "P1",
-                    "confirmation_required": True,
-                    "source": "clinical",
+                    "confirmation": "método ortogonal requerido",
                 },
                 {
                     "priority": "P3",
-                    "confirmation_required": False,
-                    "source": "structural_blind_spots",
+                    "confirmation": "não requerido",
                 },
             ]
         }
         self.assertEqual(_resolve("01", "N_ACHADOS_P1_P2", payload), "1")
-        self.assertEqual(_resolve("01", "N_CONFIRMACOES", payload), "1")
-        self.assertEqual(_resolve("09", "N_CEGOS", payload), "1")
+        self.assertIsNone(_resolve("01", "N_CONFIRMACOES", payload))
+        self.assertIsNone(_resolve("09", "N_CEGOS", payload))
+
+    def test_missing_input_is_unavailable_without_a_resolver_failure(self):
+        """No input block means no assay fact; it is not an unknown declared schema."""
+        failures: list[dict[str, str]] = []
+        self.assertIsNone(_resolve("01", "METODO", {"case_id": "CASE"}, failures))
+        self.assertIsNone(_resolve("01", "CALLER_ENSAIO", {"case_id": "CASE"}, failures))
+        self.assertIsNone(
+            _resolve("01", "TIPO_AMOSTRA_E_IDENTIFICADOR", {"case_id": "CASE"}, failures)
+        )
+        self.assertEqual(failures, [])
 
     def test_missing_count_fields_remain_unavailable(self):
         """A missing count field stays unavailable rather than resolving to zero."""

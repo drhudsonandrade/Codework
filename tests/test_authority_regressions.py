@@ -95,6 +95,17 @@ class WgsQcSummaryValidationTest(unittest.TestCase):
         self.assertNotIn("mean_depth", summary["measured"])
         self.assertTrue(summary["problems"])
 
+    def test_identity_fields_must_be_non_empty_text(self):
+        """JSON containers and numbers cannot become verified identity through str()."""
+        for key in ("case_id", "laboratory"):
+            for value in ({}, [], 7, True):
+                with self.subTest(key=key, value=value):
+                    record = wgs_qc_record(case_id="CASE")
+                    record[key] = value
+                    summary = audit_summary(record)
+                    self.assertEqual(summary["status"], UNAVAILABLE)
+                    self.assertTrue(any(key in p for p in summary["problems"]))
+
 
     def test_non_finite_metrics_are_rejected(self):
         """NaN and the infinities are rejected as metric values."""

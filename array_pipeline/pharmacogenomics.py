@@ -306,6 +306,12 @@ def _diplotype_for(
         # thinking a registry would fix it.
         reasons.append(str(spec["definitions_unavailable"]))
     else:
+        if not (spec.get("alleles") or {}):
+            reasons.append(
+                "o registro não cataloga nenhum alelo para este gene; um diplótipo de "
+                "referência sobre catálogo vazio afirmaria ausência sem nenhuma posição "
+                "definidora avaliada"
+            )
         if not spec.get("complete_panel"):
             reasons.append(
                 "o registro não declara o painel completo para este gene; alelos não definidos "
@@ -605,6 +611,7 @@ def build_pharmacogenomic_passport(
         # The passport is a restatement of observations whose status the matrix already
         # established; it cannot be stronger than that.
         "operational_status": matrix.get("operational_status", UNAVAILABLE),
+        "qc_reservations": matrix.get("qc_reservations", []),
         "evaluated_at": now,
         "ruleset": normative.attested_ruleset_block(),
         "case_id": matrix.get("case_id"),

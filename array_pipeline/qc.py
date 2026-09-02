@@ -960,6 +960,12 @@ def inspect_array(
             f"a verificação de contradição de fita não pôde ser executada: {strand_marker_failure}"
         )
         strand_evidence_verified = False
+        for hit in marker_hits.values():
+            hit["orientation_operational_status"] = "NÃO DISPONÍVEL"
+            hit["orientation_basis"] = (
+                "a checagem de contradição de fita não pôde ser executada: "
+                f"{strand_marker_failure}"
+            )
     elif strand_votes_minus >= MIN_STRAND_CONTRADICTION_MARKERS and strand_votes_plus == 0:
         # An attestation is a claim about the file; the file is the evidence. A well-formed,
         # correctly bound, human-signed attestation asserting `forward` used to be the end of

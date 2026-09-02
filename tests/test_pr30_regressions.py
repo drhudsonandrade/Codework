@@ -107,6 +107,64 @@ class PostRenderProvenanceRegressionTest(unittest.TestCase):
                 write_editorial_bundle(prepared, Path(td), stem="must-not-write")
             self.assertEqual(list(Path(td).iterdir()), [])
 
+    def test_writer_refuses_markdown_or_html_that_no_longer_matches_data(self):
+        """The serialized views cannot lag behind a caller mutation of the payload."""
+        from reporting.editorial_v3 import prepare_editorial_render
+        from reporting.engine import ReportReleaseError, render_document, write_bundle
+
+        prepared = prepare_editorial_render(
+            render_document("01", _final_data(), mode="FINAL"),
+            programmatic_final_authorization="unit-test visual QA",
+        )
+        prepared["markdown"] += "\ntexto não derivado"
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaisesRegex(ReportReleaseError, "markdown"):
+                write_bundle(prepared, Path(td), stem="must-not-write")
+            self.assertEqual(list(Path(td).iterdir()), [])
+
+        prepared = prepare_editorial_render(
+            render_document("01", _final_data(), mode="FINAL"),
+            programmatic_final_authorization="unit-test visual QA",
+        )
+        prepared["html"] += "<p>texto não derivado</p>"
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaisesRegex(ReportReleaseError, "HTML"):
+                write_bundle(prepared, Path(td), stem="must-not-write")
+            self.assertEqual(list(Path(td).iterdir()), [])
+
+    def test_input_schema_is_checked_in_both_directions(self):
+        """Changing or deleting the assay schema leaves a render-time blocker."""
+        from reporting.provenance import Artifact, PayloadCompiler, provenance_blockers
+
+        compiler = PayloadCompiler(case_id="CASE", report_id="01")
+        compiler.register(Artifact.from_payload(
+            "input-artifact", {"input": {"schema": "raw_snp_array_v1"}}
+        ))
+        for name in ("summary", "sources", "limitations"):
+            compiler.state(
+                name, "fixture", kind="fixture", basis="regression fixture",
+                status="NÃO DISPONÍVEL",
+            )
+        data = compiler.compile()
+        data["input"]["schema"] = "wgs_vcf_projection_v1"
+        self.assertIn("provenance:mismatch:input.schema", provenance_blockers(data))
+
+    def test_extra_cannot_replace_the_anchored_input_block(self):
+        """The top-level input object is protected although its anchor is input.schema."""
+        from reporting.provenance import Artifact, PayloadCompiler, ProvenanceError
+
+        compiler = PayloadCompiler(case_id="CASE", report_id="01")
+        compiler.register(Artifact.from_payload(
+            "input-artifact", {"input": {"schema": "raw_snp_array_v1"}}
+        ))
+        for name in ("summary", "sources", "limitations"):
+            compiler.state(
+                name, "fixture", kind="fixture", basis="regression fixture",
+                status="NÃO DISPONÍVEL",
+            )
+        with self.assertRaisesRegex(ProvenanceError, "input"):
+            compiler.compile(extra={"input": {"schema": "wgs_vcf_projection_v1"}})
+
 
 if __name__ == "__main__":
     unittest.main()

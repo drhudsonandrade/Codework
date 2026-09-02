@@ -157,8 +157,9 @@ def validate_record(
         problems.append(f"o registro não declara o schema {SCHEMA!r}")
 
     for key in REQUIRED_IDENTITY:
-        if not str(record.get(key) or "").strip():
-            problems.append(f"{key}: obrigatório e ausente")
+        value = record.get(key)
+        if not isinstance(value, str) or not value.strip():
+            problems.append(f"{key}: obrigatório e deve ser texto não vazio")
 
     declared_sha = str(record.get("vcf_sha256") or "").strip().lower()
     if declared_sha and (len(declared_sha) != 64 or not all(c in "0123456789abcdef" for c in declared_sha)):

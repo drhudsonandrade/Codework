@@ -304,6 +304,8 @@ def attestation_from_probe(result: dict[str, Any], kind: str) -> str | None:
     """
     if kind not in {"reference_build", "strand"}:
         raise ProvenanceProbeError(f"unknown attestation kind: {kind!r}")
+    if (result.get("marker_table") or {}).get("verification_status") != "VERIFICADO":
+        return None
     block = result["build"] if kind == "reference_build" else result["strand"]
     if block["status"] != "VERIFICADO" or not block["value"]:
         return None

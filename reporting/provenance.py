@@ -1336,7 +1336,10 @@ class PayloadCompiler:
             # a test fixture was in fact using it to stamp POST-DEPLOYMENT PASS on a payload
             # compiled as PENDENTE. Refused at the source rather than only at render, so a
             # caller learns immediately which field it may not reach this way.
-            overwritten = sorted(key for key in extra if key in self._anchors)
+            protected_top_level = {"input"} if "input.schema" in self._anchors else set()
+            overwritten = sorted(
+                key for key in extra if key in self._anchors or key in protected_top_level
+            )
             if overwritten:
                 raise ProvenanceError(
                     f"extra may not overwrite anchored fields {overwritten}; pass the value "
@@ -1653,6 +1656,9 @@ def provenance_blockers(data: dict[str, Any]) -> list[str]:
 
     for name in SCALAR_FIELDS + IDENTITY_FIELDS + AUTHORITY_FIELDS:
         check(name, data.get(name))
+    input_block = data.get("input") if isinstance(data.get("input"), dict) else {}
+    if "input.schema" in fields or input_block:
+        check("input.schema", input_block.get("schema"))
     publication = (
         data.get("publication_gate")
         if isinstance(data.get("publication_gate"), dict)
@@ -1720,6 +1726,8 @@ def provenance_blockers(data: dict[str, Any]) -> list[str]:
             # A deleted key leaves its anchor behind; checking only what `data` still carries
             # made the deletion invisible, and the reader loses a tool version without a word.
             blockers.append(f"provenance:missing_value:{name}")
+        elif name == "input.schema" and not input_block:
+            blockers.append("provenance:missing_value:input.schema")
 
     # The floor and the distribution are both derived from the same anchors, so they are
     # recomputed here rather than trusted. A block that merely *stated* a reassuring floor

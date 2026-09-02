@@ -73,7 +73,9 @@ def _count_findings(payload: dict[str, Any], predicate: Callable[[dict], bool]) 
 def _assay(payload: dict[str, Any]):
     """The assay this payload was produced by, resolved from its declared input schema."""
     input_block = payload.get("input")
-    schema = input_block.get("schema") if isinstance(input_block, dict) else None
+    if not isinstance(input_block, dict) or "schema" not in input_block:
+        return None
+    schema = input_block.get("schema")
     return assay_for_schema(schema)
 
 
@@ -85,6 +87,8 @@ def _qc_reference(payload: dict[str, Any]) -> Any:
     did not produce it.
     """
     assay = _assay(payload)
+    if assay is None:
+        return None
     direct = _manifest(payload, f"{assay.evidence_prefix.upper()}_QC_SHA256")
     if direct:
         return direct
@@ -128,7 +132,7 @@ COMMON_RESOLVERS: dict[str, Resolver] = {
     "AMOSTRA": lambda p: p.get("case_id"),
     "TIPO_AMOSTRA_E_IDENTIFICADOR": lambda p: (
         f"{_assay(p).name}; identificador do caso {p.get('case_id')}"
-        if p.get("case_id")
+        if p.get("case_id") and _assay(p) is not None
         else None
     ),
     # No clock here, deliberately. This table's contract is that values come only from the
@@ -150,8 +154,8 @@ COMMON_RESOLVERS: dict[str, Resolver] = {
     ) if isinstance(p.get("execution_manifest"), dict) else None,
     "CONCLUSAO_LIMITADA": lambda p: p.get("summary"),
     "STATUS": lambda p: p.get("operational_status"),
-    "METODO": lambda p: _assay(p).name,
-    "CALLER_ENSAIO": lambda p: _assay(p).depth_note,
+    "METODO": lambda p: _assay(p).name if _assay(p) is not None else None,
+    "CALLER_ENSAIO": lambda p: _assay(p).depth_note if _assay(p) is not None else None,
 }
 
 #: Report-specific tokens, resolved from the sections that report actually compiled.
@@ -244,9 +248,6 @@ REPORT_RESOLVERS: dict[str, dict[str, Resolver]] = {
             "priority",
             lambda f: str(f.get("priority")).strip().upper()
             in {"1", "2", "P1", "P2", "PRIORIDADE 1", "PRIORIDADE 2"},
-        ),
-        "N_CONFIRMACOES": lambda p: _count_findings_with_field(
-            p, "confirmation_required", lambda f: f.get("confirmation_required") is True
         ),
     },
     # Report 02: ancestry. It measures feasibility rather than estimating origins, so the
@@ -361,9 +362,6 @@ REPORT_RESOLVERS: dict[str, dict[str, Resolver]] = {
     "09": {
         "LABORATORIO_E_PLATAFORMA": lambda p: _section(p, "Painel de completude"),
         "N_CLASSES": lambda p: _section(p, "Matriz por classe"),
-        "N_CEGOS": lambda p: _count_findings_with_field(
-            p, "source", lambda f: f.get("source") == "structural_blind_spots"
-        ),
         "REGIOES": lambda p: _section(p, "Matriz por gene/região"),
         "GENE_REGIAO": lambda p: _section(p, "Matriz por gene/região"),
         "NEGATIVO": lambda p: _section(p, "Evidência negativa"),

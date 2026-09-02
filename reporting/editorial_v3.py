@@ -234,14 +234,27 @@ def _rerender_derived_views(disclosed: dict[str, Any]) -> None:
     from . import engine as _engine
 
     metadata = disclosed.get("metadata")
-    if not isinstance(metadata, dict) or "markdown" not in disclosed:
+    if not isinstance(metadata, dict):
+        raise _engine.ReportReleaseError(
+            "cannot rebuild rendered views without valid metadata"
+        )
+    final_mode = str(metadata.get("mode", "")).upper() == "FINAL"
+    if "markdown" not in disclosed:
+        if final_mode:
+            raise _engine.ReportReleaseError(
+                "disclosed FINAL payload carries no rendered views to rebuild"
+            )
         return
     report_id = str(metadata.get("report_id") or "")
     catalog = _engine.load_catalog()
     model = catalog.get(report_id)
     if model is None:
+        if final_mode:
+            raise _engine.ReportReleaseError(
+                f"disclosed FINAL payload names an unknown report model: {report_id!r}"
+            )
         return
-    if str(metadata.get("mode", "")).upper() == "FINAL":
+    if final_mode:
         markdown = _engine._final_markdown(report_id, model, disclosed["data"])
     else:
         markdown = _engine._model_markdown(report_id, model)

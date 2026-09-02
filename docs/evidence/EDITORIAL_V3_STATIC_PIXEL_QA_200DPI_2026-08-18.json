@@ -30,7 +30,7 @@
   "dpi": 200,
   "executed_at": "2026-08-18T15:50:53.987461Z",
   "limitations": [
-    "This proves exact static-pixel preservation outside declared dynamic/control regions at the stated DPI for the pinned v3.0 PDFs. Dynamic regions are expected to differ because case data replaces placeholders.",
+    "This is a historical, currently unreproducible observation of static-pixel agreement outside declared dynamic/control regions at the stated DPI for the pinned v3.0 PDFs; it is not current proof. Dynamic regions were expected to differ because case data replaces placeholders.",
     "It is a layout control only. It says nothing about scientific correctness, QC or evidence, and never authorizes POST-DEPLOYMENT.",
     "DOCX renderer parity is a separate control and is not measured here."
   ],
@@ -162,6 +162,6 @@
   "status": "NÃO DISPONÍVEL",
   "template_pack": {
     "status": "NÃO DISPONÍVEL",
-    "verified_reports": 11
+    "reports_compared": 11
   }
 }
