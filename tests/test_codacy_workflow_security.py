@@ -105,16 +105,14 @@ class CodacyWorkflowTrustBoundaryTest(unittest.TestCase):
         global_header = workflow.split("\njobs:", 1)[0]
         self.assertIn("workflow_run:\n", header)
         self.assertIn("workflows: [Codacy API Report Tests]", header)
-        self.assertIn("types: [completed]", header)
-        self.assertNotIn("requested", header)
-        self.assertNotIn("in_progress", header)
+        self.assertIn("types: [requested, in_progress, completed]", header)
         self.assertNotIn("pull_request_target:", header)
         self.assertNotIn("\n  pull_request:\n", header)
         self.assertNotIn("workflow_dispatch:", header)
         self.assertEqual(_permissions(global_header), {})
         self.assertIn(
             "codacy-api-report-${{ github.event.workflow_run.head_repository.id }}-${{ "
-            "github.event.workflow_run.head_branch }}",
+            "github.event.workflow_run.id }}",
             workflow,
         )
         self.assertNotIn("queue:", workflow)
@@ -190,7 +188,7 @@ class CodacyWorkflowTrustBoundaryTest(unittest.TestCase):
             _github_expressions(workflow),
             [
                 "github.event.workflow_run.head_repository.id",
-                "github.event.workflow_run.head_branch",
+                "github.event.workflow_run.id",
                 "github.sha",
                 "github.repository_owner",
                 "github.event.repository.name",
