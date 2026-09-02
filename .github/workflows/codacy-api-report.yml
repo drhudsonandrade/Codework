@@ -1,51 +1,148 @@
 name: Codacy API Report
 
 on:
-  pull_request_target:
-    branches: [main]
-    types: [opened, synchronize, reopened]
+  workflow_run:
+    workflows: [Codacy API Report Tests]
+    types: [requested, in_progress, completed]
 
-# This workflow receives a Codacy credential and can write one PR comment. GitHub loads
-# pull_request_target workflows from the trusted base branch; the checkout below pins that
-# same base SHA. The pull request's head is data only and is never executed by this job.
+# Pull-request code runs only in the unprivileged producer. This consumer is loaded
+# from the trusted default branch, resolves live PR state without secrets, and gives
+# the environment-scoped publisher only a validated PR number/head/base tuple.
 permissions: {}
 
+concurrency:
+  group: codacy-api-report-${{ github.event.workflow_run.head_repository.id }}-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
 jobs:
+  resolve:
+    name: Resolve current pull request
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read # Re-read the live run and reject delayed events from older attempts.
+      contents: read # Read only the resolver loaded from the trusted default branch.
+      pull-requests: read # Resolve the live PR tuple without access to any secret.
+    outputs:
+      number: ${{ steps.pr.outputs.number }}
+      head: ${{ steps.pr.outputs.head }}
+      base: ${{ steps.pr.outputs.base }}
+      run_id: ${{ steps.pr.outputs.run_id }}
+      run_attempt: ${{ steps.pr.outputs.run_attempt }}
+      state: ${{ steps.pr.outputs.state }}
+    steps:
+      - name: Checkout trusted resolver
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Validate workflow-run association and live PR state
+        id: pr
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const { resolveCodacyPullRequest } = require('./scripts/codacy_pr_comment.js');
+            const resolved = await resolveCodacyPullRequest({
+              github,
+              ...context.repo,
+              workflowRun: context.payload.workflow_run,
+              defaultBranch: context.payload.repository.default_branch,
+            });
+            core.setOutput('number', String(resolved.number));
+            core.setOutput('head', resolved.head);
+            core.setOutput('base', resolved.base);
+            core.setOutput('run_id', String(resolved.run_id));
+            core.setOutput('run_attempt', String(resolved.run_attempt));
+            core.setOutput('state', resolved.state);
+
   report:
+    name: Publish Codacy API report
+    needs: resolve
+    if: needs.resolve.result == 'success' && needs.resolve.outputs.state != 'stale'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: codacy-report
     permissions:
-      contents: read
-      pull-requests: write
-    concurrency:
-      group: codacy-api-report-${{ github.event.pull_request.number }}
-      cancel-in-progress: true
+      actions: read # Revalidate the producer attempt immediately before every publication.
+      contents: read # Read the trusted default-branch reporter implementation.
+      pull-requests: write # Create or update the one owned report comment.
     env:
       CODACY_PROVIDER: gh
       CODACY_ORG: ${{ github.repository_owner }}
       CODACY_REPO: ${{ github.event.repository.name }}
-      CODACY_PULL_REQUEST: ${{ github.event.pull_request.number }}
-      CODACY_COMMIT: ${{ github.event.pull_request.head.sha }}
-      CODACY_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
+      CODACY_PULL_REQUEST: ${{ needs.resolve.outputs.number }}
+      CODACY_COMMIT: ${{ needs.resolve.outputs.head }}
+      CODACY_BASE_COMMIT: ${{ needs.resolve.outputs.base }}
+      CODACY_WORKFLOW_RUN_ID: ${{ needs.resolve.outputs.run_id }}
+      CODACY_WORKFLOW_RUN_ATTEMPT: ${{ needs.resolve.outputs.run_attempt }}
     steps:
-      - name: Checkout trusted base revision
+      - name: Checkout trusted default-branch revision
+        id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
 
+      - name: Invalidate prior report before processing
+        if: >-
+          needs.resolve.outputs.state == 'pending' ||
+          needs.resolve.outputs.state == 'failed' ||
+          needs.resolve.outputs.state == 'publish'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          REPORT_STATE: ${{ needs.resolve.outputs.state }}
+          EXPECTED_HEAD: ${{ needs.resolve.outputs.head }}
+          EXPECTED_BASE: ${{ needs.resolve.outputs.base }}
+        with:
+          script: |
+            const {
+              buildCodacyStatusReport,
+              isCurrentCodacyPublication,
+              upsertCodacyReportComment,
+            } = require('./scripts/codacy_pr_comment.js');
+            const { owner, repo } = context.repo;
+            const issue_number = Number(process.env.CODACY_PULL_REQUEST);
+            const current = await isCurrentCodacyPublication({
+              github,
+              owner,
+              repo,
+              issue_number,
+              head: process.env.EXPECTED_HEAD,
+              base: process.env.EXPECTED_BASE,
+              defaultBranch: context.payload.repository.default_branch,
+              run_id: Number(process.env.CODACY_WORKFLOW_RUN_ID),
+              run_attempt: Number(process.env.CODACY_WORKFLOW_RUN_ATTEMPT),
+            });
+            if (!current) {
+              core.notice('The PR tuple changed before its state comment; refusing stale publication.');
+              return;
+            }
+            await upsertCodacyReportComment({
+              github,
+              owner,
+              repo,
+              issue_number,
+              report: buildCodacyStatusReport(
+                process.env.EXPECTED_HEAD,
+                process.env.REPORT_STATE === 'failed' ? 'failed' : 'pending',
+              ),
+            });
+
       - name: Set up Python
+        if: needs.resolve.outputs.state == 'publish'
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
 
       - name: Detect Codacy API credential
+        if: needs.resolve.outputs.state == 'publish'
         id: token
         shell: bash
         env:
-          CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
-          CODACY_API_TOKEN: ${{ secrets.CODACY_API_TOKEN }}
+          CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_REPORT_PROJECT_TOKEN }}
+          CODACY_API_TOKEN: ${{ secrets.CODACY_REPORT_API_TOKEN }}
         run: |
           if [ -n "$CODACY_PROJECT_TOKEN" ] || [ -n "$CODACY_API_TOKEN" ]; then
             echo "available=true" >> "$GITHUB_OUTPUT"
@@ -53,26 +150,81 @@ jobs:
             echo "available=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Explain missing token
-        if: steps.token.outputs.available != 'true'
-        shell: bash
-        run: |
-          {
-            echo '## Codacy API report'
-            echo
-            echo 'NÃO DISPONÍVEL — no Codacy API token is available to the trusted publisher job.'
-          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish missing credential state
+        if: needs.resolve.outputs.state == 'publish' && steps.token.outputs.available != 'true'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          EXPECTED_HEAD: ${{ needs.resolve.outputs.head }}
+          EXPECTED_BASE: ${{ needs.resolve.outputs.base }}
+        with:
+          script: |
+            const {
+              buildCodacyStatusReport,
+              isCurrentCodacyPublication,
+              upsertCodacyReportComment,
+            } = require('./scripts/codacy_pr_comment.js');
+            const { owner, repo } = context.repo;
+            const issue_number = Number(process.env.CODACY_PULL_REQUEST);
+            const current = await isCurrentCodacyPublication({
+              github,
+              owner,
+              repo,
+              issue_number,
+              head: process.env.EXPECTED_HEAD,
+              base: process.env.EXPECTED_BASE,
+              defaultBranch: context.payload.repository.default_branch,
+              run_id: Number(process.env.CODACY_WORKFLOW_RUN_ID),
+              run_attempt: Number(process.env.CODACY_WORKFLOW_RUN_ATTEMPT),
+            });
+            if (!current) {
+              core.notice('The PR tuple changed before the credential warning; refusing stale publication.');
+              return;
+            }
+            await upsertCodacyReportComment({
+              github,
+              owner,
+              repo,
+              issue_number,
+              report: buildCodacyStatusReport(process.env.EXPECTED_HEAD, 'missing-token'),
+            });
 
       - name: Query Codacy API and build report
-        if: steps.token.outputs.available == 'true'
+        if: needs.resolve.outputs.state == 'publish' && steps.token.outputs.available == 'true'
         shell: bash
         env:
-          CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
-          CODACY_API_TOKEN: ${{ secrets.CODACY_API_TOKEN }}
+          CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_REPORT_PROJECT_TOKEN }}
+          CODACY_API_TOKEN: ${{ secrets.CODACY_REPORT_API_TOKEN }}
         run: python3 scripts/codacy_api_report.py
 
+      - name: Verify source before publication
+        if: needs.resolve.outputs.state == 'publish' && steps.token.outputs.available == 'true'
+        id: current
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          EXPECTED_HEAD: ${{ needs.resolve.outputs.head }}
+          EXPECTED_BASE: ${{ needs.resolve.outputs.base }}
+        with:
+          script: |
+            const { isCurrentCodacyPublication } = require('./scripts/codacy_pr_comment.js');
+            const { owner, repo } = context.repo;
+            const current = await isCurrentCodacyPublication({
+              github,
+              owner,
+              repo,
+              issue_number: Number(process.env.CODACY_PULL_REQUEST),
+              head: process.env.EXPECTED_HEAD,
+              base: process.env.EXPECTED_BASE,
+              defaultBranch: context.payload.repository.default_branch,
+              run_id: Number(process.env.CODACY_WORKFLOW_RUN_ID),
+              run_attempt: Number(process.env.CODACY_WORKFLOW_RUN_ATTEMPT),
+            });
+            core.setOutput('current', String(current));
+            if (!current) {
+              core.warning('The PR head/base changed during the Codacy query; refusing stale publication.');
+            }
+
       - name: Upload Codacy API report
-        if: steps.token.outputs.available == 'true'
+        if: steps.current.outputs.current == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: codacy-api-report
@@ -82,18 +234,94 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Explain refused stale publication
+        if: >-
+          needs.resolve.outputs.state == 'publish' &&
+          steps.token.outputs.available == 'true' &&
+          steps.current.outputs.current != 'true'
+        shell: bash
+        run: |
+          {
+            echo '## Codacy API report'
+            echo
+            echo 'NÃO DISPONÍVEL — the pull-request head/base changed during the query.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Publish report on pull request
-        if: steps.token.outputs.available == 'true'
+        if: steps.current.outputs.current == 'true'
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          EXPECTED_HEAD: ${{ needs.resolve.outputs.head }}
+          EXPECTED_BASE: ${{ needs.resolve.outputs.base }}
         with:
           script: |
             const fs = require('fs');
-            const { upsertCodacyReportComment } = require('./scripts/codacy_pr_comment.js');
+            const {
+              isCurrentCodacyPublication,
+              upsertCodacyReportComment,
+            } = require('./scripts/codacy_pr_comment.js');
             const { owner, repo } = context.repo;
+            const issue_number = Number(process.env.CODACY_PULL_REQUEST);
+            const current = await isCurrentCodacyPublication({
+              github,
+              owner,
+              repo,
+              issue_number,
+              head: process.env.EXPECTED_HEAD,
+              base: process.env.EXPECTED_BASE,
+              defaultBranch: context.payload.repository.default_branch,
+              run_id: Number(process.env.CODACY_WORKFLOW_RUN_ID),
+              run_attempt: Number(process.env.CODACY_WORKFLOW_RUN_ATTEMPT),
+            });
+            if (!current) {
+              core.notice('The PR tuple changed before its report comment; refusing stale publication.');
+              return;
+            }
             await upsertCodacyReportComment({
               github,
               owner,
               repo,
-              issue_number: context.issue.number,
+              issue_number,
               report: fs.readFileSync('codacy-report.md', 'utf8'),
+            });
+
+      - name: Publish terminal publisher failure
+        if: >-
+          always() &&
+          failure() &&
+          steps.checkout.outcome == 'success'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          EXPECTED_HEAD: ${{ needs.resolve.outputs.head }}
+          EXPECTED_BASE: ${{ needs.resolve.outputs.base }}
+        with:
+          script: |
+            const {
+              buildCodacyStatusReport,
+              isCurrentCodacyPublication,
+              upsertCodacyReportComment,
+            } = require('./scripts/codacy_pr_comment.js');
+            const { owner, repo } = context.repo;
+            const issue_number = Number(process.env.CODACY_PULL_REQUEST);
+            const current = await isCurrentCodacyPublication({
+              github,
+              owner,
+              repo,
+              issue_number,
+              head: process.env.EXPECTED_HEAD,
+              base: process.env.EXPECTED_BASE,
+              defaultBranch: context.payload.repository.default_branch,
+              run_id: Number(process.env.CODACY_WORKFLOW_RUN_ID),
+              run_attempt: Number(process.env.CODACY_WORKFLOW_RUN_ATTEMPT),
+            });
+            if (!current) {
+              core.notice('The PR tuple changed after a publisher failure; refusing a stale comment.');
+              return;
+            }
+            await upsertCodacyReportComment({
+              github,
+              owner,
+              repo,
+              issue_number,
+              report: buildCodacyStatusReport(process.env.EXPECTED_HEAD, 'publisher-failed'),
             });

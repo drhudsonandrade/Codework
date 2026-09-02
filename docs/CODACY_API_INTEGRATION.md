@@ -12,18 +12,39 @@ The integration is deliberately split into two workflows.
 | Workflow | Event | Code executed | Secrets | GitHub permissions |
 |---|---|---|---|---|
 | `codacy-api-report-tests.yml` | `pull_request` | pull-request revision | none | `contents: read` |
-| `codacy-api-report.yml` | `pull_request_target` against `main` | explicit `base.sha` checkout | trusted-base job only | job-only `contents: read`, `pull-requests: write` |
+| `codacy-api-report.yml` | requested/in-progress/completed `workflow_run` of the unprivileged tests | trusted default-branch `github.sha` | `codacy-report` publisher only | resolver: `actions: read`, `contents: read`, `pull-requests: read`; publisher: `actions: read`, `contents: read`, `pull-requests: write` |
 
 The test workflow exercises the Python reporter, the workflow trust-boundary regression and
 the JavaScript comment behavior. Its checkout sets `persist-credentials: false`; it cannot
 read a Codacy secret or write a pull-request comment.
 
-The publisher is loaded from the trusted base branch and checks out that same base commit.
-The pull request number, head SHA and base SHA are data passed to the trusted reporter; the
-pull request's files are never executed by the privileged job. Top-level permissions are
-empty, and write access exists only on the publishing job.
+The consumer is loaded from the trusted default branch when the unprivileged pull-request
+workflow is requested, starts or completes. A resolver job with no secrets checks out only
+the default-branch `github.sha`, verifies the upstream workflow path and resolves one live,
+open PR against the default branch. It re-reads the run through the Actions API and binds the
+PR to the live run ID, attempt, workflow path and `workflow_run.head_sha`. An event from an
+older rerun attempt is stale; `in_progress` also invalidates the old report because GitHub
+does not emit `requested` for a rerun. Publishers for the same head repository and branch are
+serialized without cancelling an in-progress publisher. The validated run ID and attempt are
+carried into the publisher and re-read before each artifact or comment path, so an older
+attempt cannot overwrite a newer one. An empty PR association (as can occur for a fork) is resolved through
+a unique live head repository and branch match. Ambiguous identities fail closed.
 
-Because a new `pull_request_target` workflow is read from the base branch, the publisher
+Only the validated PR number, head SHA, current base SHA, run ID and run attempt reach the
+publishing job. That job checks out the same trusted default-branch code. It re-fetches the
+PR and producer attempt after the Codacy query and again immediately before commenting, and
+refuses an artifact or comment if that identity changed. A requested, in-progress or failed
+current run replaces any older owned report with an explicit `NÃO DISPONÍVEL` state, so an
+old clean-looking result is not
+left current. If a later publisher step fails after the trusted checkout succeeded, an
+`always()` terminal step attempts to revalidate the PR/run tuple and replace the pending
+state with an explicit publisher-failure state. Checkout, resolver or GitHub API failures
+remain visible as failed checks; the workflow does not claim that a comment update succeeded
+when it could not perform one.
+The pull request's files and artifacts are never executed by the privileged job. Top-level
+permissions are empty, and write access exists only on the publishing job.
+
+Because a `workflow_run` consumer must already exist on the default branch, the publisher
 introduced by a pull request cannot perform a live privileged run on that same pull request.
 That is an intentional security property. Pre-merge validation consists of the unprivileged
 tests and static workflow checks; the first live publisher run occurs from trusted `main` on a
@@ -34,20 +55,24 @@ The workflows select Ubuntu 24.04, Python 3.12 and Node 22.
 
 ## Authentication
 
-Preferred secret: `CODACY_PROJECT_TOKEN` (repository-scoped Codacy API token).
+Preferred environment secret: `CODACY_REPORT_PROJECT_TOKEN` (repository-scoped Codacy API
+token). The workflow maps it to the reporter's `CODACY_PROJECT_TOKEN` process variable.
 
-Optional fallback: `CODACY_API_TOKEN` (Codacy account API token).
+Optional environment fallback: `CODACY_REPORT_API_TOKEN` (Codacy account API token). The
+workflow maps it to `CODACY_API_TOKEN` only inside the trusted publisher.
 
 When both exist, the project token is attempted first. A `401` or `403` retries the request
 from page one with the account token. Other HTTP failures are reported directly. Credential
 headers are added as unredirected `urllib` headers, so a Codacy redirect cannot forward them
 to another origin.
 
-Neither token may be committed or placed in workflow inputs. The publisher declares the
-`codacy-report` environment as a deployment-approval hook, but its primary security boundary
-does not depend on unverified environment settings: only the trusted base revision executes.
-An environment-scoped secret is recommended defense in depth; an existing repository secret
-remains compatible with this base-only design.
+Neither token may be committed, placed in workflow inputs, or stored as a repository/organization
+secret available to pull-request workflows. Both names must exist only as secrets of the
+`codacy-report` environment. That environment must restrict deployments to the protected
+default branch (`main`). Repository-level duplicates must be deleted, and any organization
+secret with repository access must be removed from this repository. These settings are part
+of the trust boundary, not optional defense in depth. Tokens used by the earlier privileged
+pull-request design must be rotated before activating this publisher.
 
 ## Scope and provenance
 
@@ -102,10 +127,12 @@ The reporter still uses the commit-delta endpoint because it expresses the requi
 source/target query and can work with an account token or a future compatible token.
 
 Only a typed authentication refusal may degrade. The reporter then performs a repository
-query, changes both artifacts to `repository` scope and adds a prominent `NÃO DISPONÍVEL`
-note saying that the count is backlog, not branch delta. It never leaves a PR label on a
-repository-wide count. Network failures, malformed payloads and non-auth HTTP errors fail the
-run instead of degrading.
+query, changes the effective result to `repository` scope and adds a prominent
+`NÃO DISPONÍVEL` note saying that the count is backlog, not branch delta. The JSON keeps the
+failed requested delta as separate structured provenance (`requestedScope`, requested PR,
+source/target commits, endpoint, status and typed failure metadata); it never presents those
+requested fields as the effective repository count. Network failures, malformed payloads
+and non-auth HTTP errors fail the run instead of degrading.
 
 The Codacy GitHub App's own PR publication remains the authoritative per-PR summary whenever
 the API delta is unavailable.
@@ -120,7 +147,8 @@ when any of these conditions occurs:
 - `pagination` is present but not an object;
 - a present cursor is not a non-empty string, or a cursor repeats;
 - a delta omits the boolean `analyzed` field;
-- a delta element lacks an object `commitIssue` or a non-empty string `deltaType`.
+- a `status=new` delta element lacks an object `commitIssue` or has any `deltaType` other
+  than the schema value `Added`.
 
 For a delta, `analyzed: false` produces `NÃO DISPONÍVEL` and no numeric count. Codacy
 documents the empty list in that state, so treating it as zero would be a green verdict on a
@@ -135,8 +163,10 @@ bot cannot claim the marker and have its comment overwritten.
 
 Codacy strings are untrusted output. Newlines are collapsed, HTML is entity-escaped, Markdown
 table/link delimiters are escaped and `@` mentions are neutralized. HTTP error bodies are read
-with a bound, scrubbed of both configured credentials before truncation, and never copied raw
-into the comment. The reporter also prevents credentials from following redirects.
+with a bound and scrubbed of both the literal and JSON-escaped forms of configured credentials
+before truncation. Network-error details are likewise redacted, flattened to one line and
+bounded. These untrusted diagnostics are never copied raw into the comment. The reporter also
+prevents credentials from following redirects.
 
 The comment behavior tests use Node's built-in test runner and a literal import of
 `scripts/codacy_pr_comment.js`. They do not create a program dynamically, load a caller-
@@ -144,17 +174,19 @@ supplied module path, or invoke a subprocess from Python.
 
 ## Manual setup
 
-1. Configure `CODACY_PROJECT_TOKEN` as a GitHub Actions secret. Add `CODACY_API_TOKEN` only
-   when an account token is intentionally approved.
-2. For additional deployment control, create or restrict the `codacy-report` environment to
-   `main`, copy the approved secrets into it, and then remove the same-named repository-level
-   secrets. This hardening is optional because the workflow already executes only trusted base
-   code; it must not be claimed as active until repository settings confirm it.
-3. Merge the trusted publisher through normal review. Validate its first live run on the next
+1. Create the `codacy-report` GitHub environment and restrict its deployment branches to the
+   protected default branch `main`.
+2. Add `CODACY_REPORT_PROJECT_TOKEN` only to that environment. Add
+   `CODACY_REPORT_API_TOKEN` there only when an account token is intentionally approved.
+3. Delete/rotate the old `CODACY_PROJECT_TOKEN` and `CODACY_API_TOKEN` repository secrets,
+   delete any repository-level duplicates of the new names, and revoke this repository's
+   access to equivalent organization secrets. Do not activate the publisher until these
+   settings have been verified in GitHub.
+4. Merge the trusted publisher through normal review. Validate its first live run on the next
    pull request; do not add a privileged `workflow_dispatch` path merely to test it early.
 
-If no Actions token is configured, the publisher records `NÃO DISPONÍVEL` in its job summary
-and does not claim that Codacy was queried.
+If no environment token is configured, the publisher replaces its owned PR comment with
+`NÃO DISPONÍVEL` and does not claim that Codacy was queried.
 
 ## External documentation
 

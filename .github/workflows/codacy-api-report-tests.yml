@@ -9,8 +9,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: codacy-api-report-tests-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   test:
+    name: Codacy API report tests
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

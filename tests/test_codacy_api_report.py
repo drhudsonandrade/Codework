@@ -92,6 +92,20 @@ class CodacyApiReportTest(unittest.TestCase):
         )
         self.assertEqual(credential_candidates("", ""), [])
 
+    def test_a_malformed_credential_cannot_escape_in_a_header_error(self):
+        from scripts.codacy_api_report import CodacyAPIError, fetch_issues
+
+        secret = "private-token\nINJECTED"
+
+        def opener(request, timeout=30):
+            value = request.get_header("Project-token")
+            raise ValueError(f"invalid header value {value!r}")
+
+        with self.assertRaises(CodacyAPIError) as caught:
+            fetch_issues("gh", "org", "repo", secret, "", opener=opener)
+        self.assertNotIn(secret, str(caught.exception))
+        self.assertNotIn("INJECTED", str(caught.exception))
+
     def test_auth_rejection_retries_once_with_account_token_for_401_and_403(self):
         from scripts.codacy_api_report import fetch_issues
 
@@ -162,6 +176,24 @@ class CodacyApiReportTest(unittest.TestCase):
         with self.assertRaises(CodacyAPIError) as caught:
             fetch_issues("gh", "org", "repo", "project", "", opener=opener)
         self.assertIn("not valid JSON", str(caught.exception))
+
+    def test_non_standard_json_numbers_are_refused_on_input_and_output(self):
+        from scripts.codacy_api_report import CodacyAPIError, fetch_issues, write_artifacts
+
+        opener = _payload_opener(
+            {"data": [{"metric": float("nan")}], "pagination": {}}
+        )
+        with self.assertRaises(CodacyAPIError):
+            fetch_issues("gh", "org", "repo", "project", "", opener=opener)
+
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaises(CodacyAPIError):
+                write_artifacts(
+                    "org",
+                    "repo",
+                    [{"metric": float("inf")}],
+                    directory=Path(td),
+                )
 
     def test_invalid_utf8_becomes_a_named_error(self):
         """Invalid response bytes are an API failure, not an uncaught decoder traceback."""
@@ -340,6 +372,59 @@ class CodacyApiReportTest(unittest.TestCase):
         self.assertIn("HTTP 500", message)
         self.assertIn("invalid token", message)
 
+    def test_a_json_escaped_credential_is_also_scrubbed_from_an_error_body(self):
+        from scripts.codacy_api_report import CodacyAPIError, fetch_issues
+
+        for project in ('PLACEHOLDER-"-TOKEN', r"PLACEHOLDER-\-TOKEN"):
+            with self.subTest(project=project):
+                encoded = json.dumps({"echo": project}).encode("utf-8")
+                opener = _http_error_opener(500, encoded)
+
+                with self.assertRaises(CodacyAPIError) as caught:
+                    fetch_issues("gh", "org", "repo", project, "", opener=opener)
+                message = str(caught.exception)
+                escaped = json.dumps(project)[1:-1]
+                self.assertNotIn(project, message)
+                self.assertNotIn(escaped, message)
+                self.assertIn("HTTP 500", message)
+
+    def test_an_unreadable_error_body_still_reports_the_http_status(self):
+        """A broken error stream must not erase the actionable HTTP diagnosis."""
+        from scripts.codacy_api_report import CodacyAPIError, fetch_issues
+
+        class _ExplodingBody:
+            def read(self, *_args):
+                raise OSError("connection reset")
+
+            def close(self):
+                pass
+
+        def opener(request, timeout=30):
+            raise urllib.error.HTTPError(
+                request.full_url, 500, "server error", {}, _ExplodingBody()
+            )
+
+        with self.assertRaises(CodacyAPIError) as caught:
+            fetch_issues("gh", "org", "repo", "project", "", opener=opener)
+        self.assertIn("HTTP 500", str(caught.exception))
+
+    def test_a_network_error_reason_cannot_expose_a_credential(self):
+        from scripts.codacy_api_report import CodacyAPIError, fetch_issues
+
+        project = "PLACEHOLDER-PROJECT-TOKEN"
+
+        def opener(request, timeout=30):
+            raise urllib.error.URLError(
+                f"TLS helper echoed header: {project}\nsecond line"
+            )
+
+        with self.assertRaises(CodacyAPIError) as caught:
+            fetch_issues("gh", "org", "repo", project, "", opener=opener)
+        message = str(caught.exception)
+        self.assertNotIn(project, message)
+        self.assertNotIn("\n", message)
+        self.assertIn("network error", message)
+
     def test_a_credential_starting_near_the_truncation_point_is_not_cut_in_half(self):
         """Truncating before redacting leaves the tail of the secret in the message.
 
@@ -367,6 +452,19 @@ class CodacyApiReportTest(unittest.TestCase):
         # Not merely absent as a whole string: no fragment of it survives either.
         for cut in range(6, len(project)):
             self.assertNotIn(project[:cut], message, f"prefix of length {cut} survived")
+
+    def test_a_multibyte_error_prefix_cannot_make_the_read_cut_through_a_credential(self):
+        from scripts.codacy_api_report import CodacyAPIError, fetch_issues
+
+        project = "A" * 40
+        body = ("é" * 501).encode("utf-8") + project.encode("ascii") + b"tail"
+        opener = _http_error_opener(500, body)
+
+        with self.assertRaises(CodacyAPIError) as caught:
+            fetch_issues("gh", "org", "repo", project, "", opener=opener)
+        message = str(caught.exception)
+        self.assertNotIn(project, message)
+        self.assertNotIn("A" * 20, message)
 
     def test_a_credential_that_is_a_prefix_of_another_does_not_expose_its_suffix(self):
         """Replacing the shorter secret first turns `abcd` into `***d`.
@@ -675,6 +773,32 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
                 with self.assertRaises(CodacyAPIError):
                     build_report("org", "repo", [], **provenance)
 
+    def test_a_note_is_rendered_for_every_supported_scope(self):
+        from scripts.codacy_api_report import build_report
+
+        note = "diagnostic note"
+        pull_request = build_report(
+            "org",
+            "repo",
+            [],
+            pull_request=32,
+            source_commit=HEAD,
+            target_commit=BASE,
+            note=note,
+        )
+        commit_delta = build_report(
+            "org",
+            "repo",
+            [],
+            scope="commit-delta",
+            source_commit=HEAD,
+            target_commit=BASE,
+            note=note,
+        )
+
+        self.assertIn(note, pull_request)
+        self.assertIn(note, commit_delta)
+
     def test_commit_delta_without_a_pull_request_label_keeps_its_real_scope(self):
         """A manual commit delta is not the repository backlog merely because it lacks a PR."""
         from scripts.codacy_api_report import collect
@@ -830,6 +954,23 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
         self.assertEqual(len(seen), 2)
         self.assertTrue(any(k.lower() == "api-token" for k in seen[1]))
 
+    def test_status_new_refuses_a_delta_that_is_not_added(self):
+        from scripts.codacy_api_report import CodacyAPIError, fetch_commit_delta_issues
+
+        for delta_type in ("Removed", "Unexpected"):
+            with self.subTest(delta_type=delta_type):
+                opener = _payload_opener({
+                    "analyzed": True,
+                    "data": [{"commitIssue": {"id": 1}, "deltaType": delta_type}],
+                    "pagination": {},
+                })
+                with self.assertRaises(CodacyAPIError) as caught:
+                    fetch_commit_delta_issues(
+                        "gh", "org", "repo", HEAD, "project", "",
+                        target_commit=BASE, opener=opener,
+                    )
+                self.assertIn("deltaType", str(caught.exception))
+
 
 class CodacyScopeDegradationTest(unittest.TestCase):
     """What happens when the commit-delta endpoint refuses the configured credential.
@@ -949,15 +1090,65 @@ class CodacyScopeDegradationTest(unittest.TestCase):
             target_commit=BASE, opener=self._opener()
         )
         with tempfile.TemporaryDirectory() as td:
-            _, issues_path = write_artifacts(
-                "org", "repo", collected.issues, directory=Path(td),
-                pull_request=collected.pull_request, analyzed=collected.analyzed,
-                note=collected.note,
-            )
+            try:
+                _, issues_path = write_artifacts(
+                    "org", "repo", collected.issues, directory=Path(td),
+                    pull_request=collected.pull_request, analyzed=collected.analyzed,
+                    note=collected.note,
+                    requested=collected.requested,
+                    failure=collected.failure,
+                )
+            except (AttributeError, TypeError) as exc:
+                self.fail(f"degraded provenance is not structurally supported: {exc}")
             payload = json.loads(issues_path.read_text(encoding="utf-8"))
         self.assertEqual(payload["scope"], "repository")
         self.assertNotIn("pullRequest", payload)
         self.assertIn("NÃO DISPONÍVEL", payload["note"])
+        self.assertEqual(payload["requestedScope"], "pull-request")
+        self.assertEqual(payload["requestedPullRequest"], 32)
+        self.assertEqual(payload["requestedSourceCommit"], HEAD)
+        self.assertEqual(payload["requestedTargetCommit"], BASE)
+        self.assertEqual(payload["requestedEndpoint"], "listCommitDeltaIssues")
+        self.assertEqual(payload["requestedStatus"], "new")
+        self.assertEqual(payload["failure"]["type"], "authentication-refusal")
+        self.assertIn("HTTP 401", payload["failure"]["detail"])
+
+    def test_contradictory_or_incomplete_degradation_provenance_is_refused(self):
+        from scripts.codacy_api_report import (
+            AUTHENTICATION_REFUSAL,
+            CodacyAPIError,
+            CollectionFailure,
+            RequestedQuery,
+            write_artifacts,
+        )
+
+        repository_request = RequestedQuery(
+            "repository", "searchRepositoryIssues", None, "", "", ""
+        )
+        delta_request = RequestedQuery(
+            "pull-request", "listCommitDeltaIssues", 32, HEAD, BASE, "new"
+        )
+        valid_failure = CollectionFailure(AUTHENTICATION_REFUSAL, "HTTP 401")
+        bad_detail = CollectionFailure(AUTHENTICATION_REFUSAL, 401)
+
+        for requested, failure, note in (
+            (repository_request, valid_failure, "NÃO DISPONÍVEL"),
+            (delta_request, valid_failure, ""),
+            (delta_request, bad_detail, "NÃO DISPONÍVEL"),
+        ):
+            with self.subTest(requested=requested, failure=failure, note=note):
+                with tempfile.TemporaryDirectory() as td:
+                    with self.assertRaises(CodacyAPIError):
+                        write_artifacts(
+                            "org",
+                            "repo",
+                            [],
+                            directory=Path(td),
+                            scope="repository",
+                            requested=requested,
+                            failure=failure,
+                            note=note,
+                        )
 
     def test_a_repository_scoped_run_carries_no_note(self):
         """The note exists to mark a degraded run; an ordinary one must not look degraded."""

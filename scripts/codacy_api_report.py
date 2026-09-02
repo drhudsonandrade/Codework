@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import html
+import http.client
 import json
 import os
 import re
@@ -23,6 +24,7 @@ COMMIT_DELTA_SCOPE = "commit-delta"
 REPOSITORY_ENDPOINT = "searchRepositoryIssues"
 COMMIT_DELTA_ENDPOINT = "listCommitDeltaIssues"
 COMMIT_DELTA_STATUS = "new"
+AUTHENTICATION_REFUSAL = "authentication-refusal"
 
 
 class CodacyAPIError(RuntimeError):
@@ -46,10 +48,21 @@ class CodacyAuthError(CodacyAPIError):
 def credential_candidates(project_token: str, account_token: str) -> list[tuple[str, str]]:
     """Return credentials in preferred order without discarding the configured fallback."""
     candidates: list[tuple[str, str]] = []
-    if project_token:
-        candidates.append(("project-token", project_token))
-    if account_token:
-        candidates.append(("api-token", account_token))
+    for header, token in (
+        ("project-token", project_token),
+        ("api-token", account_token),
+    ):
+        if not isinstance(token, str):
+            raise CodacyAPIError(f"The configured {header} credential must be a string")
+        if not token:
+            continue
+        if not token.isascii() or any(
+            character.isspace() or not character.isprintable() for character in token
+        ):
+            raise CodacyAPIError(
+                f"The configured {header} credential is not a valid HTTP header value"
+            )
+        candidates.append((header, token))
     return candidates
 
 
@@ -98,6 +111,16 @@ def _commit_delta_url(provider: str, org: str, repo: str, src_commit: str) -> st
     return f"{_repository_url(provider, org, repo)}/commits/{_quote(src_commit)}/deltaIssues"
 
 
+def _secret_variants(*secrets: str) -> list[str]:
+    """Literal and JSON-string representations that could reproduce a credential."""
+    variants: set[str] = set()
+    for secret in secrets:
+        if secret:
+            variants.add(secret)
+            variants.add(json.dumps(secret, ensure_ascii=False)[1:-1])
+    return sorted(variants, key=len, reverse=True)
+
+
 def _redact(text: str, *secrets: str) -> str:
     """Remove every configured credential from text that is about to be logged.
 
@@ -114,9 +137,8 @@ def _redact(text: str, *secrets: str) -> str:
     `abcd` into `***d`, publishing the suffix of the longer secret. Ordering by length makes
     the outcome independent of the order the caller happened to pass them in.
     """
-    for secret in sorted(secrets, key=len, reverse=True):
-        if secret:
-            text = text.replace(secret, "***")
+    for variant in _secret_variants(*secrets):
+        text = text.replace(variant, "***")
     return text
 
 
@@ -137,12 +159,28 @@ def _read_http_error(exc: urllib.error.HTTPError, *secrets: str) -> str:
     The read is bounded rather than `exc.read()`: an error body is under the remote server's
     control, and this one is about to be held in memory and printed.
     """
-    window = MAX_ERROR_BODY_CHARS + max((len(secret) for secret in secrets), default=0)
+    # `read()` is byte-counted while the public limit below is character-counted. Reserve the
+    # UTF-8 worst case for the visible prefix plus the encoded length of the longest secret;
+    # otherwise a multibyte prefix can make the byte read stop inside the credential.
+    window = (MAX_ERROR_BODY_CHARS * 4) + max(
+        (len(variant.encode("utf-8")) for variant in _secret_variants(*secrets)), default=0
+    )
     try:
         body = exc.read(window).decode("utf-8", "replace")
-    except Exception:
+    except (OSError, ValueError, http.client.HTTPException):
         return ""
     return _redact(body, *secrets)[:MAX_ERROR_BODY_CHARS]
+
+
+def _safe_error_detail(value: object, *secrets: str) -> str:
+    """One bounded log-safe line from an untrusted exception detail."""
+    redacted = _redact(str(value), *secrets)
+    return " ".join(redacted.split())[:MAX_ERROR_BODY_CHARS]
+
+
+def _reject_json_constant(value: str) -> None:
+    """Reject Python's non-standard NaN/Infinity JSON extension."""
+    raise CodacyAPIError(f"Codacy API returned non-standard JSON constant {value!r}")
 
 
 class _Endpoint(NamedTuple):
@@ -199,7 +237,7 @@ def _paged_payloads(endpoint: _Endpoint, token_header: str, token: str, *, opene
         request = _page_request(endpoint, token_header, token, cursor)
         with opener(request, timeout=30) as response:
             try:
-                payload = json.load(response)
+                payload = json.load(response, parse_constant=_reject_json_constant)
             except (json.JSONDecodeError, UnicodeDecodeError) as exc:
                 # A 200 carrying something that is not JSON is an answer from a proxy, a login
                 # page or an error template, not from Codacy. `JSONDecodeError` escaped every
@@ -296,11 +334,12 @@ def _fetch_delta_pages(
         analyzed = page_analyzed if analyzed is None else (analyzed and page_analyzed)
         page_issues = _page_issues(payload)
         for item in page_issues:
-            if not isinstance(item.get("commitIssue"), dict) or not isinstance(
-                item.get("deltaType"), str
-            ) or not item["deltaType"]:
+            if (
+                not isinstance(item.get("commitIssue"), dict)
+                or item.get("deltaType") != "Added"
+            ):
                 raise CodacyAPIError(
-                    "Codacy API returned a malformed commit delta issue"
+                    "Codacy API returned a commit delta issue with an incompatible deltaType"
                 )
         issues.extend(page_issues)
     if analyzed is None:
@@ -336,7 +375,13 @@ def _with_credentials(
             failure = CodacyAuthError if exc.code in AUTH_FAILURE_CODES else CodacyAPIError
             raise failure(f"Codacy API HTTP {exc.code}{suffix}") from exc
         except urllib.error.URLError as exc:
-            raise CodacyAPIError(f"Codacy API network error: {exc.reason}") from exc
+            details = _safe_error_detail(exc.reason, project_token, account_token)
+            suffix = f": {details}" if details else ""
+            raise CodacyAPIError(f"Codacy API network error{suffix}") from None
+        except (UnicodeError, ValueError):
+            # Header and URL construction errors can include the original value in their
+            # exception text. Never chain that text into a job-log-visible traceback.
+            raise CodacyAPIError("Codacy request configuration is invalid") from None
     raise CodacyAPIError("Codacy authentication failed for all configured credentials")
 
 
@@ -609,8 +654,6 @@ def build_report(
             f"Endpoint: `{endpoint}`.",
             f"Issues returned by API: **{len(issue_list)}**",
         ]
-        if note:
-            lines += ["", note]
     else:
         if scope == PULL_REQUEST_SCOPE:
             lines.append(
@@ -648,7 +691,11 @@ def build_report(
                 "clean result. Rerun this workflow once Codacy finishes analysing the head "
                 "commit.",
             ]
-            return "\n".join(lines) + "\n"
+
+    if note:
+        lines += ["", note]
+    if scope != REPOSITORY_SCOPE and not analyzed:
+        return "\n".join(lines) + "\n"
 
     lines += [
         "",
@@ -679,6 +726,8 @@ def write_artifacts(
     status: str = "",
     analyzed: bool = True,
     note: str = "",
+    requested: RequestedQuery | None = None,
+    failure: CollectionFailure | None = None,
 ) -> tuple[Path, Path]:
     """Write the consolidated JSON issue list and the Markdown report.
 
@@ -711,7 +760,55 @@ def write_artifacts(
         payload["pullRequest"] = pull_request
     if note:
         payload["note"] = note
-    issues_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    if (requested is None) != (failure is None):
+        raise CodacyAPIError(
+            "requested provenance and failure metadata must be provided together"
+        )
+    if requested is not None and failure is not None:
+        if scope != REPOSITORY_SCOPE:
+            raise CodacyAPIError(
+                "requested failure provenance is only valid for a degraded repository result"
+            )
+        if requested.scope not in {PULL_REQUEST_SCOPE, COMMIT_DELTA_SCOPE}:
+            raise CodacyAPIError("degradation provenance must describe a requested delta")
+        if not isinstance(note, str) or not note.strip():
+            raise CodacyAPIError("a degraded repository result requires an explicit note")
+        _report_context(
+            requested.scope,
+            requested.endpoint,
+            requested.pull_request,
+            requested.source_commit,
+            requested.target_commit,
+            requested.status,
+            True,
+        )
+        if (
+            failure.type != AUTHENTICATION_REFUSAL
+            or not isinstance(failure.detail, str)
+            or not failure.detail.strip()
+        ):
+            raise CodacyAPIError("unsupported or incomplete collection failure metadata")
+        payload.update(
+            {
+                "requestedScope": requested.scope,
+                "requestedPullRequest": requested.pull_request,
+                "requestedSourceCommit": requested.source_commit,
+                "requestedTargetCommit": requested.target_commit or None,
+                "requestedEndpoint": requested.endpoint,
+                "requestedStatus": requested.status,
+                "failure": {"type": failure.type, "detail": failure.detail},
+            }
+        )
+    try:
+        serialized = json.dumps(
+            payload,
+            ensure_ascii=False,
+            indent=2,
+            allow_nan=False,
+        )
+    except (TypeError, ValueError) as exc:
+        raise CodacyAPIError("Codacy artifact contains a non-JSON value") from exc
+    issues_path.write_text(serialized, encoding="utf-8")
     report_path.write_text(
         build_report(
             org,
@@ -760,6 +857,24 @@ def _delta_refused_note(pull_request: int | None, detail: str) -> str:
     )
 
 
+class RequestedQuery(NamedTuple):
+    """The delta query requested before a typed failure forced degradation."""
+
+    scope: str
+    endpoint: str
+    pull_request: int | None
+    source_commit: str
+    target_commit: str
+    status: str
+
+
+class CollectionFailure(NamedTuple):
+    """A machine-readable reason why the requested query was not the effective result."""
+
+    type: str
+    detail: str
+
+
 class Collected(NamedTuple):
     """What was actually fetched, and under which scope it may be quoted."""
 
@@ -772,6 +887,8 @@ class Collected(NamedTuple):
     analyzed: bool
     issues: list[dict]
     note: str
+    requested: RequestedQuery | None
+    failure: CollectionFailure | None
 
 
 def collect(
@@ -818,6 +935,8 @@ def collect(
                 provider, org, repo, project_token, account_token, opener=opener
             ),
             "",
+            None,
+            None,
         )
     try:
         analyzed, issues = fetch_commit_delta_issues(
@@ -841,6 +960,8 @@ def collect(
             analyzed,
             issues,
             "",
+            None,
+            None,
         )
     except CodacyAuthError as exc:
         return Collected(
@@ -853,6 +974,15 @@ def collect(
             True,
             fetch_issues(provider, org, repo, project_token, account_token, opener=opener),
             _delta_refused_note(pull_request, str(exc)),
+            RequestedQuery(
+                PULL_REQUEST_SCOPE if pull_request is not None else COMMIT_DELTA_SCOPE,
+                COMMIT_DELTA_ENDPOINT,
+                pull_request,
+                src_commit,
+                target_commit,
+                COMMIT_DELTA_STATUS,
+            ),
+            CollectionFailure(AUTHENTICATION_REFUSAL, str(exc)),
         )
 
 
@@ -884,6 +1014,8 @@ def main() -> int:
         status=collected.status,
         analyzed=collected.analyzed,
         note=collected.note,
+        requested=collected.requested,
+        failure=collected.failure,
     )
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
