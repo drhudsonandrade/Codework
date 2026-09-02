@@ -23,7 +23,7 @@ class PolicyControlRuntimeTest(unittest.TestCase):
         policy_control._runtime.cache_clear()
         relative = Path("alternate-manifests") / "canonical.sha256"
         temporary = mock.Mock(name="temporary_directory", name_value="unused")
-        temporary.name = "/tmp/policy-runtime"
+        temporary.name = "policy-runtime"
         ruleset = object()
         engine = object()
 
@@ -34,7 +34,7 @@ class PolicyControlRuntimeTest(unittest.TestCase):
             ),
             mock.patch(
                 "scripts.materialize_ruleset.materialize",
-                return_value=(Path("/tmp/policy-runtime/ruleset.txt"), {}),
+                return_value=(Path("policy-runtime") / "ruleset.txt", {}),
             ),
             mock.patch(
                 "policy_engine.genoma_policy.ruleset.load_ruleset", return_value=ruleset
@@ -57,7 +57,7 @@ class PolicyControlRuntimeTest(unittest.TestCase):
     def test_runtime_cleans_temporary_directory_when_materialization_fails(self):
         policy_control._runtime.cache_clear()
         temporary = mock.Mock(name="temporary_directory")
-        temporary.name = "/tmp/policy-runtime"
+        temporary.name = "policy-runtime"
 
         with (
             mock.patch.object(
