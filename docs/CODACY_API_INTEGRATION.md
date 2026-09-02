@@ -159,14 +159,18 @@ commit that was not analyzed.
 The publisher writes `codacy-report.md` and `codacy-issues.json`, appends the Markdown report
 to the job summary, uploads both files for 30 days, and creates or updates a single
 `github-actions[bot]`-owned PR comment marked with `<!-- codacy-api-report -->`. A different
-bot cannot claim the marker and have its comment overwritten.
+bot cannot claim the marker and have its comment overwritten. If historical retries left more
+than one owned marker comment, the publisher updates the canonical one and removes only its
+own duplicates.
 
 Codacy strings are untrusted output. Newlines are collapsed, HTML is entity-escaped, Markdown
 table/link delimiters are escaped and `@` mentions are neutralized. HTTP error bodies are read
 with a bound and scrubbed of both the literal and JSON-escaped forms of configured credentials
 before truncation. Network-error details are likewise redacted, flattened to one line and
 bounded. These untrusted diagnostics are never copied raw into the comment. The reporter also
-prevents credentials from following redirects.
+prevents credentials from following redirects. A successful JSON response that reproduces the
+active credential in any key or value is rejected before it can become report evidence or an
+artifact; it is not silently redacted because that would alter the evidence being audited.
 
 The comment behavior tests use Node's built-in test runner and a literal import of
 `scripts/codacy_pr_comment.js`. They do not create a program dynamically, load a caller-

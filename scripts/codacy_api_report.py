@@ -142,6 +142,18 @@ def _redact(text: str, *secrets: str) -> str:
     return text
 
 
+def _contains_credential(payload: object, *secrets: str) -> bool:
+    """Return whether decoded untrusted JSON reproduces a configured credential.
+
+    Successful response bodies are no more trusted than error bodies.  Serializing the
+    decoded value again covers object keys and values and also gives escaped credentials the
+    same representation they would have in the JSON artifact.  A match is refused rather
+    than redacted: silently changing issue evidence would make the report non-auditable.
+    """
+    serialized = json.dumps(payload, ensure_ascii=False, allow_nan=False)
+    return any(variant in serialized for variant in _secret_variants(*secrets))
+
+
 #: How much of an error body reaches the message. Enough to diagnose, short enough not to
 #: paste an entire API response into a job log.
 MAX_ERROR_BODY_CHARS = 1000
@@ -254,6 +266,10 @@ def _paged_payloads(endpoint: _Endpoint, token_header: str, token: str, *, opene
         if not isinstance(payload, dict):
             raise CodacyAPIError(
                 f"Codacy API returned a {type(payload).__name__} where a JSON object was expected"
+            )
+        if _contains_credential(payload, token):
+            raise CodacyAPIError(
+                "Codacy API returned a successful payload containing the active credential"
             )
         yield payload
 

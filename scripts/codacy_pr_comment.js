@@ -30,14 +30,61 @@ function arrayOrEmpty(value) {
   return Array.isArray(value) ? value : [];
 }
 
-function hasLiveRunIdentity(liveRun, { id, run_attempt, head }) {
+function isOwnedReportComment(comment) {
+  return [
+    comment.user?.type === 'Bot',
+    comment.user?.login === 'github-actions[bot]',
+    comment.body?.includes(MARKER),
+  ].every(Boolean);
+}
+
+function hasRunCoordinates(liveRun, { id, run_attempt }) {
   return [
     liveRun?.id === id,
     liveRun?.run_attempt === run_attempt,
+  ].every(Boolean);
+}
+
+function hasTrustedRunSource(liveRun, head) {
+  return [
     liveRun?.path === '.github/workflows/codacy-api-report-tests.yml',
     liveRun?.head_sha === head,
     liveRun?.event === 'pull_request',
   ].every(Boolean);
+}
+
+function hasLiveRunIdentity(liveRun, identity) {
+  return [
+    hasRunCoordinates(liveRun, identity),
+    hasTrustedRunSource(liveRun, identity.head),
+  ].every(Boolean);
+}
+
+function hasWorkflowHeadIdentity(workflowRun) {
+  return [
+    workflowRun.head_repository?.full_name,
+    workflowRun.head_repository?.owner?.login,
+    workflowRun.head_branch,
+  ].every(Boolean);
+}
+
+function hasTrustedBaseIdentity(pr, owner, repo, defaultBranch) {
+  return [
+    pr?.base?.repo?.full_name?.toLowerCase() === `${owner}/${repo}`.toLowerCase(),
+    pr?.base?.ref === defaultBranch,
+  ].every(Boolean);
+}
+
+function hasTrustedHeadIdentity(pr, workflowRun) {
+  return [
+    pr?.head?.repo?.full_name?.toLowerCase()
+      === workflowRun.head_repository.full_name.toLowerCase(),
+    pr?.head?.ref === workflowRun.head_branch,
+  ].every(Boolean);
+}
+
+function hasValidCommitPair(pr) {
+  return [SHA_PATTERN.test(pr?.head?.sha), SHA_PATTERN.test(pr?.base?.sha)].every(Boolean);
 }
 
 function buildCodacyStatusReport(head, state) {
@@ -127,9 +174,11 @@ async function isCurrentCodacyPublication({
 
 function validateWorkflowRun(workflowRun) {
   requireValid(
-    [isPositiveInteger(workflowRun?.id), isPositiveInteger(workflowRun?.run_attempt)].every(
-      Boolean,
-    ),
+    isPositiveInteger(workflowRun?.id),
+    'The workflow run did not supply a valid run identity.',
+  );
+  requireValid(
+    isPositiveInteger(workflowRun?.run_attempt),
     'The workflow run did not supply a valid run identity.',
   );
   requireValid(
@@ -144,10 +193,8 @@ function validateWorkflowRun(workflowRun) {
     SHA_PATTERN.test(workflowRun.head_sha),
     'The workflow run did not supply a valid source SHA.',
   );
-  const headRepository = workflowRun.head_repository?.full_name;
-  const headOwner = workflowRun.head_repository?.owner?.login;
   requireValid(
-    [headRepository, headOwner, workflowRun.head_branch].every(Boolean),
+    hasWorkflowHeadIdentity(workflowRun),
     'The workflow run did not supply a complete head identity.',
   );
   const associated = arrayOrEmpty(workflowRun.pull_requests);
@@ -211,20 +258,14 @@ async function pullRequestCandidates({
 }
 
 function validateResolvedPullRequest({ pr, owner, repo, workflowRun, defaultBranch }) {
-  const expectedBase = `${owner}/${repo}`.toLowerCase();
-  const expectedHead = workflowRun.head_repository.full_name.toLowerCase();
+  const message = 'The resolved pull request is outside the trusted workflow identity.';
   requireValid(
-    [
-      pr?.state === 'open',
-      pr?.base?.repo?.full_name?.toLowerCase() === expectedBase,
-      pr?.base?.ref === defaultBranch,
-      pr?.head?.repo?.full_name?.toLowerCase() === expectedHead,
-      pr?.head?.ref === workflowRun.head_branch,
-      SHA_PATTERN.test(pr?.head?.sha),
-      SHA_PATTERN.test(pr?.base?.sha),
-    ].every(Boolean),
-    'The resolved pull request is outside the trusted workflow identity.',
+    pr?.state === 'open',
+    message,
   );
+  requireValid(hasTrustedBaseIdentity(pr, owner, repo, defaultBranch), message);
+  requireValid(hasTrustedHeadIdentity(pr, workflowRun), message);
+  requireValid(hasValidCommitPair(pr), message);
 }
 
 function workflowRunState({ workflowRun, liveRun, current }) {
@@ -290,21 +331,22 @@ async function upsertCodacyReportComment({ github, owner, repo, issue_number, re
     issue_number,
     per_page: 100,
   });
-  const previous = comments.find(
-    (comment) =>
-      [
-        comment.user?.type === 'Bot',
-        comment.user?.login === 'github-actions[bot]',
-        comment.body?.includes(MARKER),
-      ].every(Boolean),
-  );
-  if (previous) {
+  const owned = comments.filter(isOwnedReportComment);
+  if (owned.length > 0) {
+    const [canonical, ...duplicates] = owned;
     await github.rest.issues.updateComment({
       owner,
       repo,
-      comment_id: previous.id,
+      comment_id: canonical.id,
       body,
     });
+    for (const duplicate of duplicates) {
+      await github.rest.issues.deleteComment({
+        owner,
+        repo,
+        comment_id: duplicate.id,
+      });
+    }
     return 'updated';
   }
   await github.rest.issues.createComment({ owner, repo, issue_number, body });

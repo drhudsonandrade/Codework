@@ -24,6 +24,7 @@ function makeGithub(previous) {
         listComments: async () => {},
         updateComment: async (args) => calls.push(['update', args]),
         createComment: async (args) => calls.push(['create', args]),
+        deleteComment: async (args) => calls.push(['delete', args]),
       },
     },
   };
@@ -57,10 +58,11 @@ test('creates one report comment when none exists', async () => {
   });
 });
 
-test('updates only the existing GitHub Actions report comment', async () => {
+test('updates one owned report comment and removes owned duplicates', async () => {
   const previous = [
     { id: 8, user: { type: 'Bot', login: 'foreign-bot[bot]' }, body: `${MARKER}\nforeign` },
     { id: 7, user: { type: 'Bot', login: 'github-actions[bot]' }, body: `${MARKER}\nold` },
+    { id: 10, user: { type: 'Bot', login: 'github-actions[bot]' }, body: `${MARKER}\nduplicate` },
     { id: 9, user: { type: 'User' }, body: `${MARKER}\nnot owned by the bot` },
   ];
   const { github, calls } = makeGithub(previous);
@@ -73,10 +75,14 @@ test('updates only the existing GitHub Actions report comment', async () => {
   });
 
   assert.equal(result, 'updated');
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
   assert.equal(calls[0][0], 'update');
   assert.equal(calls[0][1].comment_id, 7);
   assert.equal(calls[0][1].body, `${MARKER}\n# current`);
+  assert.equal(calls[1][0], 'delete');
+  assert.equal(calls[1][1].owner, 'o');
+  assert.equal(calls[1][1].repo, 'r');
+  assert.equal(calls[1][1].comment_id, 10);
 });
 
 test('renders explicit unavailable states bound to a commit', () => {

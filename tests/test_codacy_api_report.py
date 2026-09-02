@@ -223,6 +223,23 @@ class CodacyApiReportTest(unittest.TestCase):
             fetch_issues("gh", "org", "repo", "project", "", opener=opener)
         self.assertIn("data", str(caught.exception))
 
+    def test_a_successful_payload_that_echoes_the_active_credential_is_refused(self):
+        """A credential in a 200 response must never reach the JSON artifact."""
+        from scripts.codacy_api_report import CodacyAPIError, fetch_issues
+
+        project_token = 'PLACEHOLDER-"PROJECT\\TOKEN'
+        opener = _payload_opener(
+            {
+                "data": [{"id": 1, "diagnostic": {"requestToken": project_token}}],
+                "pagination": {},
+            }
+        )
+
+        with self.assertRaises(CodacyAPIError) as caught:
+            fetch_issues("gh", "org", "repo", project_token, "", opener=opener)
+        self.assertIn("credential", str(caught.exception).lower())
+        self.assertNotIn(project_token, str(caught.exception))
+
     def test_non_object_issue_is_refused_instead_of_being_dropped_from_the_count(self):
         """Every API element is evidence; silently discarding malformed elements undercounts."""
         from scripts.codacy_api_report import CodacyAPIError, fetch_issues
