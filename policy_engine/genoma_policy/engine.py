@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .gates_audit import AuditGates
+from .gates_common import CRITICAL_FINAL_AUDIT_KEYS
 from .gates_core import CoreGates
 from .gates_evidence import EvidenceGates
 from .models import EvaluationReport
