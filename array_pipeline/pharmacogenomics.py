@@ -36,6 +36,7 @@ from typing import Any
 import normative
 from array_pipeline.allele_discrimination import analyse_gene
 from array_pipeline.completeness import INTERPRETABLE, NAO_DETECTADO
+from array_pipeline.qc import sha256_file
 from array_pipeline.targets import load_target_manifest, sha256_json
 
 SCHEMA = "genoma-pharmacogenomic-passport-v1"
@@ -512,7 +513,22 @@ def build_pharmacogenomic_passport(
         if panel_matrix.get("input_sha256") != matrix.get("input_sha256"):
             raise ValueError("panel matrix and completeness matrix describe different inputs")
 
-    manifest = load_target_manifest(Path(target_manifest_path))
+    manifest_path = Path(target_manifest_path)
+    manifest = load_target_manifest(manifest_path)
+    recorded_manifest = matrix.get("target_manifest")
+    supplied_manifest = {
+        "id": manifest.get("id"),
+        "version": manifest.get("version"),
+        "sha256": sha256_file(manifest_path),
+    }
+    if not isinstance(recorded_manifest, dict) or any(
+        recorded_manifest.get(key) != value
+        for key, value in supplied_manifest.items()
+    ):
+        raise ValueError(
+            "target manifest does not match the completeness matrix identity: "
+            f"recorded={recorded_manifest!r}, supplied={supplied_manifest!r}"
+        )
     pgx_targets = _pgx_targets(manifest)
 
     annotation = None
