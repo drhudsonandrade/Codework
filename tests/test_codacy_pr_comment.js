@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const {
   MARKER,
   buildCodacyStatusReport,
+  codacyStatusForRunState,
   isCurrentCodacyPublication,
   isCurrentCodacyPullRequest,
   resolveCodacyPullRequest,
@@ -87,13 +88,25 @@ test('updates one owned report comment and removes owned duplicates', async () =
 
 test('renders explicit unavailable states bound to a commit', () => {
   const head = 'a'.repeat(40);
-  for (const state of ['pending', 'failed', 'missing-token', 'publisher-failed']) {
+  for (const state of [
+    'pending',
+    'processing',
+    'cancelled',
+    'failed',
+    'missing-token',
+    'publisher-failed',
+  ]) {
     const report = buildCodacyStatusReport(head, state);
     assert.match(report, /NÃO DISPONÍVEL/);
-    assert.match(report, new RegExp(head));
+    assert.ok(report.includes(head));
   }
   assert.throws(() => buildCodacyStatusReport('not-a-sha', 'pending'), TypeError);
   assert.throws(() => buildCodacyStatusReport(head, 'unknown'), TypeError);
+  assert.equal(codacyStatusForRunState('pending'), 'pending');
+  assert.equal(codacyStatusForRunState('publish'), 'processing');
+  assert.equal(codacyStatusForRunState('interrupted'), 'cancelled');
+  assert.equal(codacyStatusForRunState('failed'), 'failed');
+  assert.throws(() => codacyStatusForRunState('stale'), TypeError);
 });
 
 test('accepts only the same open PR head and base on the default branch', async () => {
@@ -154,6 +167,7 @@ test('refuses publication from an older attempt before it can touch the PR', asy
   const pullRequest = makePullRequest(head);
   const { github, calls } = makeResolverGithub(pullRequest, {
     id: 123,
+    run_number: 7,
     run_attempt: 2,
     status: 'in_progress',
     conclusion: null,
@@ -169,6 +183,7 @@ test('refuses publication from an older attempt before it can touch the PR', asy
       base: 'b'.repeat(40),
       defaultBranch: 'main',
       run_id: 123,
+      run_number: 7,
       run_attempt: 1,
     }),
     false,
@@ -195,10 +210,26 @@ function makePullRequest(head, base = 'b'.repeat(40)) {
 
 function makeResolverGithub(
   pullRequest,
-  liveRun = { id: 123, run_attempt: 1, status: 'completed', conclusion: 'success' },
+  liveRun = {},
   liveHead = pullRequest.head.sha,
+  liveIdentity = {},
+  workflowRuns = null,
 ) {
   const calls = [];
+  const currentRun = {
+    id: 123,
+    run_number: 7,
+    run_attempt: 1,
+    status: 'completed',
+    conclusion: 'success',
+    ...liveRun,
+    path: '.github/workflows/codacy-api-report-tests.yml',
+    head_sha: liveHead,
+    head_branch: 'feature',
+    head_repository: { full_name: 'contributor/Codework' },
+    event: 'pull_request',
+    ...liveIdentity,
+  };
   return {
     calls,
     github: {
@@ -206,12 +237,17 @@ function makeResolverGithub(
         actions: {
           getWorkflowRun: async (args) => {
             calls.push(['run', args]);
+            return { data: currentRun };
+          },
+          listWorkflowRuns: async (args) => {
+            calls.push(['runs', args]);
+            const allRuns = workflowRuns ?? [currentRun];
+            const page = args.page ?? 1;
+            const start = (page - 1) * 100;
             return {
               data: {
-                ...liveRun,
-                path: '.github/workflows/codacy-api-report-tests.yml',
-                head_sha: liveHead,
-                event: 'pull_request',
+                total_count: allRuns.length,
+                workflow_runs: allRuns.slice(start, start + 100),
               },
             };
           },
@@ -234,6 +270,7 @@ function makeResolverGithub(
 function makeWorkflowRun(head, pullRequests) {
   return {
     id: 123,
+    run_number: 7,
     run_attempt: 1,
     path: '.github/workflows/codacy-api-report-tests.yml',
     event: 'pull_request',
@@ -265,10 +302,21 @@ test('resolves one associated PR and binds it to the workflow-run SHA', async ()
     head,
     base: 'b'.repeat(40),
     run_id: 123,
+    run_number: 7,
     run_attempt: 1,
     state: 'publish',
   });
-  assert.deepEqual(calls.map(([operation]) => operation), ['run', 'get']);
+  assert.deepEqual(calls.map(([operation]) => operation), ['run', 'get', 'runs']);
+  assert.deepEqual(calls[2][1], {
+    owner: 'owner',
+    repo: 'repo',
+    workflow_id: 'codacy-api-report-tests.yml',
+    event: 'pull_request',
+    branch: 'feature',
+    head_sha: head,
+    per_page: 100,
+    page: 1,
+  });
 });
 
 test('resolves an empty association only through one matching live fork PR', async () => {
@@ -318,6 +366,189 @@ test('ignores an event from an older workflow attempt', async () => {
   });
 
   assert.equal(resolved.state, 'stale');
+});
+
+test('only the newest producer run may publish for the same commit', async () => {
+  const head = 'a'.repeat(40);
+  const pullRequest = makePullRequest(head);
+  const older = {
+    id: 123,
+    run_number: 7,
+    run_attempt: 1,
+    status: 'completed',
+    conclusion: 'success',
+    path: '.github/workflows/codacy-api-report-tests.yml',
+    head_sha: head,
+    head_branch: 'feature',
+    head_repository: { full_name: 'contributor/Codework' },
+    event: 'pull_request',
+  };
+  const newer = { ...older, id: 124, run_number: 8 };
+  const runs = [newer, older];
+  const oldGithub = makeResolverGithub(pullRequest, older, head, {}, runs).github;
+  const newGithub = makeResolverGithub(pullRequest, newer, head, {}, runs).github;
+
+  assert.equal(
+    await isCurrentCodacyPublication({
+      github: oldGithub,
+      owner: 'owner',
+      repo: 'repo',
+      issue_number: 32,
+      head,
+      base: 'b'.repeat(40),
+      defaultBranch: 'main',
+      run_id: 123,
+      run_number: 7,
+      run_attempt: 1,
+    }),
+    false,
+  );
+  assert.equal(
+    await isCurrentCodacyPublication({
+      github: newGithub,
+      owner: 'owner',
+      repo: 'repo',
+      issue_number: 32,
+      head,
+      base: 'b'.repeat(40),
+      defaultBranch: 'main',
+      run_id: 124,
+      run_number: 8,
+      run_attempt: 1,
+    }),
+    true,
+  );
+
+  const stale = await resolveCodacyPullRequest({
+    github: oldGithub,
+    owner: 'owner',
+    repo: 'repo',
+    workflowRun: makeWorkflowRun(head, [{ number: 32 }]),
+    defaultBranch: 'main',
+  });
+  assert.equal(stale.state, 'stale');
+});
+
+test('reads every producer-run page before deciding which run is newest', async () => {
+  const head = 'a'.repeat(40);
+  const pullRequest = makePullRequest(head);
+  const producer = (id, run_number) => ({
+    id,
+    run_number,
+    run_attempt: 1,
+    status: 'completed',
+    conclusion: 'success',
+    path: '.github/workflows/codacy-api-report-tests.yml',
+    head_sha: head,
+    head_branch: 'feature',
+    head_repository: { full_name: 'contributor/Codework' },
+    event: 'pull_request',
+  });
+  const older = producer(200, 100);
+  const lower = Array.from({ length: 99 }, (_, index) => producer(100 + index, index + 1));
+  const newer = producer(201, 101);
+  const { github, calls } = makeResolverGithub(
+    pullRequest,
+    older,
+    head,
+    {},
+    [older, ...lower, newer],
+  );
+
+  assert.equal(
+    await isCurrentCodacyPublication({
+      github,
+      owner: 'owner',
+      repo: 'repo',
+      issue_number: 32,
+      head,
+      base: 'b'.repeat(40),
+      defaultBranch: 'main',
+      run_id: 200,
+      run_number: 100,
+      run_attempt: 1,
+    }),
+    false,
+  );
+  assert.equal(calls.filter(([operation]) => operation === 'runs').length, 2);
+});
+
+test('does not label a cancelled producer as a failed test run', async () => {
+  const head = 'a'.repeat(40);
+  const pullRequest = makePullRequest(head);
+  const { github } = makeResolverGithub(pullRequest, {
+    id: 123,
+    run_attempt: 1,
+    status: 'completed',
+    conclusion: 'cancelled',
+  });
+  const resolved = await resolveCodacyPullRequest({
+    github,
+    owner: 'owner',
+    repo: 'repo',
+    workflowRun: makeWorkflowRun(head, [{ number: 32 }]),
+    defaultBranch: 'main',
+  });
+
+  assert.equal(resolved.state, 'interrupted');
+});
+
+test('rejects every live workflow identity mismatch', async () => {
+  const head = 'a'.repeat(40);
+  const pullRequest = makePullRequest(head);
+  for (const [field, value] of [
+    ['path', '.github/workflows/other.yml'],
+    ['head_sha', 'c'.repeat(40)],
+    ['event', 'push'],
+  ]) {
+    const { github } = makeResolverGithub(
+      pullRequest,
+      undefined,
+      head,
+      { [field]: value },
+    );
+    await assert.rejects(
+      resolveCodacyPullRequest({
+        github,
+        owner: 'owner',
+        repo: 'repo',
+        workflowRun: makeWorkflowRun(head, [{ number: 32 }]),
+        defaultBranch: 'main',
+      }),
+      /live workflow run does not match/,
+    );
+  }
+});
+
+async function assertPullIdentityRejected(pullRequest, signedHead) {
+  const { github } = makeResolverGithub(pullRequest, undefined, signedHead);
+  await assert.rejects(
+    resolveCodacyPullRequest({
+      github,
+      owner: 'owner',
+      repo: 'repo',
+      workflowRun: makeWorkflowRun(signedHead, [{ number: 32 }]),
+      defaultBranch: 'main',
+    }),
+    /outside the trusted workflow identity/,
+  );
+}
+
+test('rejects every untrusted pull-request identity field', async () => {
+  const signedHead = 'a'.repeat(40);
+  const current = makePullRequest(signedHead);
+  const invalidPullRequests = [
+    { ...current, base: { ...current.base, repo: { full_name: 'other/repo' } } },
+    { ...current, base: { ...current.base, ref: 'release' } },
+    { ...current, base: { ...current.base, sha: 'not-a-sha' } },
+    { ...current, head: { ...current.head, repo: { full_name: 'other/Codework' } } },
+    { ...current, head: { ...current.head, ref: 'other-feature' } },
+    { ...current, head: { ...current.head, sha: 'not-a-sha' } },
+  ];
+
+  for (const pullRequest of invalidPullRequests) {
+    await assertPullIdentityRejected(pullRequest, signedHead);
+  }
 });
 
 test('rejects ambiguous associations and marks an old run stale', async () => {

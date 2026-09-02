@@ -22,20 +22,27 @@ The consumer is loaded from the trusted default branch when the unprivileged pul
 workflow is requested, starts or completes. A resolver job with no secrets checks out only
 the default-branch `github.sha`, verifies the upstream workflow path and resolves one live,
 open PR against the default branch. It re-reads the run through the Actions API and binds the
-PR to the live run ID, attempt, workflow path and `workflow_run.head_sha`. An event from an
-older rerun attempt is stale; `in_progress` also invalidates the old report because GitHub
-does not emit `requested` for a rerun. Publishers for the same head repository and branch are
-serialized without cancelling an in-progress publisher. The validated run ID and attempt are
-carried into the publisher and re-read before each artifact or comment path, so an older
-attempt cannot overwrite a newer one. An empty PR association (as can occur for a fork) is resolved through
-a unique live head repository and branch match. Ambiguous identities fail closed.
+PR to the live run ID, run number, attempt, workflow path and `workflow_run.head_sha`. An
+event from an older rerun attempt is stale; `in_progress` also invalidates the old report
+because GitHub does not emit `requested` for a rerun. Publishers for the same head repository
+and branch use `queue: max`, preserving up to 100 pending events without cancelling an
+in-progress publisher. GitHub does not guarantee dispatch order, so serialization is not
+treated as freshness evidence: the resolver paginates every producer run returned for the
+same SHA and accepts only the unique newest `(run_number, run_attempt)` for the resolved head
+repository, branch and PR association. A truncated, changing or over-limit run listing fails
+closed. The validated coordinates are carried into the publisher and re-read before each
+artifact or comment path, so a delayed run or older attempt cannot overwrite a newer one. An
+empty PR association (as can occur for a fork) is resolved through a unique live head
+repository and branch match. Ambiguous identities fail closed.
 
-Only the validated PR number, head SHA, current base SHA, run ID and run attempt reach the
-publishing job. That job checks out the same trusted default-branch code. It re-fetches the
-PR and producer attempt after the Codacy query and again immediately before commenting, and
-refuses an artifact or comment if that identity changed. A requested, in-progress or failed
-current run replaces any older owned report with an explicit `NÃO DISPONÍVEL` state, so an
-old clean-looking result is not
+Only the validated pull-request identity fields — PR number, head SHA, current base SHA, run
+ID, run number and run attempt — reach the publishing job from the resolver. The publisher also receives
+the fixed provider, organization and repository context from the trusted workflow. That job
+checks out the same trusted default-branch code. It re-fetches the PR and producer attempt
+after the Codacy query and again immediately before commenting, and refuses an artifact or
+comment if that identity changed. A requested, in-progress, cancelled, failed or successfully
+completed current run replaces any older owned report with the corresponding explicit
+`NÃO DISPONÍVEL` pending, cancelled, failed or processing state, so an old clean-looking result is not
 left current. If a later publisher step fails after the trusted checkout succeeded, an
 `always()` terminal step attempts to revalidate the PR/run tuple and replace the pending
 state with an explicit publisher-failure state. Checkout, resolver or GitHub API failures
@@ -62,7 +69,9 @@ Optional environment fallback: `CODACY_REPORT_API_TOKEN` (Codacy account API tok
 workflow maps it to `CODACY_API_TOKEN` only inside the trusted publisher.
 
 When both exist, the project token is attempted first. A `401` or `403` retries the request
-from page one with the account token. Other HTTP failures are reported directly. Credential
+from page one with the account token. Other HTTP failures are reported directly. Every
+successful response is rejected if any key or value reproduces either configured credential,
+including a project token rejected before an account-token fallback succeeds. Credential
 headers are added as unredirected `urllib` headers, so a Codacy redirect cannot forward them
 to another origin.
 
@@ -168,9 +177,10 @@ table/link delimiters are escaped and `@` mentions are neutralized. HTTP error b
 with a bound and scrubbed of both the literal and JSON-escaped forms of configured credentials
 before truncation. Network-error details are likewise redacted, flattened to one line and
 bounded. These untrusted diagnostics are never copied raw into the comment. The reporter also
-prevents credentials from following redirects. A successful JSON response that reproduces the
-active credential in any key or value is rejected before it can become report evidence or an
-artifact; it is not silently redacted because that would alter the evidence being audited.
+prevents credentials from following redirects. A successful JSON response that reproduces
+either configured credential — literal or already JSON-escaped — in any key or string value
+is rejected before it can become report evidence or an artifact; it is not silently redacted
+because that would alter the evidence being audited.
 
 The comment behavior tests use Node's built-in test runner and a literal import of
 `scripts/codacy_pr_comment.js`. They do not create a program dynamically, load a caller-

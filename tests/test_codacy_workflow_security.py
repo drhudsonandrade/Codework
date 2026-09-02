@@ -1,14 +1,19 @@
+import re
 import unittest
 from pathlib import Path
-
+from typing import NoReturn
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _fail(message: str) -> NoReturn:
+    raise AssertionError(message)
 
 
 def _job_block(workflow: str, job_name: str) -> str:
     marker = f"  {job_name}:\n"
     if marker not in workflow:
-        raise AssertionError(f"job {job_name!r} is missing")
+        _fail(f"job {job_name!r} is missing")
     tail = workflow.split(marker, 1)[1]
     lines: list[str] = []
     for line in tail.splitlines(keepends=True):
@@ -16,6 +21,57 @@ def _job_block(workflow: str, job_name: str) -> str:
             break
         lines.append(line)
     return "".join(lines)
+
+
+def _permissions(block: str) -> dict[str, str]:
+    """Parse the one simple GitHub Actions permissions map in a workflow or job block."""
+    lines = block.splitlines()
+    indexes = [index for index, line in enumerate(lines) if line.strip().startswith("permissions:")]
+    if len(indexes) != 1:
+        _fail(f"expected exactly one permissions map, got {len(indexes)}")
+    marker = lines[indexes[0]]
+    if marker.strip() == "permissions: {}":
+        return {}
+    if marker.strip() != "permissions:":
+        _fail("permissions must be an explicit map")
+    base_indent = len(marker) - len(marker.lstrip())
+    result: dict[str, str] = {}
+    for line in lines[indexes[0] + 1 :]:
+        stripped = line.strip()
+        indent = len(line) - len(line.lstrip())
+        if stripped and indent <= base_indent:
+            break
+        if not stripped or stripped.startswith("#"):
+            continue
+        if indent != base_indent + 2 or ":" not in stripped:
+            _fail("permissions entries must be one scalar mapping level")
+        key, value = stripped.split(":", 1)
+        result[key] = value.split("#", 1)[0].strip()
+    return result
+
+
+def _github_expressions(workflow: str) -> list[str]:
+    """Normalize every GitHub-context expression, independent of its YAML location."""
+    expressions = re.findall(r"\$\{\{(.*?)\}\}", workflow, flags=re.DOTALL)
+    normalized: list[str] = []
+    for expression in expressions:
+        compact = re.sub(r"\s+", "", expression)
+        compact = re.sub(r"\[['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]\]", r".\1", compact)
+        if "github" in compact:
+            normalized.append(compact)
+    return normalized
+
+
+def _job_entries(workflow: str) -> list[str]:
+    """List every two-space YAML entry in jobs, including non-canonical key syntax."""
+    jobs = workflow.split("\njobs:\n", 1)
+    if len(jobs) != 2:
+        _fail("workflow jobs map is missing")
+    return [
+        line.strip()
+        for line in jobs[1].splitlines()
+        if line.startswith("  ") and not line.startswith("   ") and line.strip()
+    ]
 
 
 class CodacyWorkflowTrustBoundaryTest(unittest.TestCase):
@@ -34,7 +90,7 @@ class CodacyWorkflowTrustBoundaryTest(unittest.TestCase):
         self.assertIn("pull_request:\n", header)
         self.assertNotIn("pull_request_target:", header)
         self.assertNotIn("workflow_dispatch:", header)
-        self.assertIn("permissions:\n  contents: read", workflow)
+        self.assertEqual(_permissions(workflow), {"contents": "read"})
         self.assertNotIn("pull-requests: write", workflow)
         self.assertNotIn("secrets.", workflow)
         self.assertNotIn("actions/github-script@", workflow)
@@ -46,27 +102,29 @@ class CodacyWorkflowTrustBoundaryTest(unittest.TestCase):
     def test_privileged_publisher_runs_only_after_the_unprivileged_workflow(self):
         workflow = (ROOT / ".github/workflows/codacy-api-report.yml").read_text(encoding="utf-8")
         header = workflow.split("permissions:", 1)[0]
+        global_header = workflow.split("\njobs:", 1)[0]
         self.assertIn("workflow_run:\n", header)
         self.assertIn("workflows: [Codacy API Report Tests]", header)
         self.assertIn("types: [requested, in_progress, completed]", header)
         self.assertNotIn("pull_request_target:", header)
         self.assertNotIn("\n  pull_request:\n", header)
         self.assertNotIn("workflow_dispatch:", header)
-        self.assertIn("permissions: {}", workflow)
+        self.assertEqual(_permissions(global_header), {})
         self.assertIn(
             "codacy-api-report-${{ github.event.workflow_run.head_repository.id }}-${{ "
             "github.event.workflow_run.head_branch }}",
             workflow,
         )
+        self.assertIn("queue: max", workflow)
         self.assertIn("cancel-in-progress: false", workflow)
+        self.assertEqual(_job_entries(workflow), ["resolve:", "report:"])
 
         resolve = _job_block(workflow, "resolve")
         self.assertNotIn("environment:", resolve)
         self.assertNotIn("secrets.", resolve)
-        self.assertRegex(
-            resolve,
-            r"permissions:\n\s+actions: read[^\n]*\n\s+contents: read[^\n]*\n"
-            r"\s+pull-requests: read",
+        self.assertEqual(
+            _permissions(resolve),
+            {"actions": "read", "contents": "read", "pull-requests": "read"},
         )
         self.assertIn("ref: ${{ github.sha }}", resolve)
         self.assertIn("persist-credentials: false", resolve)
@@ -75,15 +133,15 @@ class CodacyWorkflowTrustBoundaryTest(unittest.TestCase):
         self.assertIn("head: ${{ steps.pr.outputs.head }}", resolve)
         self.assertIn("base: ${{ steps.pr.outputs.base }}", resolve)
         self.assertIn("run_id: ${{ steps.pr.outputs.run_id }}", resolve)
+        self.assertIn("run_number: ${{ steps.pr.outputs.run_number }}", resolve)
         self.assertIn("run_attempt: ${{ steps.pr.outputs.run_attempt }}", resolve)
 
         report = _job_block(workflow, "report")
         self.assertIn("needs: resolve", report)
         self.assertIn("environment: codacy-report", report)
-        self.assertRegex(
-            report,
-            r"permissions:\n\s+actions: read[^\n]*\n\s+contents: read[^\n]*\n"
-            r"\s+pull-requests: write",
+        self.assertEqual(
+            _permissions(report),
+            {"actions": "read", "contents": "read", "pull-requests": "write"},
         )
         self.assertIn("ref: ${{ github.sha }}", report)
         self.assertIn("persist-credentials: false", report)
@@ -97,7 +155,15 @@ class CodacyWorkflowTrustBoundaryTest(unittest.TestCase):
         self.assertIn("CODACY_BASE_COMMIT: ${{ needs.resolve.outputs.base }}", report)
         self.assertIn("CODACY_WORKFLOW_RUN_ID: ${{ needs.resolve.outputs.run_id }}", report)
         self.assertIn(
+            "CODACY_WORKFLOW_RUN_NUMBER: ${{ needs.resolve.outputs.run_number }}",
+            report,
+        )
+        self.assertIn(
             "CODACY_WORKFLOW_RUN_ATTEMPT: ${{ needs.resolve.outputs.run_attempt }}", report
+        )
+        self.assertEqual(
+            report.count("run_number: Number(process.env.CODACY_WORKFLOW_RUN_NUMBER)"),
+            5,
         )
         self.assertIn("name: Verify source before publication", report)
         self.assertIn("isCurrentCodacyPublication", report)
@@ -108,6 +174,8 @@ class CodacyWorkflowTrustBoundaryTest(unittest.TestCase):
         self.assertIn("steps.current.outputs.current != 'true'", report)
         self.assertIn("Invalidate prior report before processing", report)
         self.assertIn("needs.resolve.outputs.state == 'publish'", report)
+        self.assertIn("needs.resolve.outputs.state == 'interrupted'", report)
+        self.assertIn("codacyStatusForRunState", report)
         self.assertIn("Publish missing credential state", report)
         self.assertIn("Publish terminal publisher failure", report)
         self.assertIn("always()", report)
@@ -116,14 +184,68 @@ class CodacyWorkflowTrustBoundaryTest(unittest.TestCase):
         self.assertNotIn("workflow_run.pull_requests[0]", workflow)
         self.assertNotIn("secrets.CODACY_PROJECT_TOKEN", workflow)
         self.assertNotIn("secrets.CODACY_API_TOKEN", workflow)
-        for line in workflow.splitlines():
-            stripped = line.strip()
-            if stripped.startswith(("run:", "uses:")):
-                self.assertNotIn("github.event.workflow_run", stripped)
+        self.assertEqual(
+            _github_expressions(workflow),
+            [
+                "github.event.workflow_run.head_repository.id",
+                "github.event.workflow_run.head_branch",
+                "github.sha",
+                "github.repository_owner",
+                "github.event.repository.name",
+                "github.sha",
+            ],
+        )
 
         checkout = report.index("uses: actions/checkout@")
         first_secret = report.index("secrets.CODACY_")
         self.assertLess(checkout, first_secret)
+
+    def test_every_yaml_form_of_an_untrusted_github_expression_reaches_the_gate(self):
+        fixtures = (
+            "run: |\n  echo '${{ github.event.workflow_run.head_branch }}'\n",
+            "- run: echo '${{ github.event['workflow_run'].head_branch }}'\n",
+            "with:\n  script: >-\n    core.info('${{ github[\"event\"][\"workflow_run\"].head_branch }}')\n",
+        )
+        for workflow in fixtures:
+            with self.subTest(workflow=workflow):
+                self.assertEqual(
+                    _github_expressions(workflow),
+                    ["github.event.workflow_run.head_branch"],
+                )
+
+    def test_permissions_parser_keeps_unexpected_privileges_visible(self):
+        block = """
+permissions:
+  contents: read
+  id-token: write
+"""
+        self.assertEqual(
+            _permissions(block),
+            {"contents": "read", "id-token": "write"},
+        )
+
+    def test_job_enumeration_keeps_every_yaml_key_form_visible(self):
+        prefix = """
+jobs:
+  resolve:
+    permissions: {}
+  report:
+    permissions: {}
+"""
+        suffixes = (
+            "  exfiltrate:\n",
+            '  "exfiltrate":\n',
+            "  'exfiltrate':\n",
+            "  exfiltrate: # comment\n",
+            "  ? exfiltrate\n  :\n",
+            "  exfiltrate: {environment: codacy-report}\n",
+        )
+        for suffix in suffixes:
+            with self.subTest(suffix=suffix):
+                self.assertNotEqual(
+                    _job_entries(prefix + suffix),
+                    ["resolve:", "report:"],
+                )
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
+from typing import NoReturn
 from unittest.mock import patch
 
 #: Two commit SHAs standing in for a pull request's head and its base.
@@ -92,18 +93,27 @@ class CodacyApiReportTest(unittest.TestCase):
         )
         self.assertEqual(credential_candidates("", ""), [])
 
-    def test_a_malformed_credential_cannot_escape_in_a_header_error(self):
+    def test_a_malformed_credential_is_refused_before_any_request(self):
+        from scripts.codacy_api_report import CodacyAPIError, credential_candidates
+
+        with self.assertRaises(CodacyAPIError):
+            credential_candidates("PLACEHOLDER\nINJECTED", "")
+
+    def test_a_header_error_cannot_expose_a_valid_credential(self):
         from scripts.codacy_api_report import CodacyAPIError, fetch_issues
 
-        secret = "private-token\nINJECTED"
+        prefix = "PLACEHOLDER"
+        header_value = f"{prefix}-PROJECT-CREDENTIAL"
 
-        def opener(request, timeout=30):
+        def opener(request, timeout=30) -> NoReturn:
+            del timeout
             value = request.get_header("Project-token")
-            raise ValueError(f"invalid header value {value!r}")
+            message = f"invalid header value {value!r} INJECTED"
+            raise ValueError(message)
 
         with self.assertRaises(CodacyAPIError) as caught:
-            fetch_issues("gh", "org", "repo", secret, "", opener=opener)
-        self.assertNotIn(secret, str(caught.exception))
+            fetch_issues("gh", "org", "repo", header_value, "", opener=opener)
+        self.assertNotIn(header_value, str(caught.exception))
         self.assertNotIn("INJECTED", str(caught.exception))
 
     def test_auth_rejection_retries_once_with_account_token_for_401_and_403(self):
@@ -125,6 +135,58 @@ class CodacyApiReportTest(unittest.TestCase):
                 self.assertEqual(len(seen), 2)
                 self.assertTrue(any(k.lower() == "project-token" for k in seen[0]))
                 self.assertTrue(any(k.lower() == "api-token" for k in seen[1]))
+
+    def test_fallback_payload_cannot_echo_the_rejected_project_credential(self):
+        """Every configured credential stays secret, not only the successful fallback."""
+        from scripts.codacy_api_report import CodacyAPIError, fetch_issues
+
+        prefix = "PLACEHOLDER"
+        project = f"{prefix}-PROJECT-CREDENTIAL"
+        account = f"{prefix}-ACCOUNT-CREDENTIAL"
+        seen: list[dict] = []
+        opener = _credential_fallback_opener(
+            403,
+            seen,
+            {
+                "data": [{"id": "issue-1", "diagnostic": project}],
+                "pagination": {},
+            },
+        )
+
+        with self.assertRaises(CodacyAPIError) as caught:
+            fetch_issues("gh", "org", "repo", project, account, opener=opener)
+        self.assertEqual(len(seen), 2)
+        self.assertIn("credential", str(caught.exception).lower())
+        self.assertNotIn(project, str(caught.exception))
+
+    def test_every_fallback_page_is_checked_against_both_credentials(self):
+        from scripts.codacy_api_report import CodacyAPIError, fetch_issues
+
+        prefix = "PLACEHOLDER"
+        project = f"{prefix}-PROJECT-CREDENTIAL"
+        account = f"{prefix}-ACCOUNT-CREDENTIAL"
+        calls = 0
+
+        def opener(request, timeout=30):
+            nonlocal calls
+            calls += 1
+            if request.get_header("Project-token"):
+                raise urllib.error.HTTPError(
+                    request.full_url,
+                    403,
+                    "auth rejected",
+                    {},
+                    io.BytesIO(b"bad token"),
+                )
+            if calls == 2:
+                return _Response({"data": [], "pagination": {"cursor": "next"}})
+            return _Response(
+                {"data": [{"id": "issue-1", "diagnostic": project}], "pagination": {}}
+            )
+
+        with self.assertRaises(CodacyAPIError):
+            fetch_issues("gh", "org", "repo", project, account, opener=opener)
+        self.assertEqual(calls, 3)
 
     def test_non_auth_http_error_does_not_fall_back(self):
         from scripts.codacy_api_report import CodacyAPIError, fetch_issues
@@ -227,18 +289,67 @@ class CodacyApiReportTest(unittest.TestCase):
         """A credential in a 200 response must never reach the JSON artifact."""
         from scripts.codacy_api_report import CodacyAPIError, fetch_issues
 
-        project_token = 'PLACEHOLDER-"PROJECT\\TOKEN'
+        prefix = "PLACEHOLDER-"
+        header_value = f'{prefix}"PROJECT\\CREDENTIAL'
         opener = _payload_opener(
             {
-                "data": [{"id": 1, "diagnostic": {"requestToken": project_token}}],
+                "data": [{"id": 1, "diagnostic": {"requestToken": header_value}}],
                 "pagination": {},
             }
         )
 
         with self.assertRaises(CodacyAPIError) as caught:
-            fetch_issues("gh", "org", "repo", project_token, "", opener=opener)
+            fetch_issues("gh", "org", "repo", header_value, "", opener=opener)
         self.assertIn("credential", str(caught.exception).lower())
-        self.assertNotIn(project_token, str(caught.exception))
+        self.assertNotIn(header_value, str(caught.exception))
+
+    def test_a_preescaped_credential_variant_in_a_successful_payload_is_refused(self):
+        from scripts.codacy_api_report import CodacyAPIError, fetch_issues
+
+        prefix = "PLACEHOLDER-"
+        credential = f'{prefix}"PROJECT\\CREDENTIAL'
+        escaped = json.dumps(credential)[1:-1]
+        opener = _payload_opener(
+            {"data": [{"id": 1, "diagnostic": escaped}], "pagination": {}}
+        )
+
+        with self.assertRaises(CodacyAPIError):
+            fetch_issues("gh", "org", "repo", credential, "", opener=opener)
+
+    def test_delta_fallback_payload_is_checked_against_both_credentials(self):
+        from scripts.codacy_api_report import CodacyAPIError, fetch_commit_delta_issues
+
+        prefix = "PLACEHOLDER"
+        project = f"{prefix}-PROJECT-CREDENTIAL"
+        account = f"{prefix}-ACCOUNT-CREDENTIAL"
+        seen: list[dict] = []
+        opener = _credential_fallback_opener(
+            401,
+            seen,
+            {
+                "analyzed": True,
+                "data": [
+                    {
+                        "deltaType": "Added",
+                        "commitIssue": {"id": "issue-1", "diagnostic": project},
+                    }
+                ],
+                "pagination": {},
+            },
+        )
+
+        with self.assertRaises(CodacyAPIError):
+            fetch_commit_delta_issues(
+                "gh",
+                "org",
+                "repo",
+                HEAD,
+                project,
+                account,
+                target_commit=BASE,
+                opener=opener,
+            )
+        self.assertEqual(len(seen), 2)
 
     def test_non_object_issue_is_refused_instead_of_being_dropped_from_the_count(self):
         """Every API element is evidence; silently discarding malformed elements undercounts."""
@@ -1152,6 +1263,8 @@ class CodacyScopeDegradationTest(unittest.TestCase):
             (repository_request, valid_failure, "NÃO DISPONÍVEL"),
             (delta_request, valid_failure, ""),
             (delta_request, bad_detail, "NÃO DISPONÍVEL"),
+            (delta_request, None, "NÃO DISPONÍVEL"),
+            (None, valid_failure, "NÃO DISPONÍVEL"),
         ):
             with self.subTest(requested=requested, failure=failure, note=note):
                 with tempfile.TemporaryDirectory() as td:

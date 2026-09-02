@@ -12,6 +12,7 @@ permissions: {}
 
 concurrency:
   group: codacy-api-report-${{ github.event.workflow_run.head_repository.id }}-${{ github.event.workflow_run.head_branch }}
+  queue: max
   cancel-in-progress: false
 
 jobs:
@@ -29,6 +30,7 @@ jobs:
       head: ${{ steps.pr.outputs.head }}
       base: ${{ steps.pr.outputs.base }}
       run_id: ${{ steps.pr.outputs.run_id }}
+      run_number: ${{ steps.pr.outputs.run_number }}
       run_attempt: ${{ steps.pr.outputs.run_attempt }}
       state: ${{ steps.pr.outputs.state }}
     steps:
@@ -54,6 +56,7 @@ jobs:
             core.setOutput('head', resolved.head);
             core.setOutput('base', resolved.base);
             core.setOutput('run_id', String(resolved.run_id));
+            core.setOutput('run_number', String(resolved.run_number));
             core.setOutput('run_attempt', String(resolved.run_attempt));
             core.setOutput('state', resolved.state);
 
@@ -76,6 +79,7 @@ jobs:
       CODACY_COMMIT: ${{ needs.resolve.outputs.head }}
       CODACY_BASE_COMMIT: ${{ needs.resolve.outputs.base }}
       CODACY_WORKFLOW_RUN_ID: ${{ needs.resolve.outputs.run_id }}
+      CODACY_WORKFLOW_RUN_NUMBER: ${{ needs.resolve.outputs.run_number }}
       CODACY_WORKFLOW_RUN_ATTEMPT: ${{ needs.resolve.outputs.run_attempt }}
     steps:
       - name: Checkout trusted default-branch revision
@@ -88,6 +92,7 @@ jobs:
       - name: Invalidate prior report before processing
         if: >-
           needs.resolve.outputs.state == 'pending' ||
+          needs.resolve.outputs.state == 'interrupted' ||
           needs.resolve.outputs.state == 'failed' ||
           needs.resolve.outputs.state == 'publish'
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
@@ -99,6 +104,7 @@ jobs:
           script: |
             const {
               buildCodacyStatusReport,
+              codacyStatusForRunState,
               isCurrentCodacyPublication,
               upsertCodacyReportComment,
             } = require('./scripts/codacy_pr_comment.js');
@@ -113,6 +119,7 @@ jobs:
               base: process.env.EXPECTED_BASE,
               defaultBranch: context.payload.repository.default_branch,
               run_id: Number(process.env.CODACY_WORKFLOW_RUN_ID),
+              run_number: Number(process.env.CODACY_WORKFLOW_RUN_NUMBER),
               run_attempt: Number(process.env.CODACY_WORKFLOW_RUN_ATTEMPT),
             });
             if (!current) {
@@ -126,7 +133,7 @@ jobs:
               issue_number,
               report: buildCodacyStatusReport(
                 process.env.EXPECTED_HEAD,
-                process.env.REPORT_STATE === 'failed' ? 'failed' : 'pending',
+                codacyStatusForRunState(process.env.REPORT_STATE),
               ),
             });
 
@@ -174,6 +181,7 @@ jobs:
               base: process.env.EXPECTED_BASE,
               defaultBranch: context.payload.repository.default_branch,
               run_id: Number(process.env.CODACY_WORKFLOW_RUN_ID),
+              run_number: Number(process.env.CODACY_WORKFLOW_RUN_NUMBER),
               run_attempt: Number(process.env.CODACY_WORKFLOW_RUN_ATTEMPT),
             });
             if (!current) {
@@ -216,6 +224,7 @@ jobs:
               base: process.env.EXPECTED_BASE,
               defaultBranch: context.payload.repository.default_branch,
               run_id: Number(process.env.CODACY_WORKFLOW_RUN_ID),
+              run_number: Number(process.env.CODACY_WORKFLOW_RUN_NUMBER),
               run_attempt: Number(process.env.CODACY_WORKFLOW_RUN_ATTEMPT),
             });
             core.setOutput('current', String(current));
@@ -271,6 +280,7 @@ jobs:
               base: process.env.EXPECTED_BASE,
               defaultBranch: context.payload.repository.default_branch,
               run_id: Number(process.env.CODACY_WORKFLOW_RUN_ID),
+              run_number: Number(process.env.CODACY_WORKFLOW_RUN_NUMBER),
               run_attempt: Number(process.env.CODACY_WORKFLOW_RUN_ATTEMPT),
             });
             if (!current) {
@@ -312,6 +322,7 @@ jobs:
               base: process.env.EXPECTED_BASE,
               defaultBranch: context.payload.repository.default_branch,
               run_id: Number(process.env.CODACY_WORKFLOW_RUN_ID),
+              run_number: Number(process.env.CODACY_WORKFLOW_RUN_NUMBER),
               run_attempt: Number(process.env.CODACY_WORKFLOW_RUN_ATTEMPT),
             });
             if (!current) {

@@ -2,8 +2,14 @@
 
 const MARKER = '<!-- codacy-api-report -->';
 const SHA_PATTERN = /^[0-9a-f]{40}$/i;
+const PRODUCER_WORKFLOW = 'codacy-api-report-tests.yml';
+const PRODUCER_PATH = `.github/workflows/${PRODUCER_WORKFLOW}`;
+const PRODUCER_PAGE_SIZE = 100;
+const MAX_PRODUCER_RUNS = 1000;
 const STATUS_MESSAGES = Object.freeze({
   pending: 'the required pull-request tests are still running for this commit.',
+  processing: 'the required pull-request tests passed and the trusted publisher is processing this commit.',
+  cancelled: 'the required pull-request tests were cancelled before completion for this commit.',
   failed: 'the required pull-request tests did not complete successfully for this commit.',
   'missing-token': 'the trusted publisher has no environment-scoped Codacy API credential.',
   'publisher-failed': 'the trusted publisher failed before it could produce a current report.',
@@ -15,6 +21,16 @@ const PENDING_RUN_STATUSES = new Set([
   'waiting',
   'in_progress',
 ]);
+const COMPLETED_RUN_STATES = Object.freeze({
+  success: 'publish',
+  cancelled: 'interrupted',
+});
+const RUN_REPORT_STATES = Object.freeze({
+  pending: 'pending',
+  publish: 'processing',
+  interrupted: 'cancelled',
+  failed: 'failed',
+});
 
 function requireValid(condition, message) {
   if (!condition) {
@@ -30,6 +46,10 @@ function arrayOrEmpty(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function objectOrEmpty(value) {
+  return typeof value === 'object' && value !== null ? value : {};
+}
+
 function isOwnedReportComment(comment) {
   return [
     comment.user?.type === 'Bot',
@@ -38,18 +58,29 @@ function isOwnedReportComment(comment) {
   ].every(Boolean);
 }
 
-function hasRunCoordinates(liveRun, { id, run_attempt }) {
+function hasRunCoordinates(liveRun, { id, run_number, run_attempt }) {
   return [
     liveRun?.id === id,
+    liveRun?.run_number === run_number,
     liveRun?.run_attempt === run_attempt,
   ].every(Boolean);
 }
 
 function hasTrustedRunSource(liveRun, head) {
+  const run = objectOrEmpty(liveRun);
   return [
-    liveRun?.path === '.github/workflows/codacy-api-report-tests.yml',
-    liveRun?.head_sha === head,
-    liveRun?.event === 'pull_request',
+    run.path === PRODUCER_PATH || String(run.path).startsWith(`${PRODUCER_PATH}@`),
+    run.head_sha === head,
+    run.event === 'pull_request',
+  ].every(Boolean);
+}
+
+function hasProducerHeadIdentity(run, headRepository, headBranch) {
+  const producer = objectOrEmpty(run);
+  const repository = objectOrEmpty(producer.head_repository);
+  return [
+    String(repository.full_name).toLowerCase() === String(headRepository).toLowerCase(),
+    producer.head_branch === headBranch,
   ].every(Boolean);
 }
 
@@ -58,6 +89,118 @@ function hasLiveRunIdentity(liveRun, identity) {
     hasRunCoordinates(liveRun, identity),
     hasTrustedRunSource(liveRun, identity.head),
   ].every(Boolean);
+}
+
+function hasCurrentPullRequestIdentity(
+  pr,
+  { owner, repo, head, base, defaultBranch },
+) {
+  const current = objectOrEmpty(pr);
+  const pullHead = objectOrEmpty(current.head);
+  const pullBase = objectOrEmpty(current.base);
+  const baseRepository = objectOrEmpty(pullBase.repo);
+  return [
+    current.state === 'open',
+    pullHead.sha === head,
+    pullBase.sha === base,
+    pullBase.ref === defaultBranch,
+    String(baseRepository.full_name).toLowerCase() === `${owner}/${repo}`.toLowerCase(),
+  ].every(Boolean);
+}
+
+function hasMatchingProducerIdentity(run, pr, head) {
+  const producer = objectOrEmpty(run);
+  const associated = arrayOrEmpty(producer.pull_requests);
+  return [
+    producer.event === 'pull_request',
+    producer.head_sha === head,
+    hasProducerHeadIdentity(producer, pr.head.repo.full_name, pr.head.ref),
+    associated.length === 0 || associated.some((item) => item?.number === pr.number),
+  ].every(Boolean);
+}
+
+function compareRunOrder(left, right) {
+  return left.run_number - right.run_number || left.run_attempt - right.run_attempt;
+}
+
+function validatedRunPage(data, expectedTotal) {
+  const payload = objectOrEmpty(data);
+  requireValid(
+    Array.isArray(payload.workflow_runs),
+    'The workflow-run listing did not return a run array.',
+  );
+  requireValid(
+    [
+      Number.isSafeInteger(payload.total_count),
+      payload.total_count >= 0,
+      payload.total_count <= MAX_PRODUCER_RUNS,
+    ].every(Boolean),
+    'The workflow-run listing has an unsupported result count.',
+  );
+  requireValid(
+    [expectedTotal === null, expectedTotal === payload.total_count].some(Boolean),
+    'The workflow-run listing changed while it was being read.',
+  );
+  return { runs: payload.workflow_runs, total: payload.total_count };
+}
+
+async function loadProducerRuns({ github, owner, repo, pr, head }) {
+  const collected = [];
+  let expectedTotal = null;
+  for (let page = 1; page <= MAX_PRODUCER_RUNS / PRODUCER_PAGE_SIZE; page += 1) {
+    const { data } = await github.rest.actions.listWorkflowRuns({
+      owner,
+      repo,
+      workflow_id: PRODUCER_WORKFLOW,
+      event: 'pull_request',
+      branch: pr.head.ref,
+      head_sha: head,
+      per_page: PRODUCER_PAGE_SIZE,
+      page,
+    });
+    const current = validatedRunPage(data, expectedTotal);
+    expectedTotal = current.total;
+    collected.push(...current.runs);
+    requireValid(
+      collected.length <= expectedTotal,
+      'The workflow-run listing returned more results than declared.',
+    );
+    if (collected.length === expectedTotal) {
+      const uniqueIds = new Set(collected.map((run) => run?.id));
+      requireValid(
+        uniqueIds.size === collected.length,
+        'The workflow-run listing changed while it was being read.',
+      );
+      return collected;
+    }
+    requireValid(
+      current.runs.length === PRODUCER_PAGE_SIZE,
+      'The workflow-run listing ended before every result was read.',
+    );
+  }
+  throw new TypeError('The workflow-run listing exceeded its documented search limit.');
+}
+
+async function isNewestProducerRun({ github, owner, repo, liveRun, pr, head }) {
+  const producerRuns = await loadProducerRuns({ github, owner, repo, pr, head });
+  const matching = producerRuns.filter((run) => (
+    hasMatchingProducerIdentity(run, pr, head)
+  ));
+  if (
+    matching.length === 0
+    || matching.some((run) => ![
+      isPositiveInteger(run.id),
+      isPositiveInteger(run.run_number),
+      isPositiveInteger(run.run_attempt),
+    ].every(Boolean))
+  ) {
+    return false;
+  }
+  const newest = matching.reduce((current, run) => (
+    compareRunOrder(run, current) > 0 ? run : current
+  ));
+  const sameOrder = matching.filter((run) => compareRunOrder(run, newest) === 0);
+  return sameOrder.length === 1 && hasRunCoordinates(newest, liveRun);
 }
 
 function hasWorkflowHeadIdentity(workflowRun) {
@@ -100,6 +243,14 @@ function buildCodacyStatusReport(head, state) {
   ].join('\n');
 }
 
+function codacyStatusForRunState(state) {
+  requireValid(
+    Object.hasOwn(RUN_REPORT_STATES, state),
+    'A known workflow-run state is required.',
+  );
+  return RUN_REPORT_STATES[state];
+}
+
 async function isCurrentCodacyPullRequest({
   github,
   owner,
@@ -124,13 +275,10 @@ async function isCurrentCodacyPullRequest({
     repo,
     pull_number: issue_number,
   });
-  return [
-    pr.state === 'open',
-    pr.head?.sha === head,
-    pr.base?.sha === base,
-    pr.base?.ref === defaultBranch,
-    pr.base?.repo?.full_name?.toLowerCase() === `${owner}/${repo}`.toLowerCase(),
-  ].every(Boolean);
+  return hasCurrentPullRequestIdentity(
+    pr,
+    { owner, repo, head, base, defaultBranch },
+  );
 }
 
 async function isCurrentCodacyPublication({
@@ -142,11 +290,13 @@ async function isCurrentCodacyPublication({
   base,
   defaultBranch,
   run_id,
+  run_number,
   run_attempt,
 }) {
   requireValid(
     [
       isPositiveInteger(run_id),
+      isPositiveInteger(run_number),
       isPositiveInteger(run_attempt),
       SHA_PATTERN.test(head),
       SHA_PATTERN.test(base),
@@ -158,18 +308,29 @@ async function isCurrentCodacyPublication({
     repo,
     run_id,
   });
-  if (!hasLiveRunIdentity(liveRun, { id: run_id, run_attempt, head })) {
+  if (!hasLiveRunIdentity(liveRun, {
+    id: run_id,
+    run_number,
+    run_attempt,
+    head,
+  })) {
     return false;
   }
-  return isCurrentCodacyPullRequest({
-    github,
+  const { data: pr } = await github.rest.pulls.get({
     owner,
     repo,
-    issue_number,
-    head,
-    base,
-    defaultBranch,
+    pull_number: issue_number,
   });
+  if (
+    !hasCurrentPullRequestIdentity(
+      pr,
+      { owner, repo, head, base, defaultBranch },
+    )
+    || !hasProducerHeadIdentity(liveRun, pr.head.repo.full_name, pr.head.ref)
+  ) {
+    return false;
+  }
+  return isNewestProducerRun({ github, owner, repo, liveRun, pr, head });
 }
 
 function validateWorkflowRun(workflowRun) {
@@ -182,7 +343,11 @@ function validateWorkflowRun(workflowRun) {
     'The workflow run did not supply a valid run identity.',
   );
   requireValid(
-    workflowRun.path === '.github/workflows/codacy-api-report-tests.yml',
+    isPositiveInteger(workflowRun?.run_number),
+    'The workflow run did not supply a valid run identity.',
+  );
+  requireValid(
+    workflowRun.path === PRODUCER_PATH,
     'The workflow run did not originate from the trusted test workflow.',
   );
   requireValid(
@@ -214,6 +379,7 @@ async function loadLiveWorkflowRun({ github, owner, repo, workflowRun }) {
   requireValid(
     hasLiveRunIdentity(liveRun, {
       id: workflowRun.id,
+      run_number: workflowRun.run_number,
       run_attempt: liveRun?.run_attempt,
       head: workflowRun.head_sha,
     }),
@@ -222,6 +388,14 @@ async function loadLiveWorkflowRun({ github, owner, repo, workflowRun }) {
   requireValid(
     isPositiveInteger(liveRun.run_attempt),
     'The live workflow run does not have a valid attempt.',
+  );
+  requireValid(
+    hasProducerHeadIdentity(
+      liveRun,
+      workflowRun.head_repository.full_name,
+      workflowRun.head_branch,
+    ),
+    'The live workflow run does not match the signed head identity.',
   );
   return liveRun;
 }
@@ -279,7 +453,7 @@ function workflowRunState({ workflowRun, liveRun, current }) {
     liveRun.status === 'completed',
     `Unexpected workflow run status: ${liveRun.status}`,
   );
-  return liveRun.conclusion === 'success' ? 'publish' : 'failed';
+  return COMPLETED_RUN_STATES[liveRun.conclusion] ?? 'failed';
 }
 
 async function resolveCodacyPullRequest({
@@ -309,16 +483,31 @@ async function resolveCodacyPullRequest({
   );
   const [pr] = candidates;
   validateResolvedPullRequest({ pr, owner, repo, workflowRun, defaultBranch });
+  let current = [
+    pr.head.sha === workflowRun.head_sha,
+    liveRun.run_attempt === workflowRun.run_attempt,
+  ].every(Boolean);
+  if (current) {
+    current = await isNewestProducerRun({
+      github,
+      owner,
+      repo,
+      liveRun,
+      pr,
+      head: pr.head.sha,
+    });
+  }
   return {
     number: pr.number,
     head: workflowRun.head_sha,
     base: pr.base.sha,
     run_id: workflowRun.id,
+    run_number: workflowRun.run_number,
     run_attempt: workflowRun.run_attempt,
     state: workflowRunState({
       workflowRun,
       liveRun,
-      current: pr.head.sha === workflowRun.head_sha,
+      current,
     }),
   };
 }
@@ -356,6 +545,7 @@ async function upsertCodacyReportComment({ github, owner, repo, issue_number, re
 module.exports = {
   MARKER,
   buildCodacyStatusReport,
+  codacyStatusForRunState,
   isCurrentCodacyPublication,
   isCurrentCodacyPullRequest,
   resolveCodacyPullRequest,

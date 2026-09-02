@@ -145,13 +145,34 @@ def _redact(text: str, *secrets: str) -> str:
 def _contains_credential(payload: object, *secrets: str) -> bool:
     """Return whether decoded untrusted JSON reproduces a configured credential.
 
-    Successful response bodies are no more trusted than error bodies.  Serializing the
-    decoded value again covers object keys and values and also gives escaped credentials the
-    same representation they would have in the JSON artifact.  A match is refused rather
-    than redacted: silently changing issue evidence would make the report non-auditable.
+    Successful response bodies are no more trusted than error bodies. Serializing the
+    decoded value again covers object keys and values in their artifact representation;
+    recursively inspecting decoded strings also catches an already escaped representation
+    before serialization escapes it a second time. A match is refused rather than redacted:
+    silently changing issue evidence would make the report non-auditable.
     """
+    variants = _secret_variants(*secrets)
     serialized = json.dumps(payload, ensure_ascii=False, allow_nan=False)
-    return any(variant in serialized for variant in _secret_variants(*secrets))
+    if any(variant in serialized for variant in variants):
+        return True
+    return any(
+        variant in text
+        for text in _payload_strings(payload)
+        for variant in variants
+    )
+
+
+def _payload_strings(payload: object) -> Iterable[str]:
+    """Yield every decoded JSON key and string value without altering its escaping."""
+    if isinstance(payload, str):
+        yield payload
+    elif isinstance(payload, dict):
+        for key, value in payload.items():
+            yield from _payload_strings(key)
+            yield from _payload_strings(value)
+    elif isinstance(payload, list):
+        for value in payload:
+            yield from _payload_strings(value)
 
 
 #: How much of an error body reaches the message. Enough to diagnose, short enough not to
@@ -234,7 +255,14 @@ def _page_request(
     return request
 
 
-def _paged_payloads(endpoint: _Endpoint, token_header: str, token: str, *, opener: Callable):
+def _paged_payloads(
+    endpoint: _Endpoint,
+    token_header: str,
+    token: str,
+    *,
+    configured_tokens: tuple[str, ...],
+    opener: Callable,
+):
     """Yield each page's decoded payload, following Codacy's cursor pagination to the end.
 
     Shared by both scopes so that pagination is implemented once: whatever the method and
@@ -267,9 +295,9 @@ def _paged_payloads(endpoint: _Endpoint, token_header: str, token: str, *, opene
             raise CodacyAPIError(
                 f"Codacy API returned a {type(payload).__name__} where a JSON object was expected"
             )
-        if _contains_credential(payload, token):
+        if _contains_credential(payload, *configured_tokens):
             raise CodacyAPIError(
-                "Codacy API returned a successful payload containing the active credential"
+                "Codacy API returned a successful payload containing a configured credential"
             )
         yield payload
 
@@ -308,12 +336,19 @@ def _fetch_pages(
     token_header: str,
     token: str,
     *,
+    configured_tokens: tuple[str, ...],
     opener: Callable = urllib.request.urlopen,
 ) -> list[dict]:
     """Every issue the repository-scoped search returns, across all pages."""
     endpoint = _Endpoint(base=base, method="POST", body=b"{}")
     issues: list[dict] = []
-    for payload in _paged_payloads(endpoint, token_header, token, opener=opener):
+    for payload in _paged_payloads(
+        endpoint,
+        token_header,
+        token,
+        configured_tokens=configured_tokens,
+        opener=opener,
+    ):
         issues.extend(_page_issues(payload))
     return issues
 
@@ -324,6 +359,7 @@ def _fetch_delta_pages(
     token: str,
     *,
     params: dict[str, str],
+    configured_tokens: tuple[str, ...],
     opener: Callable = urllib.request.urlopen,
 ) -> tuple[bool, list[dict]]:
     """A delta endpoint's new issues, paired with whether Codacy has analysed the commit.
@@ -341,7 +377,13 @@ def _fetch_delta_pages(
     endpoint = _Endpoint(base=base, method="GET", params=params)
     issues: list[dict] = []
     analyzed: bool | None = None
-    for payload in _paged_payloads(endpoint, token_header, token, opener=opener):
+    for payload in _paged_payloads(
+        endpoint,
+        token_header,
+        token,
+        configured_tokens=configured_tokens,
+        opener=opener,
+    ):
         page_analyzed = payload.get("analyzed")
         if not isinstance(page_analyzed, bool):
             raise CodacyAPIError(
@@ -412,10 +454,17 @@ def fetch_issues(
 ) -> list[dict]:
     """Fetch all repository issue pages, retrying only auth failures with the account token."""
     base = _issue_url(provider, org, repo)
+    configured_tokens = (project_token, account_token)
     return _with_credentials(
         project_token,
         account_token,
-        lambda header, token: _fetch_pages(base, header, token, opener=opener),
+        lambda header, token: _fetch_pages(
+            base,
+            header,
+            token,
+            configured_tokens=configured_tokens,
+            opener=opener,
+        ),
     )
 
 
@@ -464,11 +513,17 @@ def fetch_commit_delta_issues(
     params = {"status": COMMIT_DELTA_STATUS}
     if target_commit:
         params["targetCommitUuid"] = target_commit
+    configured_tokens = (project_token, account_token)
     return _with_credentials(
         project_token,
         account_token,
         lambda header, token: _fetch_delta_pages(
-            base, header, token, params=params, opener=opener
+            base,
+            header,
+            token,
+            params=params,
+            configured_tokens=configured_tokens,
+            opener=opener,
         ),
     )
 
