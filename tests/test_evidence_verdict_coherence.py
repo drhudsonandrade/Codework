@@ -175,7 +175,10 @@ class EvidenceVerdictCoherenceTest(unittest.TestCase):
 
     def test_all_pass_cannot_approve_unavailable_evidence(self):
         self.assertEqual(
-            self._offending(\n                # `all_pass` is a witness-schema field, not a credential.\n                {"status": UNAVAILABLE, "all_pass": True},  # nosec B105\n            ),
+            self._offending(
+                # `all_pass` is a witness-schema field, not a credential.
+                {"status": UNAVAILABLE, "all_pass": True},  # nosec B105
+            ),
             ["all_pass"],
         )
 
