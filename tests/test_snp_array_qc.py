@@ -244,16 +244,18 @@ class ArrayQCTest(unittest.TestCase):
         p = self._write("RSID,CHROMOSOME,POSITION,RESULT\nrs1,1,100,TC\n")
         build_evidence = self._verified_evidence(p, asserted_value="GRCh37")
         strand_evidence = self._verified_evidence(p, asserted_value="forward")
-        for label, failure in (
-            ("table missing", OSError(2, "No such file or directory")),
-            ("table corrupt", json.JSONDecodeError("Expecting value", "", 0)),
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        marker_root = Path(td.name)
+        missing_path = marker_root / "array_provenance_markers.json"
+        corrupt_path = marker_root / "corrupt-array_provenance_markers.json"
+        corrupt_path.write_text("{not valid json", encoding="utf-8")
+        for label, marker_path in (
+            ("table missing", missing_path),
+            ("table corrupt", corrupt_path),
         ):
             with self.subTest(case=label):
-                with patch(
-                    "array_pipeline.qc.STRAND_MARKERS_PATH"
-                ) as marker_path:
-                    marker_path.read_text.side_effect = failure
-                    marker_path.name = "array_provenance_markers.json"
+                with patch("array_pipeline.qc.STRAND_MARKERS_PATH", marker_path):
                     result = inspect_array(
                         p,
                         case_id="T",
