@@ -149,6 +149,10 @@ class PostRenderProvenanceRegressionTest(unittest.TestCase):
         data["input"]["schema"] = "wgs_vcf_projection_v1"
         self.assertIn("provenance:mismatch:input.schema", provenance_blockers(data))
 
+        data = compiler.compile()
+        del data["input"]["schema"]
+        self.assertIn("provenance:missing_value:input.schema", provenance_blockers(data))
+
     def test_extra_cannot_replace_the_anchored_input_block(self):
         """The top-level input object is protected although its anchor is input.schema."""
         from reporting.provenance import Artifact, PayloadCompiler, ProvenanceError

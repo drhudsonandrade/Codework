@@ -62,14 +62,19 @@ class CpicRetryPolicyTest(unittest.TestCase):
 
     def test_assessed_allele_fetch_errors_name_the_registry_not_cpic(self):
         """The shared NCBI/GWAS transport does not misattribute failures to CPIC."""
-        factory, _ = opener_factory(urllib.error.URLError("offline"))
-        with patch.object(curate_assessed_alleles, "policy_opener", factory):
-            with self.assertRaisesRegex(
+        factory, _opener = opener_factory(urllib.error.URLError("offline"))
+        with (
+            patch.object(curate_assessed_alleles, "policy_opener", factory),
+            self.assertRaisesRegex(
                 curate_assessed_alleles.CurationError, "registry fetch failed"
-            ):
-                curate_assessed_alleles._get(
-                    "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi", attempts=1
-                )
+            ),
+        ):
+            curate_assessed_alleles._get(
+                "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi", attempts=1
+            )
+        factory.assert_called_once_with(
+            curate_assessed_alleles.is_https, "the public registry API"
+        )
 
     def test_curated_identity_requires_the_live_canonical_spdi(self):
         """Accession and alternate are insufficient when the pinned SPDI disagrees."""
@@ -427,12 +432,19 @@ class PgxPanelIdentityTest(unittest.TestCase):
         self.assertNotEqual(first["version"], second["version"])
 
     def test_invalid_grch38_identity_is_rejected(self):
-        """A target cannot be verified without a usable GRCh38 coordinate identity."""
-        invalid = self._registry()
-        item = invalid["genes"]["G"]["alleles"]["G*2"]["defining"][0]
-        item["position"] = 0
-        with self.assertRaisesRegex(ValueError, "rs1.*position"):
-            build_pgx_panel.build_panel(invalid)
+        """Every unusable GRCh38 identity field independently blocks the target."""
+        cases = (
+            ("position", 0, "position"),
+            ("chromosome", "chrUn", "chromosome"),
+            ("reference_accession", "GRCh38", "reference_accession"),
+        )
+        for field, value, expected in cases:
+            with self.subTest(field=field):
+                invalid = self._registry()
+                item = invalid["genes"]["G"]["alleles"]["G*2"]["defining"][0]
+                item[field] = value
+                with self.assertRaisesRegex(ValueError, rf"rs1.*{expected}"):
+                    build_pgx_panel.build_panel(invalid)
 
 
 if __name__ == "__main__":

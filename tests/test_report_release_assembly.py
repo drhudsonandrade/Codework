@@ -1,7 +1,7 @@
 import copy
 import unittest
 
-from tests.test_policy_evaluation_binding import INPUT_SHA, real_evaluation
+from tests.test_policy_evaluation_binding import INPUT_SHA, _manifest, _ruleset, real_evaluation
 
 
 def curated(
@@ -52,6 +52,21 @@ class ReportReleaseAssemblyTest(unittest.TestCase):
         self.assertFalse(result["publication_gate"]["passed"])
         self.assertEqual(result["report_release_status"], "NÃO DISPONÍVEL")
         self.assertIn("consent_scope_verified", result["report_release_blockers"])
+
+    def test_final_audit_failure_blocks_even_if_other_planes_pass(self):
+        """A genuine re-executable BLOCKED final-audit verdict cannot release reports."""
+        from genoma_policy.engine import PolicyEngine
+        from scripts.prepare_report_release import assemble_release
+
+        manifest = _manifest()
+        manifest["final_audit"][next(iter(manifest["final_audit"]))] = False
+        policy = PolicyEngine(_ruleset()).evaluate(manifest).to_dict()
+
+        self.assertFalse(policy["ready_for_requested_operation"])
+        result = assemble_release(curated(), policy)
+        self.assertFalse(result["publication_gate"]["passed"])
+        self.assertEqual(result["report_release_status"], "NÃO DISPONÍVEL")
+        self.assertIn("FINAL_AUDIT_GATE", result["report_release_blockers"])
 
     def test_numeric_case_identity_cannot_authorize_release(self):
         from scripts.prepare_report_release import assemble_release

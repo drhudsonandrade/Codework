@@ -114,7 +114,7 @@ class ProvenanceProbeRegressionTest(unittest.TestCase):
             with self.assertRaisesRegex(
                 ProvenanceProbeError, "two distinct alleles"
             ):
-                        load_markers(path)
+                load_markers(path)
 
     def test_proposed_marker_table_cannot_issue_a_verified_attestation(self):
         """A successful probe over unverified marker metadata is not an attestation."""
