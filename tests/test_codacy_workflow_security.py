@@ -50,6 +50,29 @@ def _permissions(block: str) -> dict[str, str]:
     return result
 
 
+def _top_level_scalar_map(workflow: str, key: str) -> dict[str, str]:
+    """Parse one top-level scalar map and reject duplicate or nested entries."""
+    lines = workflow.splitlines()
+    marker = f"{key}:"
+    indexes = [index for index, line in enumerate(lines) if line == marker]
+    if len(indexes) != 1:
+        _fail(f"expected exactly one top-level {key!r} map, got {len(indexes)}")
+    result: dict[str, str] = {}
+    for line in lines[indexes[0] + 1 :]:
+        stripped = line.strip()
+        indent = len(line) - len(line.lstrip())
+        if stripped and indent == 0:
+            break
+        if not stripped or stripped.startswith("#"):
+            continue
+        if indent != 2 or ":" not in stripped:
+            _fail(f"{key} entries must be one scalar mapping level")
+        entry, value = stripped.split(":", 1)
+        if entry in result:
+            _fail(f"duplicate {key} entry: {entry}")
+        result[entry] = value.split("#", 1)[0].strip()
+    return result
+
 def _github_expressions(workflow: str) -> list[str]:
     """Normalize every GitHub-context expression, independent of its YAML location."""
     expressions = re.findall(r"\$\{\{(.*?)\}\}", workflow, flags=re.DOTALL)
@@ -110,13 +133,16 @@ class CodacyWorkflowTrustBoundaryTest(unittest.TestCase):
         self.assertNotIn("\n  pull_request:\n", header)
         self.assertNotIn("workflow_dispatch:", header)
         self.assertEqual(_permissions(global_header), {})
-        self.assertIn(
-            "codacy-api-report-${{ github.event.workflow_run.head_repository.id }}-${{ "
-            "github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}",
-            workflow,
+        self.assertEqual(
+            _top_level_scalar_map(workflow, "concurrency"),
+            {
+                "group": (
+                    "codacy-api-report-${{ github.event.workflow_run.head_repository.id }}-${{ "
+                    "github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}"
+                ),
+                "cancel-in-progress": "true",
+            },
         )
-        self.assertNotIn("queue:", workflow)
-        self.assertIn("cancel-in-progress: true", workflow)
         self.assertEqual(_job_entries(workflow), ["resolve:", "report:"])
 
         resolve = _job_block(workflow, "resolve")
@@ -200,6 +226,20 @@ class CodacyWorkflowTrustBoundaryTest(unittest.TestCase):
         checkout = report.index("uses: actions/checkout@")
         first_secret = report.index("secrets.CODACY_")
         self.assertLess(checkout, first_secret)
+
+    def test_concurrency_parser_does_not_accept_a_true_value_outside_the_map(self):
+        workflow = """
+concurrency:
+  group: producer-attempt
+  cancel-in-progress: false
+jobs:
+  check:
+    run: echo 'cancel-in-progress: true'
+"""
+        self.assertEqual(
+            _top_level_scalar_map(workflow, "concurrency"),
+            {"group": "producer-attempt", "cancel-in-progress": "false"},
+        )
 
     def test_every_yaml_form_of_an_untrusted_github_expression_reaches_the_gate(self):
         fixtures = (
