@@ -393,7 +393,7 @@ def fetch_clinvar_conditions(rsid: str) -> dict[str, Any]:
         if spdi is None:
             mismatched += 1
             continue
-        sequence, position, deleted, _inserted = spdi
+        sequence, position, deleted, inserted = spdi
         if (
             sequence != expected_sequence
             or position != expected_position
@@ -423,6 +423,9 @@ def fetch_clinvar_conditions(rsid: str) -> dict[str, Any]:
                 "classification": germline.get("description") or UNAVAILABLE,
                 "review_status": germline.get("review_status") or UNAVAILABLE,
                 "last_evaluated": germline.get("last_evaluated") or UNAVAILABLE,
+                # Preserve the variant identity established by the SPDI join. Coordinate
+                # alone is ambiguous at multiallelic loci.
+                "alternate_allele": inserted,
                 "conditions": traits,
                 "genes": sorted(
                     {str(g.get("symbol")) for g in (entry.get("genes") or []) if g.get("symbol")}
@@ -433,6 +436,7 @@ def fetch_clinvar_conditions(rsid: str) -> dict[str, Any]:
                     "sequence": sequence,
                     "position": position + 1,
                     "reference_allele": deleted,
+                    "alternate_allele": inserted,
                 },
             }
         )
