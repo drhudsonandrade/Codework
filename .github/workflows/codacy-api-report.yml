@@ -11,7 +11,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: codacy-api-report-${{ github.event.workflow_run.head_repository.id }}-${{ github.event.workflow_run.id }}
+  group: codacy-api-report-${{ github.event.workflow_run.head_repository.id }}-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
   cancel-in-progress: true
 
 jobs:
