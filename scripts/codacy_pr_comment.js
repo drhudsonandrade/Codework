@@ -42,6 +42,10 @@ function isPositiveInteger(value) {
   return Number.isSafeInteger(value) && value > 0;
 }
 
+function isNonEmptyString(value) {
+  return typeof value === 'string' && value.length > 0;
+}
+
 function arrayOrEmpty(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -78,8 +82,16 @@ function hasTrustedRunSource(liveRun, head) {
 function hasProducerHeadIdentity(run, headRepository, headBranch) {
   const producer = objectOrEmpty(run);
   const repository = objectOrEmpty(producer.head_repository);
+  if (![
+    repository.full_name,
+    producer.head_branch,
+    headRepository,
+    headBranch,
+  ].every(isNonEmptyString)) {
+    return false;
+  }
   return [
-    String(repository.full_name).toLowerCase() === String(headRepository).toLowerCase(),
+    repository.full_name.toLowerCase() === headRepository.toLowerCase(),
     producer.head_branch === headBranch,
   ].every(Boolean);
 }
@@ -151,7 +163,12 @@ function validatedRunPage(data, expectedTotal) {
 async function loadProducerRuns({ github, owner, repo, pr, head }) {
   const collected = [];
   let expectedTotal = null;
-  for (let page = 1; page <= MAX_PRODUCER_RUNS / PRODUCER_PAGE_SIZE; page += 1) {
+  let page = 1;
+  do {
+    requireValid(
+      page <= MAX_PRODUCER_RUNS / PRODUCER_PAGE_SIZE,
+      'The workflow-run listing exceeded its documented search limit.',
+    );
     const { data } = await github.rest.actions.listWorkflowRuns({
       owner,
       repo,
@@ -169,20 +186,20 @@ async function loadProducerRuns({ github, owner, repo, pr, head }) {
       collected.length <= expectedTotal,
       'The workflow-run listing returned more results than declared.',
     );
-    if (collected.length === expectedTotal) {
-      const uniqueIds = new Set(collected.map((run) => run?.id));
+    if (collected.length < expectedTotal) {
       requireValid(
-        uniqueIds.size === collected.length,
-        'The workflow-run listing changed while it was being read.',
+        current.runs.length === PRODUCER_PAGE_SIZE,
+        'The workflow-run listing ended before every result was read.',
       );
-      return collected;
     }
-    requireValid(
-      current.runs.length === PRODUCER_PAGE_SIZE,
-      'The workflow-run listing ended before every result was read.',
-    );
-  }
-  throw new TypeError('The workflow-run listing exceeded its documented search limit.');
+    page += 1;
+  } while (collected.length < expectedTotal);
+  const uniqueIds = new Set(collected.map((run) => run?.id));
+  requireValid(
+    uniqueIds.size === collected.length,
+    'The workflow-run listing changed while it was being read.',
+  );
+  return collected;
 }
 
 async function isNewestProducerRun({ github, owner, repo, liveRun, pr, head }) {

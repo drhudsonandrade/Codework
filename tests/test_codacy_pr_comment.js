@@ -285,6 +285,21 @@ function makeWorkflowRun(head, pullRequests) {
   };
 }
 
+function makeProducerRun(head, id = 123, runNumber = 7) {
+  return {
+    id,
+    run_number: runNumber,
+    run_attempt: 1,
+    status: 'completed',
+    conclusion: 'success',
+    path: '.github/workflows/codacy-api-report-tests.yml',
+    head_sha: head,
+    head_branch: 'feature',
+    head_repository: { full_name: 'contributor/Codework' },
+    event: 'pull_request',
+  };
+}
+
 test('resolves one associated PR and binds it to the workflow-run SHA', async () => {
   const head = 'a'.repeat(40);
   const pullRequest = makePullRequest(head);
@@ -371,24 +386,33 @@ test('ignores an event from an older workflow attempt', async () => {
 test('only the newest producer run may publish for the same commit', async () => {
   const head = 'a'.repeat(40);
   const pullRequest = makePullRequest(head);
-  const older = {
-    id: 123,
-    run_number: 7,
-    run_attempt: 1,
-    status: 'completed',
-    conclusion: 'success',
-    path: '.github/workflows/codacy-api-report-tests.yml',
-    head_sha: head,
-    head_branch: 'feature',
-    head_repository: { full_name: 'contributor/Codework' },
-    event: 'pull_request',
-  };
-  const newer = { ...older, id: 124, run_number: 8 };
+  const older = makeProducerRun(head);
+  const newer = makeProducerRun(head, 124, 8);
   const runs = [newer, older];
   const oldGithub = makeResolverGithub(pullRequest, older, head, {}, runs).github;
   const newGithub = makeResolverGithub(pullRequest, newer, head, {}, runs).github;
   const deletedFork = { ...pullRequest, head: { ...pullRequest.head, repo: null } };
   const deletedForkGithub = makeResolverGithub(deletedFork, newer, head, {}, runs).github;
+  const missingHeadRepository = { ...newer, head_repository: undefined };
+  const missingEveryHeadRepository = makeResolverGithub(
+    deletedFork,
+    newer,
+    head,
+    { head_repository: undefined },
+    [missingHeadRepository],
+  ).github;
+  const missingHeadBranchPr = {
+    ...pullRequest,
+    head: { ...pullRequest.head, ref: '' },
+  };
+  const missingHeadBranch = { ...newer, head_branch: '' };
+  const missingEveryHeadBranch = makeResolverGithub(
+    missingHeadBranchPr,
+    newer,
+    head,
+    { head_branch: '' },
+    [missingHeadBranch],
+  ).github;
 
   assert.equal(
     await isCurrentCodacyPublication({
@@ -435,6 +459,23 @@ test('only the newest producer run may publish for the same commit', async () =>
     }),
     false,
   );
+  for (const github of [missingEveryHeadRepository, missingEveryHeadBranch]) {
+    assert.equal(
+      await isCurrentCodacyPublication({
+        github,
+        owner: 'owner',
+        repo: 'repo',
+        issue_number: 32,
+        head,
+        base: 'b'.repeat(40),
+        defaultBranch: 'main',
+        run_id: 124,
+        run_number: 8,
+        run_attempt: 1,
+      }),
+      false,
+    );
+  }
 
   const stale = await resolveCodacyPullRequest({
     github: oldGithub,
@@ -449,21 +490,12 @@ test('only the newest producer run may publish for the same commit', async () =>
 test('reads every producer-run page before deciding which run is newest', async () => {
   const head = 'a'.repeat(40);
   const pullRequest = makePullRequest(head);
-  const producer = (id, run_number) => ({
-    id,
-    run_number,
-    run_attempt: 1,
-    status: 'completed',
-    conclusion: 'success',
-    path: '.github/workflows/codacy-api-report-tests.yml',
-    head_sha: head,
-    head_branch: 'feature',
-    head_repository: { full_name: 'contributor/Codework' },
-    event: 'pull_request',
-  });
-  const older = producer(200, 100);
-  const lower = Array.from({ length: 99 }, (_, index) => producer(100 + index, index + 1));
-  const newer = producer(201, 101);
+  const older = makeProducerRun(head, 200, 100);
+  const lower = Array.from(
+    { length: 99 },
+    (_, index) => makeProducerRun(head, 100 + index, index + 1),
+  );
+  const newer = makeProducerRun(head, 201, 101);
   const { github, calls } = makeResolverGithub(
     pullRequest,
     older,
@@ -486,6 +518,42 @@ test('reads every producer-run page before deciding which run is newest', async 
       run_attempt: 1,
     }),
     false,
+  );
+  assert.equal(calls.filter(([operation]) => operation === 'runs').length, 2);
+});
+
+test('refuses a truncated producer-run listing instead of returning partial evidence', async () => {
+  const head = 'a'.repeat(40);
+  const pullRequest = makePullRequest(head);
+  const firstPage = Array.from(
+    { length: 100 },
+    (_, index) => makeProducerRun(head, 1000 + index, index + 1),
+  );
+  const { github, calls } = makeResolverGithub(pullRequest);
+  github.rest.actions.listWorkflowRuns = async (args) => {
+    calls.push(['runs', args]);
+    return {
+      data: {
+        total_count: 101,
+        workflow_runs: args.page === 1 ? firstPage : [],
+      },
+    };
+  };
+
+  await assert.rejects(
+    isCurrentCodacyPublication({
+      github,
+      owner: 'owner',
+      repo: 'repo',
+      issue_number: 32,
+      head,
+      base: 'b'.repeat(40),
+      defaultBranch: 'main',
+      run_id: 123,
+      run_number: 7,
+      run_attempt: 1,
+    }),
+    /ended before every result was read/,
   );
   assert.equal(calls.filter(([operation]) => operation === 'runs').length, 2);
 });
