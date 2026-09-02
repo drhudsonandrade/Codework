@@ -55,7 +55,7 @@ DEFAULT_SCOPES = ROOT / "config/trait_scopes.json"
 DEFAULT_TARGETS_OUT = ROOT / "config/targets_gwas_traits.json"
 DEFAULT_EVIDENCE_OUT = ROOT / "docs/evidence/TRAIT_ASSOCIATIONS_GWAS.json.gz"
 
-GWAS_RELEASE = "https://ftp.ebi.ac.uk/pub/databases/gwas/releases/latest"
+GWAS_RELEASE = "https://ftp.ebi.ac.uk/pub/databases/gwas/releases/2026/08/24"
 UNAVAILABLE = "NÃO DISPONÍVEL"
 
 
