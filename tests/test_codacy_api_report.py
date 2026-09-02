@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 import urllib.error
+import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import patch
@@ -23,6 +24,64 @@ class _Response:
         return False
 
 
+def _payload_opener(payload) -> Callable[..., _Response]:
+    """Return an opener that always serves one decoded JSON payload."""
+
+    def opener(request, timeout=30) -> _Response:
+        return _Response(payload)
+
+    return opener
+
+
+def _http_error_opener(
+    status: int,
+    body: bytes,
+    *,
+    reason: str = "server error",
+    seen: list[str] | None = None,
+) -> Callable:
+    """Return an opener that records its URL, then raises one HTTP response."""
+
+    def opener(request, timeout=30):
+        if seen is not None:
+            seen.append(request.full_url)
+        raise urllib.error.HTTPError(
+            request.full_url, status, reason, {}, io.BytesIO(body)
+        )
+
+    return opener
+
+
+def _credential_fallback_opener(
+    status: int, seen: list[dict], payload: dict
+) -> Callable[..., _Response]:
+    """Reject the project token, record both attempts and accept the account token."""
+
+    def opener(request, timeout=30) -> _Response:
+        seen.append(dict(request.header_items()))
+        if request.get_header("Project-token"):
+            raise urllib.error.HTTPError(
+                request.full_url,
+                status,
+                "auth rejected",
+                {},
+                io.BytesIO(b"bad token"),
+            )
+        return _Response(payload)
+
+    return opener
+
+
+def _url_recording_opener(urls: list[str], payload: dict) -> Callable[..., _Response]:
+    """Record each requested URL while serving one decoded payload."""
+
+    def opener(request, timeout=30) -> _Response:
+        urls.append(request.full_url)
+        return _Response(payload)
+
+    return opener
+
+
 class CodacyApiReportTest(unittest.TestCase):
     def test_project_token_is_preferred_but_account_token_is_retained_as_fallback(self):
         from scripts.codacy_api_report import credential_candidates
@@ -36,34 +95,14 @@ class CodacyApiReportTest(unittest.TestCase):
     def test_auth_rejection_retries_once_with_account_token_for_401_and_403(self):
         from scripts.codacy_api_report import fetch_issues
 
-        # Built by a factory, not defined inside the loop. A closure written in the loop
-        # body reads the loop variable when it is *called*, which gives the right status
-        # today only because the call happens in the same iteration; if it ever outlived
-        # the iteration, the 403 case would silently re-test 401 and report both as
-        # covered. The factory gives each opener its own scope, so the binding is a
-        # property of the structure rather than of the call timing — and, unlike keyword
-        # defaults, it does so without putting a mutable list in a signature.
-        def make_opener(status, seen) -> Callable[..., _Response]:
-            """An opener that records each request and rejects the project token."""
-
-            def opener(request, timeout=30) -> _Response:
-                seen.append(dict(request.header_items()))
-                if request.get_header("Project-token"):
-                    raise urllib.error.HTTPError(
-                        request.full_url,
-                        status,
-                        "auth rejected",
-                        {},
-                        io.BytesIO(b"bad token"),
-                    )
-                return _Response({"data": [{"id": "issue-1"}], "pagination": {}})
-
-            return opener
-
         for status in (401, 403):
             with self.subTest(status=status):
                 seen = []
-                opener = make_opener(status, seen)
+                opener = _credential_fallback_opener(
+                    status,
+                    seen,
+                    {"data": [{"id": "issue-1"}], "pagination": {}},
+                )
 
                 issues = fetch_issues(
                     "gh", "org", "repo", "project", "account", opener=opener
@@ -76,16 +115,12 @@ class CodacyApiReportTest(unittest.TestCase):
     def test_non_auth_http_error_does_not_fall_back(self):
         from scripts.codacy_api_report import CodacyAPIError, fetch_issues
 
-        calls = 0
-
-        def opener(request, timeout=30):
-            nonlocal calls
-            calls += 1
-            raise urllib.error.HTTPError(request.full_url, 500, "server error", {}, io.BytesIO(b"boom"))
+        seen = []
+        opener = _http_error_opener(500, b"boom", seen=seen)
 
         with self.assertRaises(CodacyAPIError) as caught:
             fetch_issues("gh", "org", "repo", "project", "account", opener=opener)
-        self.assertEqual(calls, 1)
+        self.assertEqual(len(seen), 1)
         self.assertIn("HTTP 500", str(caught.exception))
 
     def test_cursor_pagination_accumulates_all_issues(self):
@@ -128,6 +163,93 @@ class CodacyApiReportTest(unittest.TestCase):
             fetch_issues("gh", "org", "repo", "project", "", opener=opener)
         self.assertIn("not valid JSON", str(caught.exception))
 
+    def test_invalid_utf8_becomes_a_named_error(self):
+        """Invalid response bytes are an API failure, not an uncaught decoder traceback."""
+        from scripts.codacy_api_report import CodacyAPIError, fetch_issues
+
+        class _RawResponse:
+            def __enter__(self):
+                return io.BytesIO(b'{"data":"\x80"}')
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        def opener(request, timeout=30) -> _RawResponse:
+            return _RawResponse()
+
+        with self.assertRaises(CodacyAPIError) as caught:
+            fetch_issues("gh", "org", "repo", "project", "", opener=opener)
+        self.assertIn("not valid JSON", str(caught.exception))
+
+    def test_missing_data_is_refused_instead_of_becoming_a_clean_result(self):
+        """A malformed 200 response must not be published as zero repository issues."""
+        from scripts.codacy_api_report import CodacyAPIError, fetch_issues
+
+        opener = _payload_opener({"pagination": {}})
+
+        with self.assertRaises(CodacyAPIError) as caught:
+            fetch_issues("gh", "org", "repo", "project", "", opener=opener)
+        self.assertIn("data", str(caught.exception))
+
+    def test_non_object_issue_is_refused_instead_of_being_dropped_from_the_count(self):
+        """Every API element is evidence; silently discarding malformed elements undercounts."""
+        from scripts.codacy_api_report import CodacyAPIError, fetch_issues
+
+        opener = _payload_opener(
+            {"data": [{"id": 1}, "not-an-object"], "pagination": {}}
+        )
+
+        with self.assertRaises(CodacyAPIError) as caught:
+            fetch_issues("gh", "org", "repo", "project", "", opener=opener)
+        self.assertIn("data", str(caught.exception))
+
+    def test_credential_header_is_not_forwarded_by_urllib_redirects(self):
+        """A cross-origin redirect must not inherit the Codacy credential header."""
+        from scripts.codacy_api_report import _Endpoint, _page_request
+
+        request = _page_request(
+            _Endpoint(base="https://app.codacy.com/api/v3/issues", method="GET"),
+            "project-token",
+            "PLACEHOLDER-PROJECT-TOKEN",
+            None,
+        )
+        redirected = urllib.request.HTTPRedirectHandler().redirect_request(
+            request,
+            None,
+            302,
+            "Found",
+            {},
+            "https://example.invalid/collect",
+        )
+        self.assertIsNotNone(redirected)
+        self.assertEqual(request.get_header("Project-token"), "PLACEHOLDER-PROJECT-TOKEN")
+        self.assertIsNone(redirected.get_header("Project-token"))
+
+    def test_cursor_must_be_a_non_empty_string_when_present(self):
+        """Malformed cursors cannot truncate pagination or be stringified into a new request."""
+        from scripts.codacy_api_report import CodacyAPIError, fetch_issues
+
+        for cursor in (None, "", 0, False, [], {}, 3):
+            with self.subTest(cursor=cursor):
+                opener = _payload_opener(
+                    {"data": [], "pagination": {"cursor": cursor}}
+                )
+
+                with self.assertRaises(CodacyAPIError) as caught:
+                    fetch_issues("gh", "org", "repo", "project", "", opener=opener)
+                self.assertIn("cursor must be a string", str(caught.exception))
+
+    def test_repeated_cursor_is_refused_instead_of_looping_forever(self):
+        """The second occurrence of one cursor terminates with a named error."""
+        from scripts.codacy_api_report import CodacyAPIError, fetch_issues
+
+        def opener(request, timeout=30) -> _Response:
+            return _Response({"data": [], "pagination": {"cursor": "same"}})
+
+        with self.assertRaises(CodacyAPIError) as caught:
+            fetch_issues("gh", "org", "repo", "project", "", opener=opener)
+        self.assertIn("repeated", str(caught.exception))
+
     def test_a_payload_that_is_not_a_json_object_is_refused_before_it_is_read(self):
         """An array or scalar body must raise a named error, not `AttributeError`.
 
@@ -139,17 +261,9 @@ class CodacyApiReportTest(unittest.TestCase):
         """
         from scripts.codacy_api_report import CodacyAPIError, fetch_issues
 
-        def make_opener(body) -> Callable[..., _Response]:
-            """An opener that answers with this decoded body, whatever its JSON type."""
-
-            def opener(request, timeout=30) -> _Response:
-                return _Response(body)
-
-            return opener
-
         for body in ([{"id": 1}], "unauthorized", 7, None):
             with self.subTest(body=body):
-                opener = make_opener(body)
+                opener = _payload_opener(body)
 
                 with self.assertRaises(CodacyAPIError) as caught:
                     fetch_issues("gh", "org", "repo", "project", "", opener=opener)
@@ -173,13 +287,20 @@ class CodacyApiReportTest(unittest.TestCase):
             "repo",
             [{
                 "filePath": "src/a`b.py\n| injected | row |",
-                "patternInfo": {"id": "P|1`x", "level": "High\nInjected", "category": "Sec|urity"},
+                "patternInfo": {
+                    "id": "P|1`x<details>[click](https://invalid)@spoof",
+                    "level": "High\nInjected",
+                    "category": "Sec|urity",
+                },
             }],
         )
         issue_row = next(line for line in report.splitlines() if line.startswith("| High"))
         self.assertIn(r"Sec\|urity", issue_row)
         self.assertIn(r"src/a\`b.py \| injected \| row \|", issue_row)
-        self.assertIn(r"P\|1\`x", issue_row)
+        self.assertIn(r"P\|1\`x&lt;details&gt;\[click\]\(https://invalid\)&#64;spoof", issue_row)
+        self.assertNotIn("<details>", issue_row)
+        self.assertNotIn("[click](https://invalid)", issue_row)
+        self.assertNotIn("@spoof", issue_row)
         self.assertNotIn("\n", issue_row)
 
     def test_the_token_is_scrubbed_from_an_error_body_before_it_reaches_a_log(self):
@@ -208,10 +329,7 @@ class CodacyApiReportTest(unittest.TestCase):
             b'"api-token":"PLACEHOLDER-ACCOUNT-TOKEN"}}}'
         )
 
-        def opener(request, timeout=30):
-            raise urllib.error.HTTPError(
-                request.full_url, 500, "server error", {}, io.BytesIO(body)
-            )
+        opener = _http_error_opener(500, body)
 
         with self.assertRaises(CodacyAPIError) as caught:
             fetch_issues("gh", "org", "repo", project, account, opener=opener)
@@ -240,10 +358,7 @@ class CodacyApiReportTest(unittest.TestCase):
         project = "PLACEHOLDER-PROJECT-TOKEN"
         body = b"x" * (MAX_ERROR_BODY_CHARS - 10) + project.encode() + b"tail"
 
-        def opener(request, timeout=30):
-            raise urllib.error.HTTPError(
-                request.full_url, 500, "server error", {}, io.BytesIO(body)
-            )
+        opener = _http_error_opener(500, body)
 
         with self.assertRaises(CodacyAPIError) as caught:
             fetch_issues("gh", "org", "repo", project, "", opener=opener)
@@ -272,10 +387,7 @@ class CodacyApiReportTest(unittest.TestCase):
         """An unset secret is the empty string, and replacing "" would redact everything."""
         from scripts.codacy_api_report import CodacyAPIError, fetch_issues
 
-        def opener(request, timeout=30):
-            raise urllib.error.HTTPError(
-                request.full_url, 500, "server error", {}, io.BytesIO(b"plain detail")
-            )
+        opener = _http_error_opener(500, b"plain detail")
 
         with self.assertRaises(CodacyAPIError) as caught:
             fetch_issues("gh", "org", "repo", "tok", "", opener=opener)
@@ -290,8 +402,17 @@ class CodacyApiReportTest(unittest.TestCase):
                     "org", "repo", [{"id": 1}], directory=Path(td)
                 )
             payload = json.loads(issues_path.read_text(encoding="utf-8"))
-            self.assertEqual(payload, {"scope": "repository", "data": [{"id": 1}]})
-            self.assertTrue(report_path.read_text(encoding="utf-8").startswith("# Codacy API report"))
+            self.assertEqual(
+                payload,
+                {
+                    "scope": "repository",
+                    "endpoint": "searchRepositoryIssues",
+                    "data": [{"id": 1}],
+                },
+            )
+            self.assertTrue(
+                report_path.read_text(encoding="utf-8").startswith("# Codacy API report")
+            )
 
 
 class CodacyPullRequestScopeTest(unittest.TestCase):
@@ -302,10 +423,9 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
     branch — a mistake this project has actually made — so the delta has to come from the
     endpoint that computes it.
 
-    That endpoint is `listCommitDeltaIssues`, not `listPullRequestIssues`. The latter refuses a
-    repository token (`401 ProjectTokenNotAllowed`), and this repository configures only
-    `CODACY_PROJECT_TOKEN`; the former lives in the repository analysis tree that token is
-    scoped to and answers the same question about a commit range.
+    That endpoint is `listCommitDeltaIssues`, not `listPullRequestIssues`. This repository's
+    project token has been measured as refused by both; the commit endpoint still defines the
+    correct source/target query and can succeed with an approved account token.
     """
 
     def test_the_commit_delta_endpoint_is_called_with_the_new_status_and_the_base_commit(self):
@@ -353,42 +473,37 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
         """
         from scripts.codacy_api_report import build_report, fetch_commit_delta_issues
 
-        def opener(request, timeout=30):
-            return _Response({"analyzed": False, "data": [], "pagination": {}})
+        opener = _payload_opener(
+            {"analyzed": False, "data": [], "pagination": {}}
+        )
 
         analyzed, issues = fetch_commit_delta_issues(
             "gh", "org", "repo", HEAD, "project", "", target_commit=BASE, opener=opener
         )
         self.assertFalse(analyzed)
 
-        report = build_report("org", "repo", issues, pull_request=32, analyzed=analyzed)
+        report = build_report(
+            "org", "repo", issues, pull_request=32, source_commit=HEAD,
+            target_commit=BASE, analyzed=analyzed,
+        )
         self.assertIn("NÃO DISPONÍVEL", report)
         self.assertNotIn("**0**", report)
 
         # And the analysed case does state the count, or the guard above would be satisfied by
         # a report that never reports anything.
-        clean = build_report("org", "repo", [], pull_request=32, analyzed=True)
+        clean = build_report(
+            "org", "repo", [], pull_request=32, source_commit=HEAD,
+            target_commit=BASE, analyzed=True,
+        )
         self.assertIn("**0**", clean)
         self.assertNotIn("NÃO DISPONÍVEL", clean)
 
     def test_a_missing_analyzed_flag_is_refused_rather_than_assumed_true(self):
         from scripts.codacy_api_report import CodacyAPIError, fetch_commit_delta_issues
 
-        # A factory again, not a keyword default. Binding the loop variable as `payload=payload`
-        # works, but puts a mutable dict in a signature — pylint W0102, and the finding Codacy
-        # reported for this pull request. The factory binds by scope instead, which needs no
-        # default at all.
-        def make_opener(payload) -> Callable[..., _Response]:
-            """An opener that answers every page with this payload."""
-
-            def opener(request, timeout=30) -> _Response:
-                return _Response(payload)
-
-            return opener
-
         for payload in ({"data": []}, {"analyzed": "true", "data": []}):
             with self.subTest(payload=payload):
-                opener = make_opener(payload)
+                opener = _payload_opener(payload)
 
                 with self.assertRaises(CodacyAPIError) as caught:
                     fetch_commit_delta_issues(
@@ -429,7 +544,11 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
                     {
                         "commitIssue": {
                             "filePath": "scripts/a.py",
-                            "patternInfo": {"id": "B101", "level": "Warning", "category": "Security"},
+                            "patternInfo": {
+                                "id": "B101",
+                                "level": "Warning",
+                                "category": "Security",
+                            },
                         },
                         "deltaType": "Added",
                     }
@@ -442,7 +561,11 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
                     {
                         "commitIssue": {
                             "filePath": "scripts/b.py",
-                            "patternInfo": {"id": "E731", "level": "Info", "category": "CodeStyle"},
+                            "patternInfo": {
+                                "id": "E731",
+                                "level": "Info",
+                                "category": "CodeStyle",
+                            },
                         },
                         "deltaType": "Added",
                     }
@@ -465,32 +588,156 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
         # The wrapper survives into the evidence rather than being flattened away.
         self.assertEqual(issues[0]["deltaType"], "Added")
 
-        report = build_report("org", "repo", issues, pull_request=32, analyzed=True)
+        report = build_report(
+            "org", "repo", issues, pull_request=32, source_commit=HEAD,
+            target_commit=BASE, analyzed=True,
+        )
         self.assertIn("| Warning | Security | scripts/a.py | B101 |", report)
         self.assertIn("| Info | CodeStyle | scripts/b.py | E731 |", report)
         self.assertNotIn("Unknown", report)
 
+    def test_malformed_delta_wrapper_is_refused_instead_of_rendering_unknown(self):
+        """A delta element must contain the issue object whose fields are reported."""
+        from scripts.codacy_api_report import CodacyAPIError, fetch_commit_delta_issues
+
+        for item in (
+            {"deltaType": "Added"},
+            {"commitIssue": "not-an-object", "deltaType": "Added"},
+            {"commitIssue": {"id": 1}},
+            {"commitIssue": {"id": 1}, "deltaType": 1},
+        ):
+            with self.subTest(item=item):
+                opener = _payload_opener(
+                    {"analyzed": True, "data": [item], "pagination": {}}
+                )
+
+                with self.assertRaises(CodacyAPIError) as caught:
+                    fetch_commit_delta_issues(
+                        "gh", "org", "repo", HEAD, "project", "", opener=opener
+                    )
+                self.assertIn("commit delta issue", str(caught.exception))
+
     def test_the_report_states_which_scope_produced_its_count(self):
-        from scripts.codacy_api_report import build_report
+        from scripts.codacy_api_report import CodacyAPIError, build_report
 
         repository = build_report("org", "repo", [{"id": 1}])
         self.assertIn("Scope: **repository**", repository)
         self.assertIn("not the delta of any pull request", repository)
 
-        pull = build_report("org", "repo", [{"id": 1}], pull_request=30, analyzed=True)
+        pull = build_report(
+            "org",
+            "repo",
+            [{"id": 1}],
+            pull_request=30,
+            source_commit=HEAD,
+            target_commit=BASE,
+            analyzed=True,
+        )
         self.assertIn("Scope: **pull request #30**", pull)
+        self.assertIn("listCommitDeltaIssues", pull)
+        self.assertNotIn("listPullRequestIssues", pull)
         self.assertIn("status=new", pull)
+
+        for source, target in (("", BASE), (HEAD, "")):
+            with self.subTest(source=source, target=target):
+                with self.assertRaises(CodacyAPIError):
+                    build_report(
+                        "org",
+                        "repo",
+                        [],
+                        pull_request=30,
+                        source_commit=source,
+                        target_commit=target,
+                    )
+        with self.assertRaises(CodacyAPIError):
+            build_report("org", "repo", [], scope="commit-delta")
+        contradictory = (
+            {"scope": "repository", "source_commit": HEAD},
+            {"scope": "repository", "target_commit": BASE},
+            {"scope": "commit-delta", "source_commit": HEAD, "status": "fixed"},
+            {"scope": "commit-delta", "source_commit": "not-a-sha"},
+            {
+                "pull_request": 30,
+                "source_commit": HEAD,
+                "target_commit": "not-a-sha",
+            },
+            {"pull_request": 0, "source_commit": HEAD, "target_commit": BASE},
+            {"pull_request": -1, "source_commit": HEAD, "target_commit": BASE},
+            {"pull_request": True, "source_commit": HEAD, "target_commit": BASE},
+            {"pull_request": "32", "source_commit": HEAD, "target_commit": BASE},
+            {"scope": "commit-delta", "source_commit": HEAD, "analyzed": "false"},
+            {"scope": "commit-delta", "source_commit": HEAD, "analyzed": 0},
+            {"scope": "commit-delta", "source_commit": HEAD, "analyzed": 1},
+            {"scope": "commit-delta", "source_commit": HEAD, "analyzed": None},
+        )
+        for provenance in contradictory:
+            with self.subTest(provenance=provenance):
+                with self.assertRaises(CodacyAPIError):
+                    build_report("org", "repo", [], **provenance)
+
+    def test_commit_delta_without_a_pull_request_label_keeps_its_real_scope(self):
+        """A manual commit delta is not the repository backlog merely because it lacks a PR."""
+        from scripts.codacy_api_report import collect
+
+        opener = _payload_opener({"analyzed": True, "data": [], "pagination": {}})
+
+        collected = collect(
+            "gh", "org", "repo", None, "project", "", src_commit=HEAD,
+            target_commit=BASE, opener=opener,
+        )
+        self.assertEqual(getattr(collected, "scope", None), "commit-delta")
+        self.assertEqual(getattr(collected, "endpoint", None), "listCommitDeltaIssues")
+        self.assertEqual(getattr(collected, "source_commit", None), HEAD)
+        self.assertEqual(getattr(collected, "target_commit", None), BASE)
+
+    def test_a_pull_request_label_requires_both_head_and_base_commits(self):
+        """A PR count cannot default to one push or silently become the repository backlog."""
+        from scripts.codacy_api_report import CodacyAPIError, collect
+
+        opener = _payload_opener(
+            {"analyzed": True, "data": [], "pagination": {}}
+        )
+        for source, target, missing in (
+            ("", BASE, "source"),
+            (HEAD, "", "target"),
+        ):
+            with self.subTest(missing=missing):
+                with self.assertRaises(CodacyAPIError) as caught:
+                    collect(
+                        "gh",
+                        "org",
+                        "repo",
+                        32,
+                        "project",
+                        "",
+                        src_commit=source,
+                        target_commit=target,
+                        opener=opener,
+                    )
+                self.assertIn(missing, str(caught.exception))
 
     def test_the_artifact_records_the_scope_it_was_produced_under(self):
         from scripts.codacy_api_report import write_artifacts
 
         with tempfile.TemporaryDirectory() as td:
             _, issues_path = write_artifacts(
-                "org", "repo", [], directory=Path(td), pull_request=30, analyzed=False
+                "org",
+                "repo",
+                [],
+                directory=Path(td),
+                pull_request=30,
+                source_commit=HEAD,
+                target_commit=BASE,
+                analyzed=False,
             )
             payload = json.loads(issues_path.read_text(encoding="utf-8"))
         self.assertEqual(payload["scope"], "pull-request")
+        self.assertEqual(payload["endpoint"], "listCommitDeltaIssues")
         self.assertEqual(payload["pullRequest"], 30)
+        self.assertEqual(payload["sourceCommit"], HEAD)
+        self.assertEqual(payload["targetCommit"], BASE)
+        self.assertEqual(payload["targetStrategy"], "explicit")
+        self.assertEqual(payload["status"], "new")
         self.assertIs(payload["analyzed"], False)
 
     def test_a_value_that_is_not_a_commit_sha_is_refused_before_any_request(self):
@@ -506,7 +753,18 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
         def opener(request, timeout=30):
             raise AssertionError(f"no request should be made: {request.full_url}")
 
-        bad = ("", "refs/pull/30/merge", "abc", "zzzzzzz", HEAD + "0", 30, 3.0, None, True)
+        bad = (
+            "",
+            "refs/pull/30/merge",
+            "abc",
+            "zzzzzzz",
+            HEAD + "0",
+            HEAD + "\n",
+            30,
+            3.0,
+            None,
+            True,
+        )
         for value in bad:
             with self.subTest(source=value):
                 with self.assertRaises(CodacyAPIError):
@@ -528,9 +786,9 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
 
         urls = []
 
-        def opener(request, timeout=30) -> _Response:
-            urls.append(request.full_url)
-            return _Response({"analyzed": True, "data": [], "pagination": {}})
+        opener = _url_recording_opener(
+            urls, {"analyzed": True, "data": [], "pagination": {}}
+        )
 
         fetch_commit_delta_issues("gh", "org", "repo", HEAD[:7], "project", "", opener=opener)
         self.assertIn(f"/commits/{HEAD[:7]}/deltaIssues", urls[0])
@@ -559,13 +817,11 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
 
         seen = []
 
-        def opener(request, timeout=30):
-            seen.append(dict(request.header_items()))
-            if request.get_header("Project-token"):
-                raise urllib.error.HTTPError(
-                    request.full_url, 403, "auth rejected", {}, io.BytesIO(b"bad token")
-                )
-            return _Response({"analyzed": True, "data": [], "pagination": {}})
+        opener = _credential_fallback_opener(
+            403,
+            seen,
+            {"analyzed": True, "data": [], "pagination": {}},
+        )
 
         analyzed, _ = fetch_commit_delta_issues(
             "gh", "org", "repo", HEAD, "project", "account", opener=opener
@@ -576,13 +832,12 @@ class CodacyPullRequestScopeTest(unittest.TestCase):
 
 
 class CodacyScopeDegradationTest(unittest.TestCase):
-    """What happens when the pull-request endpoint refuses the only configured credential.
+    """What happens when the commit-delta endpoint refuses the configured credential.
 
-    Observed live: Codacy answers `listPullRequestIssues` with
-    `401 {"code":"ProjectTokenNotAllowed"}` for a repository token. The endpoint is answered
-    only to an account token. A deployment holding just `CODACY_PROJECT_TOKEN` can therefore
-    reach every repository-scoped endpoint and no pull-request one. The delta therefore comes
-    from `listCommitDeltaIssues`; these cases cover what happens if Codacy refuses that one too.
+    Observed live: this repository's project token receives
+    `401 {"code":"ProjectTokenNotAllowed"}` from both delta endpoints. These cases prove that
+    the commit-delta refusal is typed and that an explicit repository fallback cannot inherit
+    the PR label.
     """
 
     @staticmethod
@@ -614,10 +869,7 @@ class CodacyScopeDegradationTest(unittest.TestCase):
         """The type must separate "needs a credential nobody has" from "something broke"."""
         from scripts.codacy_api_report import CodacyAPIError, CodacyAuthError, fetch_issues
 
-        def opener(request, timeout=30):
-            raise urllib.error.HTTPError(
-                request.full_url, 500, "server error", {}, io.BytesIO(b"boom")
-            )
+        opener = _http_error_opener(500, b"boom")
 
         with self.assertRaises(CodacyAPIError) as caught:
             fetch_issues("gh", "org", "repo", "project", "", opener=opener)
@@ -634,7 +886,8 @@ class CodacyScopeDegradationTest(unittest.TestCase):
         from scripts.codacy_api_report import build_report, collect
 
         collected = collect(
-            "gh", "org", "repo", 32, "project", "", src_commit=HEAD, opener=self._opener()
+            "gh", "org", "repo", 32, "project", "", src_commit=HEAD,
+            target_commit=BASE, opener=self._opener()
         )
         self.assertIsNone(collected.pull_request)
         self.assertEqual(collected.issues, [{"id": "backlog"}])
@@ -651,6 +904,18 @@ class CodacyScopeDegradationTest(unittest.TestCase):
         self.assertNotIn("Scope: **pull request", report)
         self.assertIn("NÃO DISPONÍVEL", report)
 
+    def test_refusal_detail_cannot_inject_rendered_markdown_into_the_bot_comment(self):
+        from scripts.codacy_api_report import _delta_refused_note
+
+        note = _delta_refused_note(
+            32,
+            "HTTP 401 <details><summary>SPOOF</summary></details> [click](https://invalid) @spoof",
+        )
+        self.assertNotIn("<details>", note)
+        self.assertNotIn("[click](https://invalid)", note)
+        self.assertNotIn("@spoof", note)
+        self.assertIn("&lt;details&gt;", note)
+
     def test_the_project_token_is_never_sent_to_the_pull_request_endpoint(self):
         """Codacy refuses a repository token there, so the reporter must not present it.
 
@@ -663,9 +928,9 @@ class CodacyScopeDegradationTest(unittest.TestCase):
 
         urls = []
 
-        def opener(request, timeout=30) -> _Response:
-            urls.append(request.full_url)
-            return _Response({"analyzed": True, "data": [], "pagination": {}})
+        opener = _url_recording_opener(
+            urls, {"analyzed": True, "data": [], "pagination": {}}
+        )
 
         collect(
             "gh", "org", "repo", 30, "project", "", src_commit=HEAD,
@@ -680,7 +945,8 @@ class CodacyScopeDegradationTest(unittest.TestCase):
         from scripts.codacy_api_report import collect, write_artifacts
 
         collected = collect(
-            "gh", "org", "repo", 32, "project", "", src_commit=HEAD, opener=self._opener()
+            "gh", "org", "repo", 32, "project", "", src_commit=HEAD,
+            target_commit=BASE, opener=self._opener()
         )
         with tempfile.TemporaryDirectory() as td:
             _, issues_path = write_artifacts(

@@ -39,6 +39,8 @@ jobs:
           bash -n scripts/*.sh
           python3 -m compileall -q policy_engine/genoma_policy scripts evidence_adapters
           python3 -m unittest discover -s tests -v
+      - name: Test Codacy comment behavior
+        run: node --test tests/test_codacy_pr_comment.js
       - name: Build and test MCP
         working-directory: mcp
         run: |

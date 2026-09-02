@@ -1,70 +1,44 @@
 name: Codacy API Report
 
 on:
-  workflow_dispatch:
-    inputs:
-      pull_request:
-        description: 'Pull request number, used only to label the report.'
-        required: false
-        type: string
-      commit:
-        description: 'Head commit SHA to take the delta from. Leave empty for the repository-wide backlog.'
-        required: false
-        type: string
-      base_commit:
-        description: 'Base commit SHA the delta is measured against. Defaults to the head commit''s parent.'
-        required: false
-        type: string
-  pull_request:
+  pull_request_target:
+    branches: [main]
     types: [opened, synchronize, reopened]
 
-permissions:
-  contents: read
-  pull-requests: write
+# This workflow receives a Codacy credential and can write one PR comment. GitHub loads
+# pull_request_target workflows from the trusted base branch; the checkout below pins that
+# same base SHA. The pull request's head is data only and is never executed by this job.
+permissions: {}
 
 jobs:
   report:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: codacy-report
+    permissions:
+      contents: read
+      pull-requests: write
     concurrency:
-      # `github.ref` is the same for every manual dispatch from a branch, so two
-      # `workflow_dispatch` runs asking about different pull requests shared one group and,
-      # with `cancel-in-progress`, the second cancelled the first. The requested scope is
-      # part of the identity of the run.
-      group: codacy-api-report-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.pull_request || github.ref }}
+      group: codacy-api-report-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     env:
       CODACY_PROVIDER: gh
       CODACY_ORG: ${{ github.repository_owner }}
       CODACY_REPO: ${{ github.event.repository.name }}
-      # The pull-request number is a *label* for the report. It is never sent to Codacy:
-      # `listPullRequestIssues` refuses a repository token, and this repository configures only
-      # CODACY_PROJECT_TOKEN.
-      CODACY_PULL_REQUEST: ${{ github.event.pull_request.number || inputs.pull_request }}
-      # These two select the scope. With a source commit the reporter asks
-      # `listCommitDeltaIssues` — repository-scoped, so the project token reaches it — for the
-      # issues this branch introduces against its base. Empty means the repository-wide
-      # backlog. The two totals answer different questions and must never be quoted for one
-      # another.
-      #
-      # The base SHA, not the parent commit: left to its default Codacy compares the head
-      # against its own predecessor on the branch, which is the delta of the last push rather
-      # than of the branch against what it will merge into.
-      CODACY_COMMIT: ${{ github.event.pull_request.head.sha || inputs.commit }}
-      CODACY_BASE_COMMIT: ${{ github.event.pull_request.base.sha || inputs.base_commit }}
+      CODACY_PULL_REQUEST: ${{ github.event.pull_request.number }}
+      CODACY_COMMIT: ${{ github.event.pull_request.head.sha }}
+      CODACY_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
     steps:
-      - name: Checkout repository
+      - name: Checkout trusted base revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
 
-      # `tests.test_codacy_pr_comment` is guarded by `skipUnless(node)`. Without this check a
-      # runner image that dropped Node would skip the whole class and the job would still be
-      # green, reporting a passing regression suite that never ran the upsert.
-      - name: Require Node for the comment regression tests
-        shell: bash
-        run: node --version
-
-      - name: Run Codacy reporter regression tests
-        shell: bash
-        run: python3 -m unittest tests.test_codacy_api_report tests.test_codacy_pr_comment -v
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
 
       - name: Detect Codacy API credential
         id: token
@@ -86,9 +60,7 @@ jobs:
           {
             echo '## Codacy API report'
             echo
-            echo 'NÃO DISPONÍVEL — no Codacy API token is configured.'
-            echo
-            echo 'Add repository secret `CODACY_PROJECT_TOKEN` (preferred) or `CODACY_API_TOKEN`, then rerun this workflow.'
+            echo 'NÃO DISPONÍVEL — no Codacy API token is available to the trusted publisher job.'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Query Codacy API and build report
@@ -111,7 +83,7 @@ jobs:
           retention-days: 30
 
       - name: Publish report on pull request
-        if: github.event_name == 'pull_request' && steps.token.outputs.available == 'true'
+        if: steps.token.outputs.available == 'true'
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           script: |

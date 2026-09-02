@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import html
 import json
 import os
 import re
@@ -16,6 +17,12 @@ from typing import NamedTuple
 
 AUTH_FAILURE_CODES = {401, 403}
 API_ROOT = "https://app.codacy.com/api/v3/analysis/organizations"
+REPOSITORY_SCOPE = "repository"
+PULL_REQUEST_SCOPE = "pull-request"
+COMMIT_DELTA_SCOPE = "commit-delta"
+REPOSITORY_ENDPOINT = "searchRepositoryIssues"
+COMMIT_DELTA_ENDPOINT = "listCommitDeltaIssues"
+COMMIT_DELTA_STATUS = "new"
 
 
 class CodacyAPIError(RuntimeError):
@@ -28,10 +35,11 @@ class CodacyAuthError(CodacyAPIError):
     Distinguished from other failures because it is the one that can mean "this endpoint is
     outside the credential's scope" rather than "something is broken". Codacy answers
     `listPullRequestIssues` only to an account token, refusing a repository token with
-    `401 ProjectTokenNotAllowed` — observed live in run 33434452877. That is why the delta is
-    taken from `listCommitDeltaIssues` instead, which sits in the repository analysis tree the
-    project token is scoped to; this class exists so a scope refusal on the delta can be told
-    apart from a broken credential and reported rather than crashing the run.
+    `401 ProjectTokenNotAllowed` — observed live in run 33434452877. The reporter therefore
+    uses `listCommitDeltaIssues`, whose response can answer the same branch-delta question,
+    but this repository's project token has also been measured as refused there. This class
+    lets that scope refusal be distinguished from a broken credential and reported rather
+    than converted into a false clean result.
     """
 
 
@@ -164,14 +172,16 @@ def _page_request(
     if cursor:
         query["cursor"] = cursor
     url = endpoint.base + ("?" + urllib.parse.urlencode(query) if query else "")
-    headers = {
-        token_header: token,
-        "Accept": "application/json",
-        "User-Agent": USER_AGENT,
-    }
+    headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
     if endpoint.body is not None:
         headers["Content-Type"] = "application/json"
-    return urllib.request.Request(url, data=endpoint.body, method=endpoint.method, headers=headers)
+    request = urllib.request.Request(
+        url, data=endpoint.body, method=endpoint.method, headers=headers
+    )
+    # `urllib` copies ordinary headers when it follows a redirect. Credentials are deliberately
+    # unredirected so a Codacy response cannot forward them to another origin.
+    request.add_unredirected_header(token_header, token)
+    return request
 
 
 def _paged_payloads(endpoint: _Endpoint, token_header: str, token: str, *, opener: Callable):
@@ -190,7 +200,7 @@ def _paged_payloads(endpoint: _Endpoint, token_header: str, token: str, *, opene
         with opener(request, timeout=30) as response:
             try:
                 payload = json.load(response)
-            except json.JSONDecodeError as exc:
+            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
                 # A 200 carrying something that is not JSON is an answer from a proxy, a login
                 # page or an error template, not from Codacy. `JSONDecodeError` escaped every
                 # handler here and reached `main` as a traceback, which reads like a bug in
@@ -209,13 +219,18 @@ def _paged_payloads(endpoint: _Endpoint, token_header: str, token: str, *, opene
             )
         yield payload
 
-        pagination = payload.get("pagination")
-        if pagination is not None and not isinstance(pagination, dict):
-            raise CodacyAPIError("Codacy API returned a non-object pagination field")
-        next_cursor = pagination.get("cursor") if pagination else None
-        if not next_cursor:
+        if "pagination" not in payload:
             return
-        next_cursor = str(next_cursor)
+        pagination = payload["pagination"]
+        if not isinstance(pagination, dict):
+            raise CodacyAPIError("Codacy API returned a non-object pagination field")
+        if "cursor" not in pagination:
+            return
+        next_cursor = pagination["cursor"]
+        if not isinstance(next_cursor, str) or not next_cursor:
+            raise CodacyAPIError(
+                "Codacy API pagination cursor must be a string when present"
+            )
         if next_cursor in seen_cursors:
             raise CodacyAPIError("Codacy API repeated a pagination cursor")
         seen_cursors.add(next_cursor)
@@ -224,10 +239,14 @@ def _paged_payloads(endpoint: _Endpoint, token_header: str, token: str, *, opene
 
 def _page_issues(payload: dict) -> list[dict]:
     """The issue objects on one page, refusing a `data` field that is not a list."""
-    data = payload.get("data", [])
+    if "data" not in payload:
+        raise CodacyAPIError("Codacy API omitted the required data field")
+    data = payload["data"]
     if not isinstance(data, list):
         raise CodacyAPIError("Codacy API returned a non-list data field")
-    return [item for item in data if isinstance(item, dict)]
+    if any(not isinstance(item, dict) for item in data):
+        raise CodacyAPIError("Codacy API data field contains a non-object issue")
+    return data
 
 
 def _fetch_pages(
@@ -275,7 +294,15 @@ def _fetch_delta_pages(
                 "Codacy API omitted the required `analyzed` field for the commit delta"
             )
         analyzed = page_analyzed if analyzed is None else (analyzed and page_analyzed)
-        issues.extend(_page_issues(payload))
+        page_issues = _page_issues(payload)
+        for item in page_issues:
+            if not isinstance(item.get("commitIssue"), dict) or not isinstance(
+                item.get("deltaType"), str
+            ) or not item["deltaType"]:
+                raise CodacyAPIError(
+                    "Codacy API returned a malformed commit delta issue"
+                )
+        issues.extend(page_issues)
     if analyzed is None:
         raise CodacyAPIError("Codacy API returned no pages for the commit delta")
     return analyzed, issues
@@ -335,6 +362,14 @@ def fetch_issues(
 _COMMIT_SHA = re.compile(r"^[0-9a-fA-F]{7,40}$")
 
 
+def _validate_commit_sha(label: str, value: object) -> None:
+    """Refuse a non-empty value that is not a Codacy-compatible commit SHA."""
+    if not isinstance(value, str):
+        raise CodacyAPIError(f"invalid {label} commit SHA: {value!r}")
+    if value and not _COMMIT_SHA.fullmatch(value):
+        raise CodacyAPIError(f"invalid {label} commit SHA: {value!r}")
+
+
 def fetch_commit_delta_issues(
     provider: str,
     org: str,
@@ -360,17 +395,12 @@ def fetch_commit_delta_issues(
     would be invisible in the report.
     """
     for label, value in (("source", src_commit), ("target", target_commit)):
-        # `isinstance` first: `re.match` raises `TypeError` on a non-string, which would
-        # replace the error naming the misconfiguration with one naming the regex.
-        if not isinstance(value, str):
-            raise CodacyAPIError(f"invalid {label} commit SHA: {value!r}")
-        if value and not _COMMIT_SHA.match(value):
-            raise CodacyAPIError(f"invalid {label} commit SHA: {value!r}")
+        _validate_commit_sha(label, value)
     if not src_commit:
         raise CodacyAPIError("no source commit configured for the delta query")
 
     base = _commit_delta_url(provider, org, repo, src_commit)
-    params = {"status": "new"}
+    params = {"status": COMMIT_DELTA_STATUS}
     if target_commit:
         params["targetCommitUuid"] = target_commit
     return _with_credentials(
@@ -400,7 +430,21 @@ def markdown_cell(value: object) -> str:
     """Normalize untrusted API text into one Markdown-table-safe line."""
     text = re.sub(r"[\r\n\t]+", " ", str(value))
     text = re.sub(r" {2,}", " ", text).strip()
-    return text.replace("\\", "\\\\").replace("|", "\\|").replace("`", "\\`")
+    text = html.escape(text, quote=False)
+    text = text.translate(
+        str.maketrans(
+            {
+                "\\": "\\\\",
+                "|": "\\|",
+                "`": "\\`",
+                "[": "\\[",
+                "]": "\\]",
+                "(": "\\(",
+                ")": "\\)",
+            }
+        )
+    )
+    return text.replace("@", "&#64;")
 
 
 #: How many issues the Markdown table carries. The full set is always in the JSON artifact;
@@ -413,7 +457,9 @@ def _issue_table(bodies: list[dict]) -> list[str]:
     lines = ["", "## Issues", "", "| Severity | Category | File | Pattern |", "|---|---|---|---|"]
     for issue in bodies[:MAX_TABLE_ROWS]:
         severity = markdown_cell(pick(issue, "patternInfo.level", "level", default="Unknown"))
-        category = markdown_cell(pick(issue, "patternInfo.category", "category", default="Unknown"))
+        category = markdown_cell(
+            pick(issue, "patternInfo.category", "category", default="Unknown")
+        )
         file_path = markdown_cell(pick(issue, "filePath", default=""))
         pattern = markdown_cell(pick(issue, "patternInfo.id", "patternId", default=""))
         lines.append(f"| {severity} | {category} | {file_path} | {pattern} |")
@@ -429,7 +475,7 @@ def _issue_table(bodies: list[dict]) -> list[str]:
 def _issue_body(issue: dict) -> dict:
     """The issue itself, whether it arrived bare or wrapped in a pull-request delta.
 
-    The pull-request endpoint answers with `CommitDeltaIssue` — `{commitIssue, deltaType}` —
+    The commit-delta endpoint answers with `CommitDeltaIssue` — `{commitIssue, deltaType}` —
     while the repository search answers with the issue directly. The JSON artifact keeps
     whichever shape Codacy sent, because it is the evidence; the unwrapping happens here, where
     the report is rendered, rather than by rewriting what the API said.
@@ -438,12 +484,84 @@ def _issue_body(issue: dict) -> dict:
     return inner if isinstance(inner, dict) else issue
 
 
+class _ReportContext(NamedTuple):
+    """Normalized provenance shared by the Markdown and JSON renderers."""
+
+    scope: str
+    endpoint: str
+    status: str
+    is_delta: bool
+
+
+def _report_context(
+    scope: str | None,
+    endpoint: str,
+    pull_request: int | None,
+    source_commit: str,
+    target_commit: str,
+    status: str,
+    analyzed: object,
+) -> _ReportContext:
+    """Resolve defaults once and refuse contradictory scope/provenance labels."""
+    if scope is None:
+        if pull_request is not None:
+            scope = PULL_REQUEST_SCOPE
+        elif source_commit:
+            scope = COMMIT_DELTA_SCOPE
+        else:
+            scope = REPOSITORY_SCOPE
+    if scope not in {REPOSITORY_SCOPE, PULL_REQUEST_SCOPE, COMMIT_DELTA_SCOPE}:
+        raise CodacyAPIError(f"unsupported Codacy report scope: {scope!r}")
+    if pull_request is not None and (
+        not isinstance(pull_request, int)
+        or isinstance(pull_request, bool)
+        or pull_request < 1
+    ):
+        raise CodacyAPIError(f"invalid pull request number: {pull_request!r}")
+    if scope == PULL_REQUEST_SCOPE and pull_request is None:
+        raise CodacyAPIError("pull-request scope requires a pull request number")
+    if scope != PULL_REQUEST_SCOPE and pull_request is not None:
+        raise CodacyAPIError(f"{scope} scope cannot carry a pull request label")
+    if scope == REPOSITORY_SCOPE and (source_commit or target_commit):
+        raise CodacyAPIError("repository scope cannot carry commit provenance")
+    is_delta = scope in {PULL_REQUEST_SCOPE, COMMIT_DELTA_SCOPE}
+    if is_delta and not source_commit:
+        raise CodacyAPIError(f"{scope} scope requires a source commit SHA")
+    if scope == PULL_REQUEST_SCOPE and not target_commit:
+        raise CodacyAPIError("pull-request scope requires a target commit SHA")
+    if is_delta:
+        if not isinstance(analyzed, bool):
+            raise CodacyAPIError("commit-delta analyzed field must be a boolean")
+        _validate_commit_sha("source", source_commit)
+        _validate_commit_sha("target", target_commit)
+    expected_endpoint = COMMIT_DELTA_ENDPOINT if is_delta else REPOSITORY_ENDPOINT
+    if endpoint and endpoint != expected_endpoint:
+        raise CodacyAPIError(
+            f"{scope} scope cannot claim the {endpoint!r} Codacy endpoint"
+        )
+    endpoint = endpoint or expected_endpoint
+    if is_delta:
+        if status and status != COMMIT_DELTA_STATUS:
+            raise CodacyAPIError(
+                f"commit-delta reports require status={COMMIT_DELTA_STATUS!r}"
+            )
+        status = COMMIT_DELTA_STATUS
+    elif status:
+        raise CodacyAPIError("repository scope cannot carry a commit-delta status")
+    return _ReportContext(scope, endpoint, status, is_delta)
+
+
 def build_report(
     org: str,
     repo: str,
     issues: Iterable[dict],
     *,
+    scope: str | None = None,
+    endpoint: str = "",
     pull_request: int | None = None,
+    source_commit: str = "",
+    target_commit: str = "",
+    status: str = "",
     analyzed: bool = True,
     note: str = "",
 ) -> str:
@@ -457,36 +575,75 @@ def build_report(
     `analyzed=False` suppresses the count entirely. An unanalysed pull request returns an empty
     issue list, and printing "0" for it would be a green verdict on work Codacy has not read.
     """
+    context = _report_context(
+        scope,
+        endpoint,
+        pull_request,
+        source_commit,
+        target_commit,
+        status,
+        analyzed,
+    )
+    scope, endpoint, status = context.scope, context.endpoint, context.status
+
     issue_list = list(issues)
     bodies = [_issue_body(item) for item in issue_list]
-    levels = Counter(str(pick(item, "patternInfo.level", "level", default="Unknown")) for item in bodies)
-    categories = Counter(str(pick(item, "patternInfo.category", "category", default="Unknown")) for item in bodies)
+    levels = Counter(
+        str(pick(item, "patternInfo.level", "level", default="Unknown"))
+        for item in bodies
+    )
+    categories = Counter(
+        str(pick(item, "patternInfo.category", "category", default="Unknown"))
+        for item in bodies
+    )
 
     lines = [
         "# Codacy API report",
         "",
         f"Repository: `{markdown_cell(org)}/{markdown_cell(repo)}`",
     ]
-    if pull_request is None:
+    if scope == REPOSITORY_SCOPE:
         lines += [
             "Scope: **repository** — every open issue Codacy currently reports for this "
             "repository, not the delta of any pull request.",
+            f"Endpoint: `{endpoint}`.",
             f"Issues returned by API: **{len(issue_list)}**",
         ]
         if note:
             lines += ["", note]
     else:
-        lines.append(
-            f"Scope: **pull request #{pull_request}** — issues Codacy attributes to this pull "
-            "request (`listPullRequestIssues`, `status=new`)."
-        )
-        if analyzed:
-            lines.append(f"New issues introduced by this pull request: **{len(issue_list)}**")
+        if scope == PULL_REQUEST_SCOPE:
+            lines.append(
+                f"Scope: **pull request #{pull_request}** — commit delta returned by "
+                f"`{endpoint}` (`status={status}`)."
+            )
         else:
+            lines.append(
+                f"Scope: **commit delta** — result returned by `{endpoint}` "
+                f"(`status={status}`)."
+            )
+        if source_commit:
+            lines.append(f"Source commit: `{markdown_cell(source_commit)}`.")
+        if target_commit:
+            lines.append(f"Target commit: `{markdown_cell(target_commit)}`.")
+        elif source_commit:
+            lines.append("Target: source commit parent (Codacy default).")
+        if pull_request is not None:
+            lines.append(
+                "The pull-request number labels the GitHub report; the source and target "
+                "commits above define the API query."
+            )
+        if analyzed:
+            subject = "this pull request" if pull_request is not None else "this commit delta"
+            lines.append(f"New issues introduced by {subject}: **{len(issue_list)}**")
+        else:
+            subject = (
+                "this pull request" if pull_request is not None else "the source commit"
+            )
             lines += [
                 "",
-                "**NÃO DISPONÍVEL** — Codacy has not yet analysed the latest commit of this "
-                "pull request (`analyzed: false`). The endpoint returns an empty issue list in "
+                f"**NÃO DISPONÍVEL** — Codacy has not yet analysed {subject} "
+                "(`analyzed: false`). The endpoint returns an empty issue list in "
                 "that state, so no count is reported here: an empty answer is not evidence of a "
                 "clean result. Rerun this workflow once Codacy finishes analysing the head "
                 "commit.",
@@ -514,7 +671,12 @@ def write_artifacts(
     issues: list[dict],
     *,
     directory: Path = Path("."),
+    scope: str | None = None,
+    endpoint: str = "",
     pull_request: int | None = None,
+    source_commit: str = "",
+    target_commit: str = "",
+    status: str = "",
     analyzed: bool = True,
     note: str = "",
 ) -> tuple[Path, Path]:
@@ -527,18 +689,43 @@ def write_artifacts(
     """
     report_path = directory / "codacy-report.md"
     issues_path = directory / "codacy-issues.json"
-    payload: dict[str, object] = {
-        "scope": "repository" if pull_request is None else "pull-request",
-        "data": issues,
-    }
+    context = _report_context(
+        scope,
+        endpoint,
+        pull_request,
+        source_commit,
+        target_commit,
+        status,
+        analyzed,
+    )
+    scope, endpoint, status, is_delta = context
+
+    payload: dict[str, object] = {"scope": scope, "endpoint": endpoint, "data": issues}
+    if is_delta:
+        payload["sourceCommit"] = source_commit or None
+        payload["targetCommit"] = target_commit or None
+        payload["targetStrategy"] = "explicit" if target_commit else "source-parent"
+        payload["status"] = status
+        payload["analyzed"] = analyzed
     if pull_request is not None:
         payload["pullRequest"] = pull_request
-        payload["analyzed"] = analyzed
     if note:
         payload["note"] = note
     issues_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     report_path.write_text(
-        build_report(org, repo, issues, pull_request=pull_request, analyzed=analyzed, note=note),
+        build_report(
+            org,
+            repo,
+            issues,
+            scope=scope,
+            endpoint=endpoint,
+            pull_request=pull_request,
+            source_commit=source_commit,
+            target_commit=target_commit,
+            status=status,
+            analyzed=analyzed,
+            note=note,
+        ),
         encoding="utf-8",
     )
     return report_path, issues_path
@@ -547,8 +734,8 @@ def write_artifacts(
 def parse_pull_request(raw: str) -> int | None:
     """The configured pull request number, or `None` for a repository-scoped run.
 
-    An unset or empty variable means "no pull request", which is how `workflow_dispatch` runs
-    reach the repository scope. Anything else must be a positive integer: a workflow that
+    An unset or empty variable means "no pull request" and therefore no PR label. Anything
+    else must be a positive integer: a workflow that
     substitutes an empty expression into a non-empty string, or passes a ref name where a
     number belongs, is a configuration fault and is refused here rather than silently falling
     back to the repository scope and publishing a backlog total under a pull request's name.
@@ -566,7 +753,8 @@ def _delta_refused_note(pull_request: int | None, detail: str) -> str:
     subject = f"pull request #{pull_request}" if pull_request else "commit"
     return (
         f"**NÃO DISPONÍVEL — {subject} delta.** Codacy refused `listCommitDeltaIssues` for the "
-        f"configured credential ({detail}). **The counts above are the repository backlog, not "
+        f"configured credential ({markdown_cell(detail)}). **The counts above are the "
+        "repository backlog, not "
         "this branch's new issues** — do not quote them as the delta. The delta published by "
         "the Codacy GitHub App on the pull request itself remains the authoritative summary."
     )
@@ -575,7 +763,12 @@ def _delta_refused_note(pull_request: int | None, detail: str) -> str:
 class Collected(NamedTuple):
     """What was actually fetched, and under which scope it may be quoted."""
 
+    scope: str
+    endpoint: str
     pull_request: int | None
+    source_commit: str
+    target_commit: str
+    status: str
     analyzed: bool
     issues: list[dict]
     note: str
@@ -595,19 +788,36 @@ def collect(
 ) -> Collected:
     """Fetch the branch delta when a commit is configured, else the repository backlog.
 
-    The delta comes from `listCommitDeltaIssues`, which the repository token reaches. The
-    pull-request number is carried only as a *label* for the report — it is never sent to
-    `listPullRequestIssues`, the endpoint that refuses a repository token outright, so the
-    project token is never presented to a credential class it is not scoped for.
+    The delta comes from `listCommitDeltaIssues`. The pull-request number is carried only as a
+    *label* for the report — it is never sent to `listPullRequestIssues`, the endpoint that
+    refuses a repository token outright. This repository's project token has also been
+    measured as refused by the commit-delta endpoint, so a typed refusal degrades explicitly
+    to repository scope instead of being mistaken for a clean delta.
 
     Degradation is narrow on purpose: only an authentication refusal falls back, and only to
     the repository backlog with the scope relabelled and a note saying so. It never keeps the
     pull-request label over a repository-wide count — that substitution, quoting the backlog as
     a branch's delta, is the specific error this whole change exists to make impossible.
     """
+    if pull_request is not None and not src_commit:
+        raise CodacyAPIError("pull request scope requires a source commit SHA")
+    if pull_request is not None and not target_commit:
+        raise CodacyAPIError("pull request scope requires a target commit SHA")
+    if target_commit and not src_commit:
+        raise CodacyAPIError("a target commit requires a source commit SHA")
     if not src_commit:
         return Collected(
-            None, True, fetch_issues(provider, org, repo, project_token, account_token, opener=opener), ""
+            REPOSITORY_SCOPE,
+            REPOSITORY_ENDPOINT,
+            None,
+            "",
+            "",
+            "",
+            True,
+            fetch_issues(
+                provider, org, repo, project_token, account_token, opener=opener
+            ),
+            "",
         )
     try:
         analyzed, issues = fetch_commit_delta_issues(
@@ -620,10 +830,26 @@ def collect(
             target_commit=target_commit,
             opener=opener,
         )
-        return Collected(pull_request, analyzed, issues, "")
+        scope = PULL_REQUEST_SCOPE if pull_request is not None else COMMIT_DELTA_SCOPE
+        return Collected(
+            scope,
+            COMMIT_DELTA_ENDPOINT,
+            pull_request,
+            src_commit,
+            target_commit,
+            COMMIT_DELTA_STATUS,
+            analyzed,
+            issues,
+            "",
+        )
     except CodacyAuthError as exc:
         return Collected(
+            REPOSITORY_SCOPE,
+            REPOSITORY_ENDPOINT,
             None,
+            "",
+            "",
+            "",
             True,
             fetch_issues(provider, org, repo, project_token, account_token, opener=opener),
             _delta_refused_note(pull_request, str(exc)),
@@ -650,7 +876,12 @@ def main() -> int:
         org,
         repo,
         collected.issues,
+        scope=collected.scope,
+        endpoint=collected.endpoint,
         pull_request=collected.pull_request,
+        source_commit=collected.source_commit,
+        target_commit=collected.target_commit,
+        status=collected.status,
         analyzed=collected.analyzed,
         note=collected.note,
     )

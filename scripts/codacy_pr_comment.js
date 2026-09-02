@@ -11,7 +11,10 @@ async function upsertCodacyReportComment({ github, owner, repo, issue_number, re
     per_page: 100,
   });
   const previous = comments.find(
-    (comment) => comment.user?.type === 'Bot' && comment.body?.includes(MARKER),
+    (comment) =>
+      comment.user?.type === 'Bot' &&
+      comment.user?.login === 'github-actions[bot]' &&
+      comment.body?.includes(MARKER),
   );
   if (previous) {
     await github.rest.issues.updateComment({
