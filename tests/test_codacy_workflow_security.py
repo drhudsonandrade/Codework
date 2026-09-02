@@ -198,10 +198,11 @@ class CodacyWorkflowTrustBoundaryTest(unittest.TestCase):
         self.assertIn("base: process.env.EXPECTED_BASE", report)
         self.assertIn("steps.current.outputs.current == 'true'", report)
         self.assertIn("steps.current.outputs.current != 'true'", report)
+        trusted_checkout = report.index("Checkout trusted default-branch revision")
         repair = report.index("Repair or invalidate prior report before processing")
         query = report.index("Query Codacy API and build report")
         publish = report.index("Publish report on pull request")
-        self.assertLess(checkout, repair)
+        self.assertLess(trusted_checkout, repair)
         self.assertLess(repair, query)
         self.assertLess(query, publish)
         for state in ("pending", "interrupted", "failed", "publish"):
