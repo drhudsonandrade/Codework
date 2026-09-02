@@ -105,7 +105,9 @@ class CodacyWorkflowTrustBoundaryTest(unittest.TestCase):
         global_header = workflow.split("\njobs:", 1)[0]
         self.assertIn("workflow_run:\n", header)
         self.assertIn("workflows: [Codacy API Report Tests]", header)
-        self.assertIn("types: [requested, in_progress, completed]", header)
+        self.assertIn("types: [completed]", header)
+        self.assertNotIn("requested", header)
+        self.assertNotIn("in_progress", header)
         self.assertNotIn("pull_request_target:", header)
         self.assertNotIn("\n  pull_request:\n", header)
         self.assertNotIn("workflow_dispatch:", header)
@@ -115,8 +117,8 @@ class CodacyWorkflowTrustBoundaryTest(unittest.TestCase):
             "github.event.workflow_run.head_branch }}",
             workflow,
         )
-        self.assertIn("queue: max", workflow)
-        self.assertIn("cancel-in-progress: false", workflow)
+        self.assertNotIn("queue:", workflow)
+        self.assertIn("cancel-in-progress: true", workflow)
         self.assertEqual(_job_entries(workflow), ["resolve:", "report:"])
 
         resolve = _job_block(workflow, "resolve")
