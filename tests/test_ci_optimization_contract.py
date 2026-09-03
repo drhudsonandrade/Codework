@@ -97,6 +97,18 @@ class CIOptimizationContractTest(unittest.TestCase):
         ):
             self.assertIn(f"name: {required_name}", workflow)
 
+    def test_required_check_classifiers_propagate_git_diff_failure(self):
+        for workflow_name in ("genoma-policy-engine.yml", "scaffold-validation.yml"):
+            with self.subTest(workflow=workflow_name):
+                changes = _job_block(_read(workflow_name), "changes")
+                self.assertNotIn("done < <(git diff", changes)
+                self.assertIn('changed_paths="$RUNNER_TEMP/', changes)
+                self.assertIn(
+                    'git diff --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$changed_paths"',
+                    changes,
+                )
+                self.assertIn('done < "$changed_paths"', changes)
+
     def test_scaffold_required_checks_use_job_level_markdown_gate(self):
         workflow = _read("scaffold-validation.yml")
         header = workflow.split("permissions:", 1)[0]

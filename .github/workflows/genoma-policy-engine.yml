@@ -51,6 +51,8 @@ jobs:
             exit 0
           fi
           policy_relevant=false
+          changed_paths="$RUNNER_TEMP/policy-changed-paths.zlist"
+          git diff --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$changed_paths"
           while IFS= read -r -d '' changed_path; do
             case "$changed_path" in
               manifests/RULESET_V3.4.sha256|normative/*|policy_engine/*|locks/*|template_store/*|scripts/validate_repo.py|scripts/verify_supply_chain_lock.py|scripts/materialize_ruleset.py|scripts/run_live_post_deployment_smoke.py|adapters/*|.github/workflows/genoma-policy-engine.yml)
@@ -58,7 +60,7 @@ jobs:
                 break
                 ;;
             esac
-          done < <(git diff --name-only -z "$BASE_SHA" "$HEAD_SHA")
+          done < "$changed_paths"
           echo "policy_relevant=$policy_relevant" >> "$GITHUB_OUTPUT"
 
   policy:

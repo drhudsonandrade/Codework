@@ -41,6 +41,8 @@ jobs:
             exit 0
           fi
           validation_required=false
+          changed_paths="$RUNNER_TEMP/scaffold-changed-paths.zlist"
+          git diff --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$changed_paths"
           while IFS= read -r -d '' changed_path; do
             case "$changed_path" in
               *.md)
@@ -50,7 +52,7 @@ jobs:
                 break
                 ;;
             esac
-          done < <(git diff --name-only -z "$BASE_SHA" "$HEAD_SHA")
+          done < "$changed_paths"
           echo "validation_required=$validation_required" >> "$GITHUB_OUTPUT"
 
   static:
