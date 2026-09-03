@@ -117,6 +117,15 @@ class UnapprovedRendererError(RuntimeError):
     """A FINAL report was about to be produced without the approved v3.0 template pack."""
 
 
+class _AuthorizedEditorialRender(dict):
+    """In-memory capability created only after an explicit FINAL renderer opt-in.
+
+    A JSON payload can reproduce every string field in a prepared render, so those fields
+    cannot prove that this process received the caller's authorization.  The private type
+    survives ``deepcopy`` between preparation and writing but cannot arrive through JSON.
+    """
+
+
 #: Written into the Execution Manifest, and read back to recognise an already-disclosed
 #: payload. One constant so the writer and the recogniser cannot drift.
 _PROGRAMMATIC_RENDERER = "aproximação programática (fora do pacote de modelos aprovado)"
@@ -185,7 +194,10 @@ def _disclose_programmatic_render(
             _assert_final_provenance(disclosed)
             return disclosed
         supplied = final_authorization.strip() if isinstance(final_authorization, str) else ""
-        if supplied and isinstance(recorded, str) and supplied == recorded.strip():
+        trusted_preparation = isinstance(disclosed, _AuthorizedEditorialRender)
+        if isinstance(recorded, str) and (
+            (supplied and supplied == recorded.strip()) or trusted_preparation
+        ):
             _assert_final_provenance(disclosed)
             return disclosed
     if final_mode and (
@@ -222,6 +234,8 @@ def _disclose_programmatic_render(
         manifest.update(updates)
         data["execution_manifest"] = manifest
     disclosed["data"] = data
+    if final_mode:
+        disclosed = _AuthorizedEditorialRender(disclosed)
 
     # `render_document` built `markdown` and `html` from `data` before this function ran, and
     # this function only edits `data`. `write_bundle` then wrote the updated data into the
