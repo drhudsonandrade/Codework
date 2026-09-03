@@ -202,6 +202,22 @@ class InterpretationRefusesUntestedLociTest(unittest.TestCase):
         })
         self.assertEqual(result["kind"], GENOTIPO_DE_RISCO)
 
+    def test_named_base_with_non_applicable_comparison_is_not_interpreted(self):
+        """A named allele does not override an explicit non-applicable comparison."""
+        from array_pipeline.clinical_findings import SEM_INTERPRETACAO
+
+        result = self._interpret({
+            "classification": "OBSERVADO",
+            "genotype": "AA",
+            "scope": "CLINICO",
+            "assessed_comparison": "NÃO APLICÁVEL",
+            "assessed_alleles": ["A"],
+            "assessed_allele": "A",
+            "basis": "alelo multibase incompatível com chamada SNP",
+        })
+        self.assertEqual(result["kind"], SEM_INTERPRETACAO)
+        self.assertIn("nenhuma comparação aplicável", result["basis"])
+
     def test_the_multi_allelic_set_alone_is_enough_to_grade(self):
         """A locus the classifier could test only through the list is still gradable."""
         from array_pipeline.clinical_findings import GENOTIPO_DE_RISCO

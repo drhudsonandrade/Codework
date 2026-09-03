@@ -100,12 +100,10 @@ def _pgx_reference(payload: dict[str, Any]) -> Any:
     manifest = payload.get("execution_manifest")
     if not isinstance(manifest, dict):
         return None
-    references = {
-        key: manifest[key]
-        for key in ("PGX_PASSPORT_SHA256", "COMPLETENESS_MATRIX_SHA256")
-        if manifest.get(key)
-    }
-    return references or None
+    required = ("PGX_PASSPORT_SHA256", "COMPLETENESS_MATRIX_SHA256")
+    if any(not manifest.get(key) for key in required):
+        return None
+    return {key: manifest[key] for key in required}
 
 
 def _count_findings_with_field(

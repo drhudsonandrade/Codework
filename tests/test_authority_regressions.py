@@ -62,11 +62,15 @@ class OnePageSummaryIdentityTest(unittest.TestCase):
         """An absent matrix identity cannot be replaced with an unavailable marker."""
         from scripts.build_one_page_summary import build_payload
 
-        with tempfile.TemporaryDirectory() as td:
-            matrix = Path(td) / "matrix.json"
-            matrix.write_text(json.dumps({"operational_status": "VERIFICADO"}), encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "non-empty case_id"):
-                build_payload(matrix_path=matrix, passport_path=None)
+        for case_id in (None, "   "):
+            with self.subTest(case_id=case_id), tempfile.TemporaryDirectory() as td:
+                matrix = Path(td) / "matrix.json"
+                payload = {"operational_status": "VERIFICADO"}
+                if case_id is not None:
+                    payload["case_id"] = case_id
+                matrix.write_text(json.dumps(payload), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "non-empty case_id"):
+                    build_payload(matrix_path=matrix, passport_path=None)
 
     def test_passport_and_matrix_case_ids_must_match(self):
         """A shared input digest cannot join artifacts from different cases."""

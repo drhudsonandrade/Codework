@@ -72,7 +72,22 @@ class TemplateFillAssayTest(unittest.TestCase):
                 "COMPLETENESS_MATRIX_SHA256": "m" * 64,
             },
         }
-        self.assertIsNone(_resolve("01", "RELATORIO_QC", payload))
+        failures: list[dict[str, str]] = []
+        self.assertIsNone(_resolve("01", "RELATORIO_QC", payload, failures))
+        self.assertEqual(failures, [])
+
+    def test_pgx_qc_requires_both_bound_artifacts(self):
+        """Neither half of the report 06 evidence pair resolves on its own."""
+        for key in ("PGX_PASSPORT_SHA256", "COMPLETENESS_MATRIX_SHA256"):
+            with self.subTest(only=key):
+                payload = {
+                    "case_id": "CASE",
+                    "input": {"schema": "raw_snp_array_v1"},
+                    "execution_manifest": {key: "a" * 64},
+                }
+                failures: list[dict[str, str]] = []
+                self.assertIsNone(_resolve("06", "RELATORIO_QC", payload, failures))
+                self.assertEqual(failures, [])
 
     def test_only_counts_defined_by_the_finding_contract_are_derived(self):
         """Dead aliases outside the compiled finding contract remain explicitly unavailable."""
