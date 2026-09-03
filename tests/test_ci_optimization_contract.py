@@ -4,6 +4,8 @@ import unittest
 from pathlib import Path
 from types import ModuleType
 
+from tests.workflow_test_utils import job_block as _job_block
+
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
@@ -55,20 +57,15 @@ def _subprocess_references(source: str) -> list[str]:
     return findings
 
 
-def _job_block(workflow: str, job_name: str) -> str:
-    marker = f"  {job_name}:\n"
-    if marker not in workflow:
-        raise AssertionError(f"job {job_name!r} is missing")
-    tail = workflow.split(marker, 1)[1]
-    lines: list[str] = []
-    for line in tail.splitlines(keepends=True):
-        if line.startswith("  ") and not line.startswith("    ") and line.strip().endswith(":"):
-            break
-        lines.append(line)
-    return "".join(lines)
-
-
 class CIOptimizationContractTest(unittest.TestCase):
+    def _assert_job_gate(self, workflow: str, job_name: str, output_name: str) -> None:
+        job = _job_block(workflow, job_name)
+        self.assertIn("needs: changes", job)
+        self.assertIn("always() &&", job)
+        self.assertIn("needs.changes.result != 'success'", job)
+        self.assertIn(f"needs.changes.outputs.{output_name} == 'true'", job)
+        self.assertIn("Require successful scope classification", job)
+
     def test_validation_workflows_cancel_superseded_pr_runs(self):
         for name in CONCURRENCY_WORKFLOWS:
             with self.subTest(workflow=name):
@@ -134,14 +131,10 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertIn('deleted_paths="$RUNNER_TEMP/audit-deleted-paths.zlist"', changes)
         self.assertIn('git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$changed_paths"', changes)
         self.assertIn('git diff --no-renames --diff-filter=D --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$deleted_paths"', changes)
-        self.assertIn('git ls-tree -r --name-only -z "$HEAD_SHA" -- > "$changed_paths"', changes)
+        self.assertIn('bash scripts/ci_changed_paths.sh "$BASE_SHA" "$HEAD_SHA" "$changed_paths" "$deleted_paths"', changes)
         self.assertIn('scripts/ci_change_classifier.py markdown --changed "$changed_paths" --deleted "$deleted_paths"', changes)
-        self.assertIn('scripts/ci_change_classifier.py|.github/workflows/genoma-audit.yml', changes)
-        audit = _job_block(workflow, "audit")
-        self.assertIn("needs: changes", audit)
-        self.assertIn("needs.changes.result != 'success'", audit)
-        self.assertIn("needs.changes.outputs.audit_required == 'true'", audit)
-        self.assertIn("Require successful scope classification", audit)
+        self.assertIn('scripts/ci_changed_paths.sh|scripts/ci_change_classifier.py|.github/workflows/genoma-audit.yml', changes)
+        self._assert_job_gate(workflow, "audit", "audit_required")
 
     def test_policy_required_checks_use_job_level_scope_gates(self):
         workflow = _read("genoma-policy-engine.yml")
@@ -160,12 +153,7 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertIn("'.github/governance/**'", push)
 
         for job_name in ("policy", "rego", "container"):
-            job = _job_block(workflow, job_name)
-            self.assertIn("needs: changes", job)
-            self.assertIn("always() &&", job)
-            self.assertIn("needs.changes.result != 'success'", job)
-            self.assertIn("needs.changes.outputs.policy_relevant == 'true'", job)
-            self.assertIn("Require successful scope classification", job)
+            self._assert_job_gate(workflow, job_name, "policy_relevant")
 
         secrets = _job_block(workflow, "secrets")
         self.assertNotIn("needs: changes", secrets)
@@ -187,6 +175,19 @@ class CIOptimizationContractTest(unittest.TestCase):
                 self.assertNotIn("done < <(git diff", changes)
                 self.assertIn("scripts/ci_change_classifier.py", changes)
 
+    def test_changed_path_shell_helper_is_wired_and_behaviorally_exercised(self):
+        helper = ROOT / "scripts" / "ci_changed_paths.sh"
+        regression = ROOT / "tests" / "test_ci_changed_paths.sh"
+        self.assertTrue(helper.is_file())
+        self.assertTrue(regression.is_file())
+        helper_text = helper.read_text(encoding="utf-8")
+        self.assertIn("0000000000000000000000000000000000000000", helper_text)
+        self.assertIn('git ls-tree -r --name-only -z "$head_sha" --', helper_text)
+        self.assertIn('git diff --no-renames --name-only -z "$base_sha" "$head_sha" --', helper_text)
+        self.assertIn('git diff --no-renames --diff-filter=D --name-only -z "$base_sha" "$head_sha" --', helper_text)
+        static = _job_block(_read("scaffold-validation.yml"), "static")
+        self.assertIn("bash tests/test_ci_changed_paths.sh", static)
+
     def test_scaffold_required_checks_use_job_level_markdown_gate(self):
         workflow = _read("scaffold-validation.yml")
         header = workflow.split("permissions:", 1)[0]
@@ -201,18 +202,13 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertIn('git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$changed_paths"', changes)
         self.assertIn('git diff --no-renames --diff-filter=D --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$deleted_paths"', changes)
         self.assertIn('scripts/ci_change_classifier.py markdown --changed "$changed_paths" --deleted "$deleted_paths"', changes)
-        self.assertIn('scripts/ci_change_classifier.py|.github/workflows/scaffold-validation.yml', changes)
+        self.assertIn('scripts/ci_changed_paths.sh|scripts/ci_change_classifier.py|.github/workflows/scaffold-validation.yml', changes)
         self.assertIn('PUSH_BASE_SHA: ${{ github.event.before }}', changes)
         self.assertIn('CURRENT_SHA: ${{ github.sha }}', changes)
-        self.assertIn('git ls-tree -r --name-only -z "$HEAD_SHA" -- > "$changed_paths"', changes)
+        self.assertIn('bash scripts/ci_changed_paths.sh "$BASE_SHA" "$HEAD_SHA" "$changed_paths" "$deleted_paths"', changes)
 
         for job_name in ("static", "container-canary"):
-            job = _job_block(workflow, job_name)
-            self.assertIn("needs: changes", job)
-            self.assertIn("always() &&", job)
-            self.assertIn("needs.changes.result != 'success'", job)
-            self.assertIn("needs.changes.outputs.validation_required == 'true'", job)
-            self.assertIn("Require successful scope classification", job)
+            self._assert_job_gate(workflow, job_name, "validation_required")
 
         self.assertIn("  static:\n", workflow)
         self.assertIn("  container-canary:\n", workflow)

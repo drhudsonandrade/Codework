@@ -3,24 +3,13 @@ import unittest
 from pathlib import Path
 from typing import NoReturn
 
+from tests.workflow_test_utils import job_block as _job_block
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def _fail(message: str) -> NoReturn:
     raise AssertionError(message)
-
-
-def _job_block(workflow: str, job_name: str) -> str:
-    marker = f"  {job_name}:\n"
-    if marker not in workflow:
-        _fail(f"job {job_name!r} is missing")
-    tail = workflow.split(marker, 1)[1]
-    lines: list[str] = []
-    for line in tail.splitlines(keepends=True):
-        if line.startswith("  ") and not line.startswith("    ") and line.strip().endswith(":"):
-            break
-        lines.append(line)
-    return "".join(lines)
 
 
 def _permissions(block: str) -> dict[str, str]:

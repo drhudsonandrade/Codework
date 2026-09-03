@@ -79,11 +79,11 @@ Keep `pull_request` unfiltered at workflow level so potentially required status 
 
 ### Four-plane audit
 
-Keep the workflow trigger broad. A lightweight fail-closed job classifies changes using both changed and deleted paths: only additions/modifications consisting exclusively of Markdown may skip the heavy audit. Any deletion, rename involving a non-Markdown source, non-Markdown change, or classifier failure runs the audit.
+Keep the workflow trigger broad. Pull requests generate checked rename-aware path lists inline before the trust guard; `main` pushes use the shared `scripts/ci_changed_paths.sh` helper, whose null/non-null behavior is exercised by `tests/test_ci_changed_paths.sh`. Only additions/modifications consisting exclusively of Markdown may skip the heavy audit. Any deletion, rename involving a non-Markdown source, non-Markdown change, or classifier failure runs the audit.
 
 ### Scaffold validation
 
-Keep both `pull_request` and `push` to `main` unfiltered at workflow level and preserve the existing `static` and `container-canary` job names. A lightweight fail-closed classifier may skip those heavy jobs only for additions/modifications consisting exclusively of Markdown; deletions, renames from non-Markdown paths, non-Markdown changes, and classifier failures require validation. Null push bases classify the full HEAD tree.
+Keep both `pull_request` and `push` to `main` unfiltered at workflow level and preserve the existing `static` and `container-canary` job names. Pull requests compute checked path lists inline and force validation when the classifier, helper, or controlling workflow changes. Main pushes use `scripts/ci_changed_paths.sh`; its regression test covers both normal and null-base pushes. Heavy jobs may be skipped only for additions/modifications consisting exclusively of Markdown; deletions, renames from non-Markdown paths, non-Markdown changes, and classifier failures require validation.
 
 The Docker canary remains the independent runtime check for code changes in this optimization. Linux/container execution remains authoritative on GitHub when Docker is unavailable on the NOAR host.
 

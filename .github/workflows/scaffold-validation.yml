@@ -52,22 +52,20 @@ jobs:
           esac
           changed_paths="$RUNNER_TEMP/scaffold-changed-paths.zlist"
           deleted_paths="$RUNNER_TEMP/scaffold-deleted-paths.zlist"
-          NULL_SHA=0000000000000000000000000000000000000000
-          if [ "$BASE_SHA" = "$NULL_SHA" ]; then
-            git ls-tree -r --name-only -z "$HEAD_SHA" -- > "$changed_paths"
-            : > "$deleted_paths"
+          if [ "$EVENT_NAME" = "push" ]; then
+            bash scripts/ci_changed_paths.sh "$BASE_SHA" "$HEAD_SHA" "$changed_paths" "$deleted_paths"
           else
             git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$changed_paths"
             git diff --no-renames --diff-filter=D --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$deleted_paths"
+            while IFS= read -r -d '' changed_path; do
+              case "$changed_path" in
+                scripts/ci_changed_paths.sh|scripts/ci_change_classifier.py|.github/workflows/scaffold-validation.yml)
+                  echo "validation_required=true" >> "$GITHUB_OUTPUT"
+                  exit 0
+                  ;;
+              esac
+            done < "$changed_paths"
           fi
-          while IFS= read -r -d '' changed_path; do
-            case "$changed_path" in
-              scripts/ci_change_classifier.py|.github/workflows/scaffold-validation.yml)
-                echo "validation_required=true" >> "$GITHUB_OUTPUT"
-                exit 0
-                ;;
-            esac
-          done < "$changed_paths"
           validation_required=$(python3 scripts/ci_change_classifier.py markdown --changed "$changed_paths" --deleted "$deleted_paths")
           echo "validation_required=$validation_required" >> "$GITHUB_OUTPUT"
 
@@ -107,11 +105,13 @@ jobs:
         run: python3 scripts/validate_repo.py
       - name: Validate shell and Python
         run: |
-          bash -n scripts/*.sh tests/test_wgs_align_or_stage.sh
+          bash -n scripts/*.sh tests/test_wgs_align_or_stage.sh tests/test_ci_changed_paths.sh
           python3 -m compileall -q policy_engine/genoma_policy scripts evidence_adapters
           python3 -m unittest discover -s tests -v
       - name: Exercise WGS alignment trust boundary
         run: bash tests/test_wgs_align_or_stage.sh
+      - name: Exercise CI changed-path push contract
+        run: bash tests/test_ci_changed_paths.sh
       - name: Test Codacy comment behavior
         run: node --test tests/test_codacy_pr_comment.js
       - name: Build and test MCP
