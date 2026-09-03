@@ -30,7 +30,7 @@ def main() -> None:
     manifests.mkdir(exist_ok=True)
     digest = hashlib.sha256(payload).hexdigest()
     manifest = manifests / "RULESET_V3.4.sha256"
-    manifest.write_text(f"{digest}  {CANONICAL}\n", encoding="ascii")
+    manifest.write_text(f"{digest}  {CANONICAL}\n", encoding="utf-8")
     print(ruleset)
     print(manifest)
 

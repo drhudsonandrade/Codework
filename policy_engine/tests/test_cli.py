@@ -245,7 +245,7 @@ class CliTests(unittest.TestCase):
             root = Path(td)
             payload = root / "payload.json"
             ledger = root / "audit.jsonl"
-            payload.write_text(json.dumps({"ready": False}))
+            payload.write_text(json.dumps({"ready": False}), encoding="utf-8")
             appended = self.run_cli("ledger-append", str(ledger), "POLICY_EVALUATED", str(payload))
             self.assertEqual(appended.returncode, 0, appended.stderr)
             verified = self.run_cli("ledger-verify", str(ledger))
