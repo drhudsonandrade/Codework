@@ -33,6 +33,12 @@ class ConsentRequiredIdentityTest(unittest.TestCase):
         with self.assertRaisesRegex(ConsentError, "case_id está vazio"):
             validate_record(record, today=date(2026, 8, 24))
 
+    def test_complete_identity_record_is_accepted(self):
+        """The fixture is a real positive control, not only input for negative tests."""
+        validated = validate_record(self._valid(), today=date(2026, 8, 24))
+        self.assertEqual(validated["case_id"], "CASE-1")
+        self.assertEqual(validated["input_sha256"], "a" * 64)
+
     def test_empty_input_sha256_is_rejected_without_runtime_binding(self):
         """An empty input_sha256 is rejected on the record alone."""
         record = self._valid()

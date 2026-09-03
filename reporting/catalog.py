@@ -11,12 +11,8 @@ equals what this module returns, so that builder's literal tuple cannot drift aw
 """
 from __future__ import annotations
 
-import json
 from functools import lru_cache
-from pathlib import Path
 from typing import Any
-
-CATALOG_PATH = Path(__file__).resolve().parent / "catalog.json"
 
 
 class CatalogError(KeyError):
@@ -25,8 +21,10 @@ class CatalogError(KeyError):
 
 @lru_cache(maxsize=1)
 def load_catalog() -> dict[str, Any]:
-    """The raw report catalog as written on disk."""
-    return json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+    """The report catalog after the engine's canonical schema validation."""
+    from reporting.engine import load_catalog as load_validated_catalog
+
+    return load_validated_catalog()
 
 
 def report(report_id: str) -> dict[str, Any]:

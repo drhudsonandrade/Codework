@@ -10,7 +10,6 @@ from typing import Any
 from .editorial_v3_hifi import DESIGN, write_editorial_bundle as _programmatic_write_editorial_bundle
 from . import template_v3 as _template_v3
 from .post_render_provenance import bind_execution_manifest_updates
-from .provenance import provenance_blockers
 
 _TEMPLATE_LOCK = threading.RLock()
 _ORIGINAL_LOADER = _template_v3.load_reference_manifest
@@ -132,15 +131,22 @@ def _assert_final_provenance(rendered: dict[str, Any]) -> None:
     checks the current data again. The import is local to avoid the engine/editorial cycle.
     """
     metadata = rendered.get("metadata") if isinstance(rendered.get("metadata"), dict) else {}
-    if str(metadata.get("mode", "")).upper() != "FINAL":
-        return
-    data = rendered.get("data") if isinstance(rendered.get("data"), dict) else {}
-    blockers = provenance_blockers(data)
-    if blockers:
+    render_mode = rendered.get("_render_mode")
+    metadata_mode = str(metadata.get("mode", "")).upper()
+    if render_mode != metadata_mode:
         from .engine import ReportReleaseError
 
+        raise ReportReleaseError("rendered mode was mutated after rendering")
+    if render_mode != "FINAL":
+        return
+    data = rendered.get("data") if isinstance(rendered.get("data"), dict) else {}
+    from .engine import ReportReleaseError, _publication_blockers
+
+    report_id = str(metadata.get("report_id") or "")
+    blockers = _publication_blockers(data, report_id)
+    if blockers:
         raise ReportReleaseError(
-            "post-render provenance gate failed: " + ", ".join(blockers)
+            "post-render publication gate failed: " + ", ".join(blockers)
         )
 
 
@@ -175,7 +181,11 @@ def _disclose_programmatic_render(
     existing = data.get("execution_manifest")
     if isinstance(existing, dict) and existing.get("RENDERER") == _PROGRAMMATIC_RENDERER:
         recorded = existing.get("PROGRAMMATIC_FINAL_AUTHORIZATION")
-        if not final_mode or (isinstance(recorded, str) and recorded.strip()):
+        if not final_mode:
+            _assert_final_provenance(disclosed)
+            return disclosed
+        supplied = final_authorization.strip() if isinstance(final_authorization, str) else ""
+        if supplied and isinstance(recorded, str) and supplied == recorded.strip():
             _assert_final_provenance(disclosed)
             return disclosed
     if final_mode and (
@@ -238,7 +248,11 @@ def _rerender_derived_views(disclosed: dict[str, Any]) -> None:
         raise _engine.ReportReleaseError(
             "cannot rebuild rendered views without valid metadata"
         )
-    final_mode = str(metadata.get("mode", "")).upper() == "FINAL"
+    render_mode = disclosed.get("_render_mode")
+    metadata_mode = str(metadata.get("mode", "")).upper()
+    if render_mode != metadata_mode:
+        raise _engine.ReportReleaseError("rendered mode was mutated after rendering")
+    final_mode = render_mode == "FINAL"
     if "markdown" not in disclosed:
         if final_mode:
             raise _engine.ReportReleaseError(

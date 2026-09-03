@@ -150,6 +150,7 @@ def build_panel(registry: dict[str, Any]) -> dict[str, Any]:
         targets.append(target)
 
     retrieved = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    registry_digest = sha256_json(registry)
     payload = {
         "schema": SCHEMA,
         "id": "GENOMA-PGX-CPIC-PANEL",
@@ -158,7 +159,7 @@ def build_panel(registry: dict[str, Any]) -> dict[str, Any]:
             + "."
             + sha256_json(
                 {
-                    "registry_sha256": sha256_json(registry),
+                    "registry_sha256": registry_digest,
                     "schema": SCHEMA,
                     "generator": "scripts/build_pgx_panel.py",
                 }
@@ -174,7 +175,7 @@ def build_panel(registry: dict[str, Any]) -> dict[str, Any]:
             "registry_id": registry.get("id"),
             "registry_version": registry.get("version"),
             "registry_source": registry.get("source"),
-            "registry_sha256": sha256_json(registry),
+            "registry_sha256": registry_digest,
         },
         "generated_at": retrieved,
         "targets": targets,

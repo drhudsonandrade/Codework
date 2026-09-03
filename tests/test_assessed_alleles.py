@@ -1,9 +1,7 @@
 """The assessed allele decides whether absence can be stated, so it must be sourced.
 
-Before curation all 29 targets sat in OBSERVADO and the completeness matrix could never say
-"tested and absent" about anything. After it, 19 of them are NÃO DETECTADO — which means the
-curation is now load-bearing for a clinical claim, and a wrong entry would assert absence of
-the wrong variant.
+The curation is load-bearing for clinical absence claims: a wrong entry could assert absence
+of the wrong variant.
 
 These tests pin the shipped registry to the recorded evidence offline, and pin the
 decision rules that produced it. They need no network.
@@ -329,6 +327,24 @@ class DecisionRuleTest(unittest.TestCase):
         self.assertEqual(target["assessed_allele_status"], "VERIFICADO")
         self.assertNotIn("assessed_allele_reason", target)
         self.assertNotIn("assessed_allele_references", target)
+
+    def test_reference_base_cannot_be_published_as_verified_assessed_allele(self):
+        """The public curation boundary rejects a VERIFIED reference allele."""
+        from scripts import curate_assessed_alleles as curation
+
+        unchecked = {
+            "rsid": "rs1",
+            "reference_allele": "A",
+            "assessed_allele": "A",
+            "status": "VERIFICADO",
+            "source": "ClinVar",
+            "reason": None,
+        }
+        with patch.object(curation, "_curate_target_unchecked", return_value=unchecked):
+            result = curation.curate_target("rs1")
+        self.assertEqual(result["status"], "NÃO DISPONÍVEL")
+        self.assertIsNone(result["assessed_allele"])
+        self.assertIn("reference", result["reason"])
 
 
 class BcheFallbackTest(unittest.TestCase):

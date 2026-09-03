@@ -60,7 +60,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.https_transport import is_https, policy_opener
+from scripts.https_transport import TransportPolicyError, is_https, policy_opener
 
 from array_pipeline.clinical_findings import normalised_moi
 from array_pipeline.targets import load_target_manifest, sha256_json
@@ -125,6 +125,8 @@ def _fetch(url: str, *, attempts: int = 4, accept: str = "application/json") -> 
         try:
             with policy_opener(is_https, "this source").open(request, timeout=120) as response:  # nosec B310
                 return response.read()
+        except TransportPolicyError as exc:
+            raise CurationError(f"transport policy refused {url}: {exc}") from exc
         except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
             last = exc
             if attempt < attempts - 1:

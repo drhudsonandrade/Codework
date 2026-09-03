@@ -240,7 +240,14 @@ def validate_record(
     else:
         for band in ("alta_confianca", "confianca_moderada", "baixa_cobertura",
                      "mapeamento_dificil", "nao_resolvidas"):
-            if not str(coverage_map.get(band) or "").strip():
+            value = coverage_map.get(band)
+            marker = _unavailable_problem(f"reliability_map.{band}", value)
+            if marker:
+                problems.append(marker)
+                continue
+            if _is_unavailable(value):
+                continue
+            if not isinstance(value, str) or not value.strip():
                 problems.append(
                     f"reliability_map.{band}: obrigatório; informe o valor ou a forma "
                     f"{UNAVAILABLE}"

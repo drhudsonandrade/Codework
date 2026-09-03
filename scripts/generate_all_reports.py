@@ -10,7 +10,11 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from reporting.editorial_v3 import prepare_editorial_render, write_editorial_bundle
+from reporting.editorial_v3 import (
+    UnapprovedRendererError,
+    prepare_editorial_render,
+    write_editorial_bundle,
+)
 from reporting.engine import ReportReleaseError, load_catalog, render_document, write_bundle
 from scripts.prepare_report_release import assemble_release
 
@@ -53,7 +57,7 @@ def main() -> int:
             paths = write_bundle(rendered, out)
             paths.update(write_editorial_bundle(rendered, out))
             generated[report_id] = {key: str(value) for key, value in paths.items()}
-    except ReportReleaseError as exc:
+    except (ReportReleaseError, UnapprovedRendererError) as exc:
         print(f"REPORT BLOCKED: {exc}", file=sys.stderr)
         return 2
 

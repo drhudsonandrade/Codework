@@ -258,7 +258,7 @@ comando pinado necessários para reproduzi-los. Eles não são evidência do HEA
 podem ser usados como alegação de desempenho.
 
 O comportamento reproduzível preservado dessa investigação é o suporte a evidência
-comprimida: `build_clinical_findings` lê o manifesto por `read_manifest_bytes`, que detecta
+comprimida: `build_clinical_findings` lê o manifesto por `read_manifest_text`, que detecta
 compressão pelo conteúdo do arquivo. O contrato é exercitado por
 `tests/test_clinical_findings_regressions.py::test_the_gene_disease_evidence_may_arrive_compressed`.
 Execute apenas esse conjunto com:
@@ -281,6 +281,19 @@ própria execução e que a saída os descreva como contagem de variantes, não 
 alélica.
 
 ## Reproduzir
+
+O recorte GWAS usado nesta curadoria é o release datado de **2026-08-24**. Baixe os
+dois arquivos exatos e verifique seus bytes antes de executar o construtor:
+
+```bash
+curl -fLO https://ftp.ebi.ac.uk/pub/databases/gwas/releases/2026/08/24/gwas-catalog-associations_ontology-annotated-full.zip
+curl -fLO https://ftp.ebi.ac.uk/pub/databases/gwas/releases/2026/08/24/gwas-catalog-download-ancestries-v1.0.3.1.txt
+printf '%s  %s\n' \
+  9109f1aa0f7a4e9a808dd277c2a321c82d98c86f199ff6bfc04c81e5f4d4ec20 \
+  gwas-catalog-associations_ontology-annotated-full.zip \
+  afcc1cb6e2c7230577e955436dd597a8fd730176e418ba71c14b29604d235f26 \
+  gwas-catalog-download-ancestries-v1.0.3.1.txt | sha256sum --check --strict
+```
 
 ```bash
 curl -O https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.txt.gz

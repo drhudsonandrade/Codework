@@ -26,12 +26,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from bootstrap_attestation import BootstrapAttestationError, verify_bootstrap_attestation
-from project_instructions_attestation import (
+from scripts.bootstrap_attestation import BootstrapAttestationError, verify_bootstrap_attestation
+from scripts.project_instructions_attestation import (
     ProjectInstructionsAttestationError,
     verify_project_instructions_attestation,
 )
-from https_transport import loopback_http_or_https, policy_opener
+from scripts.https_transport import loopback_http_or_https, policy_opener
 from reporting import deployment_target
 
 EXPECTED_SHA = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"

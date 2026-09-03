@@ -38,6 +38,7 @@ class ExecutionManifestAnchoringTest(unittest.TestCase):
     def test_every_execution_manifest_key_is_anchored(self):
         """Every execution-manifest key is anchored as a provenance field."""
         payload = self._compiled()
+        self.assertTrue(payload["execution_manifest"])
         fields = payload["provenance"]["fields"]
         for key in payload["execution_manifest"]:
             with self.subTest(key=key):

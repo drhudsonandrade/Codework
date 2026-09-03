@@ -33,7 +33,7 @@ from typing import Any
 
 import normative
 from array_pipeline.completeness import INTERPRETABLE, NAO_DETECTADO, NAO_TESTADO
-from array_pipeline.targets import read_manifest_bytes, sha256_json
+from array_pipeline.targets import read_manifest_text, sha256_json
 from reporting.case_dossier import (
     SEX_FEMALE,
     SEX_INTERSEX,
@@ -231,6 +231,7 @@ def _clinvar_for(
         if str(record.get("accession")) in allowed:
             records.append(record)
     discarded = len(all_records) - len(records)
+    discarded_by_coordinate = discarded - discarded_by_allele
     if not records:
         return {
             "status": UNAVAILABLE,
@@ -301,7 +302,8 @@ def _clinvar_for(
         "unrecognised_review_statuses": unrecognised_reviews,
         "review_stars": stars,
         "meets_review_threshold": stars >= MIN_STARS_FOR_FINDING,
-        "accessions_discarded_by_coordinate": discarded,
+        "accessions_discarded_by_coordinate": discarded_by_coordinate,
+        "accessions_discarded_by_allele": discarded_by_allele,
         # Which route admitted the records, so a reader can tell a coordinate-native release
         # row from a text search checked against an allowlist.
         "records_verified_by_coordinate": by_coordinate,
@@ -849,7 +851,7 @@ def build_clinical_findings(
     # 88 MB of JSON and ships compressed; reading it with `read_text` raised a
     # UnicodeDecodeError about byte 0x8b, which says nothing about the real cause and is why
     # the expanded evidence could not be made the default in the first place.
-    evidence = json.loads(read_manifest_bytes(Path(evidence_path)))
+    evidence = json.loads(read_manifest_text(Path(evidence_path)))
     if evidence.get("schema") != "genoma-gene-disease-validity-v1":
         raise ClinicalEvidenceError(
             f"unsupported gene-disease evidence schema: {evidence.get('schema')!r}"

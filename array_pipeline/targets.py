@@ -12,7 +12,7 @@ ALLOWED_SCOPES = {"CLINICO", "PREDISPOSICAO", "PESQUISA", "CURIOSIDADE"}
 ALLOWED_SOURCES = {"clinvar", "clingen", "cpic", "clinpgx", "gnomad", "pgs_catalog"}
 
 
-def read_manifest_bytes(path: Path) -> str:
+def read_manifest_text(path: Path) -> str:
     """Read a target manifest, transparently decompressing a `.gz`.
 
     The curated registry holds twenty-nine loci and the ClinVar-derived one holds tens of
@@ -61,7 +61,7 @@ def load_target_manifest(path: Path) -> dict[str, Any]:
     here rather than at use: a duplicate locus would be interrogated twice and weighted
     twice, and an unknown scope would reach the ranking as a value it cannot place.
     """
-    payload = json.loads(read_manifest_bytes(Path(path)))
+    payload = json.loads(read_manifest_text(Path(path)))
     if payload.get("schema") != "genoma-partial-genome-targets-v1":
         raise ValueError("unsupported target manifest schema")
     targets = payload.get("targets")

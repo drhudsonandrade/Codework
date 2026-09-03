@@ -553,22 +553,23 @@ def validate_core_runtime_dependencies(root: Path, errors: list[str]) -> None:
         visited.add(path)
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"))
-        except (OSError, SyntaxError) as exc:
+        except (OSError, UnicodeDecodeError, SyntaxError) as exc:
             errors.append(f"core module could not be parsed: {path.relative_to(root)}: {exc}")
             continue
         for node in _import_time_statements(tree.body):
             modules: list[str] = []
             if isinstance(node, ast.Import):
                 modules = [alias.name for alias in node.names]
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                if node.level == 0:
+            elif isinstance(node, ast.ImportFrom):
+                if node.level == 0 and node.module:
                     modules = [node.module]
                     modules.extend(f"{node.module}.{alias.name}" for alias in node.names)
-                else:
+                elif node.level > 0:
                     relative = path.relative_to(root).with_suffix("").parts[:-1]
                     keep = max(len(relative) - node.level + 1, 0)
-                    base = ".".join((*relative[:keep], node.module))
-                    modules = [base]
+                    base_parts = (*relative[:keep], *((node.module,) if node.module else ()))
+                    base = ".".join(base_parts)
+                    modules = [base] if base else []
                     modules.extend(f"{base}.{alias.name}" for alias in node.names)
             for module in modules:
                 name = module.split(".")[0]

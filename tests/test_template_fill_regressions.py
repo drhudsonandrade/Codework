@@ -76,9 +76,11 @@ class TemplateFillAssayTest(unittest.TestCase):
                 },
             ]
         }
-        self.assertEqual(_resolve("01", "N_ACHADOS_P1_P2", payload), "1")
-        self.assertIsNone(_resolve("01", "N_CONFIRMACOES", payload))
-        self.assertIsNone(_resolve("09", "N_CEGOS", payload))
+        failures: list[dict[str, str]] = []
+        self.assertEqual(_resolve("01", "N_ACHADOS_P1_P2", payload, failures), "1")
+        self.assertIsNone(_resolve("01", "N_CONFIRMACOES", payload, failures))
+        self.assertIsNone(_resolve("09", "N_CEGOS", payload, failures))
+        self.assertEqual(failures, [])
 
     def test_missing_input_is_unavailable_without_a_resolver_failure(self):
         """No input block means no assay fact; it is not an unknown declared schema."""

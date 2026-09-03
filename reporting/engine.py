@@ -49,19 +49,28 @@ def _assert_serializable_provenance(rendered: dict[str, Any]) -> None:
     gate. The check runs before ``mkdir`` so a refusal leaves no partial output behind.
     """
     metadata = rendered.get("metadata") if isinstance(rendered.get("metadata"), dict) else {}
-    if str(metadata.get("mode", "")).upper() != "FINAL":
-        return
-    data = rendered.get("data") if isinstance(rendered.get("data"), dict) else {}
-    blockers = provenance_blockers(data)
-    if blockers:
+    render_mode = rendered.get("_render_mode")
+    metadata_mode = str(metadata.get("mode", "")).upper()
+    if render_mode not in {"MODEL", "FINAL"}:
+        raise ReportReleaseError("rendered bundle carries no trusted render mode")
+    if metadata_mode != render_mode:
         raise ReportReleaseError(
-            "post-render provenance gate failed: " + ", ".join(blockers)
+            f"rendered mode was mutated after rendering: {metadata_mode!r} != {render_mode!r}"
         )
+    data = rendered.get("data") if isinstance(rendered.get("data"), dict) else {}
     report_id = str(metadata.get("report_id") or "")
     model = load_catalog().get(report_id)
     if model is None:
-        raise ReportReleaseError(f"unknown FINAL report model: {report_id!r}")
-    expected_markdown = _final_markdown(report_id, model, data)
+        raise ReportReleaseError(f"unknown report model: {report_id!r}")
+    if render_mode == "FINAL":
+        blockers = _publication_blockers(data, report_id)
+        if blockers:
+            raise ReportReleaseError(
+                "post-render publication gate failed: " + ", ".join(blockers)
+            )
+        expected_markdown = _final_markdown(report_id, model, data)
+    else:
+        expected_markdown = _model_markdown(report_id, model)
     if rendered.get("markdown") != expected_markdown:
         raise ReportReleaseError("rendered markdown no longer matches the bundled payload")
     expected_html = _to_html(expected_markdown, model["title"])
@@ -359,6 +368,7 @@ def render_document(report_id: str, data: dict[str, Any], *, mode: str = "MODEL"
         "publication_blockers": blockers,
     }
     return {
+        "_render_mode": mode,
         "metadata": metadata,
         "data": deepcopy(data),
         "markdown": markdown,

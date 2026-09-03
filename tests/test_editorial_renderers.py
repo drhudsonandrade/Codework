@@ -129,7 +129,9 @@ class EditorialRendererTest(unittest.TestCase):
         once = prepare_editorial_render(
             rendered, programmatic_final_authorization="unit-test visual QA"
         )
-        twice = prepare_editorial_render(once)
+        twice = prepare_editorial_render(
+            once, programmatic_final_authorization="unit-test visual QA"
+        )
         self.assertEqual(
             twice["data"]["execution_manifest"]["PROGRAMMATIC_FINAL_AUTHORIZATION"],
             "unit-test visual QA",
@@ -147,6 +149,44 @@ class EditorialRendererTest(unittest.TestCase):
         }
         with self.assertRaises(UnapprovedRendererError):
             prepare_editorial_render(rendered)
+
+    def test_payload_cannot_supply_its_own_final_authorization(self):
+        """Both publishable disclosure fields remain untrusted without caller opt-in."""
+        from reporting.engine import render_document
+        from reporting.editorial_v3 import prepare_editorial_render, UnapprovedRendererError
+
+        rendered = render_document("01", final_data(), mode="FINAL")
+        rendered["data"]["execution_manifest"].update(
+            {
+                "RENDERER": "aproximação programática (fora do pacote de modelos aprovado)",
+                "PROGRAMMATIC_FINAL_AUTHORIZATION": "forged in payload",
+            }
+        )
+        with self.assertRaises(UnapprovedRendererError):
+            prepare_editorial_render(rendered)
+
+    def test_mutating_final_mode_after_render_is_refused(self):
+        """Changing only public metadata cannot downgrade a FINAL payload to MODEL."""
+        from reporting.engine import ReportReleaseError, render_document
+        from reporting.editorial_v3 import prepare_editorial_render
+
+        rendered = render_document("01", final_data(), mode="FINAL")
+        rendered["metadata"]["mode"] = "MODEL"
+        with self.assertRaisesRegex(ReportReleaseError, "mode was mutated"):
+            prepare_editorial_render(rendered)
+
+    def test_mutating_final_ruleset_after_render_is_refused(self):
+        """The full publication gate is repeated at the serialization boundary."""
+        from reporting.engine import ReportReleaseError, render_document
+        from reporting.editorial_v3 import prepare_editorial_render
+
+        rendered = render_document("01", final_data(), mode="FINAL")
+        rendered["data"]["ruleset"]["sha256"] = "0" * 64
+        with self.assertRaisesRegex(ReportReleaseError, "publication gate failed"):
+            prepare_editorial_render(
+                rendered,
+                programmatic_final_authorization="unit-test visual QA",
+            )
 
     def test_final_report_writes_real_pdf_and_editable_docx(self):
         """A FINAL report writes a real PDF and an editable DOCX."""

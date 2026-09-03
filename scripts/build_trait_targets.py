@@ -47,7 +47,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from array_pipeline.qc import _ZipBackedTextStream, _check_zip_member
+from array_pipeline.qc import (
+    MAX_UNCOMPRESSED_BYTES,
+    _BoundedRaw,
+    _ZipBackedTextStream,
+    _check_zip_member,
+)
 from array_pipeline.targets import load_target_manifest, sha256_json
 from scripts.merge_target_manifests import SCOPE_RANK
 
@@ -82,11 +87,28 @@ def _open_associations(path: Path) -> io.TextIOWrapper:
         except Exception:
             archive.close()
             raise
+        bounded = io.BufferedReader(
+            _BoundedRaw(
+                raw,
+                limit=MAX_UNCOMPRESSED_BYTES,
+                name=f"{path}:{member.filename}",
+            )
+        )
         return _ZipBackedTextStream(
-            raw, archive, encoding="utf-8", errors="strict"
+            bounded, archive, encoding="utf-8", errors="strict"
         )
     if path.suffix == ".gz":
-        return io.TextIOWrapper(gzip.open(path, "rb"), encoding="utf-8", errors="strict")
+        raw = gzip.open(path, "rb")
+        try:
+            bounded = io.BufferedReader(
+                _BoundedRaw(raw, limit=MAX_UNCOMPRESSED_BYTES, name=str(path))
+            )
+            return io.TextIOWrapper(
+                bounded, encoding="utf-8", errors="strict"
+            )
+        except Exception:
+            raw.close()
+            raise
     return path.open("r", encoding="utf-8", errors="strict")
 
 
@@ -268,7 +290,14 @@ def build(
     loci: list[dict[str, Any]] = []
     target_stats: dict[str, int] = defaultdict(int)
 
-    for rsid in sorted(keep, key=lambda r: int(r[2:]) if r[2:].isdigit() else 0):
+    for rsid in sorted(
+        keep,
+        key=lambda r: (
+            0 if r[2:].isdigit() else 1,
+            int(r[2:]) if r[2:].isdigit() else 0,
+            r,
+        ),
+    ):
         records = [r for r in by_rsid[rsid] if r["term_id"] in wanted]
         positions = {
             (r["grch38"]["chromosome"], r["grch38"]["position"])

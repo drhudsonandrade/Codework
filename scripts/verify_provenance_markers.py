@@ -36,7 +36,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.https_transport import is_https, policy_opener
+from scripts.https_transport import TransportPolicyError, is_https, policy_opener
 
 from array_pipeline.provenance_probe import COMPLEMENT, load_markers
 
@@ -104,6 +104,10 @@ def fetch_refsnp(rsid: str, *, timeout: int = 30) -> dict[str, Any]:
     try:
         with policy_opener(is_https, "this source").open(request, timeout=timeout) as response:  # nosec B310
             return json.loads(response.read().decode("utf-8"))
+    except TransportPolicyError as exc:
+        raise MarkerVerificationError(
+            f"{rsid}: dbSNP transport policy refused the request: {exc}"
+        ) from exc
     except urllib.error.HTTPError as exc:
         raise MarkerVerificationError(
             f"{rsid}: dbSNP HTTP {exc.code}: {exc.reason}"

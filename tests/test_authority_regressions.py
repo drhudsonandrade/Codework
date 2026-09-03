@@ -13,6 +13,7 @@ from reporting.section_attestations import (
     CurationError,
     SCHEMA as CURATION_SCHEMA,
     curation_for_schema,
+    build_attestations,
     validate_curation,
 )
 from array_pipeline.qc import _text_stream
@@ -119,6 +120,16 @@ class WgsQcSummaryValidationTest(unittest.TestCase):
                     any("número finito" in problem for problem in summary["problems"])
                 )
 
+    def test_reliability_band_rejects_arbitrary_json_objects(self):
+        """A non-marker object is not a valid human-readable reliability classification."""
+        record = wgs_qc_record(case_id="CASE")
+        record["reliability_map"]["alta_confianca"] = {"unexpected": "object"}
+        summary = audit_summary(record)
+        self.assertEqual(summary["status"], UNAVAILABLE)
+        self.assertTrue(
+            any("reliability_map.alta_confianca" in problem for problem in summary["problems"])
+        )
+
 
 class StreamConstructionCleanupTest(unittest.TestCase):
     """Handles opened while constructing a stream are closed when construction fails."""
@@ -218,6 +229,19 @@ class SectionCurationValidationTest(unittest.TestCase):
             }
         })
         self.assertTrue(any("reuse justification" in problem for problem in problems))
+
+    def test_attestation_builder_refuses_missing_required_fields(self):
+        """Direct callers cannot bypass curation validation and trigger a KeyError."""
+        payload = self._payload()
+        payload["sections"] = {"1": {"evidence_refs": []}}
+        with self.assertRaisesRegex(CurationError, "missing required curation fields"):
+            build_attestations(
+                payload,
+                artifact_sha256={},
+                input_sha256="a" * 64,
+                run_id="RUN-1",
+                created_at="2026-08-24T00:00:00Z",
+            )
 
 
 if __name__ == "__main__":

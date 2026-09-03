@@ -236,6 +236,32 @@ class CoreRuntimeDependencyCheckTest(unittest.TestCase):
         self.assertTrue(errors)
         self.assertTrue(any("numpy" in error for error in errors))
 
+    def test_relative_import_in_local_intermediate_is_walked(self):
+        """A relative import must not hide an external transitive dependency."""
+        errors = self._errors_for(
+            "from . import bridge\n",
+            extra_modules={
+                f"{validate_repo.CORE_PACKAGES[0]}.bridge": "import numpy\n"
+            },
+        )
+        self.assertTrue(errors)
+        self.assertTrue(any("numpy" in error for error in errors))
+
+    def test_invalid_utf8_is_reported_instead_of_crashing_the_check(self):
+        """A non-UTF-8 Python file becomes a validation error."""
+        errors: list[str] = []
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            for package in validate_repo.CORE_PACKAGES:
+                (root / package).mkdir()
+                (root / package / "__init__.py").write_text("", encoding="utf-8")
+            bad = root / validate_repo.CORE_PACKAGES[0] / "bad.py"
+            bad.write_bytes(b"\xff\xfe")
+            validate_repo.validate_core_runtime_dependencies(root, errors)
+        self.assertTrue(
+            any("core module could not be parsed" in error and "bad.py" in error for error in errors)
+        )
+
     def test_the_real_repository_passes_this_check(self):
         """The check is worth nothing if it only ever runs against fixtures."""
         errors: list[str] = []

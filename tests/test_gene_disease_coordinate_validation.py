@@ -189,20 +189,32 @@ class ClinvarCoordinateIdentityTests(unittest.TestCase):
                 self.assertNotIn("não retorna registro", message)
 
     def test_clinvar_fetch_failure_is_local_to_one_locus(self):
-        """A ClinVar fetch failure is local to one locus."""
-        with patch.object(
-            CURATE,
-            "fetch_clinvar_conditions",
-            side_effect=[
-                CURATE.CurationError("temporary ClinVar failure"),
-                {"status": "VERIFICADO", "records": [{"accession": "VCV2"}]},
-            ],
+        """A real fetch-path CurationError is local to one locus."""
+        search = {"esearchresult": {"count": "1", "idlist": ["1"]}}
+        summary = _summary("NC_000001.11", 100, "A")
+        placement = {
+            "GRCh38": {
+                "seq_id": "NC_000001.11",
+                "position": 101,
+                "reference_allele": "A",
+            }
+        }
+        with (
+            patch.object(CURATE, "fetch_refsnp", return_value={}),
+            patch.object(CURATE, "placements", return_value=placement),
+            patch.object(
+                CURATE,
+                "_json",
+                side_effect=[CURATE.CurationError("temporary ClinVar failure"), search, summary],
+            ),
+            patch.object(CURATE.time, "sleep"),
         ):
             first = CURATE._clinvar_for_locus("rs1")
             second = CURATE._clinvar_for_locus("rs2")
         self.assertEqual(first["status"], CURATE.UNAVAILABLE)
         self.assertIn("temporary ClinVar failure", first["reason"])
         self.assertEqual(second["status"], "VERIFICADO")
+        self.assertEqual(second["records"][0]["accession"], "VCV000000001")
 
     def test_matching_grch38_spdi_is_verified(self):
         """A matching GRCh38 SPDI is VERIFICADO."""

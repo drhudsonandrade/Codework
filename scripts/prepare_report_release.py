@@ -50,6 +50,24 @@ def _blocked_policy(reason: str) -> dict[str, Any]:
     }
 
 
+def _public_policy_projection(policy: dict[str, Any]) -> dict[str, Any]:
+    """Expose only the policy verdict required by the publication gate."""
+    public_keys = (
+        "result_digest",
+        "manifest_sha256",
+        "ready_for_requested_operation",
+        "state",
+        "planes",
+        "gates",
+        "plans",
+    )
+    return {
+        key: copy.deepcopy(policy[key])
+        for key in public_keys
+        if key in policy
+    }
+
+
 def assemble_release(curated: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
     """Assemble a release only from a Policy Control verdict re-executed for this case."""
     result = copy.deepcopy(curated)
@@ -69,7 +87,7 @@ def assemble_release(curated: dict[str, Any], policy: dict[str, Any]) -> dict[st
             input_sha256=input_sha256,
             required_output="FINAL_AUDITED_REPORT",
         )
-        result["policy_evaluation"] = copy.deepcopy(verified_policy)
+        result["policy_evaluation"] = _public_policy_projection(verified_policy)
         result["policy_evaluation_verification"] = {
             "status": "VERIFICADO",
             "method": "policy-control-reexecution",

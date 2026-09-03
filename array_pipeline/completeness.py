@@ -166,18 +166,31 @@ def _classify(
         )
 
     genotype = _canonical_gt(raw_gt) or ""
+    if len(genotype) != 2 or set(genotype) - set("ACGT"):
+        return (
+            OBSERVADO,
+            "genótipo chamado, mas não é uma chamada SNP diploide composta apenas por ACGT; "
+            "presença e ausência permanecem indeterminadas",
+        )
     assessed = assessed_bases(target)
     if not assessed:
         return (
             OBSERVADO,
             "genótipo chamado; ausência não pode ser afirmada porque o registro não declara o alelo avaliado",
         )
-    multibase = sorted(allele for allele in assessed if len(allele) != 1)
-    if multibase:
+    non_snp = sorted(
+        allele for allele in assessed
+        if len(allele) != 1 or allele not in set("ACGT")
+    )
+    if non_snp:
+        described = ", ".join(
+            f"multibase {allele}" if len(allele) != 1 else allele
+            for allele in non_snp
+        )
         return (
             OBSERVADO,
-            "genótipo chamado, mas o alelo avaliado multibase "
-            f"({', '.join(multibase)}) não é comparável a uma chamada SNP de duas bases; "
+            "genótipo chamado, mas o alelo avaliado não é uma base SNP ACGT "
+            f"({described}) e não é comparável a uma chamada SNP de duas bases; "
             "presença e ausência permanecem indeterminadas",
         )
     present = sorted(assessed & set(genotype))

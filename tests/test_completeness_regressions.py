@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from array_pipeline.completeness import (
+    NAO_REPORTAVEL,
     NO_CALL,
     OBSERVADO,
     _classify,
@@ -115,6 +116,31 @@ class CompletenessRegressionTest(unittest.TestCase):
             ]
         )
         self.assertEqual(entry["classification"], NO_CALL)
+
+    def test_conflicting_valid_duplicates_are_not_reportable(self):
+        """Two different valid calls at one locus fail closed."""
+        entry = self._entry_for_rows(
+            [
+                ("raw_snp_array_v1", {"RSID": "rs1", "RESULT": "AA"}),
+                ("raw_snp_array_v1", {"RSID": "rs1", "RESULT": "AG"}),
+            ]
+        )
+        self.assertEqual(entry["classification"], NAO_REPORTAVEL)
+        self.assertIn("divergentes", entry["basis"])
+
+    def test_indel_codes_are_not_compared_as_snp_alleles(self):
+        """Insertion/deletion call codes cannot satisfy an A/C/G/T assessed allele."""
+        for genotype in ("II", "ID", "DI", "DD"):
+            with self.subTest(genotype=genotype):
+                classification, basis = _classify(
+                    {"RESULT": genotype, "__orientation_status": "VERIFICADO"},
+                    "raw_snp_array_v1",
+                    {"assessed_allele": "A"},
+                    "raw_snp_array_v1",
+                )
+                self.assertEqual(classification, OBSERVADO)
+                self.assertIn("SNP diploide", basis)
+                self.assertIn("ACGT", basis)
 
 
 if __name__ == "__main__":

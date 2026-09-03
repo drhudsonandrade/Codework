@@ -461,7 +461,6 @@ class WitnessNamesTheDeploymentItVerifiedTest(unittest.TestCase):
             self.assertIn(value.id, resolved)
 
 
-WITNESS_REQUIRED_ITEMS = tuple(provenance.WITNESS_REQUIRED.items())
 
 
 if __name__ == "__main__":

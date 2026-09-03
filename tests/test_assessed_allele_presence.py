@@ -224,7 +224,7 @@ class ShippedRegistryTest(unittest.TestCase):
         multi = [t for t in targets if not t.get("assessed_allele") and t.get("clinvar_alternate_alleles")]
         blank = [t for t in targets if not assessed_bases(t)]
         self.assertGreater(len(multi), 5_000)
-        for target in multi[:200]:
+        for target in multi:
             self.assertGreaterEqual(len(assessed_bases(target)), 2)
         # Some loci genuinely name nothing; they are the ones the backstop above covers.
         self.assertLess(len(blank), len(multi))

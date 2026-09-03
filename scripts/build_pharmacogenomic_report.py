@@ -223,7 +223,15 @@ def build_payload(
             "passport and completeness matrix must describe the same non-empty input_sha256"
         )
 
-    case_id = passport.payload.get("case_id") or UNAVAILABLE
+    passport_case = passport.payload.get("case_id")
+    matrix_case = matrix.payload.get("case_id")
+    passport_case = passport_case.strip() if isinstance(passport_case, str) else ""
+    matrix_case = matrix_case.strip() if isinstance(matrix_case, str) else ""
+    if not passport_case or not matrix_case or passport_case != matrix_case:
+        raise ValueError(
+            "passport and completeness matrix must describe the same non-empty case_id"
+        )
+    case_id = passport_case
     compiler = PayloadCompiler(
         case_id=str(case_id),
         report_id=REPORT_ID,

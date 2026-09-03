@@ -30,7 +30,6 @@ not happen.
 from __future__ import annotations
 
 import json
-from functools import lru_cache
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -151,7 +150,6 @@ def load_curation(path: Path | str | None = None) -> dict[str, Any]:
     return curation
 
 
-@lru_cache(maxsize=1)
 def _canonical_section_hashes() -> dict[int, str]:
     """Section number → SHA-256, computed from the sealed ruleset rather than read from a file.
 
@@ -264,6 +262,23 @@ def build_attestations(
     attestations: list[dict[str, Any]] = []
     for key, entry in sorted(curation.get("sections", {}).items(), key=lambda kv: int(kv[0])):
         number = int(key)
+        required = (
+            "rule_sha256",
+            "applicability",
+            "status",
+            "decision",
+            "justification",
+        )
+        absent = [
+            field
+            for field in required
+            if not isinstance(entry, dict) or entry.get(field) in (None, "")
+        ]
+        if absent:
+            raise CurationError(
+                f"section {number} is missing required curation fields {absent}; "
+                "validate the curation before building attestations"
+            )
         refs = list(entry.get("evidence_refs") or [])
         unknown = sorted(ref for ref in refs if ref not in artifact_sha256)
         if unknown:

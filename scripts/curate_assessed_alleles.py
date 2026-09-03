@@ -382,7 +382,7 @@ def _apply_curated_identity_decision(
     return result
 
 
-def curate_target(
+def _curate_target_unchecked(
     rsid: str,
     pgx_registry: dict[str, Any] | None = None,
     curated_decisions: dict[str, dict[str, Any]] | None = None,
@@ -615,6 +615,29 @@ def curate_target(
             }
         )
     return base
+
+
+def curate_target(
+    rsid: str,
+    pgx_registry: dict[str, Any] | None = None,
+    curated_decisions: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Curate one target and refuse any verified reference-as-alternate result."""
+    result = _curate_target_unchecked(rsid, pgx_registry, curated_decisions)
+    allele = str(result.get("assessed_allele") or "").strip().upper()
+    reference = str(result.get("reference_allele") or "").strip().upper()
+    if result.get("status") == "VERIFICADO" and allele and allele == reference:
+        result.update(
+            {
+                "assessed_allele": None,
+                "status": "NÃO DISPONÍVEL",
+                "reason": (
+                    f"{rsid}: the proposed assessed allele equals the dbSNP reference base; "
+                    "a reference base cannot be verified as the alternate being assessed"
+                ),
+            }
+        )
+    return result
 
 
 def curate(
