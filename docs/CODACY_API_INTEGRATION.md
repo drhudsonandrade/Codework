@@ -31,8 +31,10 @@ order, so cancellation is not treated as freshness evidence: the resolver pagina
 same SHA and accepts only the unique newest `(run_number, run_attempt)` for the resolved head
 repository, branch and PR association. A truncated, changing or over-limit run listing fails
 closed. The validated coordinates are carried into the publisher and re-read before each
-artifact or comment path, so a delayed run or older attempt cannot overwrite a newer one. An
-empty PR association (as can occur for a fork) is resolved through a unique live head
+artifact or comment path. Each comment candidate also carries a monotonic run number, attempt
+and publication rank. The publisher creates the candidate before pruning lower versions, so an
+older run that resumes after a newer publication deletes only its own losing candidate instead
+of overwriting the newer report. An empty PR association (as can occur for a fork) is resolved through a unique live head
 repository and branch match. Ambiguous identities fail closed.
 
 Only the validated pull-request identity fields — PR number, head SHA, current base SHA, run
@@ -171,11 +173,12 @@ commit that was not analyzed.
 ## Output handling
 
 The publisher writes `codacy-report.md` and `codacy-issues.json`, appends the Markdown report
-to the job summary, uploads both files for 30 days, and creates or updates a single
-`github-actions[bot]`-owned PR comment marked with `<!-- codacy-api-report -->`. A different
-bot cannot claim the marker and have its comment overwritten. If historical retries left more
-than one owned marker comment, the publisher updates the canonical one and removes only its
-own duplicates.
+to the job summary, uploads both files for 30 days, and converges on one
+`github-actions[bot]`-owned PR comment marked with `<!-- codacy-api-report -->`. Publication
+comments are immutable candidates carrying run ID, run number, attempt and rank. The highest
+tuple wins; a lower or interleaved candidate is refused or deletes itself, while the winner
+prunes only older comments owned by the same bot. A different bot cannot claim the marker.
+Legacy owned comments without version metadata rank below every validated publication.
 
 Codacy strings are untrusted output. Newlines are collapsed, HTML is entity-escaped, Markdown
 table/link delimiters are escaped and `@` mentions are neutralized. HTTP error bodies are read
