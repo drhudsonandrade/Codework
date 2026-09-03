@@ -10,10 +10,11 @@ on:
 # the environment-scoped publisher only a validated PR number/head/base tuple.
 permissions: {}
 
+# A cancelled lifecycle consumer performs no cleanup. The next event for this
+# exact producer attempt revalidates live state and repairs the owned PR comment.
 concurrency:
-  group: codacy-api-report-${{ github.event.workflow_run.head_repository.id }}-${{ github.event.workflow_run.head_branch }}
-  queue: max
-  cancel-in-progress: false
+  group: codacy-api-report-${{ github.event.workflow_run.head_repository.id }}-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
+  cancel-in-progress: true
 
 jobs:
   resolve:
@@ -89,7 +90,7 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Invalidate prior report before processing
+      - name: Repair or invalidate prior report before processing
         if: >-
           needs.resolve.outputs.state == 'pending' ||
           needs.resolve.outputs.state == 'interrupted' ||
@@ -131,6 +132,14 @@ jobs:
               owner,
               repo,
               issue_number,
+              publication: {
+                run_id: Number(process.env.CODACY_WORKFLOW_RUN_ID),
+                run_number: Number(process.env.CODACY_WORKFLOW_RUN_NUMBER),
+                run_attempt: Number(process.env.CODACY_WORKFLOW_RUN_ATTEMPT),
+                rank: process.env.REPORT_STATE === 'pending'
+                  ? 0
+                  : process.env.REPORT_STATE === 'publish' ? 1 : 2,
+              },
               report: buildCodacyStatusReport(
                 process.env.EXPECTED_HEAD,
                 codacyStatusForRunState(process.env.REPORT_STATE),
@@ -193,6 +202,12 @@ jobs:
               owner,
               repo,
               issue_number,
+              publication: {
+                run_id: Number(process.env.CODACY_WORKFLOW_RUN_ID),
+                run_number: Number(process.env.CODACY_WORKFLOW_RUN_NUMBER),
+                run_attempt: Number(process.env.CODACY_WORKFLOW_RUN_ATTEMPT),
+                rank: 2,
+              },
               report: buildCodacyStatusReport(process.env.EXPECTED_HEAD, 'missing-token'),
             });
 
@@ -292,6 +307,12 @@ jobs:
               owner,
               repo,
               issue_number,
+              publication: {
+                run_id: Number(process.env.CODACY_WORKFLOW_RUN_ID),
+                run_number: Number(process.env.CODACY_WORKFLOW_RUN_NUMBER),
+                run_attempt: Number(process.env.CODACY_WORKFLOW_RUN_ATTEMPT),
+                rank: 2,
+              },
               report: fs.readFileSync('codacy-report.md', 'utf8'),
             });
 
@@ -334,5 +355,11 @@ jobs:
               owner,
               repo,
               issue_number,
+              publication: {
+                run_id: Number(process.env.CODACY_WORKFLOW_RUN_ID),
+                run_number: Number(process.env.CODACY_WORKFLOW_RUN_NUMBER),
+                run_attempt: Number(process.env.CODACY_WORKFLOW_RUN_ATTEMPT),
+                rank: 2,
+              },
               report: buildCodacyStatusReport(process.env.EXPECTED_HEAD, 'publisher-failed'),
             });
