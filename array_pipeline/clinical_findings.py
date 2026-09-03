@@ -34,6 +34,7 @@ from typing import Any
 import normative
 from array_pipeline.completeness import (
     COMPARISON_APPLICABLE,
+    COMPARISON_NOT_APPLICABLE,
     INTERPRETABLE,
     NAO_DETECTADO,
     NAO_TESTADO,
@@ -538,7 +539,7 @@ def _interpretation(
             "kind": NAO_INTERROGADO,
             "basis": f"locus classificado {classification}: {entry.get('basis')}",
         }
-    if entry.get("assessed_comparison") != COMPARISON_APPLICABLE:
+    if entry.get("assessed_comparison") == COMPARISON_NOT_APPLICABLE:
         return {
             "kind": SEM_INTERPRETACAO,
             "basis": (

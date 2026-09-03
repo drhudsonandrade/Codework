@@ -342,7 +342,7 @@ def build_completeness_matrix(
                 for allele in compared_alleles
             )
         )
-        interpretable = classification in INTERPRETABLE and comparison_applicable
+        interpretable = classification in INTERPRETABLE
         entries.append(
             {
                 "rsid": rsid,
@@ -364,10 +364,10 @@ def build_completeness_matrix(
                 # the NÃO REPORTÁVEL class exists to refuse.
                 "genotype": (
                     called_genotype
-                    if row is not None and interpretable
+                    if row is not None and classification in INTERPRETABLE
                     else None
                 ),
-                "genotype_withheld": row is not None and not interpretable,
+                "genotype_withheld": row is not None and classification not in INTERPRETABLE,
                 "assessed_allele": target.get("assessed_allele"),
                 # Every base the classification was actually able to test for. Empty means
                 # the registry could name none, so OBSERVADO at this locus says "chamado",

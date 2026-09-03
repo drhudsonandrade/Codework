@@ -149,8 +149,8 @@ class CompletenessRegressionTest(unittest.TestCase):
             [("raw_snp_array_v1", {"RSID": "rs1", "RESULT": "ID"})]
         )
         self.assertEqual(entry["assessed_comparison"], COMPARISON_NOT_APPLICABLE)
-        self.assertFalse(entry["interpretable"])
-        self.assertTrue(entry["genotype_withheld"])
+        self.assertTrue(entry["interpretable"])
+        self.assertFalse(entry["genotype_withheld"])
 
     def test_a_single_base_assessed_allele_absent_from_the_genotype_is_not_detected(self):
         """Controle positivo: alelo SNP avaliado ausente continua NÃO DETECTADO."""

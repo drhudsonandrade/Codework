@@ -52,7 +52,14 @@ def _complete_witness() -> dict[str, object]:
         },
         "suite": "post-deployment",
         "deployment_id": "deploy-1",
-        "target": {"network_class": "public-host", "resolved_addresses": ["93.184.216.34"]},
+        "target": {
+            "authority": "https://deployment.example:443",
+            "scheme": "https",
+            "host": "deployment.example",
+            "port": 443,
+            "network_class": "public-host",
+            "resolved_addresses": ["93.184.216.34"],
+        },
         "ruleset": {"sha256": normative.RAW_SHA256},
         # Recent, not future: the binding refusal rejects a witness that claims to have
         # completed after now, and a stale one falls outside the freshness window.
