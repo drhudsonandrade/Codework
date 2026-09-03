@@ -50,7 +50,27 @@ jobs:
               exit 0
               ;;
           esac
-          audit_required=$(python3 scripts/ci_change_classifier.py markdown --base "$BASE_SHA" --head "$HEAD_SHA")
+          changed_paths="$RUNNER_TEMP/audit-changed-paths.zlist"
+          deleted_paths="$RUNNER_TEMP/audit-deleted-paths.zlist"
+          NULL_SHA=0000000000000000000000000000000000000000
+          if [ "$BASE_SHA" = "$NULL_SHA" ]; then
+            git ls-tree -r --name-only -z "$HEAD_SHA" -- > "$changed_paths"
+            : > "$deleted_paths"
+          else
+            git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$changed_paths"
+            git diff --no-renames --diff-filter=D --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$deleted_paths"
+          fi
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            while IFS= read -r -d '' changed_path; do
+              case "$changed_path" in
+                scripts/ci_change_classifier.py|.github/workflows/genoma-audit.yml)
+                  echo "audit_required=true" >> "$GITHUB_OUTPUT"
+                  exit 0
+                  ;;
+              esac
+            done < "$changed_paths"
+          fi
+          audit_required=$(python3 scripts/ci_change_classifier.py markdown --changed "$changed_paths" --deleted "$deleted_paths")
           echo "audit_required=$audit_required" >> "$GITHUB_OUTPUT"
 
   audit:

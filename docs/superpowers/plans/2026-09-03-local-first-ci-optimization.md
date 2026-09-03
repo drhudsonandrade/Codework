@@ -151,7 +151,7 @@ Commit message: `ci: cancel superseded runs and target non-required checks`
 
 - [ ] **Step 1: Add the shared fail-closed classifier and policy classifier job**
 
-Create `scripts/ci_change_classifier.py` using only the standard library. It owns the checked `git diff --no-renames` execution and accepts exact `--base`/`--head` SHAs, so invalid refs propagate as non-zero errors. In the policy `changes` job, use `fetch-depth: 0` and pass the PR SHAs to the classifier. Include direct verification dependencies such as `scripts/sealed_ruleset.py`, `.github/governance/**`, and the classifier itself in the policy scope. For push/manual events, set `policy_relevant=true`.
+Create `scripts/ci_change_classifier.py` using only the standard library and no process creation. The workflow owns checked `git diff --no-renames` execution and passes NUL-delimited path files to the classifier. For pull requests, force policy validation before executing the classifier whenever the classifier or policy workflow itself changed. Include direct verification dependencies such as `scripts/sealed_ruleset.py`, `.github/governance/**`, and the classifier itself in the policy scope. For push/manual events, set `policy_relevant=true`.
 
 - [ ] **Step 2: Gate policy-heavy jobs fail closed**
 
@@ -159,7 +159,7 @@ Add `needs: changes` and `always()` to `policy`, `rego`, and `container`; execut
 
 - [ ] **Step 3: Add the scaffold classifier job**
 
-For pull requests, pass exact base/head SHAs to `ci_change_classifier.py markdown`; the classifier itself executes checked rename-aware changed/deleted diffs. Set `validation_required=false` only for Markdown additions/modifications with no deletions. For push/manual events, set it to `true`. Preserve the PR trigger without workflow-level path filters.
+For pull requests, have the workflow generate checked rename-aware changed/deleted NUL path lists, force validation when the classifier or scaffold workflow changes, then pass those files to `ci_change_classifier.py markdown`. Set `validation_required=false` only for Markdown additions/modifications with no deletions. For push/manual events, set it to `true`. Preserve the PR trigger without workflow-level path filters.
 
 - [ ] **Step 4: Gate scaffold heavy jobs fail closed**
 
@@ -196,7 +196,7 @@ Run:
 
 ```text
 bash -n scripts/*.sh tests/test_wgs_align_or_stage.sh
-git diff --check origin/main...HEAD
+git diff --check <immutable-base-sha>...HEAD
 ```
 
 If Bash is unavailable in the Windows shell, use Git for Windows Bash explicitly and record that fact.

@@ -75,7 +75,7 @@ Use explicit PR path filters for TypeScript/JavaScript sources plus the MCP pack
 
 ### Policy engine
 
-Keep `pull_request` unfiltered at workflow level so potentially required status checks remain present. The shared fail-closed `scripts/ci_change_classifier.py` owns rename-aware `git diff --no-renames` execution from exact base/head SHAs; policy, Rego, and policy-container jobs run when policy-relevant paths are present or when classification itself fails. `Gitleaks secret scan` remains unconditional. Preserve the targeted `push.paths`, including direct classifier/ruleset dependencies and `.github/governance/**`.
+Keep `pull_request` unfiltered at workflow level so potentially required status checks remain present. The workflow performs checked rename-aware `git diff --no-renames` execution and passes NUL-delimited path files to the process-free `scripts/ci_change_classifier.py`. If the classifier or policy workflow changes, policy, Rego, and policy-container validation is forced before any classifier result can suppress those jobs. `Gitleaks secret scan` remains unconditional. Preserve the targeted `push.paths`, including direct classifier/ruleset dependencies and `.github/governance/**`.
 
 ### Four-plane audit
 
@@ -191,7 +191,7 @@ For workflows that provide status-check names which may be required by repositor
 Therefore:
 
 - `genoma-policy-engine.yml` remains unfiltered at `pull_request` workflow level.
-- Add a lightweight PR change-classifier job to `genoma-policy-engine.yml`; it passes exact base/head SHAs to `scripts/ci_change_classifier.py`, which owns checked rename-aware `git diff --no-renames` execution and treats `.github/governance/**` as policy relevant.
+- Add a lightweight PR change-classifier job to `genoma-policy-engine.yml`; the workflow owns checked rename-aware Git diff generation, forces policy validation if the classifier/workflow changes, and passes NUL-delimited paths to a process-free `scripts/ci_change_classifier.py`, which treats `.github/governance/**` as policy-relevant.
 - On unrelated PRs, skip the policy, Rego, and policy-container jobs at job level while preserving their names; classifier errors run those jobs and fail closed.
 - Keep `Gitleaks secret scan` active on every PR so secret scanning is not weakened.
 - Preserve the targeted policy-engine `push.paths` filter for `main` pushes and include direct ruleset/classifier dependencies.

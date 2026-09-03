@@ -85,8 +85,8 @@ Machine restart expected within ~15 minutes. This section is a continuity checkp
 - Remote PR: `#36`.
 - Last remote/local HEAD before this checkpoint: `b1ca539c95e032709b3567ba95db31c4ac18364e`.
 - Current uncommitted review-fix files: `genoma-audit.yml`, `genoma-policy-engine.yml`, `scaffold-validation.yml`, implementation plan/spec, `scripts/ci_change_classifier.py`, `tests/test_ci_optimization_contract.py`, and `tests/test_repo_contract.py`.
-- Implemented locally after `b1ca539`: `.github/governance/**` is policy-relevant; shared classifier owns checked `git diff --no-renames`; null push base SHA is handled with `git ls-tree` of HEAD and no deletions; UTF-8 regression rejects non-UTF-8 encodings; integration coverage uses a temporary real Git repository for rename/deletion/invalid-SHA cases.
-- Latest focused verification after the null-SHA/UTF-8 edits: `python -m unittest tests.test_ci_optimization_contract.CIOptimizationContractTest.test_classifier_executes_git_diff_and_propagates_failures tests.test_repo_contract.RepoContractTest.test_json_scan_reads_utf8_explicitly -v` → 2 tests passed.
-- The earlier 36-test focused block passed before the latest null-SHA/UTF-8 edits and must be rerun after restart before any completion claim.
-- Still pending from the latest CodeRabbit review: update the versioned local-validation evidence to replace mutable `origin/main` with the exact base SHA used for that historical verification, then rerun the complete focused pre-push gate on the final SHA.
+- The review hardening that followed `b1ca539` made `.github/governance/**` policy-relevant, moved checked rename-aware Git diff generation into the workflows, kept the shared Python classifier process-free, added null-push-base handling with `git ls-tree` of HEAD and no deletions, and strengthened the UTF-8 regression to reject non-UTF-8 encodings.
+- The emergency pre-commit focused run is retained only as continuity history and is not used as merge evidence because the working tree was uncommitted.
+- Post-restart validation supersedes the emergency partial run; final merge evidence must remain bound to a committed SHA and immutable log hash.
+- The historical evidence now uses immutable PR base SHA `67b3133b6dd881a120ebee2edd9435458674fef8`; any later code change requires a fresh final-SHA validation log.
 - Do not merge automatically. Final human approval remains required.
