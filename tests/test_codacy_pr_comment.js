@@ -12,7 +12,7 @@ const {
   upsertCodacyReportComment,
 } = require('../scripts/codacy_pr_comment.js');
 
-function makeGithub(previous, paginateHook = null) {
+function makeGithub(previous, paginateHook = null, deleteErrorStatuses = new Map()) {
   const calls = [];
   const paginationCalls = [];
   let comments = [...previous];
@@ -46,8 +46,17 @@ function makeGithub(previous, paginateHook = null) {
           return { data: comment };
         },
         deleteComment: async (args) => {
-          comments = comments.filter((comment) => comment.id !== args.comment_id);
           calls.push(['delete', args]);
+          const status = deleteErrorStatuses.get(args.comment_id);
+          if (status === 404) {
+            comments = comments.filter((comment) => comment.id !== args.comment_id);
+          }
+          if (status) {
+            const error = new Error(`delete failed with status ${status}`);
+            error.status = status;
+            throw error;
+          }
+          comments = comments.filter((comment) => comment.id !== args.comment_id);
         },
       },
     },
@@ -174,6 +183,54 @@ test('an older validated run cannot overwrite a newer publication during interle
   assert.equal(comments().length, 1);
   assert.ok(comments()[0].body.includes('# new report'));
   assert.ok(comments()[0].body.includes(publicationMarker(publication(8))));
+});
+
+test('concurrent cleanup treats an already deleted comment as success', async () => {
+  const previous = [
+    { id: 7, user: { type: 'Bot', login: 'github-actions[bot]' }, body: `${MARKER}\nold` },
+    { id: 10, user: { type: 'Bot', login: 'github-actions[bot]' }, body: `${MARKER}\nduplicate` },
+  ];
+  const { github, calls, comments } = makeGithub(
+    previous,
+    null,
+    new Map([[7, 404]]),
+  );
+
+  const result = await upsertCodacyReportComment({
+    github,
+    owner: 'o',
+    repo: 'r',
+    issue_number: 32,
+    publication: publication(8),
+    report: '# current',
+  });
+
+  assert.equal(result, 'replaced');
+  assert.deepEqual(
+    calls.filter(([operation]) => operation === 'delete').map(([, args]) => args.comment_id),
+    [7, 10],
+  );
+  assert.equal(comments().length, 1);
+  assert.ok(comments()[0].body.includes('# current'));
+});
+
+test('comment cleanup still propagates deletion errors other than not found', async () => {
+  const previous = [
+    { id: 7, user: { type: 'Bot', login: 'github-actions[bot]' }, body: `${MARKER}\nold` },
+  ];
+  const { github } = makeGithub(previous, null, new Map([[7, 500]]));
+
+  await assert.rejects(
+    upsertCodacyReportComment({
+      github,
+      owner: 'o',
+      repo: 'r',
+      issue_number: 32,
+      publication: publication(8),
+      report: '# current',
+    }),
+    /delete failed with status 500/,
+  );
 });
 
 test('renders explicit unavailable states bound to a commit', () => {
