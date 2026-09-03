@@ -54,8 +54,16 @@ def _top_level_scalar_map(workflow: str, key: str) -> dict[str, str]:
     """Parse one top-level scalar map and reject duplicate or nested entries."""
     lines = workflow.splitlines()
     marker = f"{key}:"
-    key_pattern = re.compile(rf"^{re.escape(key)}\s*:")
-    indexes = [index for index, line in enumerate(lines) if key_pattern.match(line)]
+    escaped = re.escape(key)
+    key_pattern = re.compile(rf"^(?:{escaped}|'(?:{escaped})'|\"(?:{escaped})\")\s*:")
+    explicit_pattern = re.compile(
+        rf"^\?\s+(?:{escaped}|'(?:{escaped})'|\"(?:{escaped})\")\s*(?:#.*)?$"
+    )
+    indexes = [
+        index
+        for index, line in enumerate(lines)
+        if key_pattern.match(line) or explicit_pattern.match(line)
+    ]
     if len(indexes) != 1:
         _fail(f"expected exactly one top-level {key!r} map, got {len(indexes)}")
     if lines[indexes[0]] != marker:
@@ -255,20 +263,28 @@ jobs:
             {"group": "producer-attempt", "cancel-in-progress": "false"},
         )
 
-    def test_concurrency_parser_rejects_a_duplicate_inline_map(self):
-        workflow = """
+    def test_concurrency_parser_rejects_alternative_duplicate_key_forms(self):
+        prefix = """
 concurrency:
   group: producer-attempt
   cancel-in-progress: true
 jobs:
   check:
     runs-on: ubuntu-latest
-concurrency: {group: bypass, cancel-in-progress: false}
 """
-        with self.assertRaisesRegex(
-            AssertionError, "expected exactly one top-level 'concurrency' map"
-        ):
-            _top_level_scalar_map(workflow, "concurrency")
+        duplicates = (
+            "concurrency: {group: inline, cancel-in-progress: false}\n",
+            '"concurrency": {group: quoted, cancel-in-progress: false}\n',
+            "'concurrency': {group: single-quoted, cancel-in-progress: false}\n",
+            "? concurrency\n: {group: explicit, cancel-in-progress: false}\n",
+            '? "concurrency"\n: {group: explicit-quoted, cancel-in-progress: false}\n',
+        )
+        for duplicate in duplicates:
+            with self.subTest(duplicate=duplicate):
+                with self.assertRaisesRegex(
+                    AssertionError, "expected exactly one top-level 'concurrency' map"
+                ):
+                    _top_level_scalar_map(prefix + duplicate, "concurrency")
 
     def test_every_yaml_form_of_an_untrusted_github_expression_reaches_the_gate(self):
         fixtures = (
