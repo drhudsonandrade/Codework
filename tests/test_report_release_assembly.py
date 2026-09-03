@@ -1,72 +1,100 @@
+import copy
 import unittest
+
+from tests.test_policy_evaluation_binding import INPUT_SHA, _manifest, _ruleset, real_evaluation
+
+
+def curated(
+    *,
+    case_id: object = "CASE-1",
+    consent: bool = True,
+    consent_scope: bool = True,
+    evidence: bool = True,
+):
+    return {
+        "case_id": case_id,
+        "array_artifacts": {"input_sha256": INPUT_SHA},
+        "publication_gate": {
+            "consent_verified": consent,
+            "consent_scope_verified": consent_scope,
+            "qc_verified": True,
+            "evidence_verified": evidence,
+            "placeholders_resolved": True,
+            "passed": False,
+        },
+    }
 
 
 class ReportReleaseAssemblyTest(unittest.TestCase):
-    def test_policy_pass_plus_verified_publication_prerequisites_releases_reports(self):
-        from scripts.prepare_report_release import assemble_release
+    def test_reexecuted_policy_plus_verified_prerequisites_releases_reports(self):
+        from scripts.prepare_report_release import assemble_release, _public_policy_projection
 
-        curated = {
-            "publication_gate": {
-                "consent_verified": True,
-                "qc_verified": True,
-                "evidence_verified": True,
-                "placeholders_resolved": True,
-                "passed": False,
-            }
-        }
-        policy = {
-            "ready_for_requested_operation": True,
-            "planes": {name: {"state": "PASS"} for name in ("policy_control", "scientific_data", "evidence", "audit")},
-            "gates": [{"gate": "FINAL_AUDIT_GATE", "state": "PASS", "blocking": True}],
-        }
-        result = assemble_release(curated, policy)
+        policy = real_evaluation()
+        result = assemble_release(curated(), policy)
         self.assertTrue(result["publication_gate"]["passed"])
-        self.assertEqual(result["policy_evaluation"], policy)
+        self.assertEqual(
+            result["policy_evaluation"],
+            _public_policy_projection(policy),
+        )
+        for internal in ("case_id", "session_id", "input_sha256", "binding", "evaluated_manifest"):
+            self.assertNotIn(internal, result["policy_evaluation"])
+        self.assertEqual(result["policy_evaluation_verification"]["status"], "VERIFICADO")
         self.assertEqual(result["report_release_status"], "VERIFICADO")
 
     def test_policy_pass_cannot_override_missing_evidence_or_consent(self):
         from scripts.prepare_report_release import assemble_release
 
-        curated = {
-            "publication_gate": {
-                "consent_verified": False,
-                "qc_verified": True,
-                "evidence_verified": False,
-                "placeholders_resolved": True,
-                "passed": False,
-            }
-        }
-        policy = {
-            "ready_for_requested_operation": True,
-            "planes": {name: {"state": "PASS"} for name in ("policy_control", "scientific_data", "evidence", "audit")},
-            "gates": [{"gate": "FINAL_AUDIT_GATE", "state": "PASS", "blocking": True}],
-        }
-        result = assemble_release(curated, policy)
+        result = assemble_release(curated(consent=False, evidence=False), real_evaluation())
         self.assertFalse(result["publication_gate"]["passed"])
         self.assertEqual(result["report_release_status"], "NÃO DISPONÍVEL")
         self.assertIn("consent_verified", result["report_release_blockers"])
         self.assertIn("evidence_verified", result["report_release_blockers"])
 
-    def test_final_audit_failure_blocks_even_if_other_planes_pass(self):
+    def test_policy_pass_cannot_override_consent_scope_refusal(self):
         from scripts.prepare_report_release import assemble_release
 
-        curated = {
-            "publication_gate": {
-                "consent_verified": True,
-                "qc_verified": True,
-                "evidence_verified": True,
-                "placeholders_resolved": True,
-                "passed": False,
-            }
-        }
-        policy = {
-            "ready_for_requested_operation": False,
-            "planes": {name: {"state": "PASS"} for name in ("policy_control", "scientific_data", "evidence", "audit")},
-            "gates": [{"gate": "FINAL_AUDIT_GATE", "state": "FAIL", "blocking": True}],
-        }
-        result = assemble_release(curated, policy)
+        result = assemble_release(curated(consent_scope=False), real_evaluation())
         self.assertFalse(result["publication_gate"]["passed"])
+        self.assertEqual(result["report_release_status"], "NÃO DISPONÍVEL")
+        self.assertIn("consent_scope_verified", result["report_release_blockers"])
+
+    def test_final_audit_failure_blocks_even_if_other_planes_pass(self):
+        """A genuine re-executable BLOCKED final-audit verdict cannot release reports."""
+        from genoma_policy.engine import PolicyEngine
+        from scripts.prepare_report_release import assemble_release
+
+        manifest = _manifest()
+        manifest["final_audit"][next(iter(manifest["final_audit"]))] = False
+        policy = PolicyEngine(_ruleset()).evaluate(manifest).to_internal_dict()
+
+        self.assertFalse(policy["ready_for_requested_operation"])
+        result = assemble_release(curated(), policy)
+        self.assertFalse(result["publication_gate"]["passed"])
+        self.assertEqual(result["report_release_status"], "NÃO DISPONÍVEL")
         self.assertIn("FINAL_AUDIT_GATE", result["report_release_blockers"])
+
+    def test_numeric_case_identity_cannot_authorize_release(self):
+        from scripts.prepare_report_release import assemble_release
+
+        result = assemble_release(curated(case_id=7), real_evaluation(case_id=7))
+        self.assertFalse(result["publication_gate"]["passed"])
+        self.assertEqual(result["report_release_status"], "NÃO DISPONÍVEL")
+        self.assertIn("policy_evaluation_binding", result["report_release_blockers"])
+
+    def test_forged_complete_pass_is_blocked_by_policy_reexecution(self):
+        from genoma_policy.models import evaluation_binding
+        from scripts.prepare_report_release import assemble_release
+
+        policy = real_evaluation()
+        policy["evaluated_manifest"]["qc"]["passed"] = False
+        binding = evaluation_binding(policy["evaluated_manifest"])
+        policy["binding"] = binding
+        for key in ("case_id", "session_id", "input_sha256", "operation", "manifest_sha256"):
+            policy[key] = copy.deepcopy(binding[key])
+        result = assemble_release(curated(), policy)
+        self.assertFalse(result["publication_gate"]["passed"])
+        self.assertEqual(result["policy_evaluation_verification"]["status"], "NÃO DISPONÍVEL")
+        self.assertIn("policy_evaluation_binding", result["report_release_blockers"])
 
 
 if __name__ == "__main__":

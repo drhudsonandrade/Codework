@@ -10,10 +10,22 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from array_pipeline.annotation import annotate_partial_genome, write_annotation
+from array_pipeline.annotation import (
+    AdapterUnavailableError,
+    annotate_partial_genome,
+    write_annotation,
+)
 
 
 def main() -> int:
+    """Run the bounded annotation plane and report its outcome through the exit code.
+
+    Exit 2 covers two distinct situations, both of which have to stop a pipeline: the run
+    was blocked before producing anything (the `ANNOTATION BLOCKED` branch), and a `live`
+    run that completed but did not reach `VERIFICADO`. A `plan-only` run is `PROPOSTO` by
+    construction and exits 0 — it is a plan, and refusing it for not being verified would
+    make the mode useless.
+    """
     p = argparse.ArgumentParser(description="GENOMA v3.4 bounded Evidence/Annotation Plane for partial SNP-array genomes")
     p.add_argument("--input", required=True)
     p.add_argument("--qc", required=True)
@@ -35,7 +47,12 @@ def main() -> int:
             max_queries=args.max_queries,
             max_payload_bytes=args.max_payload_bytes,
         )
-    except (ValueError, OSError, json.JSONDecodeError) as exc:
+    # `AdapterUnavailableError` is a RuntimeError, so it matched none of the others and left
+    # here as an unhandled traceback: no ANNOTATION BLOCKED line and no exit 2, on the one
+    # failure the optional-adapter contract exists to make survivable. In `live` mode each
+    # retrieval degrades to NÃO DISPONÍVEL and never reaches this; `plan-only` builds its
+    # locator from the adapter, so without it there is no plan to write and the run blocks.
+    except (ValueError, OSError, json.JSONDecodeError, AdapterUnavailableError) as exc:
         print(f"ANNOTATION BLOCKED: {exc}", file=sys.stderr)
         return 2
     write_annotation(result, Path(args.output))

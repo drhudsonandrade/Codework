@@ -15,6 +15,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from reporting.provenance import provenance_blockers, render_value
+
 ROOT = Path(__file__).resolve().parent
 CATALOG_PATH = ROOT / "catalog.json"
 EXPECTED_RULESET = {
@@ -31,10 +33,57 @@ REQUIRED_PLANES = ("policy_control", "scientific_data", "evidence", "audit")
 
 
 class ReportReleaseError(RuntimeError):
-    pass
+    """A document may not be released in the form that was asked for.
+
+    Every refusal in this module raises it, because they mean the same thing to a caller: the
+    artifact you would get is not the one the gates authorise, so none is produced.
+    """
+
+
+def _assert_serializable_provenance(rendered: dict[str, Any]) -> None:
+    """Re-run provenance and derived-view checks at a FINAL write boundary.
+
+    ``render_document`` validates the source payload, but editorial preparation happens later
+    and may legitimately add renderer disclosures. A caller can also mutate a prepared
+    object. Writers therefore validate the *current* data rather than trusting the earlier
+    gate. The check runs before ``mkdir`` so a refusal leaves no partial output behind.
+    """
+    metadata = rendered.get("metadata") if isinstance(rendered.get("metadata"), dict) else {}
+    render_mode = rendered.get("_render_mode")
+    metadata_mode = str(metadata.get("mode", "")).upper()
+    if render_mode not in {"MODEL", "FINAL"}:
+        raise ReportReleaseError("rendered bundle carries no trusted render mode")
+    if metadata_mode != render_mode:
+        raise ReportReleaseError(
+            f"rendered mode was mutated after rendering: {metadata_mode!r} != {render_mode!r}"
+        )
+    data = rendered.get("data") if isinstance(rendered.get("data"), dict) else {}
+    report_id = str(metadata.get("report_id") or "")
+    model = load_catalog().get(report_id)
+    if model is None:
+        raise ReportReleaseError(f"unknown report model: {report_id!r}")
+    if render_mode == "FINAL":
+        blockers = _publication_blockers(data, report_id)
+        if blockers:
+            raise ReportReleaseError(
+                "post-render publication gate failed: " + ", ".join(blockers)
+            )
+        expected_markdown = _final_markdown(report_id, model, data)
+    else:
+        expected_markdown = _model_markdown(report_id, model)
+    if rendered.get("markdown") != expected_markdown:
+        raise ReportReleaseError("rendered markdown no longer matches the bundled payload")
+    expected_html = _to_html(expected_markdown, model["title"])
+    if rendered.get("html") != expected_html:
+        raise ReportReleaseError("rendered HTML no longer matches the bundled payload")
 
 
 def load_catalog() -> dict[str, dict[str, Any]]:
+    """The eleven v3 report models, refusing any catalog that is not exactly 01..11.
+
+    A partial catalog would let a render pick a model nobody approved, and a model missing
+    its editorial metadata would render a document with empty headings.
+    """
     catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     if not isinstance(catalog, dict) or sorted(catalog) != [f"{i:02d}" for i in range(1, 12)]:
         raise ReportReleaseError("report catalog must contain exactly models 01..11")
@@ -45,15 +94,39 @@ def load_catalog() -> dict[str, dict[str, Any]]:
     return catalog
 
 
-def _publication_blockers(data: dict[str, Any]) -> list[str]:
+def _publication_blockers(data: dict[str, Any], report_id: str) -> list[str]:
+    """Every reason this payload may not be published as `report_id`.
+
+    Reasons accumulate rather than raising at the first one, so a caller sees everything
+    wrong in a single run instead of fixing them one release at a time.
+    """
     blockers: list[str] = []
+    # Every other check here was computed for the payload's *own* report, and none of them
+    # looked at which model is being rendered. `PayloadCompiler.consent_scope` resolves the
+    # consent domain through `reporting.consent.REPORT_DOMAINS[report_id]`, and
+    # `provenance_blockers` anchors `report_id` as an identity field — so the two agreed with
+    # each other while agreeing with nothing here. `render_document("02", payload compiled
+    # for "01", mode="FINAL")` therefore published the Ancestralidade document with zero
+    # blockers under a consent verdict computed for the CLÍNICO domain: a real consent, for
+    # the wrong thing, reading as authorisation.
+    declared = data.get("report_id")
+    if declared != report_id:
+        blockers.append(f"report_id:mismatch:{declared!r}!={report_id!r}")
+
     ruleset = data.get("ruleset") if isinstance(data.get("ruleset"), dict) else {}
     for key, expected in EXPECTED_RULESET.items():
         if ruleset.get(key) != expected:
             blockers.append(f"ruleset:{key}")
 
     publication = data.get("publication_gate") if isinstance(data.get("publication_gate"), dict) else {}
-    for key in ("passed", "consent_verified", "qc_verified", "evidence_verified", "placeholders_resolved"):
+    for key in (
+        "passed",
+        "consent_verified",
+        "consent_scope_verified",
+        "qc_verified",
+        "evidence_verified",
+        "placeholders_resolved",
+    ):
         if publication.get(key) is not True:
             blockers.append(f"publication_gate:{key}")
 
@@ -73,18 +146,31 @@ def _publication_blockers(data: dict[str, Any]) -> list[str]:
     )
     if not isinstance(final_audit, dict) or final_audit.get("state") != "PASS":
         blockers.append("policy_evaluation:FINAL_AUDIT_GATE")
+    blockers.extend(provenance_blockers(data))
     return blockers
 
 
 def _safe(value: Any, default: str = "NÃO DISPONÍVEL") -> str:
+    """Print `value` for the document, or `default` when there is nothing to print.
+
+    The rendering itself belongs to `reporting.provenance.render_value`, which is what an
+    anchor records as `observed_value`; this function only chooses what stands in for an
+    absent value. It used to hold its own copy of the serialisation rules, and the copies
+    drifted on mapping key order — see `render_value` and
+    `tests/test_rendered_text_matches_the_document.py`.
+    """
     if value is None or value == "":
         return default
-    if isinstance(value, (dict, list, tuple)):
-        return json.dumps(value, ensure_ascii=False, sort_keys=True)
-    return str(value)
+    return render_value(value)
 
 
 def _model_markdown(report_id: str, model: dict[str, Any]) -> str:
+    """The empty template for a model, with every slot left as a visible placeholder.
+
+    Reads no payload at all. MODEL mode exists to show the shape of a report without
+    asserting anything, so the placeholders are printed rather than filled — a blank where a
+    result belongs would read as a measurement that came back empty.
+    """
     lines = [
         f"# {model['title']}",
         "",
@@ -112,6 +198,12 @@ def _model_markdown(report_id: str, model: dict[str, Any]) -> str:
 
 
 def _final_markdown(report_id: str, model: dict[str, Any], data: dict[str, Any]) -> str:
+    """The published document: every printed value comes from the payload.
+
+    Values are rendered through `reporting.provenance.render_value`, which is also what the
+    anchors record, so the text on the page and the provenance block describing it cannot
+    disagree. Raises if any placeholder syntax survives into the output.
+    """
     lines = [
         f"# {model['title']}",
         "",
@@ -192,6 +284,12 @@ def _final_markdown(report_id: str, model: dict[str, Any], data: dict[str, Any])
 
 
 def _to_html(markdown: str, title: str) -> str:
+    """Convert the rendered Markdown to standalone HTML, escaping every dynamic value.
+
+    A deliberately small converter rather than a Markdown library: the input is this module's
+    own output, and the set of constructs it emits is fixed and known. Content is escaped, so
+    a value carrying HTML is displayed rather than interpreted.
+    """
     body: list[str] = []
     in_code = False
     code: list[str] = []
@@ -222,6 +320,22 @@ def _to_html(markdown: str, title: str) -> str:
 
 
 def render_document(report_id: str, data: dict[str, Any], *, mode: str = "MODEL") -> dict[str, Any]:
+    """Render one report in MODEL or FINAL mode, returning payload, Markdown and HTML.
+
+    MODEL renders the empty template from the catalogue and never touches `data`: it shows
+    what a report of this kind looks like, and must remain producible for a case that has no
+    evidence at all. FINAL renders the case and is gated — `_publication_blockers` runs
+    first and any blocker raises `ReportReleaseError` instead of returning a document.
+
+    The gate raises rather than returning a bundle with `publication_blockers` filled in.
+    A blocked FINAL that still produced Markdown would be a publishable file on disk whose
+    only warning lived in a sibling metadata field; the caller has to be unable to obtain
+    the text at all. `publication_blockers` in the metadata is therefore always empty on a
+    FINAL that was returned, and carries the (empty) list on MODEL for schema stability.
+
+    `data` is deep-copied into the bundle so a later mutation by the caller cannot change
+    what the rendered Markdown was rendered from.
+    """
     catalog = load_catalog()
     if report_id not in catalog:
         raise ReportReleaseError(f"unknown report model: {report_id}")
@@ -231,7 +345,7 @@ def render_document(report_id: str, data: dict[str, Any], *, mode: str = "MODEL"
     model = catalog[report_id]
     blockers: list[str] = []
     if mode == "FINAL":
-        blockers = _publication_blockers(data)
+        blockers = _publication_blockers(data, report_id)
         if blockers:
             raise ReportReleaseError("publication gate failed: " + ", ".join(blockers))
         markdown = _final_markdown(report_id, model, data)
@@ -254,6 +368,7 @@ def render_document(report_id: str, data: dict[str, Any], *, mode: str = "MODEL"
         "publication_blockers": blockers,
     }
     return {
+        "_render_mode": mode,
         "metadata": metadata,
         "data": deepcopy(data),
         "markdown": markdown,
@@ -262,6 +377,12 @@ def render_document(report_id: str, data: dict[str, Any], *, mode: str = "MODEL"
 
 
 def write_bundle(rendered: dict[str, Any], output_dir: Path, *, stem: str | None = None) -> dict[str, Path]:
+    """Write the JSON, Markdown and HTML of one render, and return where each landed.
+
+    All three share a stem so a reader can tell they describe the same document, and the JSON
+    travels beside the rendered text so the payload behind a page is always recoverable.
+    """
+    _assert_serializable_provenance(rendered)
     output_dir.mkdir(parents=True, exist_ok=True)
     metadata = rendered["metadata"]
     stem = stem or f"{metadata['report_id']}-{metadata['slug']}"

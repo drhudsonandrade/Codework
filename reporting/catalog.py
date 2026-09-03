@@ -1,0 +1,53 @@
+"""Read report metadata from `reporting/catalog.json`, so no builder retypes it.
+
+Two report builders in this project have shipped with hand-typed section titles that did not
+match the catalogue. The engine looks sections up by catalogue title, so a paraphrase renders
+an *empty* section while the anchored text sits unreachable under a key nobody reads — the
+document loses a page and nothing errors. Both times the mistake survived until a PDF was
+opened and read.
+
+Reading the titles from the catalogue removes the possibility. `tests/test_pharmacogenomics.py` additionally asserts that report 06's declared `SECTIONS`
+equals what this module returns, so that builder's literal tuple cannot drift away from it.
+"""
+from __future__ import annotations
+
+from functools import lru_cache
+from typing import Any
+
+
+class CatalogError(KeyError):
+    """The catalogue does not describe the requested report."""
+
+
+@lru_cache(maxsize=1)
+def load_catalog() -> dict[str, Any]:
+    """The report catalog after the engine's canonical schema validation."""
+    from reporting.engine import load_catalog as load_validated_catalog
+
+    return load_validated_catalog()
+
+
+def report(report_id: str) -> dict[str, Any]:
+    """One catalog entry, refusing an unknown id rather than returning an empty mapping.
+
+    An empty entry would render a document with blank headings and no indication that the
+    model was never defined.
+    """
+    catalog = load_catalog()
+    entry = catalog.get(str(report_id))
+    if not isinstance(entry, dict):
+        raise CatalogError(f"reporting/catalog.json has no report {report_id!r}")
+    return entry
+
+
+def section_titles(report_id: str) -> tuple[str, ...]:
+    """The report's section titles, in catalogue order."""
+    sections = report(report_id).get("sections")
+    if not isinstance(sections, list) or not sections:
+        raise CatalogError(f"report {report_id!r} declares no sections")
+    return tuple(str(title) for title in sections)
+
+
+def report_ids() -> tuple[str, ...]:
+    """Every report id in the catalog, in sorted order."""
+    return tuple(sorted(load_catalog()))

@@ -7,6 +7,7 @@ import csv
 import json
 import re
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -111,6 +112,12 @@ SUPERSEDED_WEAK_KEYS = ("version", "effective_date", "iso_date")
 
 
 def _load_superseded_contract() -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    """Read the superseded-identity registry from every archived ruleset version.
+
+    Refuses when no registry is present rather than scanning for nothing: a check with an
+    empty pattern list passes every repository, including one that has reintroduced an
+    identity a previous version retired.
+    """
     fixtures = sorted((ROOT / "docs" / "history").glob("*/superseded-identities.json"))
     if not fixtures:
         raise RuntimeError("superseded identity registry is missing from docs/history")
@@ -152,6 +159,7 @@ ACTIVE_DECLARATION_MARKERS = (
 
 
 def validate_sealed_ruleset(root: Path, errors: list[str]) -> None:
+    """Record an error unless the sealed transport decodes to the canonical ruleset."""
     try:
         verify_transport(root / "normative" / "sealed")
     except (OSError, UnicodeError, ValueError, SealedRulesetError) as exc:
@@ -166,12 +174,22 @@ def validate_active_identity_text(text: str, relative: str, errors: list[str]) -
 
 
 def _constant_value(node: ast.AST) -> str | int | float | bool | None:
+    """The literal behind an AST node, or None when it is computed at runtime.
+
+    Only literals can be checked statically; a value assembled at runtime is deliberately
+    not guessed at, because guessing wrong would either pass a violation or fail a legal file.
+    """
     if isinstance(node, ast.Constant) and isinstance(node.value, (str, int, float, bool)):
         return node.value
     return None
 
 
 def _formatted_constant(value: ast.FormattedValue) -> str | None:
+    """The literal text an f-string placeholder expands to, when it is a constant.
+
+    Lets an identity spelled through an f-string be checked like a plain string, so the
+    superseded-identity scan cannot be evaded by interpolating a constant.
+    """
     constant = _constant_value(value.value)
     if constant is None:
         return None
@@ -288,6 +306,11 @@ def _active_declaration_context(path: Path, text: str) -> tuple[str, ...]:
 
 
 def _historical_roots(root: Path) -> tuple[Path, ...]:
+    """Directories holding archived ruleset versions, which are exempt from identity checks.
+
+    A superseded identity is *expected* inside its own archive: that is the record of what it
+    was. The scan refuses it everywhere else.
+    """
     history = root / "docs" / "history"
     return tuple(
         fixture.parent.relative_to(root)
@@ -296,6 +319,7 @@ def _historical_roots(root: Path) -> tuple[Path, ...]:
 
 
 def _is_historical_path(relative: Path, history_roots: tuple[Path, ...]) -> bool:
+    """Whether a path sits inside an archived ruleset version."""
     return any(relative == historical or historical in relative.parents for historical in history_roots)
 
 
@@ -377,13 +401,202 @@ def validate_superseded_identity_locations(root: Path, errors: list[str]) -> Non
 
 
 def _missing_path_error(relative: str) -> str:
+    """The error for a required path that is absent, with the hint for fixing it if there is one."""
     hint = MISSING_PATH_HINTS.get(relative)
     if hint:
         return f"missing required path: {relative} — {hint}"
     return f"missing required path: {relative}"
 
 
+#: The surfaces the "core has no external runtime dependency" claim is about. `reporting` and
+#: `scripts` deliberately carry pinned renderer dependencies (python-docx, reportlab, pypdf,
+#: PyMuPDF); the scientific core does not, and that is the property checked below.
+CORE_PACKAGES = ("array_pipeline", "normative")
+
+#: Packages that live in this repository but are optional by contract — `.coderabbit.yaml`
+#: declares `evidence_adapters/**` an optional Evidence Plane component. The core must import
+#: without them, so they are excluded from the "local, therefore fine" allowance below.
+OPTIONAL_LOCAL_PACKAGES = frozenset({"evidence_adapters", "adapters", "mcp"})
+
+
+#: The only errors an optional-adapter guard may catch. `ModuleNotFoundError` is a subclass of
+#: `ImportError`, so naming either is enough; naming anything else is not a guard.
+_IMPORT_ERRORS = frozenset({"ImportError", "ModuleNotFoundError"})
+
+
+def _catches_import_error(handler: ast.ExceptHandler) -> bool:
+    """Does this `except` clause catch import errors and *nothing else*?
+
+    A bare `except:` and `except Exception:` do catch it, and are deliberately not accepted:
+    the contract is that an absent adapter degrades to a *stated* refusal, and a handler that
+    also swallows a corrupt install or a failing module-level side effect cannot tell the
+    caller which of those happened. Naming the error is what makes the guard a declaration
+    that the dependency is optional rather than a blanket suppression.
+
+    The same argument applies to a tuple, which an earlier version of this check missed by
+    accepting any handler *containing* ImportError: under
+    ``except (ImportError, AttributeError)`` an `AttributeError` raised while the dependency
+    runs its own import-time code binds the fallback and reports a missing optional adapter
+    where there is a broken installed one. Every name in the clause has to be an import error.
+    """
+    if handler.type is None:
+        return False
+    candidates = handler.type.elts if isinstance(handler.type, ast.Tuple) else [handler.type]
+    named = set()
+    for candidate in candidates:
+        if isinstance(candidate, ast.Name):
+            named.add(candidate.id)
+        elif isinstance(candidate, ast.Attribute):
+            named.add(candidate.attr)
+        else:
+            # A computed exception class — a name this walk cannot resolve is not a
+            # declaration it can act on, so it does not qualify as a guard.
+            return False
+    return bool(named) and named <= _IMPORT_ERRORS
+
+
+def _import_time_statements(body: list[ast.stmt]) -> Iterator[ast.stmt]:
+    """Yield the statements that run when the module is imported, minus the guarded ones.
+
+    The first version of the caller walked `tree.body` alone, reasoning that "an import
+    nested in a `try` is guarded by construction". `tree.body` holds the `ast.Try` node and
+    not the `ast.Import` inside it, so *every* `try` hid its imports from the walk —
+    ``try: import numpy`` / ``except ValueError:`` reported clean and still raised
+    `ModuleNotFoundError` at import time. What makes an import optional is the handler, so
+    the handler is read: the body of a `try` that catches ImportError is skipped, and
+    everything else that executes at import time is yielded, however deeply nested.
+
+    Function and class bodies are not import-time and are not descended into: a lazy import
+    inside a function is the pattern this contract exists to permit — `array_pipeline/
+    annotation.py` loads `evidence_adapters` that way so the core imports without it.
+
+    `ast.TryStar` (`try`/`except*`, Python 3.11) is a distinct node from `ast.Try`, and
+    `ast.Match` is another, so imports inside either were invisible to this walk in exactly
+    the way every import was before the handler started being read. Both are traversed, and
+    `except*` follows the same guard rule: an `except* ImportError` group does catch the
+    plain `ModuleNotFoundError` the import raises.
+    """
+    #: The `try` forms this walk understands. Both carry body/handlers/orelse/finalbody, so
+    #: the same reasoning applies; only the node class differs.
+    try_nodes: tuple[type[ast.stmt], ...] = (ast.Try,)
+    if hasattr(ast, "TryStar"):  # pragma: no branch - present from Python 3.11
+        try_nodes += (ast.TryStar,)
+
+    for node in body:
+        yield node
+        if isinstance(node, try_nodes):
+            if not any(_catches_import_error(handler) for handler in node.handlers):
+                yield from _import_time_statements(node.body)
+            for handler in node.handlers:
+                yield from _import_time_statements(handler.body)
+            # `else` runs only when the body did not raise and `finally` runs regardless;
+            # neither is covered by the handler that protects the body.
+            yield from _import_time_statements(node.orelse)
+            yield from _import_time_statements(node.finalbody)
+        elif isinstance(node, (ast.If, ast.For, ast.While)):
+            yield from _import_time_statements(node.body)
+            yield from _import_time_statements(node.orelse)
+        elif isinstance(node, (ast.With, ast.AsyncWith)):
+            yield from _import_time_statements(node.body)
+        elif isinstance(node, ast.Match):
+            for case in node.cases:
+                yield from _import_time_statements(case.body)
+
+
+def validate_core_runtime_dependencies(root: Path, errors: list[str]) -> None:
+    """Check the claim `main()` used to simply print.
+
+    `PASS optional_adapters core has no external runtime dependency` was a literal print with
+    nothing behind it, and `array_pipeline/ancestry.py` imported NumPy at module scope —
+    unpinned, absent from environment.yml, reporting/requirements.txt and the runtime lock —
+    for as long as that line claimed otherwise. A validator that asserts a property it never
+    evaluates is worse than one that stays quiet: every run of it published the assurance.
+
+    An import inside `try`/`except ImportError` is an optional adapter and passes; one at
+    module scope makes the package unimportable without the library and does not.
+    """
+    local_modules = {p.stem for p in root.glob("*.py")}
+    local_modules |= {p.name for p in root.iterdir() if p.is_dir() and (p / "__init__.py").is_file()}
+    local_modules |= {"array_pipeline", "reporting", "scripts", "normative", "tests"}
+    allowed = set(sys.stdlib_module_names) | local_modules
+    # Present in this repository, yet declared optional by contract, so "is it local?" is
+    # the wrong question for these. `array_pipeline/annotation.py` imported
+    # `evidence_adapters` at module scope and `completeness.py` imported *annotation* for a
+    # single constant, which made an optional Evidence Plane adapter a hard requirement for
+    # importing the core — the same defect as the NumPy one, hidden because the package sits
+    # inside the repository and so counted as local.
+    allowed -= OPTIONAL_LOCAL_PACKAGES
+
+    def module_paths(module: str) -> list[Path]:
+        """Files Python executes while importing one absolute local module."""
+        parts = module.split(".")
+        found: list[Path] = []
+        for index in range(1, len(parts) + 1):
+            package_init = root.joinpath(*parts[:index], "__init__.py")
+            if package_init.is_file():
+                found.append(package_init)
+        module_file = root.joinpath(*parts).with_suffix(".py")
+        if module_file.is_file():
+            found.append(module_file)
+        return found
+
+    pending = [
+        path
+        for package in CORE_PACKAGES
+        for path in sorted((root / package).rglob("*.py"))
+    ]
+    visited: set[Path] = set()
+    while pending:
+        path = pending.pop()
+        if path in visited:
+            continue
+        visited.add(path)
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, SyntaxError) as exc:
+            errors.append(f"core module could not be parsed: {path.relative_to(root)}: {exc}")
+            continue
+        for node in _import_time_statements(tree.body):
+            modules: list[str] = []
+            if isinstance(node, ast.Import):
+                modules = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                if node.level == 0 and node.module:
+                    modules = [node.module]
+                    modules.extend(f"{node.module}.{alias.name}" for alias in node.names)
+                elif node.level > 0:
+                    relative = path.relative_to(root).with_suffix("").parts[:-1]
+                    keep = max(len(relative) - node.level + 1, 0)
+                    base_parts = (*relative[:keep], *((node.module,) if node.module else ()))
+                    base = ".".join(base_parts)
+                    modules = [base] if base else []
+                    modules.extend(f"{base}.{alias.name}" for alias in node.names)
+            for module in modules:
+                name = module.split(".")[0]
+                if name in OPTIONAL_LOCAL_PACKAGES:
+                    errors.append(
+                        f"core module {path.relative_to(root)} imports {name!r} at module "
+                        "scope; optional local packages must be lazy and fail closed"
+                    )
+                elif name in local_modules:
+                    pending.extend(module_paths(module))
+                elif name not in allowed:
+                    errors.append(
+                        f"core module {path.relative_to(root)} imports {name!r} at module "
+                        "scope; the scientific core must have no external runtime "
+                        "dependency. Guard it with try/except ImportError and refuse "
+                        "NÃO DISPONÍVEL, or declare and pin it and change this contract."
+                    )
+
+
 def validate(root: Path) -> list[str]:
+    """Run every static repository check and return the accumulated errors.
+
+    Errors accumulate rather than raising, so one run reports everything wrong instead of
+    stopping at the first problem. `main` prints its PASS banner only when this returns
+    empty — those printed lines are a summary of this function's verdict, not twelve
+    independent checks, and should not be quoted as if they were.
+    """
     errors: list[str] = []
     errors.extend(
         _missing_path_error(relative)
@@ -396,6 +609,7 @@ def validate(root: Path) -> list[str]:
         if (root / relative).exists()
     )
     validate_superseded_identity_locations(root, errors)
+    validate_core_runtime_dependencies(root, errors)
 
     active = []
     for candidate in root.rglob("REGRAS_PROJETO_GENOMA*.txt"):
@@ -546,6 +760,12 @@ def validate(root: Path) -> list[str]:
 
 
 def main() -> None:
+    """Run every repository check and print the verdict.
+
+    The twelve `PASS` lines are a fixed banner printed once `validate()` returns no errors —
+    not twelve independent verdicts. What exit 0 supports is "`validate()` found no errors";
+    see `validate()` for what that does and does not cover.
+    """
     errors = validate(ROOT)
     if errors:
         for error in errors:

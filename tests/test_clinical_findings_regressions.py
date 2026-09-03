@@ -1,0 +1,212 @@
+from __future__ import annotations
+
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from array_pipeline.clinical_findings import (
+    GENOTIPO_DE_RISCO,
+    _interpretation,
+    _registry_totals,
+    _validity_for,
+    build_clinical_findings,
+)
+from reporting.case_dossier import SEX_FEMALE, SEX_INTERSEX, SEX_NOT_RECORDED
+
+
+def _pathogenic_x_linked(genotype: str, sex: str | None):
+    """The interpretation of a pathogenic X-linked locus for this genotype and sex at birth."""
+    return _interpretation(
+        {
+            "classification": "OBSERVADO",
+            "genotype": genotype,
+            "scope": "CLINICO",
+            "assessed_allele": "A",
+        },
+        {
+            "asserts_pathogenic": True,
+            "meets_review_threshold": True,
+            "classifications": ["Pathogenic"],
+            "condition_xrefs": {},
+        },
+        {
+            "established": True,
+            "established_by": ["ClinGen"],
+            "modes_of_inheritance": ["XL"],
+            "diseases_by_mondo": {},
+            "diseases_by_name": {},
+        },
+        sex,
+    )
+
+
+class ClinicalFindingsRegressionTest(unittest.TestCase):
+    """How clinical findings read validity, inheritance and sex at birth."""
+    def test_clingen_disease_lists_normalise_the_mode_of_inheritance(self):
+        """ClinGen disease lists normalise the mode of inheritance."""
+        validity = _validity_for("GENE", {
+            "gene_validity": {
+                "GENE": {
+                    "clingen": {
+                        "curations": [{
+                            "classification": "Strong",
+                            "disease": "Fixture disease",
+                            "mode_of_inheritance": "Autosomal recessive",
+                        }]
+                    }
+                }
+            }
+        })
+        self.assertEqual(validity["recessive_diseases"], ["Fixture disease"])
+
+    def test_gencc_disease_lists_normalise_each_mode_of_inheritance(self):
+        """GenCC disease lists normalise each mode of inheritance, not only the first."""
+        validity = _validity_for("GENE", {
+            "gene_validity": {
+                "GENE": {
+                    "gencc": {
+                        "established_groups": [
+                            {
+                                "established": True,
+                                "disease": "GenCC recessive disease",
+                                "mode_of_inheritance": "Autosomal recessive",
+                            },
+                            {
+                                "established": True,
+                                "disease": "GenCC dominant disease",
+                                "mode_of_inheritance": "Autosomal dominant",
+                            },
+                        ]
+                    }
+                }
+            }
+        })
+        self.assertEqual(
+            validity["recessive_diseases"], ["GenCC recessive disease"]
+        )
+        self.assertEqual(
+            validity["dominant_diseases"], ["GenCC dominant disease"]
+        )
+
+    def test_registry_totals_recompute_stored_validity_summaries(self):
+        """Registry totals are recomputed rather than read from the stored summary."""
+        totals = _registry_totals({
+            "gene_validity": {
+                "STALE": {
+                    "established": True,
+                    "modes_of_inheritance": ["AD"],
+                    "clingen": {"curations": []},
+                    "gencc": {"established_groups": []},
+                },
+                "CURRENT": {
+                    "established": False,
+                    "modes_of_inheritance": [],
+                    "gencc": {
+                        "established_groups": [{
+                            "established": True,
+                            "disease": "Current disease",
+                            "mode_of_inheritance": "Autosomal recessive",
+                        }]
+                    },
+                },
+            }
+        })
+        self.assertEqual(totals["genes_with_established_validity"], 1)
+        self.assertEqual(totals["recessive_genes_established"], 1)
+        self.assertEqual(totals["dominant_genes_established"], 0)
+
+    def test_unknown_female_zygosity_is_not_described_as_homozygous(self):
+        """An undetermined female zygosity is not described as homozygous."""
+        result = _pathogenic_x_linked("DI", SEX_FEMALE)
+        self.assertEqual(result["kind"], GENOTIPO_DE_RISCO)
+        self.assertIn("zigosidade não foi determinada", result["basis"])
+        self.assertNotIn("homozigoto", result["basis"].lower())
+
+    def test_intersex_has_its_own_x_linked_refusal(self):
+        """Intersex has its own X-linked refusal, distinct from an unrecorded sex."""
+        result = _pathogenic_x_linked("AG", SEX_INTERSEX)
+        self.assertIn("intersexo", result["basis"])
+        self.assertNotIn("não registra o sexo", result["basis"])
+        self.assertNotIn("Preencha", result["basis"])
+
+    def test_explicit_not_recorded_is_distinct_from_an_absent_field(self):
+        """An explicit 'not recorded' is distinct from an absent field, and asks for nothing."""
+        explicit = _pathogenic_x_linked("AG", SEX_NOT_RECORDED)["basis"]
+        absent = _pathogenic_x_linked("AG", None)["basis"]
+        self.assertIn("explicitamente", explicit)
+        self.assertNotIn("Preencha", explicit)
+        self.assertIn("Preencha", absent)
+
+    def test_qc_reservations_travel_with_the_clinical_payload(self):
+        """QC reservations travel with the clinical payload rather than being dropped."""
+        reservations = [{"gate": "LIMITED_INTERPRETATION_GATE", "state": "BLOCKED"}]
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            matrix = root / "matrix.json"
+            matrix.write_text(json.dumps({
+                "schema": "genoma-genome-completeness-matrix-v1",
+                "case_id": "CASE",
+                "operational_status": "NÃO DISPONÍVEL",
+                "qc_reservations": reservations,
+                "entries": [],
+            }), encoding="utf-8")
+            evidence = root / "evidence.json"
+            evidence.write_text(json.dumps({
+                "schema": "genoma-gene-disease-validity-v1",
+                "sources": ["fixture"],
+                "gene_validity": {},
+                "loci": [],
+            }), encoding="utf-8")
+            assessed = root / "assessed.json"
+            assessed.write_text(json.dumps({"results": []}), encoding="utf-8")
+            result = build_clinical_findings(matrix, evidence, assessed)
+        self.assertEqual(result["qc_reservations"], reservations)
+
+    def test_the_gene_disease_evidence_may_arrive_compressed(self):
+        """The bulk evidence file ships gzipped, and reading it as text used to fail.
+
+        `build_clinical_findings` read the evidence with `read_text`, so the 88 MB compressed
+        file raised `UnicodeDecodeError` about byte 0x8b — an error that names the symptom and
+        not the cause, and the reason the expanded registry could not be made the default. It
+        now goes through `read_manifest_bytes`, which decides compression from the file's own
+        magic number.
+
+        `docs/TARGET_REGISTRY_EXPANSION.md` claimed that correction had a test. It did not:
+        every case in this file wrote plain JSON, so the compressed path — the only one the
+        correction is about — was never exercised. Both encodings are asserted here, from the
+        same content, so the reader is shown to be transparent rather than merely tolerant.
+        """
+        import gzip
+
+        payload = {
+            "schema": "genoma-gene-disease-validity-v1",
+            "sources": ["fixture"],
+            "gene_validity": {},
+            "loci": [],
+        }
+        raw = json.dumps(payload).encode("utf-8")
+        results = []
+        for label, body in (("plain", raw), ("gzip", gzip.compress(raw))):
+            with self.subTest(encoding=label):
+                with tempfile.TemporaryDirectory() as td:
+                    root = Path(td)
+                    matrix = root / "matrix.json"
+                    matrix.write_text(json.dumps({
+                        "schema": "genoma-genome-completeness-matrix-v1",
+                        "case_id": "CASE",
+                        "operational_status": "NÃO DISPONÍVEL",
+                        "entries": [],
+                    }), encoding="utf-8")
+                    evidence = root / "evidence.json"
+                    evidence.write_bytes(body)
+                    assessed = root / "assessed.json"
+                    assessed.write_text(json.dumps({"results": []}), encoding="utf-8")
+                    results.append(build_clinical_findings(matrix, evidence, assessed))
+        plain, compressed = results
+        self.assertEqual(plain["case_id"], compressed["case_id"])
+        self.assertEqual(plain["findings"], compressed["findings"])
+
+
+if __name__ == "__main__":
+    unittest.main()

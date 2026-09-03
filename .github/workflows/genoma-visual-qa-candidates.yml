@@ -85,48 +85,31 @@ jobs:
           mkdir -p visual-qa/candidates
           python3 - <<'PY'
           from pathlib import Path
+          import normative
           from reporting.engine import render_document
           from reporting.editorial_v3 import write_editorial_bundle
+          from reporting.provenance import fixture_payload
 
-          PASSING_POLICY = {
-              'ready_for_requested_operation': True,
-              'planes': {
-                  'policy_control': {'state': 'PASS'},
-                  'scientific_data': {'state': 'PASS'},
-                  'evidence': {'state': 'PASS'},
-                  'audit': {'state': 'PASS'},
-              },
-              'gates': [{'gate': 'FINAL_AUDIT_GATE', 'state': 'PASS', 'blocking': True}],
-          }
-          data = {
-              'case_id': 'CASE-VISUAL-REFERENCE',
-              'summary': 'Conteúdo rastreável para teste editorial de regressão visual.',
-              'ruleset': {
-                  'status': 'VIGENTE',
-                  'version': 'v3.4',
-                  'effective_date': '17/08/2026',
-                  'sha256': 'ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580',
-              },
-              'publication_gate': {
-                  'passed': True,
-                  'consent_verified': True,
-                  'qc_verified': True,
-                  'evidence_verified': True,
-                  'placeholders_resolved': True,
-              },
-              'policy_evaluation': PASSING_POLICY,
-              'post_deployment_status': 'PENDENTE',
-              'sections': {},
-              'findings': [],
-              'execution_manifest': {'status': 'VERIFICADO'},
-              'sources': ['fixture:visual-reference'],
-              'limitations': 'Fixture editorial; não representa paciente.',
-          }
           out = Path('visual-qa/candidates')
           for i in range(1, 12):
               rid = f'{i:02d}'
+              data = fixture_payload(
+                  case_id='CASE-VISUAL-REFERENCE',
+                  report_id=rid,
+                  summary='Conteúdo rastreável para teste editorial de regressão visual.',
+                  basis='Fixture editorial; não representa paciente.',
+              )
+              data['ruleset'] = normative.ruleset_block()
+              # Patient-free visual-QA fixture only: release assembly normally supplies this
+              # prerequisite, and production defaults remain fail-closed.
+              data['publication_gate']['placeholders_resolved'] = True
               rendered = render_document(rid, data, mode='FINAL')
-              write_editorial_bundle(rendered, out, stem=rid)
+              write_editorial_bundle(
+                  rendered,
+                  out,
+                  stem=rid,
+                  programmatic_final_authorization='GitHub Actions visual-QA fixture',
+              )
           PY
       - name: Structural validation
         run: |

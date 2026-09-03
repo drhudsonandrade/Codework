@@ -6,12 +6,37 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
+from array_pipeline import assembly
+
 ALLOWED_SCOPES = {"CLINICO", "PREDISPOSICAO", "PESQUISA", "CURIOSIDADE"}
 ALLOWED_SOURCES = {"clinvar", "clingen", "cpic", "clinpgx", "gnomad", "pgs_catalog"}
 
 
+def read_manifest_text(path: Path) -> str:
+    """Read a target manifest, transparently decompressing a `.gz`.
+
+    The curated registry holds twenty-nine loci and the ClinVar-derived one holds tens of
+    thousands; the second is an order of magnitude too large to keep as plain JSON in the
+    repository. Compression is decided by the file's own gzip magic number rather than by its
+    extension, so a manifest that was compressed without being renamed still loads instead of
+    failing with a decoding error that says nothing about the real cause.
+    """
+    raw = Path(path).read_bytes()
+    if raw[:2] == b"\x1f\x8b":
+        # Bounded: `gzip.decompress` expands whatever it is given, and this path takes a
+        # filename from `--targets`. The ceilings live beside the ones the QC gate applies
+        # to an array export, so the two cannot drift apart on what is physically plausible.
+        raw = assembly.bounded_gunzip(raw, name=str(path))
+    return raw.decode("utf-8")
+
+
 @dataclass(frozen=True)
 class Target:
+    """One interrogated locus: which variant, how strongly scoped, and what to ask about it.
+
+    `scope` is what decides whether a locus may become a clinical finding at all, so it is
+    part of the target's identity rather than presentation metadata.
+    """
     rsid: str
     scope: str
     label: str
@@ -20,15 +45,23 @@ class Target:
 
 
 def _stable_json(value: Any) -> str:
+    """JSON that depends only on the value: sorted keys, no incidental whitespace."""
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def sha256_json(value: Any) -> str:
+    """SHA-256 over the stable rendering, so equal content gives equal digests."""
     return hashlib.sha256(_stable_json(value).encode("utf-8")).hexdigest()
 
 
 def load_target_manifest(path: Path) -> dict[str, Any]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    """Read a target manifest, refusing any entry the pipeline could not act on.
+
+    Schema, rsid shape, duplicate rsids, scope vocabulary and query sources are all checked
+    here rather than at use: a duplicate locus would be interrogated twice and weighted
+    twice, and an unknown scope would reach the ranking as a value it cannot place.
+    """
+    payload = json.loads(read_manifest_text(Path(path)))
     if payload.get("schema") != "genoma-partial-genome-targets-v1":
         raise ValueError("unsupported target manifest schema")
     targets = payload.get("targets")
@@ -60,6 +93,11 @@ def load_target_manifest(path: Path) -> dict[str, Any]:
 
 
 def targets_from_manifest(payload: dict[str, Any]) -> list[Target]:
+    """Convert a validated manifest into `Target` records, normalising rsid and scope case.
+
+    The manifest is accepted in whatever case it was written; everything downstream compares
+    against the canonical spelling, so normalising happens once, here.
+    """
     out: list[Target] = []
     for item in payload["targets"]:
         out.append(

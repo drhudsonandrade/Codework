@@ -1,0 +1,10 @@
+title = "GENOMA Gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Public GWAS Catalog study accessions in gene-disease evidence"
+condition = "AND"
+paths = ['''(^|/)docs/evidence/GENE_DISEASE_VALIDITY\.json$''']
+regexes = ['''^GCST[0-9]{8}$''']

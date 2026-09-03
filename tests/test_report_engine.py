@@ -2,12 +2,17 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import normative
 from ruleset_test_support import RULESET
 
 
 def passing_policy_evaluation():
+    """A policy evaluation that clears every gate the publication check reads."""
     return {
         "ready_for_requested_operation": True,
+        # `policy_verdict` binds the evaluation to the canonical ruleset, so a fixture
+        # without it is refused — which is the point of the binding.
+        "ruleset": {"sha256": normative.RAW_SHA256},
         "planes": {
             "policy_control": {"state": "PASS"},
             "scientific_data": {"state": "PASS"},
@@ -21,8 +26,25 @@ def passing_policy_evaluation():
     }
 
 
+def final_fixture(report_id="01"):
+    """A payload complete enough for a FINAL render of this report."""
+    from reporting.provenance import fixture_payload
+
+    data = fixture_payload(
+        case_id="CASE-001",
+        report_id=report_id,
+        summary="Nenhum achado fictício é inserido pelo motor.",
+        basis="fixture de teste do motor de relatórios",
+    )
+    data["ruleset"] = dict(RULESET)
+    data["publication_gate"]["placeholders_resolved"] = True
+    return data
+
+
 class ReportEngineTest(unittest.TestCase):
+    """What the report engine publishes, and everything it refuses to publish."""
     def assert_release_rejected(self, callable_, expected_reason=None):
+        """Assert this call is refused as a release, optionally naming the blocker."""
         from reporting.engine import ReportReleaseError
 
         try:
@@ -34,6 +56,7 @@ class ReportEngineTest(unittest.TestCase):
         self.fail("expected ReportReleaseError")
 
     def test_catalog_contains_all_eleven_v3_models(self):
+        """The catalogue carries all eleven v3 models, with their slugs."""
         from reporting.engine import load_catalog
 
         catalog = load_catalog()
@@ -42,6 +65,7 @@ class ReportEngineTest(unittest.TestCase):
         self.assertEqual(catalog["11"]["slug"], "guia-editorial-matriz-preenchimento")
 
     def test_model_mode_is_explicitly_non_result(self):
+        """MODEL mode says on its face that it is not a genetic result."""
         from reporting.engine import render_document
 
         result = render_document("01", {}, mode="MODEL")
@@ -50,6 +74,7 @@ class ReportEngineTest(unittest.TestCase):
         self.assertEqual(result["metadata"]["ruleset_required"], RULESET)
 
     def test_final_mode_fails_closed_without_publication_gate(self):
+        """FINAL mode fails closed when the publication gate is absent."""
         from reporting.engine import render_document
 
         self.assert_release_rejected(
@@ -57,7 +82,19 @@ class ReportEngineTest(unittest.TestCase):
             expected_reason="publication_gate:passed",
         )
 
+    def test_final_mode_rejects_consent_outside_report_domain(self):
+        """FINAL mode refuses a consent that does not cover this report's domain."""
+        from reporting.engine import render_document
+
+        data = final_fixture()
+        data["publication_gate"]["consent_scope_verified"] = False
+        self.assert_release_rejected(
+            lambda: render_document("01", data, mode="FINAL"),
+            expected_reason="publication_gate:consent_scope_verified",
+        )
+
     def test_final_mode_rejects_wrong_ruleset_digest(self):
+        """FINAL mode refuses a ruleset digest that is not the canonical one."""
         from reporting.engine import render_document
 
         bad_ruleset = dict(RULESET)
@@ -68,6 +105,7 @@ class ReportEngineTest(unittest.TestCase):
             "publication_gate": {
                 "passed": True,
                 "consent_verified": True,
+                "consent_scope_verified": True,
                 "qc_verified": True,
                 "evidence_verified": True,
                 "placeholders_resolved": True,
@@ -80,6 +118,7 @@ class ReportEngineTest(unittest.TestCase):
         )
 
     def test_final_mode_rejects_unready_policy_evaluation(self):
+        """FINAL mode refuses a policy evaluation that is not ready for the requested operation."""
         from reporting.engine import render_document
 
         data = {
@@ -88,6 +127,7 @@ class ReportEngineTest(unittest.TestCase):
             "publication_gate": {
                 "passed": True,
                 "consent_verified": True,
+                "consent_scope_verified": True,
                 "qc_verified": True,
                 "evidence_verified": True,
                 "placeholders_resolved": True,
@@ -104,6 +144,7 @@ class ReportEngineTest(unittest.TestCase):
         )
 
     def test_final_mode_requires_final_audit_pass(self):
+        """FINAL mode requires the final audit gate to pass."""
         from reporting.engine import render_document
 
         policy = passing_policy_evaluation()
@@ -116,6 +157,7 @@ class ReportEngineTest(unittest.TestCase):
             "publication_gate": {
                 "passed": True,
                 "consent_verified": True,
+                "consent_scope_verified": True,
                 "qc_verified": True,
                 "evidence_verified": True,
                 "placeholders_resolved": True,
@@ -128,22 +170,10 @@ class ReportEngineTest(unittest.TestCase):
         )
 
     def test_final_mode_writes_json_markdown_and_html_when_gate_passes(self):
+        """With the gate passing, the bundle is written as JSON, Markdown and HTML."""
         from reporting.engine import render_document, write_bundle
 
-        data = {
-            "case_id": "CASE-001",
-            "summary": "Nenhum achado fictício é inserido pelo motor.",
-            "ruleset": dict(RULESET),
-            "publication_gate": {
-                "passed": True,
-                "consent_verified": True,
-                "qc_verified": True,
-                "evidence_verified": True,
-                "placeholders_resolved": True,
-            },
-            "policy_evaluation": passing_policy_evaluation(),
-            "post_deployment_status": "PENDENTE",
-        }
+        data = final_fixture()
         rendered = render_document("01", data, mode="FINAL")
         with tempfile.TemporaryDirectory() as td:
             paths = write_bundle(rendered, Path(td), stem="case-001-genoma-clinico")
@@ -154,6 +184,80 @@ class ReportEngineTest(unittest.TestCase):
             self.assertIn("POST-DEPLOYMENT: PENDENTE", markdown)
             self.assertIn("Ruleset: v3.4 / VIGENTE / 17/08/2026", markdown)
             self.assertIn(RULESET["sha256"], markdown)
+
+
+class PayloadIsBoundToTheModelItAuthorisesTest(unittest.TestCase):
+    """A payload compiled for one report may not be rendered as another.
+
+    `render_document(report_id, data, mode="FINAL")` picked the catalog entry by its own
+    argument and never compared it to `data["report_id"]`. Every gate it runs was computed
+    for the payload's report: `PayloadCompiler.consent_scope` resolves the consent domain
+    through `reporting.consent.REPORT_DOMAINS[report_id]`, and `provenance_blockers` anchors
+    `report_id` as an identity field. Both agreed with each other and neither was compared
+    to the model actually being rendered.
+
+    So `render_document("02", payload_compiled_for_01, mode="FINAL")` produced the
+    Ancestralidade e Genealogia Genética document, with zero blockers, under a consent
+    verdict computed for the CLÍNICO domain — reports 01 and 02 sit in different domains
+    (`CLÍNICO` and `ANCESTRALIDADE`). That is a real consent, for the wrong thing, reading
+    as authorisation: the exact failure `consent_scope`'s docstring says it exists to
+    prevent, reintroduced one layer below it.
+    """
+
+    def _payload_for(self, report_id: str):
+        """A payload complete enough for a FINAL render of this report."""
+        data = final_fixture(report_id=report_id)
+        return data
+
+    def test_rendering_a_payload_as_a_different_report_is_refused(self):
+        """Rendering a payload as a different report is refused, not silently relabelled."""
+        from reporting.engine import ReportReleaseError, render_document
+
+        data = self._payload_for("01")
+        with self.assertRaises(ReportReleaseError) as caught:
+            render_document("02", data, mode="FINAL")
+        message = str(caught.exception)
+        self.assertIn("report_id", message)
+        self.assertIn("01", message)
+        self.assertIn("02", message)
+
+    def test_every_other_model_is_refused_the_same_way(self):
+        """One pair proves the check exists; the sweep proves it is not special-cased."""
+        from reporting.engine import ReportReleaseError, load_catalog, render_document
+
+        data = self._payload_for("01")
+        for report_id in load_catalog():
+            if report_id == "01":
+                continue
+            with self.subTest(rendered_as=report_id):
+                with self.assertRaises(ReportReleaseError):
+                    render_document(report_id, data, mode="FINAL")
+
+    def test_the_matching_report_still_renders(self):
+        """The accepting case, so the refusal above is a binding and not a blanket no."""
+        from reporting.engine import render_document
+
+        rendered = render_document("01", self._payload_for("01"), mode="FINAL")
+        self.assertEqual("01", rendered["metadata"]["report_id"])
+        self.assertEqual("01", rendered["data"]["report_id"])
+
+    def test_a_payload_carrying_no_report_id_cannot_publish(self):
+        """Absence is not agreement: nothing may render FINAL without saying which report."""
+        from reporting.engine import ReportReleaseError, render_document
+
+        for value in (None, "", "1", 1):
+            with self.subTest(report_id=value):
+                data = self._payload_for("01")
+                data["report_id"] = value
+                with self.assertRaises(ReportReleaseError):
+                    render_document("01", data, mode="FINAL")
+
+    def test_model_mode_is_unaffected(self):
+        """MODEL renders the empty template and reads no payload, so it keeps working."""
+        from reporting.engine import render_document
+
+        result = render_document("02", {"report_id": "01"}, mode="MODEL")
+        self.assertIn("MODELO — NÃO É RESULTADO GENÉTICO", result["markdown"])
 
 
 if __name__ == "__main__":

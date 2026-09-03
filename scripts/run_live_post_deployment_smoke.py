@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -21,11 +22,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from bootstrap_attestation import BootstrapAttestationError, verify_bootstrap_attestation
-from project_instructions_attestation import (
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.bootstrap_attestation import BootstrapAttestationError, verify_bootstrap_attestation
+from scripts.project_instructions_attestation import (
     ProjectInstructionsAttestationError,
     verify_project_instructions_attestation,
 )
+from scripts.https_transport import loopback_http_or_https, policy_opener
+from reporting import deployment_target
 
 EXPECTED_SHA = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
 EXPECTED_IDENTITY = "v3.4/VIGENTE/17/08/2026"
@@ -68,17 +75,45 @@ EXPECTED = {
 
 
 def sha256_bytes(value: bytes) -> str:
+    """SHA-256 of a byte string, as lowercase hex."""
     return hashlib.sha256(value).hexdigest()
 
 
 def http_json(base: str, method: str, path: str, payload: dict[str, Any] | None = None) -> tuple[int, dict[str, Any], bytes]:
+    """One real HTTP call to the deployed service: status, parsed body, and raw bytes.
+
+    The raw bytes are returned alongside the parsed body because the witness records their
+    SHA-256: a response digest taken over a re-serialised object would attest to this
+    script's formatting rather than to what the service actually sent.
+    """
     body = None if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")
     request = urllib.request.Request(base.rstrip("/") + path, data=body, method=method)
     request.add_header("Accept", "application/json")
     if body is not None:
         request.add_header("Content-Type", "application/json")
+    # `--base-url` is operator-supplied, and `urlopen` honours `file:`, `ftp:` and `data:` as
+    # readily as it honours HTTP. A `file:` base would make every case "succeed" against
+    # bytes on the runner's disk, and the witness would record fifteen passes for a service
+    # that was never contacted — the precise substitution `reporting/deployment_target.py`
+    # exists to prevent, arriving one layer lower.
+    #
+    # `http` stays admissible because the ceremony deliberately dials
+    # `http://127.0.0.1:8787` — but only for that endpoint. Admitting plain HTTP to *any*
+    # host would let a mistyped or hostile `--base-url` send these request bodies to a third
+    # party in clear text: this function POSTs the case manifests, so the payloads are what
+    # is at stake, not only the verdict. `deployment_target.classify` records that a target
+    # is loopback but does not stop the call, so the refusal has to happen here.
+    #
+    # `policy_opener` re-applies the same rule to every redirect hop. Checking only the
+    # request built here would leave `Location: http://elsewhere/` free to move the exchange
+    # off this machine after the guard had already passed.
+    if not loopback_http_or_https(request.full_url):
+        raise SystemExit(
+            f"refusing a transport the live smoke does not allow: {request.full_url}"
+        )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        opener = policy_opener(loopback_http_or_https, "the live smoke")
+        with opener.open(request, timeout=30) as response:  # nosec B310
             raw = response.read()
             return response.status, json.loads(raw), raw
     except urllib.error.HTTPError as exc:
@@ -87,6 +122,11 @@ def http_json(base: str, method: str, path: str, payload: dict[str, Any] | None 
 
 
 def baseline() -> dict[str, Any]:
+    """The manifest every section-260 case starts from, before its own mutation.
+
+    One shared starting point so each case differs from the others only in the field it is
+    written to exercise, and a failure names that field rather than a whole payload.
+    """
     return {
         "case_id": "LIVE-SMOKE",
         "session_id": "live-post-deployment",
@@ -103,6 +143,12 @@ def baseline() -> dict[str, Any]:
 
 
 def valid_na_attestations(catalog: dict[str, Any], run_id: str) -> list[dict[str, Any]]:
+    """A NOT_APPLICABLE attestation for every rule in the catalog, with real trace metadata.
+
+    Cases that exercise one gate still have to satisfy the attestation contract for the rest,
+    or they would be refused for the wrong reason and the case would prove nothing about the
+    gate it targets. Each attestation is explicitly NOT_APPLICABLE — never a claimed pass.
+    """
     out = []
     for rule in catalog["rules"]:
         out.append({
@@ -116,12 +162,19 @@ def valid_na_attestations(catalog: dict[str, Any], run_id: str) -> list[dict[str
 
 
 def claim(**kw: Any) -> dict[str, Any]:
+    """A minimal well-formed claim, with the caller's fields overriding the defaults."""
     value = {"id": "C1", "nature": "ASSOCIAÇÃO", "domain": "PESQUISA", "status": "INFERIDO", "priority": "P5", "evidence_refs": []}
     value.update(kw)
     return value
 
 
 def cases(catalog: dict[str, Any]) -> list[tuple[int, dict[str, Any]]]:
+    """The fifteen canonical section-260 scenarios, each paired with its case number.
+
+    Each one is a manifest built to trip exactly one blocking gate, so a live run that
+    reports 15/15 has exercised fifteen distinct refusals rather than the same one fifteen
+    times. The numbers are the case ids the witness reports against.
+    """
     result: list[tuple[int, dict[str, Any]]] = []
     m = baseline(); m["claims"] = [claim(negative_result=True, disease_excluded=True, all_relevant_mechanisms_assessed=False)]; result.append((1, m))
     m = baseline(); m["operation"]["analysis_relevant"] = True; m["inputs"]=[{"id":"rare","kind":"vcf","source":"live-smoke","sha256":"fixture-sha"}]; m["consent"]={"verified":True,"version":"live-smoke","authorized_domains":["research"]}; m["qc"]={"status":"EXECUTADO","passed":False,"evidence_refs":["smoke:qc"]}; m["claims"]=[claim(nature="FATO CONFIRMADO",technical_quality_flag="LOW")]; m["section_attestations"]=valid_na_attestations(catalog,"SMOKE-02"); result.append((2,m))
@@ -142,6 +195,12 @@ def cases(catalog: dict[str, Any]) -> list[tuple[int, dict[str, Any]]]:
 
 
 def verify_ruleset(metadata: dict[str, Any]) -> None:
+    """Refuse unless the live service reports the exact canonical ruleset identity.
+
+    Checked before any case runs: a smoke against a service carrying a different ruleset
+    measures that other ruleset, and reporting it as this deployment's result would be the
+    transfer the witness binding exists to prevent.
+    """
     expected = {"status": "VIGENTE", "version": "v3.4", "effective_date": "17/08/2026", "canonical_filename": EXPECTED_NAME, "sha256": EXPECTED_SHA, "section_count": 263}
     mismatch = {key: (metadata.get(key), value) for key, value in expected.items() if metadata.get(key) != value}
     if mismatch:
@@ -149,6 +208,13 @@ def verify_ruleset(metadata: dict[str, Any]) -> None:
 
 
 def main() -> int:
+    """Run the fifteen section-260 cases against a live deployment and write the witness.
+
+    Every argument is required and nothing is defaulted: the base URL, the attestation paths
+    and their expected digests all have to be supplied by whoever is running the ceremony,
+    because a default would let a run certify something the operator did not choose. Exits
+    non-zero unless all fifteen pass with no critical failure.
+    """
     p = argparse.ArgumentParser()
     p.add_argument("--base-url", required=True)
     p.add_argument("--output", required=True)
@@ -161,6 +227,20 @@ def main() -> int:
     p.add_argument("--deployment-id", required=True)
     args = p.parse_args()
     started = time.time()
+
+    # Classified before the first request, not while assembling the evidence at the end.
+    # Resolving afterwards recorded a fresh lookup that nothing tied to the run: the name
+    # could have moved between the last request and the record, and the witness would have
+    # published the later answer as the target it exercised.
+    #
+    # What this field proves and what it does not: it is the resolution taken immediately
+    # before the smoke ran, not the peer address each connection actually used. `urllib`
+    # resolves again per request, and pinning connections to a literal address would break
+    # TLS hostname verification, so the defensible record is a contemporaneous resolution
+    # rather than a connected-peer attestation. That is enough for the gate it feeds —
+    # loopback and unresolved cannot certify a deployment — and it is not evidence of
+    # anything narrower than that.
+    target = deployment_target.classify(args.base_url)
 
     code, metadata, metadata_raw = http_json(args.base_url, "GET", "/v1/ruleset")
     if code != 200:
@@ -230,6 +310,10 @@ def main() -> int:
         "suite": "GENOMA v3.4 section-260 LIVE post-deployment smoke",
         "classification": "live HTTP execution against a real container instance; not a unit fixture",
         "deployment_id": args.deployment_id,
+        # What this run actually reached. Without it `deployment_target.refusal` has nothing
+        # to judge, and every consumer has to take the `classification` string's word for it —
+        # an ephemeral CI container and a deployed host present exactly the same PASS face.
+        "target": target,
         "ruleset": metadata,
         "ruleset_response_sha256": sha256_bytes(metadata_raw),
         "ruleset_bootstrap_clause_present": bootstrap_ok,

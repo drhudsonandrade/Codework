@@ -10,12 +10,17 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from reporting.editorial_v3 import write_editorial_bundle
+from reporting.editorial_v3 import (
+    UnapprovedRendererError,
+    prepare_editorial_render,
+    write_editorial_bundle,
+)
 from reporting.engine import ReportReleaseError, load_catalog, render_document, write_bundle
 from scripts.prepare_report_release import assemble_release
 
 
 def main() -> int:
+    """Render every report the case supports, from one array input and its artifacts."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True)
     parser.add_argument("--policy", help="actual policy evaluation JSON; if omitted, a staged evaluation.json is used when present")
@@ -48,10 +53,11 @@ def main() -> int:
     try:
         for report_id in sorted(load_catalog()):
             rendered = render_document(report_id, data, mode="FINAL")
+            rendered = prepare_editorial_render(rendered)
             paths = write_bundle(rendered, out)
             paths.update(write_editorial_bundle(rendered, out))
             generated[report_id] = {key: str(value) for key, value in paths.items()}
-    except ReportReleaseError as exc:
+    except (ReportReleaseError, UnapprovedRendererError) as exc:
         print(f"REPORT BLOCKED: {exc}", file=sys.stderr)
         return 2
 

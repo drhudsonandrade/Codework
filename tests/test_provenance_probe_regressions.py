@@ -1,0 +1,163 @@
+from __future__ import annotations
+
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from array_pipeline.provenance_probe import (
+    ProvenanceProbeError,
+    _read_markers_from_array,
+    attestation_from_probe,
+    load_markers,
+)
+
+
+class ProvenanceProbeRegressionTest(unittest.TestCase):
+    """What the provenance marker table must declare before the probe will use it."""
+    def _write_markers(self, root: Path, marker: object) -> Path:
+        """Write a marker table containing exactly this marker."""
+        path = root / "markers.json"
+        path.write_text(json.dumps({
+            "schema": "genoma-array-provenance-markers-v1",
+            "source": "fixture",
+            "markers": [marker],
+        }), encoding="utf-8")
+        return path
+
+    def test_marker_entries_must_be_objects(self):
+        """A marker entry that is not an object is refused."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            for marker in (None, 7, "rs1"):
+                with self.subTest(marker=marker):
+                    with self.assertRaisesRegex(ProvenanceProbeError, "marker.*object"):
+                        load_markers(self._write_markers(root, marker))
+
+    def test_rsid_must_be_a_non_empty_string(self):
+        """An rsid that is not a non-empty string is refused."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            for marker in ({}, {"rsid": None}, {"rsid": ""}, {"rsid": "   "}, {"rsid": 7}):
+                with self.subTest(marker=marker):
+                    with self.assertRaisesRegex(ProvenanceProbeError, "rsid.*non-empty string"):
+                        load_markers(self._write_markers(root, marker))
+
+    def test_marker_positions_must_be_positive_integers(self):
+        """Marker positions must be positive integers, and True is not one."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            for position in (None, "abc", 0, -1, True):
+                marker = {
+                    "rsid": "rs1",
+                    "grch37": {"chromosome": "1", "position": position},
+                    "grch38": {"chromosome": "1", "position": 2},
+                    "plus_alleles": ["A", "C"],
+                }
+                with self.subTest(position=position):
+                    with self.assertRaisesRegex(
+                        ProvenanceProbeError, "rs1.*positive integer"
+                    ):
+                        load_markers(self._write_markers(root, marker))
+
+    def test_duplicate_rsids_are_rejected_case_insensitively(self):
+        """Duplicate rsids are rejected case-insensitively."""
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "markers.json"
+            marker = {
+                "grch37": {"chromosome": "1", "position": 1},
+                "grch38": {"chromosome": "1", "position": 2},
+                "plus_alleles": ["A", "C"],
+            }
+            path.write_text(json.dumps({
+                "schema": "genoma-array-provenance-markers-v1",
+                "source": "fixture",
+                "markers": [
+                    {**marker, "rsid": "rs1"},
+                    {**marker, "rsid": "RS1"},
+                ],
+            }), encoding="utf-8")
+            with self.assertRaisesRegex(ProvenanceProbeError, "duplicate.*rsid"):
+                load_markers(path)
+
+    def test_invalid_plus_allele_is_domain_error_not_keyerror(self):
+        """An invalid plus-strand allele is a domain error, not a KeyError escaping the parser."""
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "markers.json"
+            path.write_text(json.dumps({
+                "schema": "genoma-array-provenance-markers-v1",
+                "source": "fixture",
+                "markers": [{
+                    "rsid": "rs1",
+                    "grch37": {"chromosome": "1", "position": 1},
+                    "grch38": {"chromosome": "1", "position": 2},
+                    "plus_alleles": ["A", None],
+                }],
+            }), encoding="utf-8")
+            with self.assertRaisesRegex(ProvenanceProbeError, "rs1.*A, C, G or T"):
+                load_markers(path)
+
+    def test_plus_alleles_must_be_distinct(self):
+        """The two plus-strand alleles must be distinct."""
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "markers.json"
+            path.write_text(json.dumps({
+                "schema": "genoma-array-provenance-markers-v1",
+                "source": "fixture",
+                "markers": [{
+                    "rsid": "rs1",
+                    "grch37": {"chromosome": "1", "position": 1},
+                    "grch38": {"chromosome": "1", "position": 2},
+                    "plus_alleles": ["A", "A"],
+                }],
+            }), encoding="utf-8")
+            with self.assertRaisesRegex(
+                ProvenanceProbeError, "two distinct alleles"
+            ):
+                load_markers(path)
+
+    def test_proposed_marker_table_cannot_issue_a_verified_attestation(self):
+        """A successful probe over unverified marker metadata is not an attestation."""
+        result = {
+            "evaluated_at": "2026-09-02T00:00:00Z",
+            "input_sha256": "a" * 64,
+            "marker_table": {
+                "id": "fixture",
+                "version": "1",
+                "sha256": "b" * 64,
+                "verification_status": "PROPOSTO",
+            },
+            "build": {
+                "status": "VERIFICADO",
+                "value": "GRCh38",
+                "grch37_matches": 0,
+                "grch38_matches": 3,
+            },
+            "strand": {
+                "status": "VERIFICADO",
+                "value": "forward",
+                "plus_matches": 3,
+                "minus_matches": 0,
+            },
+        }
+        self.assertIsNone(attestation_from_probe(result, "reference_build"))
+        self.assertIsNone(attestation_from_probe(result, "strand"))
+
+    def test_duplicate_and_unresolved_markers_are_discarded(self):
+        """Duplicate and unresolved markers are discarded rather than probed."""
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "array.csv"
+            path.write_text(
+                "RSID,CHROMOSOME,POSITION,CONSENSUS_RESULT,STATUS,GENERA_RESULT,MYHERITAGE_RESULT,SOURCES\n"
+                "rs1,1,10,AA,consensus,AA,AA,GM\n"
+                "rs1,1,10,AA,consensus,AA,AA,GM\n"
+                "rs2,1,20,AA,genotype_conflict,AA,AG,GM\n"
+                "rs3,1,30,AA,consensus,AA,AA,GM\n",
+                encoding="utf-8",
+            )
+            found = _read_markers_from_array(path, {"rs1", "rs2", "rs3"})
+            self.assertEqual(set(found), {"rs3"})
+
+
+if __name__ == "__main__":
+    unittest.main()

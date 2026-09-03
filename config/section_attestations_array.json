@@ -1,0 +1,2502 @@
+{
+ "applies_to_schemas": [
+  "harmonized_genera_myheritage_v1",
+  "raw_snp_array_v1"
+ ],
+ "curated_at": "2026-08-22",
+ "curated_by": "curadoria do projeto GENOMA — leitura seção a seção do ruleset vigente",
+ "note": "Cada entrada é um juízo sobre uma seção específica, escrito contra o texto dela e fixado ao SHA-256 daquela seção. Uma seção cujo texto mude deixa de ser coberta por esta curadoria e o RULE_COVERAGE_GATE recusa, que é o comportamento correto: um juízo sobre outras palavras não é um juízo sobre estas.",
+ "operation": "SNP-array curated interpretation",
+ "ruleset": {
+  "sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
+  "version": "v3.4"
+ },
+ "schema": "genoma-section-attestations-v1",
+ "scope_note": "Estes juízos foram escritos sobre uma execução de genotipagem em array. Uma projeção de VCF de WGS é outra operação — a hierarquia de fontes, a auditoria de WGS, a normalização de variantes e o truth set mudam de resposta — e exige a própria curadoria.",
+ "sections": {
+  "0": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "ruleset-v3.4"
+   ],
+   "justification": "Esta execução identifica o ruleset vigente antes de qualquer análise: materializa o artefato selado, confere o SHA-256 contra o manifesto e submete o manifesto ao policy engine, cujo RULESET_GATE recusa versão ou hash divergentes. As seções aplicáveis são percorridas uma a uma por esta própria curadoria.",
+   "rule_sha256": "4dda249c753fad467296e633a2f4549c027772579dbe9a844a7c8e96f7e6106e",
+   "status": "VERIFICADO"
+  },
+  "1": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A missão é longitudinal e integrativa; esta execução contribui a camada SNP-array dela e declara explicitamente, na matriz de capacidade, quais camadas (WGS, SV, epigenoma) permanecem fora do que este lane produz, em vez de apresentá-la como o genoma mestre.",
+   "rule_sha256": "3c7b19f4603a11de15aef19f3742458c43061956b6deb95f3d2de6bafed307c3",
+   "status": "VERIFICADO"
+  },
+  "10": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A classificação A–E de prioridade do projeto é aplicada em paralelo à patogenicidade: os achados são graduados por nível de revisão ClinVar e validade gene–doença ClinGen, com submissão de único submissor limitada a ACHADO PRELIMINAR e jamais promovida a acionável.",
+   "rule_sha256": "62ea835521e89fbcde57caa9b28ba540198506bdb4e4a300003774caa4da109f",
+   "status": "EXECUTADO"
+  },
+  "100": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O Personal Genome Model integra sequência, haplótipos, estrutura, expressão e tempo. Este lane contribui uma camada dele e não o constrói.",
+   "rule_sha256": "07c833774f35b2fecc649decdbcea2be656a76853202ae0474fd1bc9621f0b45",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "101": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Os cinco eixos são avaliados separadamente em cada achado: confiança técnica vem do QC do locus, patogenicidade do ClinVar com nível de revisão, validade gene–doença do ClinGen, e o eixo de ação fica explicitamente condicionado à confirmação.",
+   "rule_sha256": "beb6a30581a50689e44f67e934690b1271940d3ab1b518c96380e77c4a2e7c29",
+   "status": "VERIFICADO"
+  },
+  "102": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A classificação de patogenicidade não é recomputada aqui: é lida do ClinVar com o review status registrado, e especificações de VCEP são respeitadas ao não sobrepor julgamento próprio à do painel de especialistas.",
+   "rule_sha256": "3f114d4ee3db024231a7e87f09708be46fcb9d55f34678bf920d0b32c6951e57",
+   "status": "VERIFICADO"
+  },
+  "103": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A validade gene–doença é conferida no ClinGen antes de qualquer interpretação clínica, com o nível de validade impresso; genes sem validade definitiva ou forte não sustentam achado acionável.",
+   "rule_sha256": "8dc02c77e8c7b8f03f51ec04f1dc88e74231412d8ae4cdccb3ca169c9dfe6599",
+   "status": "VERIFICADO"
+  },
+  "104": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "Cada achado é reportado por rsID com build e orientação de fita atestados. HGVS completo e transcript MANE exigem coordenadas e alelos que o export de array não traz, e essa limitação é declarada em vez de um HGVS ser fabricado.",
+   "rule_sha256": "032ab40b972a56da0abc2b0be17dd583683ecdde5dc33cad7762fcdb16404d0b",
+   "status": "VERIFICADO"
+  },
+  "105": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Os genes da lista ACMG SF vigente presentes no registro são interrogados e reportados como achados secundários, com a fração interrogada por gene impressa, de modo que a lista não seja lida como avaliada por completo.",
+   "rule_sha256": "359db55e95cdcaa78fd13812be69a2e364c65210e1f6e7013dc9bda1f31b59a4",
+   "status": "EXECUTADO"
+  },
+  "106": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O módulo nutrigenético existe como relatório 04, construído sobre associações documentadas do GWAS Catalog com a coorte de descoberta declarada, e separa nutrigenética de nutrigenômica ao não afirmar efeito da dieta sobre expressão.",
+   "rule_sha256": "3186fc2f4de805fe4ada24484f35a2e409d44c42ae22c6917aca7e50c4b01b94",
+   "status": "EXECUTADO"
+  },
+  "107": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Cada interação gene × nutriente é graduada pela força da evidência da associação e pela ancestralidade da coorte em que foi estimada; associações de submissão única não sustentam recomendação.",
+   "rule_sha256": "0e5af87cf6c4fe9ba8035cd758d340eebaf648a544478e8eb7b911dbc106fbfa",
+   "status": "VERIFICADO"
+  },
+  "108": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Os domínios nutrigenéticos são investigados nos loci que o array cobre — LCT/MCM6, MTHFR, FADS, CYP1A2, ALDH2, HFE e demais do registro — e os que dependem de haplotipagem HLA, como DQ2/DQ8 para doença celíaca, são declarados não interrogados.",
+   "rule_sha256": "ca77b6c286bf6f5c4eddbc0fcc044f40e2baff962314fedadc0d4bfe90e152ca",
+   "status": "EXECUTADO"
+  },
+  "109": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Para cada achado nutrigenético o relatório traz variante, gene, nutriente relacionado, qualidade técnica, grau de evidência, magnitude e a população em que foi validada.",
+   "rule_sha256": "ee1121e38806cf7ecf02651865d23a47f87dff41d3c898aa5311de50b7d9df2e",
+   "status": "EXECUTADO"
+  },
+  "11": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A interpretação usa apenas fontes primárias/oficiais curadas — ClinVar com review status, ClinGen gene-disease validity e actionability, CPIC/PharmVar, gnomAD, GWAS Catalog, PGS Catalog, PanelApp — cada uma com data de recuperação registrada; o EVIDENCE_RECENCY_GATE recusa fonte mutável verificada há mais de 90 dias. Cada snapshot curado registra, no próprio arquivo, a URL consultada, os filtros aplicados e o instante da recuperação.",
+   "rule_sha256": "fcc28ecc2ff153442a4826cf81353cdd83b4f5383676d5b264c5f33c3e70b568",
+   "status": "VERIFICADO"
+  },
+  "110": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A integração genoma × dieta × fenótipo alimenta o gêmeo digital com diário alimentar, composição corporal e biomarcadores. Nenhum desses dados foi fornecido.",
+   "rule_sha256": "28acf19844b8610d85cd3a859003ded42efe37c4c8ea8952bee6eabdf137799e",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "111": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "Experimentos n-of-1 exigem baseline, desfecho objetivo e medições repetidas no tempo, que estão fora de uma execução de análise de arquivo.",
+   "rule_sha256": "2a3d8a723f33854a66864a5b4298f8926eab1b4b2ddb80f9b707c40b2d3b15ec",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "112": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Condições monogênicas com manejo dietético — hemocromatose hereditária, distúrbios de transporte de micronutrientes — são interrogadas nos loci cobertos e reportadas com a confirmação exigida, nunca como diagnóstico.",
+   "rule_sha256": "2218fa3c55d38f4a82390d94147b86a3c2155068a10d4e2879afc23867995a3d",
+   "status": "EXECUTADO"
+  },
+  "113": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-input",
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "O manifesto de proveniência é produzido nesta execução: para cada artefato, o SHA-256, a origem, o build, a orientação de fita, a ferramenta que o produziu e o hash do arquivo pai quando derivado, mais a versão e o hash do ruleset. O DATA_PROVENANCE_GATE recusa entrada transformada sem o hash do pai. Versão de caller e tipo de amostra biológica não se aplicam a um export de genotipagem e não são inventados.",
+   "rule_sha256": "02f0d16cab562800ee5ebddc7cd336ddf1373b26199a1316f4cd522239cc4049",
+   "status": "EXECUTADO"
+  },
+  "114": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-input",
+    "array-qc"
+   ],
+   "justification": "A origem da amostra é registrada como export de genotipagem de consumidor, e a distinção germinativo × somático é preservada ao não promover nenhuma variante a somática: o array não mede fração alélica.",
+   "rule_sha256": "3828048ffc86a41cf5ab2a1b89882473d4b5dd863125680f100f7d6f2c5639d4",
+   "status": "VERIFICADO"
+  },
+  "115": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A ancestralidade entra na interpretação: frequências populacionais são consultadas por grupo ancestral e a coorte de descoberta é impressa com cada associação, com a advertência de que efeitos estimados em europeus não transferem ao genoma admisto brasileiro no tamanho declarado.",
+   "rule_sha256": "f1cdb2fd5b0028d951cd3787ce03836b920a0849d826c79694705be71bf2f22c",
+   "status": "VERIFICADO"
+  },
+  "116": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "Imprinting, parent-of-origin e dissomia uniparental exigem trio, phasing ou indicação clínica com dados familiares. Nenhum foi fornecido.",
+   "rule_sha256": "caf00e76bd16c89df4fabe01734de6619fb83bc3a9b3bde6a4d58d04621f7d87",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "117": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "Toda conclusão negativa registra a classe avaliada: apenas SNV em loci catalogados. CNV, SV, expansões, mtDNA, HLA/KIR, pseudogenes, não codificantes e mosaicismo constam da matriz de capacidade como não avaliados, e nenhuma negativa se estende a eles.",
+   "rule_sha256": "ddab52ec5dc5ffb00243e35aaebecc30a4fdedf01eff06046e9bb8b1993094f2",
+   "status": "EXECUTADO"
+  },
+  "118": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "As referências desta versão são as efetivamente consultadas na curadoria da evidência, cada uma registrada no próprio artefato com URL, filtros e instante de recuperação, em vez de uma lista citada sem acesso.",
+   "rule_sha256": "95169ebe2b9a84e73d73a447f56d11ec065af903738156a5079b1120afc40062",
+   "status": "VERIFICADO"
+  },
+  "119": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-input",
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "Nenhum achado importante é apresentado sem responder ao padrão mínimo: a chamada é conferida no QC, build e fita são atestados contra tabela de marcadores, a classificação vem do ClinVar com nível de revisão e a confirmação necessária é declarada.",
+   "rule_sha256": "7d187ab0da5b96261ae04b3abb66695cc25e9d0f1d840407248c880441a18c96",
+   "status": "EXECUTADO"
+  },
+  "12": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "BCHE rs1799807 e rs1803274 são alvos interrogados do registro. A fase entre A e K não é assumida: o passaporte declara o genótipo por locus e recusa diplótipo quando a fase não é determinável pelo array, e o cartão de anestesia registra a implicação prática com a confirmação enzimática necessária.",
+   "rule_sha256": "fbd4d73c6d96b6dab22634b49804ab8e09ac3a9ca6df119b9f27b90bb3553a1e",
+   "status": "EXECUTADO"
+  },
+  "120": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-input",
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "O checklist de reanálise é executado nesta corrida: QC e integridade dos arquivos, proveniência, achados acionáveis, achados secundários ACMG, validade ClinGen, farmacogenômica e limitações por classe de variante.",
+   "rule_sha256": "ac9c8de683bf392e2b133ce7e0a14d65defedd33209563b6c6c11f9d5c03ae3e",
+   "status": "EXECUTADO"
+  },
+  "121": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A análise nutricional não é comercial: nenhum rótulo de 'metabolizador', 'intolerante' ou 'necessita suplemento' é emitido a partir de genótipo isolado, e nenhuma recomendação é derivada de lista de SNPs.",
+   "rule_sha256": "1b10edee32d58841f0e4810690dcbfc0bcefe011384e3f801dc843e83c49f6a8",
+   "status": "VERIFICADO"
+  },
+  "122": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O ecossistema ampliado é consultado no que este lane usa: ClinVar, ClinGen, GenCC, PanelApp, gnomAD, CPIC/PharmVar, GWAS Catalog e PGS Catalog, cada um com URL, filtros e instante de recuperação gravados no snapshot curado que esta execução lê; os demais bancos não são citados como consultados.",
+   "rule_sha256": "33d52ae56cd160d283ddea64c2e2373c265c066e86edb087cc0fa280e475fe47",
+   "status": "VERIFICADO"
+  },
+  "123": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "Evidência funcional multiplexada aplica-se a variantes raras e VUS candidatas em genes com dados MaveDB, situação que este lane não produz.",
+   "rule_sha256": "a49b78ce10b73e0ad457e54967a1a79979afbce44dec5c3cdccac276fec93361",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "124": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O catálogo IGVF é uma camada de genômica funcional para variantes priorizadas por sequenciamento.",
+   "rule_sha256": "152e65c47b75b04a9f95f6361d77e24ccf154bb448b929dc87122f0abd350b0e",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "125": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A triangulação gene–doença é feita: validade é conferida em ClinGen e GenCC e complementada por PanelApp, com divergências registradas em vez de resolvidas por maioria.",
+   "rule_sha256": "0726edb1cf316b2f5be4a47ab52289e7b8bf8690c1b1cb73db385fd56ae11643",
+   "status": "VERIFICADO"
+  },
+  "126": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A interpretação de dosagem e CNV exige deleções e duplicações detectadas, que este lane não detecta.",
+   "rule_sha256": "c3a0a1c94ae84eaea413e7c14cbda91c3c4488d37160dca10ef943303c1352d7",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "127": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "Fine-mapping, colocalização e inferência causal exigem estatísticas de sumário e dados de LD local que esta execução não processa; o relatório para no SNP líder e diz isso.",
+   "rule_sha256": "d0beabe29e19c82651ff537babc32c6336087f1da7c26dc9b73ab1225537f8f6",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "128": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "PheWAS e efeitos pleiotrópicos exigem consulta a biobancos com fenótipos, não executada nesta corrida.",
+   "rule_sha256": "d750f509e8bf23219d6ebf02f72560ff2b5420571f4e62022c0b40342250ad4d",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "129": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "Genômica de célula única e espacial é uma camada de interpretação regulatória sem relação com um export de genotipagem.",
+   "rule_sha256": "6b00e29e18ccc9490cfe8d136378a8c1fed8b7ec897c9c55b650ef42d115005b",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "13": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "SERPINA1 rs17580 e rs28929474 são alvos interrogados. O resultado é reportado como negativo apenas nos loci avaliados; o gene inteiro não é declarado normal, e a deficiência de alfa-1-antitripsina não é excluída pelos dois SNPs.",
+   "rule_sha256": "9c97da33878d52d9fa1fba0f2e3384139bc72d9e29d420028a866ef1e9c2de97",
+   "status": "EXECUTADO"
+  },
+  "130": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O cruzamento com proteômica tecidual, pQTL e interações proteína–proteína pressupõe variantes candidatas priorizadas e dados de proteína, nenhum dos quais este lane produz.",
+   "rule_sha256": "27b7dc475746a4261754fcedfa8cac21dce17d9c6e2ba6cfeaf1390a4b509ea0",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "131": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A nutrição de precisão multiômica exige proteoma, metaboloma e microbioma.",
+   "rule_sha256": "21bb4d3e4fb0a106d009f757479cd9a7c5176329dd7b688e524d33c650386348",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "132": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "Os fenótipos de resposta metabólica exigem medições de glicemia, lipídios, cafeína ou álcool no caso, não fornecidas.",
+   "rule_sha256": "d9acb658568d4e41c45af6b674b127cf87f96e4ab5382d870dd48bc99da5fae4",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "133": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O módulo hospedeiro × microbioma investiga metabólitos microbianos, SCFAs e resposta a fibras, o que exige metagenoma ou perfil de microbiota. Nenhum foi fornecido.",
+   "rule_sha256": "4b91ab94aa225babf427c409667397a472a52c1aae25bdb9666727b62ed1fe1d",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "134": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A camada exposoma exige dados de exposição ambiental e estilo de vida.",
+   "rule_sha256": "977081990a97775623b47dd51d2eb9ad53971e5a76f6ae019dbc12bd510cda07",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "135": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Genômica de personalidade e comportamento permanece em pesquisa: nenhum SNP isolado é interpretado como explicação de traço comportamental e nenhum escore de personalidade é emitido.",
+   "rule_sha256": "ec3a67a50565ddc3d189df4a805838201692de2dd569d12d886ab89cf5ee96ab",
+   "status": "VERIFICADO"
+  },
+  "136": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O atlas de traços é produzido como relatório 08, separado da clínica, sobre os loci que o array cobre e com a evidência de cada traço graduada.",
+   "rule_sha256": "168ec3e1e52483b0cfa71cbf3467c811631db8e7963fdf3436f9da0c25f9ffa3",
+   "status": "EXECUTADO"
+  },
+  "137": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A escala T1–T5 é aplicada aos resultados não clínicos pela força da associação e pela replicação, e traços sem evidência reproduzida não entram no atlas.",
+   "rule_sha256": "7fbfd931b31c5696930210339b415ec4e2342ff54d83dea64561822fc0d96607",
+   "status": "VERIFICADO"
+  },
+  "138": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O atlas de benefícios é produzido ao reportar variantes protetoras e risco relativo menor com a mesma graduação de evidência dos achados de risco.",
+   "rule_sha256": "b4792da152d72a4b04bd79bfac4a3f34c1ecaceb2e69b75821aca41e02803bc2",
+   "status": "EXECUTADO"
+  },
+  "139": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O acompanhamento do pangenoma humano é relevante ao reprocessamento de leituras.",
+   "rule_sha256": "95e35b0aa8b2d70126f681fa291cf22c9854107e0cdc064ba7b404437fe5c359",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "14": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "PNPLA3 rs738409 é alvo interrogado e reportado como predisposição, com a exigência explícita de leitura conjunta com fenótipo hepático e metabólico; nenhum diagnóstico de MASLD é emitido a partir do genótipo.",
+   "rule_sha256": "36dba733d0e511dcd03ca92473d6282e77f08f1ce5f2492cc3e17a81fa1bea90",
+   "status": "EXECUTADO"
+  },
+  "140": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O genoma regulatório 3D aplica-se a variantes não codificantes priorizadas.",
+   "rule_sha256": "fc4811e340215999ad88ad48b11cdce457471afe8907238b526fd5edca99f0fe",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "141": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A reconstrução de isoformas completas, transcritos alelo-específicos e NMD exige RNA sequenciado por leitura longa. Nenhum dado de RNA foi fornecido a esta execução.",
+   "rule_sha256": "520ec1eb9a8be7b93591f84a82dcf4ab84f293a54b90e9312d93d72dc1601d02",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "142": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A busca por peptídeos alelo-específicos e a confirmação de tradução exigem espectrometria de massas de alta resolução, que esta execução não possui.",
+   "rule_sha256": "310bac777fc3fd9f039befa254971e1a11e1a317f925c162e159dc4a470524bd",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "143": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O radar de novidade é atendido pelo instante de recuperação gravado em cada snapshot curado e pelo gate de recência, que recusa fonte mutável vencida: é isso que torna verificável, na próxima reanálise, o que mudou desde esta.",
+   "rule_sha256": "665b4ee435438b7794ddf054c21fd52aef37b9e333a6c6fdd195370174c6a8cc",
+   "status": "VERIFICADO"
+  },
+  "144": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-input",
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "O ambiente é congelado fora do manifesto e referenciado por ele: as versões de ferramenta e container ficam no lock de runtime versionado do repositório, e este manifesto registra o SHA-256 de cada artefato e a ferramenta que o produziu, de modo que a corrida seja reconstituível a partir dos dois.",
+   "rule_sha256": "e4f8b46875abe08c6cf33d1bea80b23a24b7d48424f0e215d8b01089a9b53483",
+   "status": "EXECUTADO"
+  },
+  "145": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Cada achado de alta prioridade recebe seu dossiê: variante, gene, qualidade técnica, frequência populacional, ClinVar com nível de revisão, validade ClinGen e a confirmação exigida, tudo ancorado ao artefato de onde foi lido.",
+   "rule_sha256": "d711ca9ceb39d60b8fe41a50289db1a5ebb578ffc73e459371eab8d7031a61d0",
+   "status": "EXECUTADO"
+  },
+  "146": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "Resultados negativos são calibrados: cada negativa declara a classe avaliada e o escopo do locus, e loci não cobertos recebem NÃO INTERROGADO em vez de negativo.",
+   "rule_sha256": "6c5bf40f91adf08a1636e690640c97b10e98ceebfe81a2435c1df8f013744004",
+   "status": "EXECUTADO"
+  },
+  "147": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O relatório final em PDF é produzido nesta execução, estruturado, arquivável e com camada técnica e camada simples, e o gate de publicação recusa emitir FINAL enquanto qualquer plano do policy engine estiver bloqueado.",
+   "rule_sha256": "94b51f887f593651fbf6b34ccaee66c66e01fd821283eb07c2dde25ec1ad0a20",
+   "status": "VERIFICADO"
+  },
+  "148": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A dupla camada de linguagem é obrigatória em cada achado relevante do PDF, com a camada simples explicando sem distorcer a classe de asserção da camada técnica.",
+   "rule_sha256": "ff4c012652cb7b51f343dce1fb9ddd9794e9709d57a3d90ef8e68e53d4594e8a",
+   "status": "VERIFICADO"
+  },
+  "149": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O design do PDF segue o pacote de templates v3.0 selado e verificado por hash, com QA visual e paridade DOCX medidas, em vez de layout improvisado por execução.",
+   "rule_sha256": "e6130a6148ce1179af59f130d80a49a48231b1065e81628bc27f9444311c27c2",
+   "status": "VERIFICADO"
+  },
+  "15": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "Os loci farmacogenéticos baseline (CYP2C9, VKORC1, SLCO1B1, CYP3A5, NAT2) são interrogados e o passaporte deriva o diplótipo apenas de chamadas diploides com base de zigosidade registrada, declarando NÃO INTERROGADO onde o array não cobre o alelo definidor.",
+   "rule_sha256": "a8b52a82e3d9c6fe72a1de8b4aece59ec3ca1e5c106050b73492488970bc006e",
+   "status": "EXECUTADO"
+  },
+  "150": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Alertas e benefícios são destacados separadamente em cada relatório, com os achados que justificam confirmação distintos dos favoráveis.",
+   "rule_sha256": "04f53a18a84f480e189bcd045a3fa53514833ecbc128bef1eee0bc95bba4377b",
+   "status": "VERIFICADO"
+  },
+  "151": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O resumo de uma página é produzido como relatório 10, com alertas principais, farmacogenômica crítica, cartão de anestesia resumido, ancestralidade e próximos passos, declarando que não substitui os relatórios completos.",
+   "rule_sha256": "5c4a8ae2e378869e5fc9b744e3e7b7a720954ef3c526c2e0ac480c999dc88fe8",
+   "status": "EXECUTADO"
+  },
+  "152": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "A matriz de completude do genoma é produzida como relatório 09, linha a linha por classe de variante e por gene, com o estado real de cada uma nesta execução.",
+   "rule_sha256": "8fae59f1b1f8097d78f85e2c782197425e28dff32cc1cd8a84e68c9d7b782c8f",
+   "status": "EXECUTADO"
+  },
+  "153": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A separação entre clínico, predisposição, pesquisa e curiosidade é estrutural: cada achado carrega seu domínio e os relatórios são emitidos por domínio, com traços comportamentais mantidos em pesquisa e curiosidade.",
+   "rule_sha256": "5b79dcca1e7c124108bd125dc18f12c325dc25d5be809ebb99afed77f214d55a",
+   "status": "VERIFICADO"
+  },
+  "154": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A busca é exaustiva e filtrada por evidência: o registro padrão cobre mais de cento e vinte mil loci, e a graduação por nível de revisão e validade gene–doença faz a filtragem, em vez de um limite arbitrário de módulos.",
+   "rule_sha256": "b1a5060353fdc30b0a4b1a9b03191285b66e57a11292848ebbe0db4b51b64131",
+   "status": "EXECUTADO"
+  },
+  "155": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "As fontes desta versão que este lane usa são consultadas na curadoria e registradas com URL, filtros e instante de recuperação no artefato de evidência; as demais não são citadas como incorporadas.",
+   "rule_sha256": "eb6c6749ad66d1273554d8543c25a041b11dc3abb74f255241916d020884d1ac",
+   "status": "VERIFICADO"
+  },
+  "156": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "ruleset-v3.4"
+   ],
+   "justification": "O changelog da v2.1 é preservado como conteúdo normativo cumulativo e suas exigências que se aplicam a este lane — triangulação de validade gene–doença e registro de fontes — são atendidas nas seções 122 e 125.",
+   "rule_sha256": "6111e10e2b07ebe8e557b081aed4eb74331fb2c47ddabceedd9bff525d2d2523",
+   "status": "VERIFICADO"
+  },
+  "157": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O objetivo da v2.1 é atendido no escopo deste lane ao conectar variante, evidência, fenótipo declarado e limitação de forma rastreável, sem afirmar as camadas ômicas ausentes.",
+   "rule_sha256": "6b32c99acf024a0b8156187f737df220433baa72fedf7f0096ed6db9efcb94c6",
+   "status": "VERIFICADO"
+  },
+  "158": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O benchmark de serviços é mantido de forma honesta: a matriz de capacidade declara, recurso a recurso, o que este lane produz e o que exigiria WGS, sem reivindicar paridade com o que não executa.",
+   "rule_sha256": "cb512477d61165235dc20dedb279d38e8071322c6682f84139fe02a763e9ddbe",
+   "status": "VERIFICADO"
+  },
+  "159": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A comparação com serviços de WGS é declarada, não reivindicada: esta execução opera sobre array e a matriz de capacidade registra que amplitude clínica de WGS, FASTQ/BAM e relatórios de gene inteiro não são produzidos aqui.",
+   "rule_sha256": "92cfa5d7512d5ad0322a0d33b6c6bd135b74bfca0015c150da4543ced9c768e5",
+   "status": "VERIFICADO"
+  },
+  "16": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "O passaporte farmacogenético é produzido nesta execução para os genes que o array cobre, com nível de evidência CPIC por par gene-fármaco, e declara explicitamente os genes fora de alcance — CYP2D6 estrutural, HLA farmacogenético — em vez de omiti-los.",
+   "rule_sha256": "5b42744371664686cd39d17c3e74a782b033920fb6624beb202c8db172fbefe2",
+   "status": "EXECUTADO"
+  },
+  "160": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Haplogrupo Y exato, anotação completa de SNPs-Y e análise genealógica profunda exigem WGS; a paridade é declarada como não alcançada por este lane, com o nível de linhagem efetivamente sustentado pelos marcadores do array reportado em seu lugar.",
+   "rule_sha256": "be8f34a2cba11cc5667d75391aa3e4d18a695cba481e179ca0067621ca247b69",
+   "status": "VERIFICADO"
+  },
+  "161": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A colocação em YTree/MTree e SNPs privados exigem WGS. Esta execução declara o nível de resolução que os marcadores uniparentais do array sustentam e não reivindica subclado terminal.",
+   "rule_sha256": "9796d56f74d31753e7a05aa6b2068c5e1e6a166c2c7b8e4b99806a9b220066a2",
+   "status": "VERIFICADO"
+  },
+  "162": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Os relatórios em escala e o navegador de genoma dessas plataformas pressupõem WGS. A matriz de capacidade registra o que este lane cobre e o que não cobre.",
+   "rule_sha256": "91210f0f4d72a66a72cefe2ef797f3c36b2a7d6c71450527f5e724ba05bfaa74",
+   "status": "VERIFICADO"
+  },
+  "163": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "SV, CNV e heteroplasmia mitocondrial constam da matriz de capacidade como NÃO DISPONÍVEL nesta execução, em vez de figurarem como recursos oferecidos.",
+   "rule_sha256": "47e44d72a375b4b2d212f337a6eb5caee83652d35fcbb75c26bb136cea3069c7",
+   "status": "VERIFICADO"
+  },
+  "164": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A combinação de modelos poligênicos com análise mendeliana é reproduzida no limite dos dados: PRS só a partir de modelos publicados com cobertura medida, e variantes P/LP apenas nos loci interrogados.",
+   "rule_sha256": "ac79efeb020e9cd2293ff76069758cf945458eefeb5bd33ad280e23b47772362",
+   "status": "VERIFICADO"
+  },
+  "165": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "As classes de recurso desses serviços — DNA com estilo de vida, dieta e suplementos — são reproduzidas apenas onde a evidência sustenta, e o relatório recusa emitir recomendação de suplemento a partir de genótipo.",
+   "rule_sha256": "6914bb075d3377a942ea26a5fae0f623f6e93ad03446824c940fa8a900e4d54d",
+   "status": "VERIFICADO"
+  },
+  "166": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-input",
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "Composição de ancestralidade e traços são produzidos por este lane, com intervalo de confiança medido e piso de componente menor, o que é mais conservador do que a apresentação comercial dessas plataformas.",
+   "rule_sha256": "00bdfd1ecdbf9eef4c1bd70bf06a24dc27a8504988c35146c7848588993e2a87",
+   "status": "EXECUTADO"
+  },
+  "167": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A matriz de paridade comercial é mantida como a matriz de capacidade do manifesto, que registra recurso a recurso o método deste projeto, sua qualidade e sua limitação.",
+   "rule_sha256": "3503aa2dca087774ec869bf3dba9732fe007284dc67a7ee1b224c82d82908119",
+   "status": "VERIFICADO"
+  },
+  "168": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "Artefatos pesquisáveis são produzidos: os payloads JSON de cada relatório, a matriz de completude, o passaporte e os achados clínicos, todos com proveniência por campo.",
+   "rule_sha256": "3ebbc5883785393e031abba11eb2dbbaa29192c8a3858ae02461a7713294b4dc",
+   "status": "EXECUTADO"
+  },
+  "169": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O motor de consulta semântica sobre o Genoma Mestre pressupõe o banco mestre de variantes, que este lane não constrói.",
+   "rule_sha256": "a947b8b393ada62facce124a5c6ba83b26103f76d3a9fe3de7ad1c6be1b21739",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "17": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "rs4307059 é interrogado e reportado como associação de GWAS, nunca como causa de TEA. SNPs candidatos isolados de OXTR, COMT, BDNF e HTR2A não são usados como explicação causal; genes SFARI de alto impacto não são interrogáveis por array e constam como não interrogados.",
+   "rule_sha256": "f9c3781c2549affa9e936cd3c4073bbe8c364c75db270e2a00670a7596fe19cd",
+   "status": "EXECUTADO"
+  },
+  "170": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A varredura ampla de doenças raras é condicionada pelo próprio texto a WGS adequado.",
+   "rule_sha256": "4687a4693291b555a16f43dc39fe5fab8b0c273325e7c78fb2784e4d72cff6a9",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "171": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "AlphaGenome é camada regulatória para variantes não codificantes descobertas em sequenciamento.",
+   "rule_sha256": "2038a7452cd55e7652c5989fce77e8df5d8e2b3722040ebc7c96149bba2dfc77",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "172": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "Modelos fundacionais genômicos operam sobre sequência, que este lane não possui.",
+   "rule_sha256": "e1c8c1c238c337d8e33edaf3728cccde4e6a76f81f016ff97e97587fe545f1f6",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "173": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "Referências populacionais de SV por leitura longa aplicam-se à interpretação de SV, não produzidas aqui.",
+   "rule_sha256": "897f2898e8c63032f518b09ff7b416c6333d022d241aa6b3bf664c8a69d1d9b2",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "174": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A watchlist de loci complexos (MHC, SMN1/SMN2, AMY1) exige resolução por sequenciamento; a matriz de capacidade já declara esses loci como não resolvidos.",
+   "rule_sha256": "6a2e73251c34d795dc7a9148459e7af893f5da303ebef6701559f53de0dff021",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "175": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O atlas de repetições em tandem e VNTR exige medição de número de repetições.",
+   "rule_sha256": "85c9d650ea49319b111c461cf632bfa18d125068721faa3dabed566c1644ccc6",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "176": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O atlas de inserções de elementos móveis exige detecção de inserções em leituras.",
+   "rule_sha256": "7d774c169dd1007ef17c5d7e341ee4fbb11b8d5ee0351ac075e6697cfef78cc2",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "177": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A genômica transfusional é interrogada no que o array cobre — ABO, ACKR1/Duffy e outros loci do registro — e o relatório declara que o genótipo não substitui tipagem sorológica nem pesquisa de anticorpos irregulares. RHD/RHCE dependem de número de cópias e constam como não interrogados.",
+   "rule_sha256": "4ffd4a3256b43e9d0c3b2f1ad98c103f6607cc828e1dc670e462f8600497be08",
+   "status": "EXECUTADO"
+  },
+  "178": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "Genes de número de cópias (AMY1, GSTM1, GSTT1, UGT2B17, CYP2D6) exigem medição direta de cópias, e o próprio texto proíbe inferi-las por tag SNP.",
+   "rule_sha256": "5960c3483b746849cb94d28da19b59d1801e17359d23e7932c42fbc58382c113",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "179": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O atlas de introgressão arcaica exige modelos de segmentos arcaicos sobre dados de sequenciamento com painel apropriado.",
+   "rule_sha256": "a022f5ba420f242b368cbb77ccb0ada75a6f82e9088472bc69e1e3cfbb58b62b",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "18": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "APOE é resolvido por rs429358 e rs7412 quando ambos são chamados, e o resultado ε3/ε3 é reportado sem ser convertido em proteção contra Alzheimer.",
+   "rule_sha256": "2970f6641562050c54530214846e5dbaf931a31880ce2b221b779e5bc6808cfd",
+   "status": "EXECUTADO"
+  },
+  "180": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Sinais de adaptação nos loci que o array cobre — persistência da lactase, EDAR, pigmentação, FADS — são reportados como história populacional e explicitamente separados de benefício médico atual.",
+   "rule_sha256": "fff4b1fca0923816841f092d182f80364d90d52b14ee4963b98b725b03540085",
+   "status": "EXECUTADO"
+  },
+  "181": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Os traços de aparência, sensoriais e fisiológicos com evidência reproduzida e cobertos pelo array são reportados no atlas de traços, com a evidência graduada e sem afirmar determinismo.",
+   "rule_sha256": "6b8d60b8a11040209601ac191fb1150db88fcd5306f53ee089be2f96c516dec8",
+   "status": "EXECUTADO"
+  },
+  "182": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A regra de não reducionismo é cumprida literalmente: COMT, OXTR, BDNF e DRD2 não são interpretados isoladamente como explicação de personalidade, e nenhum escore de personalidade é emitido.",
+   "rule_sha256": "7d97c2b7a0bbee37e926e49ab8f7e8ad64323897c7c40f7828192bdc2b8c8ead",
+   "status": "VERIFICADO"
+  },
+  "183": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-input",
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "A camada de referência brasileira/latino-americana é obrigatória para este genoma e está no painel de ancestralidade, que inclui componente indígena amazônico/brasileiro além dos componentes continentais.",
+   "rule_sha256": "160a0e210979538870f45dd25d6b56069320baa237ce0d386090de5befc67b34",
+   "status": "EXECUTADO"
+  },
+  "184": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "As referências populacionais efetivamente usadas — gnomAD por grupo ancestral e os painéis de referência do relatório de ancestralidade — estão registradas nos artefatos curados com origem e instante de recuperação; as demais não são citadas como consultadas.",
+   "rule_sha256": "903ffad55819480665b2b3a948cb40c50da6fcd7291d1cdb0b0e9a739d8f8be7",
+   "status": "VERIFICADO"
+  },
+  "185": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O registro vivo de bancos é o bloco de fontes de cada artefato curado, que nomeia a base, a URL, os filtros e o instante de recuperação; o gate de honestidade de capacidade recusa marcar VERIFICADO qualquer fonte declarada inacessível.",
+   "rule_sha256": "55b714c79e6759a605151c36ebe4f61c63d3e4e0fa6ad38b0afb9cf698eb9ec6",
+   "status": "VERIFICADO"
+  },
+  "186": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "As fontes de referência, genes e variantes efetivamente usadas — dbSNP para identidade de rsID e a tabela de marcadores de proveniência, versionada e fixada por identificador, para build e fita — estão registradas nos artefatos que esta execução produz.",
+   "rule_sha256": "a3596c33e04d7932e77484c74fb38c14cb7558d5a60ef4579d528d3eccb19238",
+   "status": "VERIFICADO"
+  },
+  "187": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "As fontes clínicas e de gene–doença efetivamente consultadas — ClinVar, ClinGen, GenCC e PanelApp — estão registradas no snapshot de validade gene–doença com URL, filtros aplicados e instante de recuperação, mantidas separadas para que não sejam lidas como votos independentes quando se sobrepõem.",
+   "rule_sha256": "79cf227aac4db4e68983b5c829fa8eaad76902cc5f0414900425e630125b0917",
+   "status": "VERIFICADO"
+  },
+  "188": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "As frequências populacionais vêm do gnomAD por grupo ancestral, com a origem registrada no snapshot curado; as bases brasileiras específicas não são citadas como consultadas.",
+   "rule_sha256": "99a8d0b98dd621c0f892cd293cf740117fff4e1151a6925a5c7936545b6d0ce0",
+   "status": "VERIFICADO"
+  },
+  "189": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "As bases de genômica funcional e regulatória servem à priorização de variantes regulatórias, que este lane não produz.",
+   "rule_sha256": "59cb1d251c50f11f9c7d6f386c34dfbaeb28cb6266924f0a0dc060fd6632cadb",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "19": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Nenhum escore de longevidade arbitrário é produzido. O relatório 07 organiza predisposições e variantes protetoras por associação documentada, com a coorte de descoberta e sua ancestralidade impressas junto de cada efeito.",
+   "rule_sha256": "1d666408c2a8c1fe0c3f64ad1610d65f42acf60c50e2f5fe7d251c4564a0157e",
+   "status": "EXECUTADO"
+  },
+  "190": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "Preditores computacionais aplicam-se a variantes sem classificação estabelecida descobertas em sequenciamento; este lane usa classificação existente do ClinVar.",
+   "rule_sha256": "25adbcfb961002158169314c3a76f0af2bbfeb114fc44a39f7404805eba6ebcf",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "191": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "As bases de proteína, interações e vias servem à interpretação mecanística de variantes candidatas, não produzidas aqui.",
+   "rule_sha256": "db34ae9f3d59af37f608c81334eb841878ecd2e8841189efaad5f13d8445c09e",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "192": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "As bases de SV, CNV, repetições e elementos móveis servem a classes de variante que este lane não detecta.",
+   "rule_sha256": "fbd762fbc87803a4ca41ff53a5d69aa942edab09960f8d45eefbb9da86defd0c",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "193": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "As fontes farmacogenômicas efetivamente usadas — CPIC e PharmVar para definição de alelos estrela e nível de evidência por par gene-fármaco — estão no registro de alelos versionado que esta execução lê, e o passaporte recusa diplotipar onde a definição exige alelo que o array não interroga.",
+   "rule_sha256": "90911acfa12d831111e1d0f434c17ba158ffe978a1079281e632e8a984736331",
+   "status": "VERIFICADO"
+  },
+  "194": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "As bases de HLA e KIR servem a tipagem que este lane não executa.",
+   "rule_sha256": "a2cec37ed411ee817c5e75800187efafcc5f450ceedf35170ef4e91459dae772",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "195": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "As bases de mtDNA clínico servem à análise mitocondrial de alta resolução, não executada aqui.",
+   "rule_sha256": "fd618e0e42d57f71960c0e3250d57ae0439b5f18a6ddaf2d10ea3ffb909c3235",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "196": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "As fontes de Y-DNA são usadas apenas no nível que os marcadores do array sustentam, e o relatório declara esse nível em vez de reivindicar subclado terminal ou colocação em árvore.",
+   "rule_sha256": "2930053715f6c4743a3622d5b392fe3072553ab9f9436cfadbf1c222b5c26eed",
+   "status": "VERIFICADO"
+  },
+  "197": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O GWAS Catalog é consultado na curadoria, com a coorte de descoberta e sua ancestralidade gravadas por associação, e nenhum escore poligênico é emitido — o PGS Catalog serve apenas à seleção de alvos.",
+   "rule_sha256": "b5de7a8722096fb92a297e3ec7013f234fc26971041e10a1c078d0c6f91a531d",
+   "status": "VERIFICADO"
+  },
+  "198": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "As bases de câncer somático servem à análise de tumor, fora do escopo germinativo desta execução.",
+   "rule_sha256": "895c554bbedf3a2a72d747ee188e625ac9d90feaeff691db713c763e0b78c007",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "199": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "As fontes de longevidade entram apenas como associação humana documentada no registro de alvos, e nenhum escore de longevidade é produzido.",
+   "rule_sha256": "f68aacc334a0dc0d01cc2430d499ba28da427aa815791e7030d73bdcf26d71ad",
+   "status": "VERIFICADO"
+  },
+  "2": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "A separação exigida é estrutural no pipeline: cada achado recebe uma classe de asserção — ACHADO ACIONÁVEL, ACHADO PRELIMINAR, PORTADOR, GENÓTIPO DE RISCO, PREDISPOSIÇÃO, SEM INTERPRETAÇÃO ESTABELECIDA, NEGATIVO NESTE LOCUS ou NÃO INTERROGADO — e associação populacional nunca é promovida a diagnóstico.",
+   "rule_sha256": "30399cb35d4baf640045803b2f3139794226c8088b94c762b27bac67777b5fcc",
+   "status": "EXECUTADO"
+  },
+  "20": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "LPA rs10455872/rs3798220, 9p21 rs10757278, TCF7L2 rs7903146 e FTO rs9939609 são alvos interrogados e reportados como efeito populacional pequeno a moderado; a ausência dos alelos de risco de LPA não é convertida em Lp(a) baixa.",
+   "rule_sha256": "186793b9cad93abcac5033af162bcb45f7d31d0ca1e19591e179ccf04f9736fe",
+   "status": "EXECUTADO"
+  },
+  "200": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "As bases de metaboloma, microbioma e nutrição multiômica exigem dados ômicos que não foram fornecidos.",
+   "rule_sha256": "05f7f4ad8702ed8a7b50ecfa7d9f144216fb70426bce14848819b81d200cd8b6",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "201": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O pacote de evidência por domínios é montado para cada achado: chamada técnica do QC, frequência populacional, ClinVar com nível de revisão, validade gene–doença, compatibilidade fenotípica declarada e ancestralidade da coorte.",
+   "rule_sha256": "2a28ece64fa4cd6b0efd662ea6af0edebd2df20ad06744435e8730644673c657",
+   "status": "EXECUTADO"
+  },
+  "202": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O status temporal de cada fonte é registrado, e o gate de recência recusa fonte mutável verificada há mais de noventa dias em vez de aceitar rótulo antigo.",
+   "rule_sha256": "6b873f4f123cdd12b5e7e8ff8b77398d1060b5b9c73fdb5bb3e05ec0f1d63065",
+   "status": "VERIFICADO"
+  },
+  "203": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O modo de descoberta de variantes privadas ou novas exige sequenciamento: o array só observa marcadores já catalogados.",
+   "rule_sha256": "15f46f7df6da0e2e78094d24a06ec7c7fd2e7465dead77e9587ad9b8ee732076",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "204": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O relatório de novidade do genoma depende de variantes raras e privadas, LoF inesperadas e SVs, que este lane não descobre.",
+   "rule_sha256": "338ab56541b5be13612239264a66ee221228611d5adf4df58b0acbefe3d301ae",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "205": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A atribuição de segmentos ao lado parental exige phasing, IBD ou parentes.",
+   "rule_sha256": "0272506dbaefe807754428a124a03c4b0cb19a94125b205c988386c283a94434",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "206": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O motor de correspondência de parentes exige arquivos de familiares.",
+   "rule_sha256": "3a19a5610ca807e98bac46d6e0f79b73cfb75108530fb9570bce316bae474cd6",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "207": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A priorização que integra genética, exames, medicações e composição corporal exige dados clínicos do caso, não fornecidos.",
+   "rule_sha256": "9f382a3c6d7988ea015e4eef3ab0678aa51990175fc5ca1abd6a68bf0e112b2f",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "208": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Exames são sugeridos apenas com racional genético explícito: para cada achado acionável o relatório nomeia o exame de confirmação, o que ele mede e sua limitação, sem periodicidade não amparada em guideline.",
+   "rule_sha256": "5c4c8b4e91d25ff78592879d0912904013c7e5e82cd343d5fb6a215d3c42a99e",
+   "status": "VERIFICADO"
+  },
+  "209": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Nenhuma intervenção é sugerida fora da escada de evidência: o pipeline não emite recomendação terapêutica ou dietética a partir de genótipo, e o que indica é confirmação diagnóstica amparada em guideline.",
+   "rule_sha256": "011ba3e8290e8fe53654009829fd6893f5a560a4a0d32d6b6b21d1cad8bd7e77",
+   "status": "VERIFICADO"
+  },
+  "21": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Os genes de câncer hereditário do registro são interrogados nos loci que o array cobre e a matriz de completude declara, gene a gene, quantos alelos avaliados foram interrogados. CNV/SV permanecem NÃO DISPONÍVEL e nenhum gene é declarado normal.",
+   "rule_sha256": "513a581ed0c1de76bf77755cd0da7dd581481a460880a877bb9e189a7ee35481",
+   "status": "EXECUTADO"
+  },
+  "210": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O scorecard de benefício e resiliência é atendido pelo relatório de variantes protetoras e risco relativo menor, com as mesmas limitações declaradas dos achados de risco.",
+   "rule_sha256": "21560c0d1d39e3a54a932125ddb2522fa1cfb14c89e82ed9dd6c62cf6af5f7b2",
+   "status": "EXECUTADO"
+  },
+  "211": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Dos entregáveis do superconjunto, esta execução produz os que o array sustenta — relatório mestre, resumo de uma página, cartão de anestesia, passaporte farmacogenético, relatório nutrigenético, ancestralidade, traços, matriz de completude e relatório técnico — e declara os demais como dependentes de WGS.",
+   "rule_sha256": "8d156952cb5c8fb5872ad340fb600d87605c35ec1b95c1d177efc4b2c4f2c241",
+   "status": "VERIFICADO"
+  },
+  "212": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O PDF mestre supera o padrão comercial nos eixos que este lane controla: rastreabilidade por campo, versionamento por hash, metodologia explícita e declaração de limitação; profundidade de sequência não é reivindicada.",
+   "rule_sha256": "f856c3e129aa1d377f4637be8bf91a931e2d538d2342f6ac7844e0c52aa92569",
+   "status": "VERIFICADO"
+  },
+  "213": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "O mapa visual de cobertura é a matriz de completude: cobertura por gene e por classe de variante medida nesta execução, com os loci complexos não resolvidos nomeados. Histogramas de profundidade exigem WGS e constam como não aplicáveis.",
+   "rule_sha256": "94d99c2d30350333e1d43a6615fcc49fc2f90184c3e2fc53609eebcb9197c4da",
+   "status": "EXECUTADO"
+  },
+  "214": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A seção narrativa de história genética é produzida no relatório de ancestralidade, separando afinidade genética de identidade cultural e de história familiar documental.",
+   "rule_sha256": "87eea143c121b6efd5471c08a409414bbb17b1ddf126116e0ec3d6fba4a432c7",
+   "status": "INFERIDO"
+  },
+  "215": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A galeria de curiosidades é o relatório 08, separada da clínica, com a qualidade da evidência de cada traço e a distribuição populacional declaradas.",
+   "rule_sha256": "d0558d66f164f0fce72a0e940eae138ed2d4b6996a36a03f07005ceefa173d22",
+   "status": "EXECUTADO"
+  },
+  "216": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A comparação com serviços comerciais é feita por categoria e por capacidade real, usando a matriz de capacidade desta execução, e não por marketing.",
+   "rule_sha256": "1737f828363172a01938429991bc56328177acf6f25505a1e718df0a4b1daf08",
+   "status": "VERIFICADO"
+  },
+  "217": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O radar de novidade 2026+ é atendido pelo instante de recuperação de cada snapshot curado e pelo lock de runtime versionado, que juntos tornam verificável o que mudou na próxima reanálise.",
+   "rule_sha256": "12cbac9f5b4dbb33f6d5142a3eae7a873f1c03fd3a9defc6621a8f193f28c42a",
+   "status": "VERIFICADO"
+  },
+  "218": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O benchmark de variant calling contra GIAB/CMRG avalia pipelines de chamada de variantes. Este lane não chama variantes.",
+   "rule_sha256": "f121d7e57a6bb5e55d1a3ab24cc2e9ded93956f9999347c6f3231c4025d2cd08",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "219": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A hierarquia de fontes é respeitada: guideline e consórcio oficial primeiro, banco curado primário em seguida; agregadores não são usados como autoridade clínica.",
+   "rule_sha256": "ca8d826f9d22cf6f3c5114e5cd34aa64e86259d756e169a56414343534c88b40",
+   "status": "VERIFICADO"
+  },
+  "22": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "Esta é a regra central desta execução: cada locus sem o alelo pesquisado é classificado NEGATIVO NESTE LOCUS, e a matriz de completude imprime a fração de alelos avaliados interrogados por gene, de modo que a ausência nunca se lê como exclusão do gene.",
+   "rule_sha256": "4e07ff703f91f12155b2d4e4064658fb74b6678fa79e306cd6f56f821d632910",
+   "status": "EXECUTADO"
+  },
+  "220": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Cada base citada declara seu estado de acesso — consultada diretamente, consultada via adaptador ou não acessível nesta sessão — e o gate de honestidade de capacidade recusa fonte marcada VERIFICADO enquanto inacessível.",
+   "rule_sha256": "6c370b612dded0dce90544fbb83f1ba6ad1f32be4688b5f17a9536e08db7cb9e",
+   "status": "VERIFICADO"
+  },
+  "221": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O manifesto de consultas existe como o bloco de fontes de cada artefato de evidência curado: nome da base, URL, filtros aplicados, instante de recuperação e o SHA-256 do resultado, referenciado por hash a partir desta execução.",
+   "rule_sha256": "3d823547e5ec0e9978dd20cd19de30a1f5d40d9171fd08e2e028170c00ae0bb7",
+   "status": "EXECUTADO"
+  },
+  "222": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "ruleset-v3.4"
+   ],
+   "justification": "O changelog da v2.2 é conteúdo normativo cumulativo, e suas exigências aplicáveis a este lane — benchmark honesto de capacidade e registro de acesso a fontes — são atendidas nas seções 158, 167 e 220.",
+   "rule_sha256": "2322e2ee7ebf360127030627a59f87a9c070b4ef1b7ee230e357d2d1002a37fe",
+   "status": "VERIFICADO"
+  },
+  "223": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O objetivo da v2.2 é atendido no escopo deste lane pela amplitude do registro de alvos e pela declaração explícita das profundidades que exigem WGS.",
+   "rule_sha256": "7e04bdff450e3812396c42f183ec228adccaea7df3941bfde1d5fd5c4dcfffce",
+   "status": "VERIFICADO"
+  },
+  "224": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-input",
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "A auditoria final de completude é executada como parte desta corrida: qualidade técnica, classes de variante cobertas, estado da interpretação clínica e lacunas remanescentes são medidos e registrados antes de qualquer declaração de completude.",
+   "rule_sha256": "16534d23ca04695433125386144bd1d081dcab688ddefd526e77b8becfca4e43",
+   "status": "EXECUTADO"
+  },
+  "225": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "Os padrões GA4GH de QC de WGS e metadados de experimento descrevem sequenciamento: plataforma, química, layout de leitura e profundidade, que um export de array não tem.",
+   "rule_sha256": "bd1b50ecac1e9e7c87b4faa9af3ef3dce8eabf7fe887b042fb087cb3fc52e127",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "226": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O fenótipo computável em Phenopackets/HPO/FHIR exige dados clínicos estruturados, não fornecidos a esta execução.",
+   "rule_sha256": "1e850224b2ab4cee3226aa1e7e3d610eab92a78353532bb438191749c42070f3",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "227": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "A interoperabilidade é atendida no que se aplica: identidade inequívoca dos artefatos por SHA-256 e identificação de variantes por rsID com build e fita atestados. VRS e Phenopackets exigem representação que este lane não produz e constam como não produzidos.",
+   "rule_sha256": "5c945d03e941f563d4565b7e8b744b5fba3b147115d18ff9bd45d22006bd3004",
+   "status": "VERIFICADO"
+  },
+  "228": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A camada de constraint mutacional serve à interpretação de variantes raras descobertas, situação que este lane não produz.",
+   "rule_sha256": "61fa9f981bac039d7b2967f4716fb4b2112270aa533309613eca4dc28f380777",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "229": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "A análise dos cromossomos sexuais é declarada, não executada: este lane não chama ploidia nem regiões PAR, e loci ligados ao X são interpretados apenas quando o sexo ao nascer consta do dossiê, sendo recusados com motivo quando não consta.",
+   "rule_sha256": "25aea8d44bb6808974f2c23330fa592d68e9d2b224611f06fd926b57fa4ae6a4",
+   "status": "VERIFICADO"
+  },
+  "23": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "As variantes clássicas de RYR1 do registro são interrogadas e o cartão de anestesia declara explicitamente o escopo: susceptibilidade à hipertermia maligna não é excluída, os loci não interrogados são listados e o cartão traz o motivo do status em vez de silenciar.",
+   "rule_sha256": "6ef9ea7a12544963eb5c2f1976b952a80de1b9e14b857da41d6ca99c1bdac0cd",
+   "status": "EXECUTADO"
+  },
+  "230": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A via de escalonamento por assinatura epigenética exige medição de metilação e um fenótipo neurodesenvolvimental ou VUS em gene regulador de cromatina que a motive. Nenhum dos dois existe nesta execução.",
+   "rule_sha256": "fd4fc6e670e681ff9861cd10d6a070b0acf294de58c48933516f448383c9a4e6",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "231": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O mapeamento óptico do genoma é tecnologia ortogonal para rearranjos estruturais, não disponível a esta execução.",
+   "rule_sha256": "4abce1b654c3c405368d009eddad45a6f86faef52b7558348aa252490248a785",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "232": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "O limite de detecção por classe de variante é declarado: apenas SNV em loci catalogados do array são detectáveis, e CNV, SV, expansões, VNTR, MEI, heteroplasmia, mosaicismo, HLA/KIR, loci complexos e alelos estrela estruturais constam como não detectáveis, de modo que 'não detectado' nunca se confunde com 'ausente'.",
+   "rule_sha256": "10788d5aefbce4568ebed6a2b33a8b53378465c6351877be4a616c6d82630251",
+   "status": "EXECUTADO"
+  },
+  "233": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Risco absoluto não é fabricado: as associações são reportadas como efeito relativo com a coorte de descoberta e sua ancestralidade impressas, e a conversão em risco absoluto é declarada como dependente de prevalência basal, idade, sexo e história familiar ausentes desta execução.",
+   "rule_sha256": "39f20ec0e8c89378bf47d78e82675cb95ea331ddedd9f216cfbbd54288c371c4",
+   "status": "VERIFICADO"
+  },
+  "234": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A federação de biobancos e fenomas exige acesso a resultados fenotípicos de biobanco, não consultados nesta corrida.",
+   "rule_sha256": "1abddff9a986190aece7a5d93e03083fc65c3816092d01fee2223592aa9fc652",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "235": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A evidência de agregação de variantes raras por gene exige o conjunto de variantes raras do indivíduo.",
+   "rule_sha256": "b76bb5235801d6aafc223004a376cda09d6476e17f462284bdc72fa200a34710",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "236": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Conflitos do ClinVar não são resolvidos por votação simples: o nível de revisão é lido e registrado, submissões de único submissor são limitadas a achado preliminar, e divergência é reportada em vez de arbitrada.",
+   "rule_sha256": "c77f4bd6acb1f9874dcc14d8529fcc0a914781f64fb76a826031c85412612b10",
+   "status": "VERIFICADO"
+  },
+  "237": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O padrão clínico específico de mtDNA exige heteroplasmia, profundidade e discriminação de NUMTs, medidas que o array não produz.",
+   "rule_sha256": "c443d6fa835fd26f7b86695b529cc444b0ae8831a67daad830cbc7e0d58ed233",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "238": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "A lista de loci que exigem caller especializado é declarada nesta execução: CYP2D6, SMN1/SMN2, PMS2, GBA1 e HLA constam como não resolvidos pelo array, com o motivo técnico, em vez de serem diplotipados a partir de SNPs.",
+   "rule_sha256": "61b0999eda1e0d172634c0ce579d75d2845d497c9eadf18e50c9ceca9602b8f1",
+   "status": "VERIFICADO"
+  },
+  "239": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "Joint calling, verificação de erros mendelianos e identificação de variantes de novo exigem genomas de pais ou parentes e chamadas por leitura. Nenhum familiar foi sequenciado e este lane não chama variantes.",
+   "rule_sha256": "fb8c9b12f213b5e9cef74982c14978c219c9b7861392068d2cf1dee2b6e58767",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "24": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Os genes cardiogenéticos do registro são interrogados nos loci cobertos, separados por condição, e a matriz de completude registra a cobertura por gene. Cardiomiopatias e canalopatias dependem de análise de gene inteiro, declarada indisponível neste lane.",
+   "rule_sha256": "e4a83999aa452d45c9899daac1dcc4ba4743d3a9fd99e0a9f20f25d20bfe6948",
+   "status": "EXECUTADO"
+  },
+  "240": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-input",
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "Os critérios do FINAL AUDIT GATE são avaliados pelo policy engine nesta execução, não declarados por quem produz o relatório: integridade do artefato normativo, cobertura por classe de variante, QC documentado, limites de detecção e regiões complexas explicitados são condições que o gate verifica antes de qualquer publicação FINAL.",
+   "rule_sha256": "4b24345f581aadf2b448df3ff5b7b401a1852f980bb8b5a0e0d3dccc829c27bb",
+   "status": "VERIFICADO"
+  },
+  "241": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "ruleset-v3.4"
+   ],
+   "justification": "O changelog da v3.0 é conteúdo normativo cumulativo; suas exigências aplicáveis a este lane — limite de detecção por classe e explicitação de cobertura — são atendidas nas seções 117, 232 e 152.",
+   "rule_sha256": "5a9b7c61d204310af2a3e249bfd0c8c258446cf01bf8f2427a48146ea0ba9ea5",
+   "status": "VERIFICADO"
+  },
+  "242": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-input",
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "O objetivo da v3.0 é atendido no escopo deste lane: sistema auditável e extensível, com cada valor publicado ancorado ao artefato de onde foi lido e com as camadas ausentes declaradas em vez de simuladas.",
+   "rule_sha256": "48185b506a79fcc330924c0544d33eb18beb21615d90e0011d9b13f24fc84233",
+   "status": "VERIFICADO"
+  },
+  "243": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O algoritmo de testagem da parceira parte da existência de intenção reprodutiva declarada e de dados da parceira. Nenhum dos dois foi fornecido; o relatório reprodutivo declara qual exame ela precisaria fazer, sem simular o resultado.",
+   "rule_sha256": "de7a9be44080b4a5fa52b37f86544628a59fe43f7edbc07254dc7f4a85487282",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "244": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A genômica reprodutiva funcional é acionada por fenótipo de infertilidade e depende de microdeleções AZF e cariótipo, que este lane não mede.",
+   "rule_sha256": "ceb5fe69e67d7fb4405ee03cef961995172be70198d79ea261e3d345af78616f",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "245": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "Rearranjos estruturais e PGT-SR exigem detecção de rearranjo, cariótipo ou mapeamento óptico.",
+   "rule_sha256": "a52f3f0b775a1c85a4adbf392ccb17939ed97c5f6f71a7ed31162ef45f8a67b8",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "246": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "As regras de uso de PGT aplicam-se quando existe indicação reprodutiva concreta com variante confirmada e caso aceito por laboratório de PGT, situação que esta execução não estabelece.",
+   "rule_sha256": "bedb16596ccd5cf848d815b79775f864ea725bc359539ea3c8420772f3f8814c",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "247": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A distinção entre triagem e diagnóstico é aplicada a este próprio resultado: um array é triagem, jamais diagnóstico, e cada achado acionável declara o teste diagnóstico que o confirmaria.",
+   "rule_sha256": "e794f3ce17ba8b86b8e61c2f2641f67b992393e3cfeb8a6f3b50ca0929e73c3f",
+   "status": "VERIFICADO"
+  },
+  "248": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A genômica de antígenos eritrocitários materno-fetal exige contexto obstétrico e dados do casal.",
+   "rule_sha256": "08e64ac7992efbf16f12ffda7757f90bf2f644a1c62509df8f2332529893f844",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "249": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O relatório reprodutivo do casal exige dados da parceira. O relatório 03 desta execução é individual e declara essa ausência.",
+   "rule_sha256": "dd8259f93a1bed6e78fc34681835ee2389a08a8fc64237fe38c770695874014b",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "25": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "F5, F2, HFE, G6PD e demais loci hematológicos do registro são interrogados, com trombofilias de alto impacto separadas de SNPs comuns pela classe de asserção e pelo nível de revisão da evidência.",
+   "rule_sha256": "4fcb89124b5dcae04e6ba44957d9c09e073b47fad29517c8a06c8e87a48545f5",
+   "status": "EXECUTADO"
+  },
+  "250": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "ruleset-v3.4"
+   ],
+   "justification": "A suíte de validação do ruleset foi executada sobre o artefato vigente: o parser confere numeração sequencial, ausência de seções vazias e integridade dos títulos, e o SHA-256 do arquivo final é conferido contra o manifesto antes de qualquer análise.",
+   "rule_sha256": "f44db2256b92177c64b7b8878b9c7bfc3fc3acacaea0d63d28b7ded220b00f19",
+   "status": "VERIFICADO"
+  },
+  "251": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O primeiro caso obrigatório de aceitação é exatamente esta situação — array apenas, sem conclusão ampla a partir de locus negativo — e este pipeline o implementa por construção, classificando cada locus como NEGATIVO NESTE LOCUS ou NÃO INTERROGADO. Os quinze casos completos são exercidos pela cerimônia de implantação, cuja testemunha é registrada à parte e nunca por este manifesto.",
+   "rule_sha256": "eecb010b1917cff56e0a8ca56493db5a13385cc3e8ab5494bcb48e35fd46da71",
+   "status": "VERIFICADO"
+  },
+  "252": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-input",
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "Os critérios críticos de aprovação são satisfeitos por esta execução: controle de falso positivo e falso negativo, separação triagem/diagnóstico, honestidade sobre ferramentas, consulta real de fontes e confirmação clínica quando necessária.",
+   "rule_sha256": "101dfda4ee38829cdc64a250a19befc7bb797f98cc84ca5a131c3e062704d114",
+   "status": "VERIFICADO"
+  },
+  "253": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "ruleset-v3.4"
+   ],
+   "justification": "O deployment normativo é respeitado: existe uma única versão marcada VIGENTE, o arquivo é materializado a partir do selo, conferido por hash e removido ao fim da avaliação, e nenhuma cópia em texto puro fica no repositório.",
+   "rule_sha256": "16e82d8410d4bb0bd8237df1f834d959bb81484368a4ecbacc96f01532537035",
+   "status": "VERIFICADO"
+  },
+  "254": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-input",
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "O contrato de capacidade é o eixo desta execução: nada é fingido. A matriz de capacidade declara o que foi executado e o que não está disponível, com a tecnologia adequada nomeada por lacuna, e o gate de honestidade recusa qualquer passo marcado EXECUTADO sem evidência.",
+   "rule_sha256": "dadd852b54c77b4875c9c1edfebab78e4cef081aa0631491451101ed3a0c5122",
+   "status": "VERIFICADO"
+  },
+  "255": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "ruleset-v3.4"
+   ],
+   "justification": "A validação da v3.1 é conteúdo normativo histórico; suas exigências aplicáveis a este lane — risco residual e regras de transmissão declaradas — são atendidas na seção 26.",
+   "rule_sha256": "6a7acf1ec2644455ff82b317c77b362b46e1aaadb284b96c8320a06a91981f10",
+   "status": "VERIFICADO"
+  },
+  "256": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "ruleset-v3.4"
+   ],
+   "justification": "O changelog da v3.1 introduziu o contrato de status operacional e o capability gate, ambos aplicados nesta execução e verificados pelas seções 254 e 261.",
+   "rule_sha256": "42c6885731bab813e45a437130ca697a1605b4924dcaa9d658b43cb9086704ae",
+   "status": "VERIFICADO"
+  },
+  "257": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "ruleset-v3.4"
+   ],
+   "justification": "O objetivo da v3.1 é desempenho verificável por testes; esta execução é verificada por suíte automatizada antes da implantação e por smoke test ao vivo depois dela.",
+   "rule_sha256": "1c2d8f1f16b5164d58ce3baf01da3fb889eb348f68bb7585c9a346e58a96fd9e",
+   "status": "VERIFICADO"
+  },
+  "258": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "ruleset-v3.4"
+   ],
+   "justification": "A matriz de validação da v3.4 é respeitada em sua separação de gates: integridade do artefato normativo é conferida por hash nesta execução, executabilidade NGS não é reivindicada por este lane, e a implantação ao vivo é atestada por testemunha independente, jamais por este manifesto.",
+   "rule_sha256": "f731d87db42e94a362d8d58e0da43e772e9c900f9c44a9b053001da8f774a427",
+   "status": "VERIFICADO"
+  },
+  "259": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O snapshot de fontes críticas é tratado como o texto determina — não substitui a consulta na data da análise. Esta execução registra versão e data de cada fonte efetivamente consultada e o gate de recência recusa snapshot vencido.",
+   "rule_sha256": "c6093a12e27f11513fa93a34a529f07922be841a5f0e5044c2d73532c727f5db",
+   "status": "VERIFICADO"
+  },
+  "26": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O núcleo de carrier screening é executado sobre os loci interrogados: variantes P/LP recessivas são classificadas PORTADOR, com herança e risco residual declarados, e o relatório 03 afirma que o rastreamento por array não é carrier screening de painel expandido. Sem dados da parceira, o mapa de risco do casal não é produzido e o relatório diz isso.",
+   "rule_sha256": "1192ccc6c4bc1303cddd4354fc3b66a2cad867d8d099f27861971aa25a7e3b60",
+   "status": "EXECUTADO"
+  },
+  "260": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "ruleset-v3.4"
+   ],
+   "justification": "Os quinze casos do smoke test de implantação são executados ao vivo contra o serviço, e o resultado não é declarado por esta execução: vem de uma testemunha externa, vinculada ao identificador de implantação e ao ruleset, sem a qual o estado permanece PENDENTE.",
+   "rule_sha256": "89a1109152da3616155fa89f21a85d322d7f451f7d7712ccaae8d5bbfdb3ef66",
+   "status": "VERIFICADO"
+  },
+  "261": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-input",
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "O contrato de status operacional é aplicado em todo artefato desta execução: cada valor publicado carrega EXECUTADO, VERIFICADO, INFERIDO, PROPOSTO ou NÃO DISPONÍVEL, e o piso de status do relatório é recalculado a partir das âncoras em vez de declarado.",
+   "rule_sha256": "6e1dc870fc5e45c527383e6911953849db05ad052e412df4ea5ccf0e040558a7",
+   "status": "VERIFICADO"
+  },
+  "262": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "ruleset-v3.4"
+   ],
+   "justification": "O changelog da v3.4 define o arquivo canônico e a neutralidade de plataforma; esta execução usa exatamente esse arquivo canônico, conferido por hash, e não depende de fornecedor específico.",
+   "rule_sha256": "3386de9cce6f547028775ad3907278efe769986627cfc27dd0df6e30f0d5b052",
+   "status": "VERIFICADO"
+  },
+  "27": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "Tipagem HLA e KIR exige pipeline especializado sobre sequenciamento; o próprio texto proíbe inferir HLA clinicamente importante a partir de tag SNP. A matriz de capacidade declara HLA como NÃO DISPONÍVEL nesta execução.",
+   "rule_sha256": "990f35697d7995feea63ac47b3b67b8fcd863d29084e45beb6e3ab3478eac8cb",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "28": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "As regiões difíceis são tratadas explicitamente: expansões repetitivas, SMN1/SMN2, CYP2D6, PMS2, GBA1, HLA e KIR constam da matriz de capacidade como NÃO DISPONÍVEL com o motivo técnico, e o relatório técnico declara que o array não é suficiente quando uma pergunta depende delas.",
+   "rule_sha256": "9386b45bb1172381f8abb063011b3ed44171293b758170be4a9616dbbc703874",
+   "status": "VERIFICADO"
+  },
+  "29": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Os marcadores Y presentes no array são interrogados e a linhagem é reportada no nível que eles sustentam, sem afirmar subclado terminal: identificar todos os SNPs-Y derivados e estimar TMRCA exige WGS, e isso é declarado como limitação.",
+   "rule_sha256": "254b5bd2bb9b19776738012a16e42daa3099b9d6ad0f65fe7bae60eca2c2bc72",
+   "status": "EXECUTADO"
+  },
+  "3": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-input",
+    "array-qc"
+   ],
+   "justification": "O arquivo analisado é o banco harmonizado, Nível 2 da hierarquia. Nenhum WGS foi enviado, de modo que o Nível 1 não está disponível, e o arquivo bruto é lido sem ser substituído: o pipeline só escreve artefatos derivados, cada um com o SHA-256 do arquivo de origem registrado.",
+   "rule_sha256": "b8ab6b849757afcf691527623eef1245ddb40e161358e84aeca92211ec7a0d20",
+   "status": "VERIFICADO"
+  },
+  "30": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A reconstrução histórica paterna é apresentada como compatível com a linhagem observada, com a distinção entre DNA, cultura arqueológica e identidade mantida explicitamente no relatório de ancestralidade.",
+   "rule_sha256": "21c33f02d024e04799ada899166f271eed363ec0e945f0a363ab0369f68e067f",
+   "status": "INFERIDO"
+  },
+  "31": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Os marcadores mitocondriais presentes no array são interrogados e o haplogrupo é reportado como inferência de alta confiança para SNP-array, não como haplogrupo terminal; a reconstrução completa do mtDNA é declarada indisponível.",
+   "rule_sha256": "abec9f3cdd14232c3602d6e8d230117b1317c36966d69da2ddbd9c73e957b82a",
+   "status": "INFERIDO"
+  },
+  "32": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-input",
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "EDAR rs3827760 e SLC24A5 rs1426654 são interrogados, e a proibição central da seção é cumprida: nenhum percentual é inferido de dois SNPs. Quando um painel de referência é fornecido, a composição vem de projeção PCA com proporções restritas ao simplex e intervalo de confiança por bootstrap.",
+   "rule_sha256": "46f0985498f6c65b3cd05fc84f1009d003a259c4e3c035712312863bae983470",
+   "status": "EXECUTADO"
+  },
+  "33": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O mapa de ancestralidade por cromossomo exige inferência de ancestralidade local com segmentos por cromossomo. Este lane produz proporções globais com incerteza medida, e declara a ancestralidade local como não executada.",
+   "rule_sha256": "635a44a15e33d5c06179b5c4de55f5ae2db57cdd018897d0124bd41d77b95339",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "34": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A comparação com populações antigas é feita apenas quando um painel de referência que as inclui é fornecido, e o relatório distingue afinidade genética de identidade cultural ou histórica; sem painel, a seção declara que a comparação não foi executada.",
+   "rule_sha256": "69caf4468e215344ed6438d1087d33e2529742fff1fe517a911b76cb61d56a65",
+   "status": "INFERIDO"
+  },
+  "35": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A integração genealógica documental exige GEDCOM, certidões ou árvore familiar. Nenhum documento genealógico foi fornecido a esta execução.",
+   "rule_sha256": "c548e1713826a01cf0022490741aeffb993706ca1006fd80b18c0978ba458a3e",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "36": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-input"
+   ],
+   "justification": "ROH e F_ROH são calculados nesta execução sobre os autossomos, com o espaçamento mediano de marcadores medido e tratos cuja densidade média excede o limite rejeitados, de modo que buracos de cobertura do array não sejam lidos como autozigosidade.",
+   "rule_sha256": "2fef9858419c1d6a1500c0e7be8044287d613f5142b2bcc6953110911f3577c0",
+   "status": "EXECUTADO"
+  },
+  "37": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Os fenótipos secundários interrogáveis pelo array — LCT/MCM6, ACKR1/Duffy, ABO, HERC2, ACTN3 — são reportados em relatório separado da clínica, e o grupo ABO é declarado provável e sujeito a confirmação sorológica.",
+   "rule_sha256": "64a9d4343033f8e7ed3398b6f4205cefe795b076ef11dca3bd3b7c2b6dffaa28",
+   "status": "EXECUTADO"
+  },
+  "38": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A busca é ampla e não se limita ao perguntado: o registro de alvos padrão desta execução cobre o tier de uma estrela do ClinVar além dos loci curados, e variantes protetoras são reportadas junto das de risco. Nenhuma recomendação dietética é derivada de genótipo.",
+   "rule_sha256": "27553507452e2b28716bdf92b885b1f07e4f8992d84b0bebfad9aa59559551cd",
+   "status": "EXECUTADO"
+  },
+  "39": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "O Genomic Anesthesia Card é produzido nesta execução com BCHE, RYR1, CACNA1S e G6PD nos loci interrogados, cada item com variante, fenótipo esperado, agente relacionado, nível de evidência CPIC e a confirmação necessária, e com os loci não interrogados nomeados.",
+   "rule_sha256": "8d84ba6cfe17fbe388dd82e3b2a9fcf62a40c1f1d55cae0465acf6ae6d468238",
+   "status": "EXECUTADO"
+  },
+  "4": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc"
+   ],
+   "justification": "Os números do banco não são recitados: o QC recalcula rsIDs únicos, call rate e taxa de conflito de sobreposição a partir dos bytes desta execução. Conflitos genotípicos são contados e reportados, nunca resolvidos arbitrariamente.",
+   "rule_sha256": "ac3345c10d45418e698cc3e087519cb733e31cfc1ad5f4c3852a5f73fc4d5891",
+   "status": "EXECUTADO"
+  },
+  "40": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O radar por sistema é o conjunto dos onze relatórios, cada um com sua classificação de prioridade; os sistemas que o array não alcança recebem o estado de não avaliável com o motivo, em vez de 'nenhum achado'.",
+   "rule_sha256": "b0c4549477e643c76ca01e66bdfeb68238372bcc314686d9344b09cc7199f9d1",
+   "status": "VERIFICADO"
+  },
+  "41": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Achados incidentais são procurados deliberadamente sobre todo o registro de alvos, não apenas sobre o solicitado, e a priorização por nível de revisão e validade gene–doença impede que o relatório seja preenchido com milhares de SNPs sem utilidade.",
+   "rule_sha256": "8e9a699e8b9e9e9deb074b15524d3566a73ec65b4931f4beba179b2f552c5011",
+   "status": "EXECUTADO"
+  },
+  "42": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "Cada relatório abre com resumo derivado dos artefatos e traz pontos não resolvidos e próximos passos; nenhum campo do resumo é texto livre — cada valor impresso é ancorado ao artefato de onde foi lido.",
+   "rule_sha256": "73479612831bf7f0ce5ca6833b0ac62ae0de800788792bf2163f7d07a5549c9d",
+   "status": "VERIFICADO"
+  },
+  "43": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-input",
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "A execução é versionada: o manifesto registra o SHA-256 de cada arquivo, a versão e o hash do ruleset, e um session_id derivado do caso e dos bytes analisados; cada atestação carrega o instante em que foi emitida.",
+   "rule_sha256": "43b1861ce235150bef7ddbe1d5aafeeac167fb9d2086cd9b763af4d3dfe6b885",
+   "status": "VERIFICADO"
+  },
+  "44": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A reinterpretação longitudinal é sustentada pelo registro de versão e data de cada fonte no manifesto, que é o que permite comparar uma reanálise futura com esta. Esta execução é a linha de base do lane SNP-array.",
+   "rule_sha256": "f180786bda21ba63dd23aa75428b940bc04473579e21e8f79f95bd31780c6601",
+   "status": "VERIFICADO"
+  },
+  "45": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Nenhum resultado é tratado como diagnóstico: cada achado acionável carrega o método de confirmação ortogonal exigido, e o CLINICAL_CONFIRMATION_GATE recusa qualquer alegação que mude conduta sem confirmação registrada.",
+   "rule_sha256": "a6d6a8a5cae55e63ba7bc89c99e3b109a8db4c85d373e3a630afd6163cd6a38b",
+   "status": "VERIFICADO"
+  },
+  "46": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "A regra é implementada literalmente: nenhum gene é declarado normal. Loci sem o alelo pesquisado recebem NEGATIVO NESTE LOCUS e loci fora do array recebem NÃO INTERROGADO, com a fração interrogada por gene impressa na matriz de completude.",
+   "rule_sha256": "4eb617109d46218987d9ce7f540c7fb6e25d3d3a13eec4f52929cdef88022b56",
+   "status": "EXECUTADO"
+  },
+  "47": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-input",
+    "array-qc"
+   ],
+   "justification": "Falsos positivos são controlados antes da interpretação: o QC recusa a execução se a call rate ou a taxa de conflito de sobreposição estiverem fora do limite, a orientação de fita e o build são atestados contra tabela de marcadores, e a graduação por nível de revisão impede alarme a partir de submissão única.",
+   "rule_sha256": "8dee2ced6671a06d2152e142e421fb068aa6ffc60a7af299beb241c199d3c2ef",
+   "status": "EXECUTADO"
+  },
+  "48": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-input"
+   ],
+   "justification": "Os dados genéticos permanecem no escopo desta execução: o repositório é privado, nenhum genótipo pessoal é versionado, e os artefatos derivados são identificados por SHA-256 em vez de conterem o arquivo bruto.",
+   "rule_sha256": "247c3719d8671472e0f4c61bd0e723acbf5a6eebc0f3d43ec9cd36f03d7baa89",
+   "status": "VERIFICADO"
+  },
+  "49": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-input",
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "Cada resposta sobre uma variante é ancorada aos dados: o pipeline identifica o locus, confere build e fita atestados, verifica a qualidade da chamada e imprime a limitação, e o gate de proveniência recusa qualquer valor impresso que não tenha sido lido de um artefato.",
+   "rule_sha256": "3d204a05c764eb61d9b6184e5d8f52c6fd857b3ad11dd426930e6dbb35147638",
+   "status": "VERIFICADO"
+  },
+  "5": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "As quatro camadas do Genoma Mestre (raw_original, intersection_high_confidence, union_research, clinical_confirmed) pressupõem fusão de múltiplas fontes e confirmação ortogonal. Este lane observa um único export harmonizado e não constrói nem mistura essas camadas.",
+   "rule_sha256": "ce3930170960dbf06a83d2c3de9183f6da55d3e8a7bbede721b5f51b4b9ad9cf",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "50": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Os relatórios são emitidos em português brasileiro, com camada técnica e camada simples, e a linguagem determinística é evitada: a classe de asserção de cada achado governa o verbo usado.",
+   "rule_sha256": "73a8cbf70de47fd63f9370a155617e2de910a78d5ecf049a43e34975b3954e9d",
+   "status": "VERIFICADO"
+  },
+  "51": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "A pergunta central é respondida no escopo do que este lane mede: o que os loci interrogados revelam, o que permanece não interrogado e o que exigiria outra tecnologia, com a matriz de completude tornando os pontos cegos visíveis.",
+   "rule_sha256": "32c4dbe6da91abcd9caf068d4fd38675c2206f079b50908b193a619dab2554e6",
+   "status": "VERIFICADO"
+  },
+  "52": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Dos artefatos do Genoma Mestre Pessoal, esta execução produz os que o array sustenta — relatório clínico, passaporte farmacogenético, cartão de anestesia, atlas de traços, ancestralidade, matriz de completude e resumo de uma página — e declara os demais como dependentes de WGS.",
+   "rule_sha256": "22655d1037182d59a5f2256dae6050cec09824271428aed11a12dac0709d6e7f",
+   "status": "VERIFICADO"
+  },
+  "53": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-input",
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "A execução não se limita ao perguntado: audita o arquivo, interroga todo o registro de alvos, procura variantes protetoras e achados inesperados, e atualiza a farmacogenômica a cada corrida.",
+   "rule_sha256": "f9eeb59c74b0286e2db1e977358de0c7210a93f31497ea8de5be6a591d88ef36",
+   "status": "EXECUTADO"
+  },
+  "54": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A análise multirreferência (GRCh38, T2T-CHM13, pangenoma) pressupõe remapear leituras contra referências alternativas. Um export de array traz coordenadas fixas em GRCh37 e nenhuma leitura para remapear.",
+   "rule_sha256": "73c4ff0397fc2ba45c1531e49300e600cfc8fa17d761730711d26961757167e2",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "55": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O truth set pessoal exige FASTQ/BAM e a execução de callers independentes. Nenhum dado bruto de sequenciamento foi enviado a esta execução.",
+   "rule_sha256": "9753c44305394b47fcd09af9d489a9b25d8b2a3daa52636e412d0797631926d6",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "56": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "Um segundo pipeline de variant calling por aprendizado profundo exige leituras para chamar. Este lane não realiza variant calling.",
+   "rule_sha256": "8cdefb869461ac468a6a4ecb5b99bfa0533e1fe485a867dc532885f51d5c7820",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "57": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O atlas de variantes estruturais exige callers de SV sobre sequenciamento. A matriz de capacidade declara SV como NÃO DISPONÍVEL neste lane.",
+   "rule_sha256": "fd85186611e695cc77d8f42ea1ef8a996cdda640d4597df63c90b7a53184e837",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "58": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A análise dirigida de expansões repetitivas exige ferramentas como ExpansionHunter sobre leituras alinhadas. O array não mede número de repetições.",
+   "rule_sha256": "1aace0d2174efb80c6afa2354d27a3bc577d6bc84a710d8b8897293d68e74741",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "59": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A fase haplotípica exige read-backed phasing, phasing estatístico com painel ou dados dos pais. Esta execução não faseia e declara a fase como desconhecida onde ela importaria, como entre BCHE A e K.",
+   "rule_sha256": "2aff5ae1194e1e6247f1a4d8e3d160e878d30e4fde63f9c5264039773481bb03",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "6": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A auditoria descrita é condicionada ao envio do WGS — profundidade, cobertura por éxon, Ti/Tv, contaminação, mapa de confiabilidade a partir de reads. Nenhum FASTQ/BAM/CRAM foi enviado a esta execução.",
+   "rule_sha256": "b4b1e36a3ba68ec7721992e29cebc10328f832380985167d3cf6062c54886898",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "60": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O genoma diploide pessoal exige montagem por haplótipo a partir de leituras, preferencialmente longas. Nada nesta execução produz sequência.",
+   "rule_sha256": "8de3e20e8b50c526ab34bfb24b33329c9a458c9c51775b35a290686a6ed3838a",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "61": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A predição funcional por ensemble de modelos aplica-se a variantes raras sem classificação definitiva encontradas em sequenciamento. Este lane interroga loci catalogados com classificação existente e não descobre variantes novas.",
+   "rule_sha256": "f1c2c17e446925e6aba09a0dc24d0171c4654aa276b34831129a6fbef3b1bcd2",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "62": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A avaliação estrutural 3D destina-se a variantes missense raras candidatas, que este lane não descobre.",
+   "rule_sha256": "2d98a94951e5c850ff2dc1260a82c4aa5098f99df20112eec6ff836f43a7d8f4",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "63": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O módulo de genoma não codificante depende de descobrir variantes regulatórias em sequenciamento; o array cobre marcadores catalogados, não regiões regulatórias.",
+   "rule_sha256": "cdf3d5ae409abbbbf25eef6ca5d152c2a58962aaf2a87d7919c4d81f41a79e92",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "64": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O cruzamento com GTEx/eQTL destina-se a variantes regulatórias priorizadas, que este lane não produz.",
+   "rule_sha256": "fc994706914ddcea524536693e09f38c68c590a1b108b075ccd8ba04e483a5a1",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "65": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O perfil HPO exige informação clínica estruturada do fenótipo. Nenhum dado fenotípico clínico foi fornecido a esta execução.",
+   "rule_sha256": "01aa0aac18619045fada3c2c5609348a884aaca870609c887941c2f0a668aeda",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "66": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A priorização genótipo-fenótipo por Exomiser/Genomiser exige exoma ou genoma mais fenótipo HPO; nenhum dos dois existe nesta execução.",
+   "rule_sha256": "06b3f65d7c5bd7dfe030cfa80450a24a6a4fdc811bb96f817a6053c1b297c63c",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "67": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O modelo de penetrância personalizada exige idade, sexo, história familiar, exames e exposições, que não foram fornecidos. O pipeline recusa converter razão de chances de GWAS em risco individual.",
+   "rule_sha256": "9e8c92fded1a9cc1ac98e7d42e0ad1e57cbbd106226581e7a48ebb423fe6d674",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "68": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "Nenhum escore poligênico é calculado neste lane. O PGS Catalog é usado apenas como fonte de curadoria do registro de alvos, não para pontuar o caso, e a matriz de capacidade declara PRS como NÃO DISPONÍVEL. Emitir um escore exigiria modelo publicado com pesos, orientação de alelos conferida e cobertura medida do array contra o modelo, nenhum dos quais esta execução estabelece.",
+   "rule_sha256": "0e52c0aaa71b86d3d82cabc69b07fc518eab52f09e7b296d3917cb5d8d2b6ba8",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "69": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Variantes protetoras são procuradas ativamente no registro de alvos e reportadas ao lado das de risco, com a mesma graduação de evidência.",
+   "rule_sha256": "e9d318b960b88d60964ecc9df64aed3bedbf2242dea14b51b4389b96906e94cf",
+   "status": "EXECUTADO"
+  },
+  "7": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O cruzamento WGS × SNP-array exige o WGS como um dos lados da comparação, além de inspeção de reads no BAM para conflitos. Nenhum WGS existe nesta execução.",
+   "rule_sha256": "c9a24a0b64b4d0543034d84ec94e235ce1612cc800c20d45732e1f988e0da26c",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "70": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O módulo de resiliência genética exige fenótipo observado para contrastar com o risco esperado. Nenhum fenótipo foi fornecido.",
+   "rule_sha256": "7cec29b839c469d282cff0ca23f91209aca6534a90bb0ef8c5ad40a09ae93cc9",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "71": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A reconstrução do mtDNA em alta resolução, heteroplasmia e discriminação de NUMTs exigem WGS. O array traz cerca de mil marcadores mitocondriais e nenhuma profundidade de leitura.",
+   "rule_sha256": "1c1ac826afa0366110e4a1a2c27b417558607cb983b9df6b9aaf1305465227d6",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "72": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A extração completa de SNPs-Y, SNPs privados e resolução de P312/S116 exige WGS. Os marcadores Y do array sustentam apenas o nível de linhagem já reportado na seção 29.",
+   "rule_sha256": "8cb905a4e26932d1820da12b52884c218ba65cc7649c2351adbabc2b7cbe29f6",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "73": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A inferência de ancestralidade local por cromossomo exige método de local ancestry com painel apropriado, não executado neste lane.",
+   "rule_sha256": "c4831ae2b3b9366dca19d5cc3179e413c046465a544a8558821640837ed02336",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "74": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A datação da miscigenação depende de comprimento e distribuição de segmentos ancestrais, que exigem ancestralidade local, não produzida aqui.",
+   "rule_sha256": "deec9beafbaf687d4e1a9c9a0c2b670786accf0e5e0596f822252bd600ec66e8",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "75": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "Os métodos f3/f4/D-statistics/qpAdm exigem dados de genética populacional em formato e escala que esta execução não monta.",
+   "rule_sha256": "7b6ebd16587dc8a773c4fda4a1722feff54a34b7a71a04c94ca7faf53ed60c6e",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "76": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A detecção de segmentos IBD exige arquivos de parentes. Nenhum foi fornecido.",
+   "rule_sha256": "ccfc5a85ab3e4551bb2f1b80204bf129211a5f35803b882b8a38bc6fb65f3534",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "77": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O mapa de origem parental de cada variante exige genomas dos pais ou de parentes.",
+   "rule_sha256": "bf63172ff6be59b79683e971219a003dbd72199fd824a175ef4e064912033c35",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "78": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A triagem de mosaicismo somático depende de allele balance por leitura. O array reporta genótipos discretos, sem fração alélica.",
+   "rule_sha256": "9e24c94c1284424b5546713fff12937e5d9766ff02678deec605f7153406c481",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "79": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A triagem exploratória de hematopoiese clonal depende de variantes somáticas de baixa fração alélica em sequenciamento de sangue.",
+   "rule_sha256": "03136e887e43ae0c5c35382b512cb3ca67d4feb8b451bdda00e6493eff79857a",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "8": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A normalização descrita (left-normalize de indels, split de multialélicos, validação de REF contra a referência, DP/GQ/allele balance) opera sobre chamadas de sequenciamento. Um export de array traz genótipos por rsID já chamados, sem REF/ALT nem métricas de chamada por leitura.",
+   "rule_sha256": "18cdf2266c5e35195f415832a72b5fc207ddf4cdcba493eaa0baec7766811817",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "80": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A estimativa de comprimento telomérico é computada a partir da contagem de leituras com motivo telomérico. Um export de genotipagem não traz leituras.",
+   "rule_sha256": "ce8c30a694e5d807699d710be07f6c95a126f77127fe89f100d54edc996f6dc0",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "81": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A carga genômica de variantes raras exige o conjunto completo de variantes raras do indivíduo, que só o sequenciamento fornece.",
+   "rule_sha256": "56bcb4d5506aa1653409492f2cd2fc377734204f19d6e6aab77d2a31ff274026",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "82": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O mapeamento por via metabólica pressupõe o conjunto de variantes relevantes do genoma; este lane produz achados por locus catalogado, não a rede.",
+   "rule_sha256": "e8cf2b4756a6947f72674409be992f4b1bd41119ec259b5bd94701ddf2486966",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "83": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O grafo de conhecimento genômico pessoal é uma camada de integração sobre o Genoma Mestre, que este lane não constrói.",
+   "rule_sha256": "bfd902709e809e2bab8430b294715489e74ded39698c3367225e9e05a7d4e919",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "84": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O gêmeo digital biológico integra exames, medidas, sono, dieta e microbioma, nenhum dos quais foi fornecido.",
+   "rule_sha256": "1d29182f2d1da6740ece7e505b762fc9da4b6d4079335e9019a450484975cffd",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "85": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A camada multiômica depende de transcriptoma, epigenoma, proteoma, metaboloma ou microbioma. Nenhum foi fornecido.",
+   "rule_sha256": "1d26a57abbdff032c090bba7dc66682add0cc40fa43de91e6eb5930032078b32",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "86": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "Verificar se uma variante altera expressão, splice ou abundância de transcrito exige RNA-seq ou perfil de RNA do tecido relevante, não fornecidos a esta execução.",
+   "rule_sha256": "d4eec718b6501da94afd37a8eb2ad4d411a809e8fb3f03779888139a10fe7fa4",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "87": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "Verificar se um dos alelos é expresso desproporcionalmente exige DNA e RNA do mesmo indivíduo. Esta execução tem apenas genótipos de array.",
+   "rule_sha256": "82a263ef6fccc4a2e9832e7f78b71c41b3745cf0d5480a63b3823b33fd17a6e1",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "88": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A camada epigenômica exige dados de metilação ou leitura longa capaz de detectar bases modificadas, e o próprio texto proíbe inferir metilação de dados que não a medem.",
+   "rule_sha256": "670de80d5acafd37d839ea68288be7b6b7c6de8201ffe71fa770a33c3e127d13",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "89": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "A matriz de interação PGx é aplicada no limite do que o array mede: o passaporte separa o fenótipo genético da fenoconversão por interação medicamentosa e declara que não dispõe de medicação, função hepática ou renal do caso.",
+   "rule_sha256": "d9bab2366e444a791e2c85ee6bf290f0d20fec628835db33ed4e29a71639625e",
+   "status": "VERIFICADO"
+  },
+  "9": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "O Banco Mestre de Variantes exige campos que só o sequenciamento produz — HGVS g./c./p., transcript, DP, GQ, allele balance, fase, caller e concordância entre callers. Este lane produz matriz de completude e achados por rsID, não esse banco.",
+   "rule_sha256": "c1220cb52a07910bc985add7ff17aa34dd5171216081b248e4ee7892ebc04827",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "90": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "PharmCAT processa VCF. Esta execução não produz VCF, e o passaporte usa definições PharmVar/CPIC diretamente sobre os loci do array, declarando o que não pode diplotipar.",
+   "rule_sha256": "441a4167aded029bda078ef50663d0beb3128715381e3a6671f7e529786c3222",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "91": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Variantes de significado incerto interrogadas não são ignoradas nem alarmadas: recebem a classe SEM INTERPRETAÇÃO ESTABELECIDA e ficam fora de qualquer recomendação de conduta.",
+   "rule_sha256": "e48111369f3d0af91047712e59f804a04bc1f8f3061a57830b722f2cdd26d2a6",
+   "status": "EXECUTADO"
+  },
+  "92": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "O changelog genético é sustentado pelos snapshots curados de evidência, cada um com instante de recuperação e SHA-256 próprios: é contra eles que uma reanálise futura compara o que mudou.",
+   "rule_sha256": "e279ae553a0f3b173496b498d6ce63960e910004cf232bb31b8b4aaa85e2281d",
+   "status": "VERIFICADO"
+  },
+  "93": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A priorização é qualitativa e explícita: gravidade, nível de revisão da evidência, validade gene–doença e qualidade da chamada aparecem ao lado de cada achado, sem fórmula opaca.",
+   "rule_sha256": "97f49180fe0a51982cbddb36eb5aff561422be8a980c38c58e07f179cd77408d",
+   "status": "VERIFICADO"
+  },
+  "94": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Para cada achado acionável o relatório indica o que é mensurável, o que é confirmável e por qual método, sem prescrever periodicidade sem guideline.",
+   "rule_sha256": "b7d07c6d8249f956272efb89fd2296f23f92b048442e8e5c23a1b838b29a57fb",
+   "status": "VERIFICADO"
+  },
+  "95": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A comparação entre expectativa genética e fenótipo observado exige dados laboratoriais do caso, que não foram fornecidos a esta execução.",
+   "rule_sha256": "37b658b7a1df5c4f9d7d2f5e28cb13f9c7cd863548f1cf5e8d21597fd5652d52",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "96": {
+   "applicability": "NOT_APPLICABLE",
+   "decision": "NOT_APPLICABLE",
+   "evidence_refs": [],
+   "justification": "A simulação mendeliana do casal exige genoma, exoma, painel ou carrier screening da parceira. Nenhum dado da parceira foi fornecido; o relatório reprodutivo declara isso em vez de estimar risco de casal.",
+   "rule_sha256": "45003d76b3ed1a3ec28fc1715b80541b5d42a27abc1cd4ad68b7eb399694d073",
+   "status": "NÃO DISPONÍVEL"
+  },
+  "97": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "array-qc",
+    "partial-annotation"
+   ],
+   "justification": "O relatório de limitações tecnológicas é produzido: o relatório 05 e a matriz de completude listam classes de variante não avaliadas, loci não interrogados, ausência de fase, limites de PRS e limites de ancestralidade desta execução.",
+   "rule_sha256": "25df54058a0aa46208eb26235a0b4020663ef37eb8801b99d5bac587d80a26e5",
+   "status": "EXECUTADO"
+  },
+  "98": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "Para cada lacuna o relatório nomeia a tecnologia adequada — WGS para gene inteiro e CNV, long-read e ferramentas dirigidas para expansões e loci complexos, tipagem especializada para HLA — em vez de recomendar 'mais exames' genericamente.",
+   "rule_sha256": "76edabbfdc942fb8861ce3b9f204e34185f4763cd661b2aac5a321be2bb107c1",
+   "status": "VERIFICADO"
+  },
+  "99": {
+   "applicability": "APPLICABLE",
+   "decision": "SATISFIED",
+   "evidence_refs": [
+    "partial-annotation"
+   ],
+   "justification": "A regra de tecnologia mais avançada é respeitada ao declarar o array como o método menos resolutivo da hierarquia e ao indicar, por lacuna, a tecnologia que a resolveria.",
+   "rule_sha256": "45b0b479a3e49d4938b50d8e659ae1febffcd1f0ca72f3b6741712b4377d600d",
+   "status": "VERIFICADO"
+  }
+ }
+}

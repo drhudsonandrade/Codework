@@ -8,69 +8,179 @@ from pathlib import Path
 from typing import Any
 
 from array_pipeline.qc import (
-    HARMONIZED_COLUMNS,
-    RAW_COLUMNS,
+    detect_schema,
     _canonical_gt,
+    _orientation,
     _read_header_and_metadata,
     _text_stream,
     sha256_file,
 )
 from array_pipeline.targets import build_query_plan, load_target_manifest, sha256_json
-from evidence_adapters import get_adapter
+from array_pipeline import claims
 
-RULESET = {
-    "status": "VIGENTE",
-    "version": "v3.4",
-    "effective_date": "17/08/2026",
-    "sha256": "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580",
-}
+import normative
 
-UNSUPPORTED_ARRAY_CLAIMS = [
-    "genome-wide negative/exclusion claims",
-    "CNV",
-    "SV",
-    "repeat expansions",
-    "HLA typing",
-    "CYP2D6 structural/hybrid/copy-number diplotyping",
-    "mosaicism from read-level evidence",
-    "deep intronic/non-assayed variation",
-]
+RULESET = normative.ruleset_block()
+
+
+class AdapterUnavailableError(RuntimeError):
+    """The Evidence Plane adapter package is not installed in this runtime."""
+
+#: Re-exported so `annotation.UNSUPPORTED_ARRAY_CLAIMS` keeps working for existing callers.
+#: The definition moved to a dependency-free module: importing it from here used to pull
+#: `evidence_adapters` into the import graph of every module that wanted only the list.
+UNSUPPORTED_ARRAY_CLAIMS = claims.UNSUPPORTED_ARRAY_CLAIMS
+
+
+def _get_adapter(source: str):
+    """Load an Evidence Plane adapter at call time, not at import time.
+
+    `from evidence_adapters import get_adapter` at module scope made an optional adapter a
+    hard requirement for importing this module — and, through the constant above, for
+    importing `completeness` and everything downstream of it. The repository declares
+    `evidence_adapters/**` optional; a core module that cannot be imported without it
+    contradicts that, and `scripts/validate_repo.py` now fails on exactly this shape.
+
+    Absence is raised as `AdapterUnavailableError` so a caller can record NÃO DISPONÍVEL for
+    the retrieval instead of the process dying at import.
+    """
+    try:
+        from evidence_adapters import get_adapter
+    except ImportError as exc:  # pragma: no cover - exercised by the import regression
+        raise AdapterUnavailableError(
+            f"adaptador do Evidence Plane indisponível para {source!r}: {exc}"
+        ) from exc
+    return get_adapter(source)
 
 
 def _stable_json(value: Any) -> bytes:
+    """JSON bytes that depend only on the value: sorted keys, no incidental whitespace."""
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
-def _orientation(row: dict[str, str], schema: str, qc: dict[str, Any]) -> tuple[str, str]:
-    strand = qc.get("input", {}).get("strand")
-    strand_evidence = qc.get("input", {}).get("strand_evidence")
-    if schema.startswith("harmonized"):
-        sources = (row.get("SOURCES") or "").strip()
-        if sources == "GM":
-            return "VERIFICADO", "cross-platform consensus"
-        if sources == "M" and strand == "forward" and strand_evidence not in {None, "NÃO DISPONÍVEL"}:
-            return "VERIFICADO", "MyHeritage forward-strand source metadata"
-        if sources == "G":
-            return "INFERIDO", "Genera-only locus; orientation is not independently verified"
-        return "NÃO DISPONÍVEL", "source-specific orientation evidence unavailable"
-    if strand in {"forward", "plus", "+"} and strand_evidence not in {None, "NÃO DISPONÍVEL"}:
-        return "VERIFICADO", str(strand_evidence)
-    return "NÃO DISPONÍVEL", "source-specific orientation evidence unavailable"
+def check_coordinate(
+    observation: dict[str, Any], target: dict[str, Any], build: str | None
+) -> dict[str, str]:
+    """Compare the observed coordinate with the registry's canonical one.
+
+    The observation used to be accepted on its rsID alone, because the registry held no
+    coordinates to compare against. An rsID is a label: a file that carries the right label
+    at the wrong position is a file annotated on another assembly, or a file whose
+    coordinate column has been rebuilt by a tool nobody recorded. Either way the locus is
+    not the locus the registry means, and interpreting it produces a finding about a
+    position that was never interrogated.
+
+    Returns an operational status and the basis for it, in the vocabulary the rest of the
+    pipeline uses. Anything short of an actual match is refused rather than downgraded, but
+    a registry with no coordinate for the locus is NÃO DISPONÍVEL, not a mismatch — there is
+    nothing to disagree with.
+    """
+    coordinates = target.get("coordinates") if isinstance(target.get("coordinates"), dict) else {}
+    if coordinates.get("status") != "VERIFICADO":
+        return {
+            "status": "NÃO DISPONÍVEL",
+            "code": "REGISTRY_COORDINATES_UNAVAILABLE",
+            "basis": f"registro não traz coordenada canônica para {target.get('rsid')}: "
+            f"{coordinates.get('reason') or 'coordenada ausente'}",
+        }
+    if build not in ("GRCh37", "GRCh38"):
+        return {
+            "status": "NÃO DISPONÍVEL",
+            "code": "BUILD_UNVERIFIED",
+            "basis": "build do caso não verificado; sem build não há coordenada canônica com que comparar",
+        }
+    expected = coordinates.get(build)
+    if not isinstance(expected, dict):
+        return {
+            "status": "NÃO DISPONÍVEL",
+            "code": "BUILD_COORDINATE_MISSING",
+            "basis": f"registro não traz coordenada em {build} para este locus",
+        }
+    if expected.get("ambiguous_positions"):
+        return {
+            "status": "NÃO DISPONÍVEL",
+            "code": "AMBIGUOUS_COORDINATE",
+            "basis": f"o ClinVar registra este rsid em {expected['ambiguous_positions']} posições "
+            f"distintas em {build}; não há coordenada única para conferir",
+        }
+
+    raw_expected_position = expected.get("position")
+    if isinstance(raw_expected_position, bool):
+        return {
+            "status": "NÃO DISPONÍVEL",
+            "code": "EXPECTED_POSITION_INVALID",
+            "basis": f"registro não traz posição inteira utilizável em {build} para este locus",
+        }
+    try:
+        expected_position = int(str(raw_expected_position).strip())
+        if expected_position <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return {
+            "status": "NÃO DISPONÍVEL",
+            "code": "EXPECTED_POSITION_INVALID",
+            "basis": f"registro não traz posição inteira utilizável em {build} para este locus",
+        }
+
+    observed_chromosome = str(observation.get("chromosome") or "").strip().upper().removeprefix("CHR")
+    expected_chromosome = (
+        str(expected.get("chromosome") or "").strip().upper().removeprefix("CHR")
+    )
+    # The expected *position* is validated above; the expected *chromosome* was not, so a
+    # registry entry missing it collapsed to "" and then failed the comparison below as
+    # COORDINATE_MISMATCH — whose basis tells the reader the patient's file "is on another
+    # assembly or had its coordinate column rewritten". That is a causal claim about the
+    # sample, asserted from a gap in our own reference data. A missing chromosome is our
+    # incompleteness and has to say so.
+    if not expected_chromosome:
+        return {
+            "status": "NÃO DISPONÍVEL",
+            "code": "EXPECTED_CHROMOSOME_INVALID",
+            "basis": f"registro não traz cromossomo utilizável em {build} para este locus; "
+            "sem os dois lados da coordenada nada pode ser afirmado sobre o arquivo",
+        }
+    try:
+        observed_position = int(str(observation.get("position") or "").strip())
+    except ValueError:
+        return {
+            "status": "NÃO DISPONÍVEL",
+            "code": "OBSERVED_POSITION_INVALID",
+            "basis": "posição observada não é um inteiro",
+        }
+
+    if observed_chromosome != expected_chromosome or observed_position != expected_position:
+        return {
+            "status": "NÃO DISPONÍVEL",
+            "code": "COORDINATE_MISMATCH",
+            "basis": f"coordenada divergente em {build}: o arquivo traz "
+            f"chr{observed_chromosome}:{observed_position:,} e o registro "
+            f"chr{expected_chromosome}:{expected_position:,}. O rsid casa e a posição "
+            "não; o arquivo está em outra montagem ou a coluna de coordenadas foi reescrita.",
+        }
+    return {
+        "status": "VERIFICADO",
+        "code": "COORDINATE_MATCH",
+        "basis": f"coordenada confere com o registro em {build} "
+        f"(chr{expected_chromosome}:{expected_position:,}, "
+        f"{expected.get('reference_allele')}>{expected.get('alternate_allele')})",
+    }
 
 
-def extract_target_observations(path: Path, target_rsids: set[str], qc: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+def extract_target_observations(
+    path: Path,
+    target_rsids: set[str],
+    qc: dict[str, Any],
+    targets_by_rsid: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, list[dict[str, Any]]]:
     """Read only target loci into the annotation workspace; never duplicate the full chip."""
     wanted = {x.lower() for x in target_rsids}
+    by_rsid = {k.lower(): v for k, v in (targets_by_rsid or {}).items()}
+    case_build = str((qc.get("input") or {}).get("build") or "") or None
     found: dict[str, list[dict[str, Any]]] = {x: [] for x in sorted(wanted)}
     fh, _ = _text_stream(path)
     try:
         header, _metadata = _read_header_and_metadata(fh)
-        if header == HARMONIZED_COLUMNS:
-            schema = "harmonized_genera_myheritage_v1"
-        elif header == RAW_COLUMNS:
-            schema = "raw_snp_array_v1"
-        else:
-            raise ValueError(f"unsupported SNP-array CSV header: {header}")
+        schema = detect_schema(header)
         reader = csv.DictReader(fh, fieldnames=header)
         for row in reader:
             rsid = (row.get("RSID") or "").strip().lower()
@@ -78,24 +188,96 @@ def extract_target_observations(path: Path, target_rsids: set[str], qc: dict[str
                 continue
             gt = row.get("CONSENSUS_RESULT") if schema.startswith("harmonized") else row.get("RESULT")
             orientation_status, orientation_basis = _orientation(row, schema, qc)
-            found[rsid].append(
-                {
-                    "rsid": rsid,
-                    "chromosome": (row.get("CHROMOSOME") or "").strip(),
-                    "position": (row.get("POSITION") or "").strip(),
-                    "genotype": _canonical_gt(gt),
-                    "status": (row.get("STATUS") or "observed").strip(),
-                    "sources": (row.get("SOURCES") or "single_source").strip(),
-                    "orientation_operational_status": orientation_status,
-                    "orientation_basis": orientation_basis,
-                }
-            )
+            observation = {
+                "rsid": rsid,
+                "chromosome": (row.get("CHROMOSOME") or "").strip(),
+                "position": (row.get("POSITION") or "").strip(),
+                "genotype": _canonical_gt(gt),
+                # The file's own text, kept beside the canonical form. `_canonical_gt` sorts
+                # the alleles, which is what makes two vendors comparable and is also what
+                # destroys any ordering the file carried. Keeping both means the canonical
+                # form is a derivation rather than a replacement.
+                "genotype_as_reported": (gt or "").strip(),
+                # An array reports two alleles at a position and says nothing about which
+                # chromosome each sits on. Stated on every observation so no consumer has to
+                # infer it from the absence of a phase field.
+                "phase_status": "UNPHASED",
+                "phase_basis": (
+                    "genotipagem por microarranjo não resolve fase; diplótipo exige "
+                    "evidência de fase que este ensaio não produz"
+                ),
+                "status": (row.get("STATUS") or "observed").strip(),
+                "sources": (row.get("SOURCES") or "single_source").strip(),
+                "orientation_operational_status": orientation_status,
+                "orientation_basis": orientation_basis,
+            }
+            target = by_rsid.get(rsid)
+            if target is not None:
+                coordinate = check_coordinate(observation, target, case_build)
+                observation["coordinate_operational_status"] = coordinate["status"]
+                observation["coordinate_reason_code"] = coordinate["code"]
+                observation["coordinate_basis"] = coordinate["basis"]
+            found[rsid].append(observation)
     finally:
         fh.close()
     return {k: v for k, v in found.items() if v}
 
 
+def _observation_status(rows: list[dict[str, Any]]) -> str:
+    """The status of one locus, from every check that was actually made about it.
+
+    It read the orientation alone. `check_coordinate` was computed per observation, written
+    onto the record — and consumed by nothing: a locus whose coordinate diverged from the
+    registry, which is proof the file is annotated on another assembly, still reached
+    VERIFICADO because its strand happened to be established. On the first real array,
+    rs4307059 was VERIFICADO with `coordinate_operational_status: NÃO DISPONÍVEL` beside it.
+
+    Both must hold. A coordinate the registry could not supply is not a failure of the file,
+    but it is not a verification either: an rsID is a label, and nothing checked that this
+    label sits where the registry means. Such a locus is INFERIDO — usable, and not
+    presented as confirmed.
+    """
+    if len(rows) != 1:
+        # More than one row for one rsid is an unresolved duplicate; choosing between them
+        # would be the arbitration sections 4 and 7 forbid.
+        return "NÃO DISPONÍVEL"
+    row = rows[0]
+    orientation = row.get("orientation_operational_status")
+    if orientation == "NÃO DISPONÍVEL":
+        return "NÃO DISPONÍVEL"
+    if orientation != "VERIFICADO":
+        return "INFERIDO"
+    coordinate = row.get("coordinate_operational_status")
+    if coordinate == "VERIFICADO":
+        return "VERIFICADO"
+    # A divergent coordinate is a positive finding of disagreement, not a gap: the rsid
+    # matches and the position does not, so this locus is not the locus the registry means.
+    if coordinate is None:
+        return "INFERIDO"
+    if row.get("coordinate_reason_code") in {
+        "REGISTRY_COORDINATES_UNAVAILABLE",
+        # No verified build means there is no canonical block to compare against, so the
+        # file has not been contradicted — the same category as the entries around it.
+        "BUILD_UNVERIFIED",
+        "BUILD_COORDINATE_MISSING",
+        "EXPECTED_POSITION_INVALID",
+        # Its twin. Both mean our registry lacks half the coordinate, which is a gap in our
+        # own reference data rather than a finding about the file. Grading one INFERIDO and
+        # the other NÃO DISPONÍVEL would decide the locus by which field we happen to lack.
+        "EXPECTED_CHROMOSOME_INVALID",
+        "AMBIGUOUS_COORDINATE",
+    }:
+        return "INFERIDO"
+    return "NÃO DISPONÍVEL"
+
+
 def _query_key(source: str, query: dict[str, Any]) -> str:
+    """A stable identity for one provider query, so the same question is asked once.
+
+    Derived from the source and the query together: the same terms sent to two registries are
+    two different retrievals, and collapsing them would attribute one provider's answer to
+    the other.
+    """
     return hashlib.sha256(_stable_json({"source": source, "query": query})).hexdigest()
 
 
@@ -105,19 +287,25 @@ def _live_retrieve(source: str, query: dict[str, Any], checked_at: str, *, max_p
     The payload is retained only when it is valid JSON and under a strict size cap.
     This is evidence capture, not automated clinical interpretation.
     """
-    adapter = get_adapter(source)
-    request = adapter._request(query)  # request construction is centralized in the adapter
-    locator = request.full_url
     base: dict[str, Any] = {
         "id": f"{source}:{_query_key(source, query)[:16]}",
         "source": source,
         "status": "NÃO DISPONÍVEL",
         "checked_at": checked_at,
-        "locator": locator,
+        "locator": None,
         "query": query,
         "retrieval_evidence": {"method": "HTTPS"},
     }
     try:
+        # Loading the adapter is part of the retrieval, so it belongs inside the block that
+        # turns a failed retrieval into a NÃO DISPONÍVEL record. It used to sit above this
+        # `try`, so an absent `evidence_adapters` package raised `AdapterUnavailableError`
+        # straight out of this function — the point of naming that error was to let the
+        # caller record a refusal, and there was no caller catching it.
+        adapter = _get_adapter(source)
+        # Request construction is centralized in the adapter.
+        request = adapter._request(query)
+        base["locator"] = request.full_url
         payload, headers = adapter.transport(request)
         if len(payload) > max_payload_bytes:
             raise ValueError(f"provider payload exceeds cap: {len(payload)} > {max_payload_bytes}")
@@ -157,6 +345,27 @@ def annotate_partial_genome(
     max_payload_bytes: int = 1_500_000,
     checked_at: str | None = None,
 ) -> dict[str, Any]:
+    """Annotate the genotyped targets of a partial genome, within declared bounds.
+
+    Two preconditions are checked before any target is read, and both raise rather than
+    degrade. The QC evidence must be `VERIFICADO` with `LIMITED_INTERPRETATION_GATE` at
+    PASS, and its recorded `input.sha256` must match the file actually being annotated —
+    otherwise the annotation would inherit a quality claim made about a different file.
+
+    `mode` decides what the retrievals are. `plan-only` asks each adapter to build its
+    request and records the locator with status `PROPOSTO`, performing no network call:
+    the output is a plan that can be reviewed before anything is fetched. `live` performs
+    the retrievals, and each one that fails degrades to `NÃO DISPONÍVEL` instead of
+    aborting the run — a single unreachable source must not discard the targets that were
+    successfully annotated. The run as a whole is `VERIFICADO` only when every retrieval
+    is, so a partial success can never be read as a complete one.
+
+    `max_targets`, `max_queries` and `max_payload_bytes` bound the plane rather than tune
+    it. The first two raise in `build_query_plan` when exceeded instead of trimming the
+    plan: a silently shortened plan would produce an annotation that looks complete while
+    having skipped targets nobody named. `checked_at` is injectable so a test can pin a
+    timestamp; production leaves it None.
+    """
     if mode not in {"plan-only", "live"}:
         raise ValueError("mode must be plan-only or live")
     qc = json.loads(qc_path.read_text(encoding="utf-8"))
@@ -168,7 +377,10 @@ def annotate_partial_genome(
 
     manifest = load_target_manifest(target_manifest_path)
     target_ids = {str(x["rsid"]).lower() for x in manifest["targets"]}
-    observations = extract_target_observations(input_path, target_ids, qc)
+    # Passed so each observation can be checked against the registry's canonical coordinate
+    # instead of being accepted on its rsID alone.
+    targets_by_rsid = {str(x["rsid"]).lower(): x for x in manifest["targets"]}
+    observations = extract_target_observations(input_path, target_ids, qc, targets_by_rsid)
     plan = build_query_plan(observations.keys(), manifest, max_targets=max_targets, max_queries=max_queries)
     now = checked_at or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -180,7 +392,7 @@ def annotate_partial_genome(
             if mode == "live":
                 retrievals[key] = _live_retrieve(item["source"], item["query"], now, max_payload_bytes=max_payload_bytes)
             else:
-                adapter = get_adapter(item["source"])
+                adapter = _get_adapter(item["source"])
                 request = adapter._request(item["query"])
                 retrievals[key] = {
                     "id": f"{item['source']}:{key[:16]}",
@@ -215,7 +427,7 @@ def annotate_partial_genome(
                 "label": meta.get("label"),
                 "gene": meta.get("gene"),
                 "records": rows,
-                "observation_operational_status": "VERIFICADO" if len(rows) == 1 and rows[0]["orientation_operational_status"] == "VERIFICADO" else ("INFERIDO" if len(rows) == 1 else "NÃO DISPONÍVEL"),
+                "observation_operational_status": _observation_status(rows),
                 "interpretation": "not automatically interpreted; evidence snapshot requires curation",
             }
         )
@@ -225,7 +437,7 @@ def annotate_partial_genome(
         "operational_status": operational_status,
         "mode": mode,
         "evaluated_at": now,
-        "ruleset": RULESET,
+        "ruleset": normative.attested_ruleset_block(),
         "case_id": qc.get("case_id"),
         "input_sha256": qc.get("input", {}).get("sha256"),
         "target_manifest": {
@@ -257,6 +469,7 @@ def annotate_partial_genome(
 
 
 def write_annotation(result: dict[str, Any], output: Path) -> Path:
+    """Write the annotation artifact deterministically, and return where it landed."""
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return output
