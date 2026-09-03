@@ -2,26 +2,75 @@ name: GENOMA v0.8 four-plane audit
 
 on:
   pull_request:
-    paths-ignore:
-      - '**/*.md'
   push:
     branches: [main]
-    paths-ignore:
-      - '**/*.md'
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Four-plane audit change classifier
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      audit_required: ${{ steps.scope.outputs.audit_required }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify safe Markdown-only changes
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request)
+              BASE_SHA="$PR_BASE_SHA"
+              HEAD_SHA="$PR_HEAD_SHA"
+              ;;
+            push)
+              BASE_SHA="$PUSH_BASE_SHA"
+              HEAD_SHA="$CURRENT_SHA"
+              ;;
+            *)
+              echo "audit_required=true" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+          changed_paths="$RUNNER_TEMP/audit-changed-paths.zlist"
+          deleted_paths="$RUNNER_TEMP/audit-deleted-paths.zlist"
+          git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$changed_paths"
+          git diff --no-renames --diff-filter=D --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$deleted_paths"
+          audit_required=$(python3 scripts/ci_change_classifier.py markdown --changed "$changed_paths" --deleted "$deleted_paths")
+          echo "audit_required=$audit_required" >> "$GITHUB_OUTPUT"
+
   audit:
+    needs: changes
+    if: >-
+      always() &&
+      (needs.changes.result != 'success' ||
+       needs.changes.outputs.audit_required == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Require successful scope classification
+        if: needs.changes.result != 'success'
+        run: |
+          echo 'Four-plane audit scope classification failed or was cancelled.' >&2
+          exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0

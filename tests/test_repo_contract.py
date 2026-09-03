@@ -38,7 +38,7 @@ class RepoContractTest(unittest.TestCase):
             payload.write_text('{"label": "≥"}', encoding="utf-8")
             original_read_text = Path.read_text
 
-            def guarded_read_text(candidate, encoding=None, errors=None):
+            def guarded_read_text(candidate, encoding=None, errors=None) -> str:
                 if candidate == payload and encoding is None:
                     raise UnicodeDecodeError("charmap", b"\x8d", 0, 1, "test default encoding")
                 return original_read_text(candidate, encoding=encoding, errors=errors)

@@ -1,9 +1,22 @@
+import importlib.util
 import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
+CLASSIFIER = ROOT / "scripts" / "ci_change_classifier.py"
+
+
+def _load_classifier():
+    if not CLASSIFIER.is_file():
+        raise AssertionError("CI change classifier is missing")
+    spec = importlib.util.spec_from_file_location("ci_change_classifier", CLASSIFIER)
+    if spec is None or spec.loader is None:
+        raise AssertionError("unable to load CI change classifier")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 CONCURRENCY_WORKFLOWS = (
     "fallow.yml",
@@ -17,7 +30,7 @@ CONCURRENCY_WORKFLOWS = (
 )
 
 CONCURRENCY_BLOCK = """concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 """
 
@@ -45,29 +58,62 @@ class CIOptimizationContractTest(unittest.TestCase):
             with self.subTest(workflow=name):
                 self.assertIn(CONCURRENCY_BLOCK, _read(name))
 
+    def test_policy_classifier_behavior_on_real_path_lists(self):
+        classifier = _load_classifier()
+        self.assertTrue(classifier.policy_relevant(["policy_engine/policy/rego/main.rego"]))
+        self.assertTrue(classifier.policy_relevant(["scripts/sealed_ruleset.py"]))
+        self.assertTrue(
+            classifier.policy_relevant(["notes.md", "policy_engine/policy/rego/main.rego"])
+        )
+        self.assertFalse(classifier.policy_relevant(["docs/architecture.md"]))
+
+    def test_markdown_classifier_behavior_on_modifications_deletions_and_renames(self):
+        classifier = _load_classifier()
+        self.assertFalse(classifier.validation_required(["docs/architecture.md"], []))
+        self.assertTrue(
+            classifier.validation_required(["docs/architecture.md"], ["docs/required-contract.md"])
+        )
+        self.assertTrue(classifier.validation_required(["notes.md", "src/code.py"], []))
+        self.assertTrue(classifier.validation_required(["src/code.py", "notes.md"], ["src/code.py"]))
+
     def test_fallow_runs_only_for_javascript_typescript_surfaces(self):
         workflow = _read("fallow.yml")
         header = workflow.split("permissions:", 1)[0]
         pull_request = header.split("  pull_request:\n", 1)[1].split("  workflow_dispatch:\n", 1)[0]
         self.assertIn("paths:\n", pull_request)
-        for expected in (
-            "'mcp/**'",
+        expected_paths = (
+            "'mcp/**/*.ts'",
+            "'mcp/**/*.js'",
+            "'mcp/package.json'",
+            "'mcp/package-lock.json'",
+            "'mcp/tsconfig.json'",
+            "'mcp/.fallowrc.json'",
             "'scripts/codacy_pr_comment.js'",
             "'tests/test_codacy_pr_comment.js'",
             "'.fallowrc.json'",
             "'.github/workflows/fallow.yml'",
-        ):
+        )
+        for expected in expected_paths:
             self.assertIn(expected, pull_request)
+        self.assertNotIn("'mcp/**'", pull_request)
 
-    def test_four_plane_audit_ignores_only_markdown_only_changes(self):
+    def test_four_plane_audit_skips_only_safe_markdown_modifications(self):
         workflow = _read("genoma-audit.yml")
         header = workflow.split("permissions:", 1)[0]
         pull_request = header.split("  pull_request:\n", 1)[1].split("  push:\n", 1)[0]
         push = header.split("  push:\n", 1)[1].split("  workflow_dispatch:\n", 1)[0]
-        self.assertIn("paths-ignore:\n", pull_request)
-        self.assertIn("'**/*.md'", pull_request)
-        self.assertIn("paths-ignore:\n", push)
-        self.assertIn("'**/*.md'", push)
+        self.assertNotIn("paths-ignore:", pull_request)
+        self.assertNotIn("paths-ignore:", push)
+        changes = _job_block(workflow, "changes")
+        self.assertIn("audit_required:", changes)
+        self.assertIn("git diff --no-renames --name-only -z", changes)
+        self.assertIn("git diff --no-renames --diff-filter=D --name-only -z", changes)
+        self.assertIn("scripts/ci_change_classifier.py markdown", changes)
+        audit = _job_block(workflow, "audit")
+        self.assertIn("needs: changes", audit)
+        self.assertIn("needs.changes.result != 'success'", audit)
+        self.assertIn("needs.changes.outputs.audit_required == 'true'", audit)
+        self.assertIn("Require successful scope classification", audit)
 
     def test_policy_required_checks_use_job_level_scope_gates(self):
         workflow = _read("genoma-policy-engine.yml")
@@ -76,7 +122,11 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertNotIn("paths:", pull_request)
         changes = _job_block(workflow, "changes")
         self.assertIn("policy_relevant:", changes)
-        self.assertIn("git diff --name-only", changes)
+        self.assertIn("git diff --no-renames --name-only -z", changes)
+        self.assertIn("scripts/ci_change_classifier.py policy", changes)
+        push = header.split("  push:\n", 1)[1].split("  workflow_dispatch:\n", 1)[0]
+        self.assertIn("'scripts/sealed_ruleset.py'", push)
+        self.assertIn("'scripts/ci_change_classifier.py'", push)
 
         for job_name in ("policy", "rego", "container"):
             job = _job_block(workflow, job_name)
@@ -97,17 +147,17 @@ class CIOptimizationContractTest(unittest.TestCase):
         ):
             self.assertIn(f"name: {required_name}", workflow)
 
-    def test_required_check_classifiers_propagate_git_diff_failure(self):
+    def test_required_check_classifiers_propagate_git_diff_failure_and_renames(self):
         for workflow_name in ("genoma-policy-engine.yml", "scaffold-validation.yml"):
             with self.subTest(workflow=workflow_name):
                 changes = _job_block(_read(workflow_name), "changes")
                 self.assertNotIn("done < <(git diff", changes)
                 self.assertIn('changed_paths="$RUNNER_TEMP/', changes)
                 self.assertIn(
-                    'git diff --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$changed_paths"',
+                    'git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$changed_paths"',
                     changes,
                 )
-                self.assertIn('done < "$changed_paths"', changes)
+                self.assertIn("scripts/ci_change_classifier.py", changes)
 
     def test_scaffold_required_checks_use_job_level_markdown_gate(self):
         workflow = _read("scaffold-validation.yml")
@@ -116,8 +166,9 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertNotIn("paths:", pull_request)
         changes = _job_block(workflow, "changes")
         self.assertIn("validation_required:", changes)
-        self.assertIn("git diff --name-only", changes)
-        self.assertIn("*.md", changes)
+        self.assertIn("git diff --no-renames --name-only -z", changes)
+        self.assertIn("git diff --no-renames --diff-filter=D --name-only -z", changes)
+        self.assertIn("scripts/ci_change_classifier.py markdown", changes)
 
         for job_name in ("static", "container-canary"):
             job = _job_block(workflow, job_name)

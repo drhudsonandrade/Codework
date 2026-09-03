@@ -84,7 +84,7 @@ Create tests that assert all of the following:
 
 ```text
 Concurrency expression:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 ```
 
@@ -92,10 +92,10 @@ Apply that contract to `fallow.yml`, `genoma-audit.yml`, `genoma-ngs-runtime-gat
 
 Also assert:
 
-- Fallow PR paths include `mcp/**`, `scripts/codacy_pr_comment.js`, `tests/test_codacy_pr_comment.js`, `.fallowrc.json`, and its own workflow.
-- Four-plane audit ignores Markdown-only changes at workflow level.
-- Policy workflow has no PR-level path filter, has a `changes` job, keeps `Gitleaks secret scan` unconditional, and gates `policy`, `rego`, and `container` jobs on `policy_relevant`.
-- Scaffold workflow has no PR-level path filter, has a `changes` job, and gates `static` and `container-canary` on `validation_required`.
+- Fallow PR paths enumerate TypeScript/JavaScript sources plus the exact MCP package/configuration files, relevant JavaScript tests, `.fallowrc.json`, and its own workflow; broad `mcp/**` is rejected.
+- Four-plane audit remains broadly triggered and uses the shared deletion/rename-aware classifier to skip only safe Markdown additions/modifications.
+- Policy workflow has no PR-level path filter, has a fail-closed `changes` job, keeps `Gitleaks secret scan` unconditional, and gates `policy`, `rego`, and `container` on either classifier failure or `policy_relevant`.
+- Scaffold workflow has no PR-level path filter, has a fail-closed `changes` job, and gates `static` and `container-canary` on either classifier failure or `validation_required`.
 - Existing protected job identifiers/names remain present.
 
 - [ ] **Step 2: Run the new test and verify RED**
@@ -125,9 +125,9 @@ Add the exact top-level concurrency expression from Task 2 to each listed valida
 
 Set `pull_request.paths` to the approved JS/TS/MCP/Fallow files only. Keep `workflow_dispatch`.
 
-- [ ] **Step 3: Skip four-plane audit only for Markdown-only changes**
+- [ ] **Step 3: Skip four-plane audit only for proven-safe Markdown modifications**
 
-Add `paths-ignore: ['**/*.md']` under both `pull_request` and `push` while preserving `workflow_dispatch` and the existing audit job.
+Keep `pull_request` and `push` triggers broad. Add a lightweight fail-closed `changes` job that uses rename-aware changed/deleted path lists and the shared `scripts/ci_change_classifier.py`; gate the heavy `audit` job only when classification proves that the change consists exclusively of Markdown additions/modifications.
 
 - [ ] **Step 4: Run CI contract tests**
 
@@ -138,6 +138,7 @@ Expected: only policy/scaffold classifier assertions may still fail.
 - [ ] **Step 5: Commit Task 3**
 
 Commit message: `ci: cancel superseded runs and target non-required checks`
+
 ### Task 4: Preserve required checks while skipping irrelevant heavy jobs
 
 **Files:**
@@ -148,21 +149,21 @@ Commit message: `ci: cancel superseded runs and target non-required checks`
 - Produces: job-level relevance outputs `policy_relevant` and `validation_required`.
 - Preserves: `Canonical policy + 263-rule contract`, `OPA/Rego parity`, `Gitleaks secret scan`, `Real Docker + canonical read-only mount`, `static`, and `container-canary` check names.
 
-- [ ] **Step 1: Add the policy classifier job**
+- [ ] **Step 1: Add the shared fail-closed classifier and policy classifier job**
 
-Add a small `changes` job with `fetch-depth: 0`. For pull requests, diff `github.event.pull_request.base.sha` to `github.event.pull_request.head.sha` and set `policy_relevant=true` when any changed path matches the existing policy `push.paths` scope. For push/manual events, set it to `true`.
+Create `scripts/ci_change_classifier.py` using only the standard library. In the policy `changes` job, use `fetch-depth: 0`, execute `git diff --no-renames --name-only -z` as a checked command, and pass that file to `ci_change_classifier.py policy`. Include direct verification dependencies such as `scripts/sealed_ruleset.py` and the classifier itself in the policy scope. For push/manual events, set `policy_relevant=true`.
 
-- [ ] **Step 2: Gate policy-heavy jobs only**
+- [ ] **Step 2: Gate policy-heavy jobs fail closed**
 
-Add `needs: changes` and `if: needs.changes.outputs.policy_relevant == 'true'` to `policy`, `rego`, and `container`. Do not add that gate to `secrets`.
+Add `needs: changes` and `always()` to `policy`, `rego`, and `container`; execute them when `needs.changes.result != 'success'` or when `policy_relevant == 'true'`. Make the first step fail explicitly when classification did not complete successfully. Do not apply this relevance gate to `secrets`.
 
 - [ ] **Step 3: Add the scaffold classifier job**
 
-For pull requests, set `validation_required=false` only when every changed file ends in `.md`. For push/manual events, set it to `true`. Preserve the existing PR trigger without `paths` filters.
+For pull requests, generate checked rename-aware changed and deleted path lists, then invoke `ci_change_classifier.py markdown`. Set `validation_required=false` only for Markdown additions/modifications with no deletions. For push/manual events, set it to `true`. Preserve the PR trigger without workflow-level path filters.
 
-- [ ] **Step 4: Gate scaffold heavy jobs**
+- [ ] **Step 4: Gate scaffold heavy jobs fail closed**
 
-Add `needs: changes` and `if: needs.changes.outputs.validation_required == 'true'` to `static` and `container-canary`. Keep `publish-ghcr` dependent on both existing jobs so docs-only main pushes do not publish a runtime image.
+Add `needs: changes` and `always()` to `static` and `container-canary`; execute them when classification failed/cancelled or `validation_required == 'true'`. Make the first step fail explicitly if classification failed. Keep `publish-ghcr` dependent on both existing jobs.
 
 - [ ] **Step 5: Verify required-check semantics structurally**
 

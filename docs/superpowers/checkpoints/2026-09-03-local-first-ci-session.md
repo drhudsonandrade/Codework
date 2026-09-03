@@ -2,8 +2,8 @@
 
 **Date:** 2026-09-03
 **Repository:** `drhudsonandrade/Codework`
-**Local path:** `C:\Users\noaruser\Documents\Codework`
-**Branch:** `ci/local-first-actions-optimization`
+**Local path:** `%USERPROFILE%\Documents\Codework`
+**Branch:** `ci/local-first-actions-optimization-impl`
 **Last committed design:** `3f37ea1 docs: design local-first targeted CI architecture`
 
 ## Completed
@@ -15,7 +15,7 @@
 - VS Code opened on the local repository.
 - Local-first CI architecture design written and committed.
 - Current workflow inventory reviewed.
-- Live GitHub ruleset checked: currently requires `Codacy Static Code Analysis`.
+- GitHub governance was inspected from both the live ruleset API and the tracked desired-state file; the live query must be repeated before merge because enforcement can change independently of repository documentation.
 
 ## Baseline evidence
 
@@ -46,23 +46,24 @@ Broad PR execution still present in:
 - `genoma-policy-engine.yml` (PR trigger broad; main push already path-filtered)
 - `scaffold-validation.yml`
 
-Planned optimization:
+Implemented optimization direction:
 
-- add PR-safe concurrency/cancellation to validation workflows;
-- narrow Fallow to JavaScript/TypeScript/MCP-related changes;
-- mirror policy-engine main `paths` onto PRs;
-- skip audit/scaffold for documentation-only changes;
+- use PR-number concurrency groups and unique `github.run_id` groups for non-PR runs;
+- narrow Fallow to explicit JavaScript/TypeScript and required configuration surfaces;
+- keep potentially protected policy/scaffold PR workflows unfiltered and make job-level classifiers fail closed;
+- make policy rename-aware and include direct ruleset/classifier dependencies;
+- skip audit/scaffold heavy jobs only for proven-safe Markdown additions/modifications with no deletions;
 - preserve production witness, production ceremony, reference foundry, canonical names, hashes, and fail-closed behavior.
 
 ## Exact resume point
 
-1. Add a failing regression test proving repository JSON validation must decode UTF-8 explicitly on Windows.
-2. Run the test and confirm RED.
-3. Change only the repository-wide JSON `read_text()` call in `scripts/validate_repo.py` to `read_text(encoding='utf-8')`.
-4. Re-run the focused test and `scripts/validate_repo.py`.
-5. Only after the local baseline is green, write the CI optimization implementation plan and begin workflow TDD changes.
-6. Keep development local; do not push iterative fixes.
-7. Push only a coherent validated block, then open a PR for CodeRabbit/Codacy/GitHub Actions.
+1. Finish the current review-fix batch locally on `ci/local-first-actions-optimization-impl` without another intermediate push.
+2. Run the CI classifier behavioral/structural tests, repository validator, supply-chain verifier, Node regression, MCP TypeScript build, Bash syntax check, and `git diff --check`.
+3. Commit the code/review fixes and record that exact code SHA.
+4. Create a repository evidence note that records the exact validated SHA, commands, exit codes/test counts, and a SHA-256 of the local verification log.
+5. Commit only that evidence/documentation update, then push the batch once to PR #36.
+6. Re-read all review threads and final-sha checks; resolve only findings that are demonstrably fixed or obsolete.
+7. Do not merge automatically. Final human merge approval remains mandatory.
 
 No auto-merge. Manual human approval remains the final merge gate.
 
