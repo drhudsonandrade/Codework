@@ -23,16 +23,18 @@ workflow is requested, starts or completes. A resolver job with no secrets check
 the default-branch `github.sha`, verifies the upstream workflow path and resolves one live,
 open PR against the default branch. It re-reads the run through the Actions API and binds the
 PR to the live run ID, run number, attempt, workflow path and `workflow_run.head_sha`. An
-event from an older rerun attempt is stale; `in_progress` also invalidates the old report
-because GitHub does not emit `requested` for a rerun. Publishers for the same head repository
-and branch use `queue: max`, preserving up to 100 pending events without cancelling an
-in-progress publisher. GitHub does not guarantee dispatch order, so serialization is not
-treated as freshness evidence: the resolver paginates every producer run returned for the
+event from an older rerun attempt is stale. Activity events for the same producer `workflow_run.id` and `run_attempt` use
+`cancel-in-progress: true`, so a later lifecycle event supersedes work still running for that
+exact producer attempt. Different producer run IDs or rerun attempts never share a concurrency
+group and therefore cannot cancel one another. GitHub does not guarantee dispatch
+order, so cancellation is not treated as freshness evidence: the resolver paginates every producer run returned for the
 same SHA and accepts only the unique newest `(run_number, run_attempt)` for the resolved head
 repository, branch and PR association. A truncated, changing or over-limit run listing fails
 closed. The validated coordinates are carried into the publisher and re-read before each
-artifact or comment path, so a delayed run or older attempt cannot overwrite a newer one. An
-empty PR association (as can occur for a fork) is resolved through a unique live head
+artifact or comment path. Each comment candidate also carries a monotonic run number, attempt
+and publication rank. The publisher creates the candidate before pruning lower versions, so an
+older run that resumes after a newer publication deletes only its own losing candidate instead
+of overwriting the newer report. An empty PR association (as can occur for a fork) is resolved through a unique live head
 repository and branch match. Ambiguous identities fail closed.
 
 Only the validated pull-request identity fields — PR number, head SHA, current base SHA, run
@@ -40,14 +42,19 @@ ID, run number and run attempt — reach the publishing job from the resolver. T
 the fixed provider, organization and repository context from the trusted workflow. That job
 checks out the same trusted default-branch code. It re-fetches the PR and producer attempt
 after the Codacy query and again immediately before commenting, and refuses an artifact or
-comment if that identity changed. A requested, in-progress, cancelled, failed or successfully
-completed current run replaces any older owned report with the corresponding explicit
-`NÃO DISPONÍVEL` pending, cancelled, failed or processing state, so an old clean-looking result is not
-left current. If a later publisher step fails after the trusted checkout succeeded, an
+comment if that identity changed. A requested, in-progress, cancelled, failed or successfully completed current run replaces
+any older owned report with the corresponding explicit `NÃO DISPONÍVEL` pending, cancelled,
+failed or processing state, or with the verified final report, so an old clean-looking result
+is not left current. Superseded activity for the same producer run and attempt may be cancelled to avoid
+redundant publication work; the resolver always re-reads the live terminal state. If a later publisher step fails after the trusted checkout succeeded, an
 `always()` terminal step attempts to revalidate the PR/run tuple and replace the pending
-state with an explicit publisher-failure state. Checkout, resolver or GitHub API failures
-remain visible as failed checks; the workflow does not claim that a comment update succeeded
-when it could not perform one.
+state with an explicit publisher-failure state. A cancelled consumer does not attempt cleanup:
+every successor for that exact producer attempt starts from trusted code, revalidates the live
+tuple and repairs or invalidates the owned comment before querying Codacy or publishing a final
+report. If another lifecycle event cancels that successor, the newest successor repeats the same
+repair; the completed event therefore owns the terminal state. Checkout, resolver or GitHub API
+failures remain visible as failed checks; the workflow does not claim that a comment update
+succeeded when it could not perform one.
 The pull request's files and artifacts are never executed by the privileged job. Top-level
 permissions are empty, and write access exists only on the publishing job.
 
@@ -166,11 +173,12 @@ commit that was not analyzed.
 ## Output handling
 
 The publisher writes `codacy-report.md` and `codacy-issues.json`, appends the Markdown report
-to the job summary, uploads both files for 30 days, and creates or updates a single
-`github-actions[bot]`-owned PR comment marked with `<!-- codacy-api-report -->`. A different
-bot cannot claim the marker and have its comment overwritten. If historical retries left more
-than one owned marker comment, the publisher updates the canonical one and removes only its
-own duplicates.
+to the job summary, uploads both files for 30 days, and converges on one
+`github-actions[bot]`-owned PR comment marked with `<!-- codacy-api-report -->`. Publication
+comments are immutable candidates carrying run ID, run number, attempt and rank. The highest
+tuple wins; a lower or interleaved candidate is refused or deletes itself, while the winner
+prunes only older comments owned by the same bot. A different bot cannot claim the marker.
+Legacy owned comments without version metadata rank below every validated publication.
 
 Codacy strings are untrusted output. Newlines are collapsed, HTML is entity-escaped, Markdown
 table/link delimiters are escaped and `@` mentions are neutralized. HTTP error bodies are read

@@ -50,6 +50,40 @@ def _permissions(block: str) -> dict[str, str]:
     return result
 
 
+def _top_level_scalar_map(workflow: str, key: str) -> dict[str, str]:
+    """Parse one top-level scalar map and reject duplicate or nested entries."""
+    lines = workflow.splitlines()
+    marker = f"{key}:"
+    escaped = re.escape(key)
+    key_pattern = re.compile(rf"^(?:{escaped}|'(?:{escaped})'|\"(?:{escaped})\")\s*:")
+    explicit_pattern = re.compile(
+        rf"^\?\s+(?:{escaped}|'(?:{escaped})'|\"(?:{escaped})\")\s*(?:#.*)?$"
+    )
+    indexes = [
+        index
+        for index, line in enumerate(lines)
+        if key_pattern.match(line) or explicit_pattern.match(line)
+    ]
+    if len(indexes) != 1:
+        _fail(f"expected exactly one top-level {key!r} map, got {len(indexes)}")
+    if lines[indexes[0]] != marker:
+        _fail(f"top-level {key!r} must use a block map")
+    result: dict[str, str] = {}
+    for line in lines[indexes[0] + 1 :]:
+        stripped = line.strip()
+        indent = len(line) - len(line.lstrip())
+        if stripped and indent == 0:
+            break
+        if not stripped or stripped.startswith("#"):
+            continue
+        if indent != 2 or ":" not in stripped:
+            _fail(f"{key} entries must be one scalar mapping level")
+        entry, value = stripped.split(":", 1)
+        if entry in result:
+            _fail(f"duplicate {key} entry: {entry}")
+        result[entry] = value.split("#", 1)[0].strip()
+    return result
+
 def _github_expressions(workflow: str) -> list[str]:
     """Normalize every GitHub-context expression, independent of its YAML location."""
     expressions = re.findall(r"\$\{\{(.*?)\}\}", workflow, flags=re.DOTALL)
@@ -110,13 +144,16 @@ class CodacyWorkflowTrustBoundaryTest(unittest.TestCase):
         self.assertNotIn("\n  pull_request:\n", header)
         self.assertNotIn("workflow_dispatch:", header)
         self.assertEqual(_permissions(global_header), {})
-        self.assertIn(
-            "codacy-api-report-${{ github.event.workflow_run.head_repository.id }}-${{ "
-            "github.event.workflow_run.head_branch }}",
-            workflow,
+        self.assertEqual(
+            _top_level_scalar_map(workflow, "concurrency"),
+            {
+                "group": (
+                    "codacy-api-report-${{ github.event.workflow_run.head_repository.id }}-${{ "
+                    "github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}"
+                ),
+                "cancel-in-progress": "true",
+            },
         )
-        self.assertIn("queue: max", workflow)
-        self.assertIn("cancel-in-progress: false", workflow)
         self.assertEqual(_job_entries(workflow), ["resolve:", "report:"])
 
         resolve = _job_block(workflow, "resolve")
@@ -163,7 +200,7 @@ class CodacyWorkflowTrustBoundaryTest(unittest.TestCase):
         )
         self.assertEqual(
             report.count("run_number: Number(process.env.CODACY_WORKFLOW_RUN_NUMBER)"),
-            5,
+            9,
         )
         self.assertIn("name: Verify source before publication", report)
         self.assertIn("isCurrentCodacyPublication", report)
@@ -172,9 +209,20 @@ class CodacyWorkflowTrustBoundaryTest(unittest.TestCase):
         self.assertIn("base: process.env.EXPECTED_BASE", report)
         self.assertIn("steps.current.outputs.current == 'true'", report)
         self.assertIn("steps.current.outputs.current != 'true'", report)
-        self.assertIn("Invalidate prior report before processing", report)
-        self.assertIn("needs.resolve.outputs.state == 'publish'", report)
-        self.assertIn("needs.resolve.outputs.state == 'interrupted'", report)
+        trusted_checkout = report.index("Checkout trusted default-branch revision")
+        repair = report.index("Repair or invalidate prior report before processing")
+        query = report.index("Query Codacy API and build report")
+        publish = report.index("Publish report on pull request")
+        self.assertLess(trusted_checkout, repair)
+        self.assertLess(repair, query)
+        self.assertLess(query, publish)
+        repair_block = report[repair:query]
+        for state in ("pending", "interrupted", "failed", "publish"):
+            self.assertIn(f"needs.resolve.outputs.state == '{state}'", repair_block)
+        self.assertIn("isCurrentCodacyPublication", repair_block)
+        self.assertIn("upsertCodacyReportComment", repair_block)
+        self.assertIn("publication: {", repair_block)
+        self.assertIn("rank: process.env.REPORT_STATE", repair_block)
         self.assertIn("codacyStatusForRunState", report)
         self.assertIn("Publish missing credential state", report)
         self.assertIn("Publish terminal publisher failure", report)
@@ -188,7 +236,8 @@ class CodacyWorkflowTrustBoundaryTest(unittest.TestCase):
             _github_expressions(workflow),
             [
                 "github.event.workflow_run.head_repository.id",
-                "github.event.workflow_run.head_branch",
+                "github.event.workflow_run.id",
+                "github.event.workflow_run.run_attempt",
                 "github.sha",
                 "github.repository_owner",
                 "github.event.repository.name",
@@ -199,6 +248,43 @@ class CodacyWorkflowTrustBoundaryTest(unittest.TestCase):
         checkout = report.index("uses: actions/checkout@")
         first_secret = report.index("secrets.CODACY_")
         self.assertLess(checkout, first_secret)
+
+    def test_concurrency_parser_does_not_accept_a_true_value_outside_the_map(self):
+        workflow = """
+concurrency:
+  group: producer-attempt
+  cancel-in-progress: false
+jobs:
+  check:
+    run: echo 'cancel-in-progress: true'
+"""
+        self.assertEqual(
+            _top_level_scalar_map(workflow, "concurrency"),
+            {"group": "producer-attempt", "cancel-in-progress": "false"},
+        )
+
+    def test_concurrency_parser_rejects_alternative_duplicate_key_forms(self):
+        prefix = """
+concurrency:
+  group: producer-attempt
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+"""
+        duplicates = (
+            "concurrency: {group: inline, cancel-in-progress: false}\n",
+            '"concurrency": {group: quoted, cancel-in-progress: false}\n',
+            "'concurrency': {group: single-quoted, cancel-in-progress: false}\n",
+            "? concurrency\n: {group: explicit, cancel-in-progress: false}\n",
+            '? "concurrency"\n: {group: explicit-quoted, cancel-in-progress: false}\n',
+        )
+        for duplicate in duplicates:
+            with self.subTest(duplicate=duplicate):
+                with self.assertRaisesRegex(
+                    AssertionError, "expected exactly one top-level 'concurrency' map"
+                ):
+                    _top_level_scalar_map(prefix + duplicate, "concurrency")
 
     def test_every_yaml_form_of_an_untrusted_github_expression_reaches_the_gate(self):
         fixtures = (

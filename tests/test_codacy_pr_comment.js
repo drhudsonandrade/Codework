@@ -12,33 +12,85 @@ const {
   upsertCodacyReportComment,
 } = require('../scripts/codacy_pr_comment.js');
 
-function makeGithub(previous) {
+function makeGithub(previous, paginateHook = null, deleteErrorStatuses = new Map()) {
   const calls = [];
   const paginationCalls = [];
+  let comments = [...previous];
+  let nextId = Math.max(100, ...comments.map((comment) => Number(comment.id) || 0)) + 1;
+  let paginateCount = 0;
   const github = {
     paginate: async (...args) => {
       paginationCalls.push(args);
-      return previous;
+      paginateCount += 1;
+      const snapshot = [...comments];
+      if (paginateHook) {
+        await paginateHook({ call: paginateCount });
+      }
+      return snapshot;
     },
     rest: {
       issues: {
         listComments: async () => {},
-        updateComment: async (args) => calls.push(['update', args]),
-        createComment: async (args) => calls.push(['create', args]),
-        deleteComment: async (args) => calls.push(['delete', args]),
+        updateComment: async () => {
+          throw new Error('report comments are immutable; replacement must create then prune');
+        },
+        createComment: async (args) => {
+          const comment = {
+            id: nextId,
+            user: { type: 'Bot', login: 'github-actions[bot]' },
+            body: args.body,
+          };
+          nextId += 1;
+          comments.push(comment);
+          calls.push(['create', args]);
+          return { data: comment };
+        },
+        deleteComment: async (args) => {
+          calls.push(['delete', args]);
+          const status = deleteErrorStatuses.get(args.comment_id);
+          if (status === 404) {
+            comments = comments.filter((comment) => comment.id !== args.comment_id);
+          }
+          if (status) {
+            const error = new Error(`delete failed with status ${status}`);
+            error.status = status;
+            throw error;
+          }
+          comments = comments.filter((comment) => comment.id !== args.comment_id);
+        },
       },
     },
   };
-  return { github, calls, paginationCalls };
+  return {
+    github,
+    calls,
+    paginationCalls,
+    comments: () => [...comments],
+  };
 }
 
-test('creates one report comment when none exists', async () => {
+function publication(runNumber, rank = 2) {
+  return {
+    run_id: 1000 + runNumber,
+    run_number: runNumber,
+    run_attempt: 1,
+    rank,
+  };
+}
+
+function publicationMarker({ run_id: runId, run_number: runNumber, run_attempt: attempt, rank }) {
+  return `<!-- codacy-api-publication run_id=${runId} run_number=${runNumber} run_attempt=${attempt} rank=${rank} -->`;
+}
+
+test('creates one versioned report comment when none exists', async () => {
+  const identity = publication(7);
   const { github, calls, paginationCalls } = makeGithub([]);
   const result = await upsertCodacyReportComment({
     github,
     owner: 'o',
     repo: 'r',
     issue_number: 32,
+    publication: identity,
     report: '# report',
   });
 
@@ -48,8 +100,11 @@ test('creates one report comment when none exists', async () => {
   assert.equal(calls[0][1].owner, 'o');
   assert.equal(calls[0][1].repo, 'r');
   assert.equal(calls[0][1].issue_number, 32);
-  assert.equal(calls[0][1].body, `${MARKER}\n# report`);
-  assert.equal(paginationCalls.length, 1);
+  assert.equal(
+    calls[0][1].body,
+    `${MARKER}\n${publicationMarker(identity)}\n# report`,
+  );
+  assert.equal(paginationCalls.length, 2);
   assert.equal(paginationCalls[0][0], github.rest.issues.listComments);
   assert.deepEqual(paginationCalls[0][1], {
     owner: 'o',
@@ -59,31 +114,123 @@ test('creates one report comment when none exists', async () => {
   });
 });
 
-test('updates one owned report comment and removes owned duplicates', async () => {
+test('creates the current version then removes older owned report comments', async () => {
   const previous = [
     { id: 8, user: { type: 'Bot', login: 'foreign-bot[bot]' }, body: `${MARKER}\nforeign` },
     { id: 7, user: { type: 'Bot', login: 'github-actions[bot]' }, body: `${MARKER}\nold` },
     { id: 10, user: { type: 'Bot', login: 'github-actions[bot]' }, body: `${MARKER}\nduplicate` },
     { id: 9, user: { type: 'User' }, body: `${MARKER}\nnot owned by the bot` },
   ];
-  const { github, calls } = makeGithub(previous);
+  const identity = publication(7);
+  const { github, calls, comments } = makeGithub(previous);
   const result = await upsertCodacyReportComment({
     github,
     owner: 'o',
     repo: 'r',
     issue_number: 32,
+    publication: identity,
     report: '# current',
   });
 
-  assert.equal(result, 'updated');
-  assert.equal(calls.length, 2);
-  assert.equal(calls[0][0], 'update');
-  assert.equal(calls[0][1].comment_id, 7);
-  assert.equal(calls[0][1].body, `${MARKER}\n# current`);
-  assert.equal(calls[1][0], 'delete');
-  assert.equal(calls[1][1].owner, 'o');
-  assert.equal(calls[1][1].repo, 'r');
-  assert.equal(calls[1][1].comment_id, 10);
+  assert.equal(result, 'replaced');
+  assert.deepEqual(calls.map(([operation]) => operation), ['create', 'delete', 'delete']);
+  assert.deepEqual(
+    calls.filter(([operation]) => operation === 'delete').map(([, args]) => args.comment_id),
+    [7, 10],
+  );
+  const remaining = comments();
+  assert.equal(remaining.length, 3);
+  assert.ok(remaining.some((comment) => comment.user.login === 'foreign-bot[bot]'));
+  assert.ok(remaining.some((comment) => comment.user.type === 'User'));
+  assert.ok(remaining.some((comment) => comment.body.includes('# current')));
+});
+
+test('an older validated run cannot overwrite a newer publication during interleaving', async () => {
+  let releaseOld;
+  let markOldListed;
+  const oldCanContinue = new Promise((resolve) => { releaseOld = resolve; });
+  const oldListed = new Promise((resolve) => { markOldListed = resolve; });
+  const { github, calls, comments } = makeGithub([], async ({ call }) => {
+    if (call === 1) {
+      markOldListed();
+      await oldCanContinue;
+    }
+  });
+
+  const oldRun = upsertCodacyReportComment({
+    github,
+    owner: 'o',
+    repo: 'r',
+    issue_number: 32,
+    publication: publication(7),
+    report: '# old validated report',
+  });
+  await oldListed;
+  const newResult = await upsertCodacyReportComment({
+    github,
+    owner: 'o',
+    repo: 'r',
+    issue_number: 32,
+    publication: publication(8),
+    report: '# new report',
+  });
+  releaseOld();
+  const oldResult = await oldRun;
+
+  assert.equal(newResult, 'created');
+  assert.equal(oldResult, 'superseded');
+  assert.deepEqual(calls.map(([operation]) => operation), ['create', 'create', 'delete']);
+  assert.equal(comments().length, 1);
+  assert.ok(comments()[0].body.includes('# new report'));
+  assert.ok(comments()[0].body.includes(publicationMarker(publication(8))));
+});
+
+test('concurrent cleanup treats an already deleted comment as success', async () => {
+  const previous = [
+    { id: 7, user: { type: 'Bot', login: 'github-actions[bot]' }, body: `${MARKER}\nold` },
+    { id: 10, user: { type: 'Bot', login: 'github-actions[bot]' }, body: `${MARKER}\nduplicate` },
+  ];
+  const { github, calls, comments } = makeGithub(
+    previous,
+    null,
+    new Map([[7, 404]]),
+  );
+
+  const result = await upsertCodacyReportComment({
+    github,
+    owner: 'o',
+    repo: 'r',
+    issue_number: 32,
+    publication: publication(8),
+    report: '# current',
+  });
+
+  assert.equal(result, 'replaced');
+  assert.deepEqual(
+    calls.filter(([operation]) => operation === 'delete').map(([, args]) => args.comment_id),
+    [7, 10],
+  );
+  assert.equal(comments().length, 1);
+  assert.ok(comments()[0].body.includes('# current'));
+});
+
+test('comment cleanup still propagates deletion errors other than not found', async () => {
+  const previous = [
+    { id: 7, user: { type: 'Bot', login: 'github-actions[bot]' }, body: `${MARKER}\nold` },
+  ];
+  const { github } = makeGithub(previous, null, new Map([[7, 500]]));
+
+  await assert.rejects(
+    upsertCodacyReportComment({
+      github,
+      owner: 'o',
+      repo: 'r',
+      issue_number: 32,
+      publication: publication(8),
+      report: '# current',
+    }),
+    /delete failed with status 500/,
+  );
 });
 
 test('renders explicit unavailable states bound to a commit', () => {

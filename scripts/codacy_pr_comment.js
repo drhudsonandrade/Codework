@@ -1,6 +1,7 @@
 'use strict';
 
 const MARKER = '<!-- codacy-api-report -->';
+const PUBLICATION_PATTERN = /^<!-- codacy-api-publication run_id=(\d+) run_number=(\d+) run_attempt=(\d+) rank=(\d+) -->$/m;
 const SHA_PATTERN = /^[0-9a-f]{40}$/i;
 const PRODUCER_WORKFLOW = 'codacy-api-report-tests.yml';
 const PRODUCER_PATH = `.github/workflows/${PRODUCER_WORKFLOW}`;
@@ -546,34 +547,159 @@ async function resolveCodacyPullRequest({
   };
 }
 
-async function upsertCodacyReportComment({ github, owner, repo, issue_number, report }) {
-  const body = `${MARKER}\n${report}`;
+function validateCommentPublication({ run_id, run_number, run_attempt, rank }) {
+  requireValid(
+    [
+      isPositiveInteger(run_id),
+      isPositiveInteger(run_number),
+      isPositiveInteger(run_attempt),
+      Number.isSafeInteger(rank),
+      rank >= 0,
+      rank <= 2,
+    ].every(Boolean),
+    'A validated comment publication identity is required.',
+  );
+}
+
+function publicationMarker({ run_id, run_number, run_attempt, rank }) {
+  validateCommentPublication({ run_id, run_number, run_attempt, rank });
+  return `<!-- codacy-api-publication run_id=${run_id} run_number=${run_number} run_attempt=${run_attempt} rank=${rank} -->`;
+}
+
+function legacyCommentPublication(comment) {
+  return {
+    run_id: 0,
+    run_number: 0,
+    run_attempt: 0,
+    rank: 0,
+    comment_id: Number(comment?.id) || 0,
+  };
+}
+
+function parsedCommentPublication(match, comment) {
+  return {
+    run_id: Number(match[1]),
+    run_number: Number(match[2]),
+    run_attempt: Number(match[3]),
+    rank: Number(match[4]),
+    comment_id: Number(comment?.id) || 0,
+  };
+}
+
+function commentPublication(comment) {
+  const match = String(comment?.body ?? '').match(PUBLICATION_PATTERN);
+  return match
+    ? parsedCommentPublication(match, comment)
+    : legacyCommentPublication(comment);
+}
+
+function compareCommentPublication(left, right) {
+  return (
+    left.run_number - right.run_number
+    || left.run_attempt - right.run_attempt
+    || left.rank - right.rank
+    || left.comment_id - right.comment_id
+  );
+}
+
+function hasNewerComment(comments, publication) {
+  return comments.some((comment) => (
+    compareCommentPublication(commentPublication(comment), publication) > 0
+  ));
+}
+
+function newestReportComment(comments) {
+  return [...comments].sort((left, right) => (
+    compareCommentPublication(commentPublication(right), commentPublication(left))
+  ))[0];
+}
+
+function includeCreatedComment(comments, created) {
+  return comments.some((comment) => comment.id === created.id)
+    ? comments
+    : [...comments, created];
+}
+
+async function deleteReportComment({ github, owner, repo, comment_id }) {
+  try {
+    await github.rest.issues.deleteComment({
+      owner,
+      repo,
+      comment_id,
+    });
+  } catch (error) {
+    if (error?.status !== 404) {
+      throw error;
+    }
+  }
+}
+
+async function pruneOlderComments({ github, owner, repo, comments, winner }) {
+  const older = comments.filter((comment) => comment.id !== winner.id);
+  await Promise.all(older.map((comment) => deleteReportComment({
+    github,
+    owner,
+    repo,
+    comment_id: comment.id,
+  })));
+}
+
+function publicationResult(existing) {
+  return existing.length > 0 ? 'replaced' : 'created';
+}
+
+async function listOwnedReportComments({ github, owner, repo, issue_number }) {
   const comments = await github.paginate(github.rest.issues.listComments, {
     owner,
     repo,
     issue_number,
     per_page: 100,
   });
-  const owned = comments.filter(isOwnedReportComment);
-  if (owned.length > 0) {
-    const [canonical, ...duplicates] = owned;
-    await github.rest.issues.updateComment({
+  return comments.filter(isOwnedReportComment);
+}
+
+async function upsertCodacyReportComment({
+  github,
+  owner,
+  repo,
+  issue_number,
+  report,
+  publication,
+}) {
+  validateCommentPublication(publication);
+  const proposed = { ...publication, comment_id: 0 };
+  const existing = await listOwnedReportComments({ github, owner, repo, issue_number });
+  if (hasNewerComment(existing, proposed)) {
+    return 'superseded';
+  }
+
+  const body = `${MARKER}\n${publicationMarker(publication)}\n${report}`;
+  const { data: created } = await github.rest.issues.createComment({
+    owner,
+    repo,
+    issue_number,
+    body,
+  });
+  requireValid(
+    isPositiveInteger(created?.id),
+    'The created Codacy report comment did not return a valid identity.',
+  );
+
+  const listed = await listOwnedReportComments({ github, owner, repo, issue_number });
+  const current = includeCreatedComment(listed, created);
+  const winner = newestReportComment(current);
+  if (winner.id !== created.id) {
+    await deleteReportComment({
+      github,
       owner,
       repo,
-      comment_id: canonical.id,
-      body,
+      comment_id: created.id,
     });
-    for (const duplicate of duplicates) {
-      await github.rest.issues.deleteComment({
-        owner,
-        repo,
-        comment_id: duplicate.id,
-      });
-    }
-    return 'updated';
+    return 'superseded';
   }
-  await github.rest.issues.createComment({ owner, repo, issue_number, body });
-  return 'created';
+
+  await pruneOlderComments({ github, owner, repo, comments: current, winner });
+  return publicationResult(existing);
 }
 
 module.exports = {
