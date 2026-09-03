@@ -1,0 +1,43 @@
+{
+  "schema": "genoma-code-language-policy-v1",
+  "scan_suffixes": [".py"],
+  "technical_terms": [
+    "acao",
+    "amostra",
+    "arquivo",
+    "atualizar",
+    "buscar",
+    "carregar",
+    "configuracao",
+    "conteudo",
+    "dados",
+    "erro",
+    "executar",
+    "gerar",
+    "limite",
+    "relatorio",
+    "resultado",
+    "validacao",
+    "validar",
+    "verificacao",
+    "verificar"
+  ],
+  "contract_literals": [
+    "VIGENTE",
+    "EXECUTADO",
+    "VERIFICADO",
+    "INFERIDO",
+    "PROPOSTO",
+    "NÃO DISPONÍVEL"
+  ],
+  "excluded_roots": [
+    {
+      "path": "docs/history",
+      "reason": "immutable historical evidence and superseded normative records"
+    },
+    {
+      "path": "normative/sealed",
+      "reason": "inactive byte-exact canonical normative transport"
+    }
+  ]
+}
