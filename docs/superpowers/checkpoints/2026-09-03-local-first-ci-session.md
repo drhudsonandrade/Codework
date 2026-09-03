@@ -90,3 +90,15 @@ Machine restart expected within ~15 minutes. This section is a continuity checkp
 - Post-restart validation supersedes the emergency partial run; final merge evidence must remain bound to a committed SHA and immutable log hash.
 - The historical evidence now uses immutable PR base SHA `67b3133b6dd881a120ebee2edd9435458674fef8`; any later code change requires a fresh final-SHA validation log.
 - Do not merge automatically. Final human approval remains required.
+
+## PR #36 review follow-up — executable push contract
+
+The CodeRabbit push-contract finding was addressed in code commit `977a531e02b412488b01ade9c40597d28d355147`.
+
+- Added process-free shell helper `scripts/ci_changed_paths.sh` for trusted `main` push path preparation.
+- Added executable regression `tests/test_ci_changed_paths.sh` covering non-null diff, null-base full HEAD tree, and deletion output.
+- Pull-request workflows continue to compute the initial diff inline and force validation if the helper, classifier, or controlling workflow is modified.
+- Extracted shared workflow job parser to `tests/workflow_test_utils.py` and consolidated job-gate assertions to address Codacy maintainability comments.
+- SHA-bound validation evidence is stored at `docs/superpowers/evidence/2026-09-03-pr36-local-validation-977a531.md`.
+- External log SHA-256: `3903E534CAB45908B52ED4C09DB3564EA0C5E1B4BAB0EECB4DB9BA447B3FD829`.
+- Final merge remains manual; do not auto-merge.
