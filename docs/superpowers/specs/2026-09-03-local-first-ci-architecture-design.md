@@ -163,10 +163,10 @@ Order:
 4. Mirror policy-engine `push.paths` to `pull_request.paths`.
 5. Add narrow documentation-only `paths-ignore` to audit and scaffold validation.
 6. Run the full local validation set.
-7. Review the final diff for accidental workflow/check-name drift.
-8. Push one validated block and open a PR.
-9. Let CodeRabbit, Codacy, and applicable GitHub Actions review the final SHA.
-10. Merge only after explicit human approval.
+9. Review the final diff for accidental workflow/check-name drift.
+10. Push one validated block and open a PR.
+11. Let CodeRabbit, Codacy, and applicable GitHub Actions review the final SHA.
+12. Merge only after explicit human approval.
 
 ## 13. Expected effect
 
@@ -180,3 +180,23 @@ It does not promise a fixed percentage reduction before observing real post-merg
 ## 14. Non-goals
 
 This PR does not refactor application code, translate the codebase, change scientific algorithms, change report content, alter production deployment, or modify the canonical ruleset.
+
+## 15. Approved safety amendment — required-check preservation
+
+The user approved this amendment on 2026-09-03 after review of the versioned governance contract and current GitHub behavior.
+
+For workflows that provide status-check names which may be required by repository governance, do not use `pull_request.paths` or `pull_request.paths-ignore` to suppress the whole workflow. GitHub documents that workflow-level path filtering leaves required checks pending, while a job skipped by a job-level `if` condition reports success.
+
+Therefore:
+
+- `genoma-policy-engine.yml` remains unfiltered at `pull_request` workflow level.
+- Add a lightweight PR change-classifier job to `genoma-policy-engine.yml`.
+- On unrelated PRs, skip the policy, Rego, and policy-container jobs at job level while preserving their names.
+- Keep `Gitleaks secret scan` active on every PR so secret scanning is not weakened.
+- Preserve the existing policy-engine `push.paths` filter for `main` pushes.
+- `scaffold-validation.yml` remains unfiltered at `pull_request` workflow level.
+- Add a lightweight Markdown-only classifier to `scaffold-validation.yml`.
+- On Markdown-only PRs, skip `static` and `container-canary` at job level while preserving their check names.
+- On non-documentation PRs, run `static` and `container-canary` unchanged.
+- For non-required workflows such as Fallow and the four-plane audit, workflow-level `paths` / `paths-ignore` remain allowed.
+- The Windows UTF-8 portability defect discovered in `scripts/validate_repo.py` is part of this implementation because local-first validation on NOAR depends on the repository validator reading JSON deterministically as UTF-8.
