@@ -65,3 +65,45 @@ Planned optimization:
 7. Push only a coherent validated block, then open a PR for CodeRabbit/Codacy/GitHub Actions.
 
 No auto-merge. Manual human approval remains the final merge gate.
+
+## Implementation validation — 2026-09-03
+
+Current implementation branch: `ci/local-first-actions-optimization-impl`.
+
+Implemented and locally committed:
+
+- deterministic UTF-8 JSON scanning in `scripts/validate_repo.py`, with RED/GREEN regression coverage;
+- concurrency cancellation on eight PR validation workflows;
+- narrow Fallow PR path filtering;
+- Markdown-only skipping for the non-required four-plane audit;
+- fail-closed job-level relevance classifier for policy checks, while Gitleaks remains unconditional;
+- fail-closed Markdown-only classifier for `static` and `container-canary` without suppressing their check names;
+- structural CI regression suite protecting triggers, job names, and scope semantics.
+
+Executed results:
+
+- `python scripts/validate_repo.py`: PASS.
+- `python scripts/verify_supply_chain_lock.py`: PASS.
+- workflow/repository focused Python tests: 32 tests, PASS.
+- workflow structural block: 27 tests, PASS.
+- `node --test tests/test_codacy_pr_comment.js`: 18 tests, PASS.
+- Git for Windows Bash syntax check: PASS.
+- `git diff --check main...HEAD`: PASS.
+
+Full-suite comparison on the same NOAR Windows environment, same isolated venv, and `PYTHONUTF8=1`:
+
+- `main`: 886 tests; 19 failures; 35 errors; 3 skipped.
+- implementation branch: 892 tests; 19 failures; 35 errors; 3 skipped.
+- Net: six new tests execute and pass; the pre-existing failure/error counts do not increase.
+
+The pinned reporting dependencies were installed in the external local environment `C:\Users\noaruser\Documents\Codework-local-venv`, not inside the repository. This reduced raw environment errors from 70 to 35.
+
+MCP local evidence:
+
+- `npm ci --ignore-scripts`: completed; 0 vulnerabilities reported.
+- TypeScript build: PASS.
+- MCP Node suite on Windows: 35 pass, 9 fail, 1 skipped. The failures are POSIX/Linux assumptions (for example `/srv/...` path expectations, POSIX file modes, and Unix process spawning). MCP source code was not changed in this CI optimization.
+
+Local Docker: NÃO DISPONÍVEL (`docker` executable not installed). Therefore Linux/container checks remain authoritative in GitHub Actions for the final pushed SHA, per the approved architecture.
+
+No claim is made that the complete Windows test suite passes. The evidence supports that this branch adds no new full-suite failure/error count relative to the local `main` baseline and that all tests directly added/affected by this CI optimization pass locally.
