@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from array_pipeline.targets import load_target_manifest, read_manifest_bytes
+from array_pipeline.targets import load_target_manifest, read_manifest_text
 
 
 def _load(name: str):
@@ -275,7 +275,7 @@ class GzipManifestTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "no-extension.json"
             path.write_bytes(gzip.compress(b'{"a": 1}'))
-            self.assertEqual(json.loads(read_manifest_bytes(path)), {"a": 1})
+            self.assertEqual(json.loads(read_manifest_text(path)), {"a": 1})
 
 
 def _manifest(identifier: str, targets: list[dict]) -> dict:

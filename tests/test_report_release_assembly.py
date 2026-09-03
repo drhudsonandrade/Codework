@@ -27,12 +27,17 @@ def curated(
 
 class ReportReleaseAssemblyTest(unittest.TestCase):
     def test_reexecuted_policy_plus_verified_prerequisites_releases_reports(self):
-        from scripts.prepare_report_release import assemble_release
+        from scripts.prepare_report_release import assemble_release, _public_policy_projection
 
         policy = real_evaluation()
         result = assemble_release(curated(), policy)
         self.assertTrue(result["publication_gate"]["passed"])
-        self.assertEqual(result["policy_evaluation"], policy)
+        self.assertEqual(
+            result["policy_evaluation"],
+            _public_policy_projection(policy),
+        )
+        for internal in ("case_id", "session_id", "input_sha256", "binding", "evaluated_manifest"):
+            self.assertNotIn(internal, result["policy_evaluation"])
         self.assertEqual(result["policy_evaluation_verification"]["status"], "VERIFICADO")
         self.assertEqual(result["report_release_status"], "VERIFICADO")
 
