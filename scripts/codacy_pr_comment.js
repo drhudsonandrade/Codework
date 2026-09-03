@@ -566,17 +566,17 @@ function publicationMarker({ run_id, run_number, run_attempt, rank }) {
   return `<!-- codacy-api-publication run_id=${run_id} run_number=${run_number} run_attempt=${run_attempt} rank=${rank} -->`;
 }
 
-function commentPublication(comment) {
-  const match = String(comment?.body ?? '').match(PUBLICATION_PATTERN);
-  if (!match) {
-    return {
-      run_id: 0,
-      run_number: 0,
-      run_attempt: 0,
-      rank: 0,
-      comment_id: Number(comment?.id) || 0,
-    };
-  }
+function legacyCommentPublication(comment) {
+  return {
+    run_id: 0,
+    run_number: 0,
+    run_attempt: 0,
+    rank: 0,
+    comment_id: Number(comment?.id) || 0,
+  };
+}
+
+function parsedCommentPublication(match, comment) {
   return {
     run_id: Number(match[1]),
     run_number: Number(match[2]),
@@ -586,6 +586,13 @@ function commentPublication(comment) {
   };
 }
 
+function commentPublication(comment) {
+  const match = String(comment?.body ?? '').match(PUBLICATION_PATTERN);
+  return match
+    ? parsedCommentPublication(match, comment)
+    : legacyCommentPublication(comment);
+}
+
 function compareCommentPublication(left, right) {
   return (
     left.run_number - right.run_number
@@ -593,6 +600,48 @@ function compareCommentPublication(left, right) {
     || left.rank - right.rank
     || left.comment_id - right.comment_id
   );
+}
+
+function hasNewerComment(comments, publication) {
+  return comments.some((comment) => (
+    compareCommentPublication(commentPublication(comment), publication) > 0
+  ));
+}
+
+function newestReportComment(comments) {
+  return [...comments].sort((left, right) => (
+    compareCommentPublication(commentPublication(right), commentPublication(left))
+  ))[0];
+}
+
+function includeCreatedComment(comments, created) {
+  return comments.some((comment) => comment.id === created.id)
+    ? comments
+    : [...comments, created];
+}
+
+async function deleteReportComment({ github, owner, repo, comment_id }) {
+  await github.rest.issues.deleteComment({
+    owner,
+    repo,
+    comment_id,
+  });
+}
+
+async function pruneOlderComments({ github, owner, repo, comments, winner }) {
+  const older = comments.filter((comment) => comment.id !== winner.id);
+  for (const comment of older) {
+    await deleteReportComment({
+      github,
+      owner,
+      repo,
+      comment_id: comment.id,
+    });
+  }
+}
+
+function publicationResult(existing) {
+  return existing.length > 0 ? 'replaced' : 'created';
 }
 
 async function listOwnedReportComments({ github, owner, repo, issue_number }) {
@@ -616,9 +665,7 @@ async function upsertCodacyReportComment({
   validateCommentPublication(publication);
   const proposed = { ...publication, comment_id: 0 };
   const existing = await listOwnedReportComments({ github, owner, repo, issue_number });
-  if (existing.some((comment) => (
-    compareCommentPublication(commentPublication(comment), proposed) > 0
-  ))) {
+  if (hasNewerComment(existing, proposed)) {
     return 'superseded';
   }
 
@@ -634,14 +681,12 @@ async function upsertCodacyReportComment({
     'The created Codacy report comment did not return a valid identity.',
   );
 
-  const current = await listOwnedReportComments({ github, owner, repo, issue_number });
-  const winner = current.reduce((newest, comment) => (
-    compareCommentPublication(commentPublication(comment), commentPublication(newest)) > 0
-      ? comment
-      : newest
-  ));
+  const listed = await listOwnedReportComments({ github, owner, repo, issue_number });
+  const current = includeCreatedComment(listed, created);
+  const winner = newestReportComment(current);
   if (winner.id !== created.id) {
-    await github.rest.issues.deleteComment({
+    await deleteReportComment({
+      github,
       owner,
       repo,
       comment_id: created.id,
@@ -649,16 +694,8 @@ async function upsertCodacyReportComment({
     return 'superseded';
   }
 
-  for (const comment of current) {
-    if (comment.id !== winner.id) {
-      await github.rest.issues.deleteComment({
-        owner,
-        repo,
-        comment_id: comment.id,
-      });
-    }
-  }
-  return existing.length > 0 ? 'replaced' : 'created';
+  await pruneOlderComments({ github, owner, repo, comments: current, winner });
+  return publicationResult(existing);
 }
 
 module.exports = {
