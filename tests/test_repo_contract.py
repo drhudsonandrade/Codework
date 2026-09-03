@@ -2,6 +2,7 @@ import importlib.util
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 
@@ -28,6 +29,23 @@ class RepoContractTest(unittest.TestCase):
         validator = load_validator()
         root = Path(__file__).resolve().parents[1]
         self.assertEqual(validator.validate(root), [])
+
+    def test_json_scan_reads_utf8_explicitly(self):
+        validator = load_validator()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            payload = root / "utf8.json"
+            payload.write_text('{"label": "≥"}', encoding="utf-8")
+            original_read_text = Path.read_text
+
+            def guarded_read_text(candidate, encoding=None, errors=None):
+                if candidate == payload and encoding is None:
+                    raise UnicodeDecodeError("charmap", b"\x8d", 0, 1, "test default encoding")
+                return original_read_text(candidate, encoding=encoding, errors=errors)
+
+            with patch.object(Path, "read_text", guarded_read_text):
+                errors = validator.validate(root)
+        self.assertFalse(any("invalid JSON: utf8.json" in error for error in errors), errors)
 
     def test_contract_rejects_micromamba_entrypoint_bypass(self):
         validator = load_validator()
