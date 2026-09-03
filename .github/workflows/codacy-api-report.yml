@@ -132,6 +132,14 @@ jobs:
               owner,
               repo,
               issue_number,
+              publication: {
+                run_id: Number(process.env.CODACY_WORKFLOW_RUN_ID),
+                run_number: Number(process.env.CODACY_WORKFLOW_RUN_NUMBER),
+                run_attempt: Number(process.env.CODACY_WORKFLOW_RUN_ATTEMPT),
+                rank: process.env.REPORT_STATE === 'pending'
+                  ? 0
+                  : process.env.REPORT_STATE === 'publish' ? 1 : 2,
+              },
               report: buildCodacyStatusReport(
                 process.env.EXPECTED_HEAD,
                 codacyStatusForRunState(process.env.REPORT_STATE),
@@ -194,6 +202,12 @@ jobs:
               owner,
               repo,
               issue_number,
+              publication: {
+                run_id: Number(process.env.CODACY_WORKFLOW_RUN_ID),
+                run_number: Number(process.env.CODACY_WORKFLOW_RUN_NUMBER),
+                run_attempt: Number(process.env.CODACY_WORKFLOW_RUN_ATTEMPT),
+                rank: 2,
+              },
               report: buildCodacyStatusReport(process.env.EXPECTED_HEAD, 'missing-token'),
             });
 
@@ -293,6 +307,12 @@ jobs:
               owner,
               repo,
               issue_number,
+              publication: {
+                run_id: Number(process.env.CODACY_WORKFLOW_RUN_ID),
+                run_number: Number(process.env.CODACY_WORKFLOW_RUN_NUMBER),
+                run_attempt: Number(process.env.CODACY_WORKFLOW_RUN_ATTEMPT),
+                rank: 2,
+              },
               report: fs.readFileSync('codacy-report.md', 'utf8'),
             });
 
@@ -335,5 +355,11 @@ jobs:
               owner,
               repo,
               issue_number,
+              publication: {
+                run_id: Number(process.env.CODACY_WORKFLOW_RUN_ID),
+                run_number: Number(process.env.CODACY_WORKFLOW_RUN_NUMBER),
+                run_attempt: Number(process.env.CODACY_WORKFLOW_RUN_ATTEMPT),
+                rank: 2,
+              },
               report: buildCodacyStatusReport(process.env.EXPECTED_HEAD, 'publisher-failed'),
             });
