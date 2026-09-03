@@ -4,16 +4,69 @@ on:
   pull_request:
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Scaffold change classifier
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      validation_required: ${{ steps.scope.outputs.validation_required }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify Markdown-only pull requests
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "validation_required=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          validation_required=false
+          while IFS= read -r -d '' changed_path; do
+            case "$changed_path" in
+              *.md)
+                ;;
+              *)
+                validation_required=true
+                break
+                ;;
+            esac
+          done < <(git diff --name-only -z "$BASE_SHA" "$HEAD_SHA")
+          echo "validation_required=$validation_required" >> "$GITHUB_OUTPUT"
+
   static:
+    needs: changes
+    if: >-
+      always() &&
+      (needs.changes.result != 'success' ||
+       needs.changes.outputs.validation_required == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Require successful scope classification
+        if: needs.changes.result != 'success'
+        run: |
+          echo 'Scaffold scope classification failed or was cancelled.' >&2
+          exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -50,9 +103,19 @@ jobs:
           npm test
 
   container-canary:
+    needs: changes
+    if: >-
+      always() &&
+      (needs.changes.result != 'success' ||
+       needs.changes.outputs.validation_required == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      - name: Require successful scope classification
+        if: needs.changes.result != 'success'
+        run: |
+          echo 'Scaffold scope classification failed or was cancelled.' >&2
+          exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build pinned tool image
         run: docker build --tag codework-genome:${{ github.sha }} .

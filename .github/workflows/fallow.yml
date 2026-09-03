@@ -2,7 +2,17 @@ name: Fallow
 
 on:
   pull_request:
+    paths:
+      - 'mcp/**'
+      - 'scripts/codacy_pr_comment.js'
+      - 'tests/test_codacy_pr_comment.js'
+      - '.fallowrc.json'
+      - '.github/workflows/fallow.yml'
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
