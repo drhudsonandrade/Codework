@@ -636,14 +636,12 @@ async function deleteReportComment({ github, owner, repo, comment_id }) {
 
 async function pruneOlderComments({ github, owner, repo, comments, winner }) {
   const older = comments.filter((comment) => comment.id !== winner.id);
-  for (const comment of older) {
-    await deleteReportComment({
-      github,
-      owner,
-      repo,
-      comment_id: comment.id,
-    });
-  }
+  await Promise.all(older.map((comment) => deleteReportComment({
+    github,
+    owner,
+    repo,
+    comment_id: comment.id,
+  })));
 }
 
 function publicationResult(existing) {
