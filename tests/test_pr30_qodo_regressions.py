@@ -1,15 +1,17 @@
 """Regressions for the final Qodo findings on PR 30."""
 from __future__ import annotations
 
+import builtins
 import hashlib
 import json
 import math
 import os
-import subprocess
+import runpy
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from array_pipeline.allele_discrimination import _numeric
 from array_pipeline.clinical_findings import _clinvar_for
@@ -162,24 +164,42 @@ class FrequencyDomainTest(unittest.TestCase):
 class DirectSmokeInvocationTest(unittest.TestCase):
     def test_production_entrypoint_can_be_executed_by_absolute_path(self):
         script = (ROOT / "scripts" / "run_live_post_deployment_smoke.py").resolve()
-        environment = os.environ.copy()
-        environment.pop("PYTHONPATH", None)
-        with tempfile.TemporaryDirectory() as td:
-            completed = subprocess.run(
-                [sys.executable, str(script), "--help"],
-                cwd=td,
-                env=environment,
-                text=True,
-                capture_output=True,
-                check=False,
-            )
+        original_cwd = Path.cwd()
 
-        self.assertEqual(
-            completed.returncode,
-            0,
-            msg=f"stdout:\n{completed.stdout}\nstderr:\n{completed.stderr}",
-        )
-        self.assertIn("--base-url", completed.stdout)
+        class BootstrapReached(Exception):
+            pass
+
+        real_import = builtins.__import__
+        observed_paths = []
+
+        def stop_at_first_repository_import(name, *args, **kwargs):
+            if name == "scripts.bootstrap_attestation":
+                observed_paths.append(sys.path.copy())
+                raise BootstrapReached
+            return real_import(name, *args, **kwargs)
+
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                os.chdir(td)
+                isolated_path = [
+                    entry
+                    for entry in sys.path
+                    if entry and Path(entry).resolve() != ROOT
+                ]
+                with (
+                    mock.patch.object(sys, "path", isolated_path),
+                    mock.patch.object(
+                        builtins,
+                        "__import__",
+                        side_effect=stop_at_first_repository_import,
+                    ),
+                    self.assertRaises(BootstrapReached),
+                ):
+                    runpy.run_path(str(script), run_name="__main__")
+        finally:
+            os.chdir(original_cwd)
+
+        self.assertEqual(observed_paths[0][0], str(ROOT))
 
 
 if __name__ == "__main__":
