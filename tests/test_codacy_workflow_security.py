@@ -192,7 +192,7 @@ class CodacyWorkflowTrustBoundaryTest(unittest.TestCase):
         )
         self.assertEqual(
             report.count("run_number: Number(process.env.CODACY_WORKFLOW_RUN_NUMBER)"),
-            5,
+            9,
         )
         self.assertIn("name: Verify source before publication", report)
         self.assertIn("isCurrentCodacyPublication", report)
@@ -208,10 +208,13 @@ class CodacyWorkflowTrustBoundaryTest(unittest.TestCase):
         self.assertLess(trusted_checkout, repair)
         self.assertLess(repair, query)
         self.assertLess(query, publish)
+        repair_block = report[repair:query]
         for state in ("pending", "interrupted", "failed", "publish"):
-            self.assertIn(f"needs.resolve.outputs.state == '{state}'", report)
-        self.assertIn("isCurrentCodacyPublication", report[repair:query])
-        self.assertIn("upsertCodacyReportComment", report[repair:query])
+            self.assertIn(f"needs.resolve.outputs.state == '{state}'", repair_block)
+        self.assertIn("isCurrentCodacyPublication", repair_block)
+        self.assertIn("upsertCodacyReportComment", repair_block)
+        self.assertIn("publication: {", repair_block)
+        self.assertIn("rank: process.env.REPORT_STATE", repair_block)
         self.assertIn("codacyStatusForRunState", report)
         self.assertIn("Publish missing credential state", report)
         self.assertIn("Publish terminal publisher failure", report)
