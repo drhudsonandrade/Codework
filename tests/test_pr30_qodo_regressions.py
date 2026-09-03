@@ -4,6 +4,9 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,6 +18,13 @@ from array_pipeline.qc import _orientation
 from scripts.build_trait_targets import GWAS_RELEASE
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _environment_without_pythonpath() -> dict[str, str]:
+    """Return a subprocess environment that cannot rely on an injected repo path."""
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    return environment
 
 
 class ImmutableGwasReleaseTest(unittest.TestCase):
@@ -34,16 +44,17 @@ class PharmacogenomicManifestBindingTest(unittest.TestCase):
                 "schema": "genoma-partial-genome-targets-v1",
                 "id": "ORIGINAL",
                 "version": "1",
-                "targets": [{
-                    "rsid": "rs1",
-                    "scope": "CLINICO",
-                    "label": "original",
-                    "queries": {"cpic": {"path": "data/gene"}},
-                }],
+                "targets": [
+                    {
+                        "rsid": "rs1",
+                        "scope": "CLINICO",
+                        "label": "original",
+                        "queries": {"cpic": {"path": "data/gene"}},
+                    }
+                ],
             }
             supplied = {
                 **original,
-                "id": "RELABELLED",
                 "targets": [{**original["targets"][0], "label": "relabeled"}],
             }
             original_path = root / "original.json"
@@ -52,18 +63,23 @@ class PharmacogenomicManifestBindingTest(unittest.TestCase):
             original_path.write_text(json.dumps(original), encoding="utf-8")
             supplied_path.write_text(json.dumps(supplied), encoding="utf-8")
             matrix_path.write_text(
-                json.dumps({
-                    "schema": "genoma-genome-completeness-matrix-v1",
-                    "target_manifest": {
-                        "id": original["id"],
-                        "version": original["version"],
-                        "sha256": hashlib.sha256(original_path.read_bytes()).hexdigest(),
-                    },
-                    "entries": [],
-                }),
+                json.dumps(
+                    {
+                        "schema": "genoma-genome-completeness-matrix-v1",
+                        "target_manifest": {
+                            "id": original["id"],
+                            "version": original["version"],
+                            "sha256": hashlib.sha256(original_path.read_bytes()).hexdigest(),
+                        },
+                        "entries": [],
+                    }
+                ),
                 encoding="utf-8",
             )
-            with self.assertRaisesRegex(ValueError, "target manifest"):
+            with self.assertRaisesRegex(
+                ValueError,
+                r"target manifest does not match.*sha256",
+            ):
                 build_pharmacogenomic_passport(matrix_path, supplied_path)
 
 
@@ -96,11 +112,13 @@ class ClinvarAlleleIdentityTest(unittest.TestCase):
         evidence = {
             "grch38": {"chromosome": "1", "position": 100},
             "clinvar": {
-                "records": [{
-                    "accession": "VCV-LEGACY",
-                    "classification": "Pathogenic",
-                    "grch38": {"chromosome": "1", "position": 100},
-                }]
+                "records": [
+                    {
+                        "accession": "VCV-LEGACY",
+                        "classification": "Pathogenic",
+                        "grch38": {"chromosome": "1", "position": 100},
+                    }
+                ]
             },
         }
         result = _clinvar_for("rs1", evidence, set(), {"A"})
@@ -149,14 +167,46 @@ class FrequencyDomainTest(unittest.TestCase):
 
 
 class DirectSmokeInvocationTest(unittest.TestCase):
-    def test_script_establishes_the_repository_root_without_transitive_side_effects(self):
-        source = (
-            ROOT / "scripts" / "run_live_post_deployment_smoke.py"
-        ).read_text(encoding="utf-8")
-        self.assertLess(
-            source.index("sys.path.insert"),
-            source.index("from bootstrap_attestation"),
+    def test_production_entrypoint_can_be_executed_by_absolute_path(self):
+        script = (ROOT / "scripts" / "run_live_post_deployment_smoke.py").resolve()
+        with tempfile.TemporaryDirectory() as td:
+            completed = subprocess.run(
+                [sys.executable, str(script), "--help"],
+                cwd=td,
+                env=_environment_without_pythonpath(),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+        self.assertEqual(
+            completed.returncode,
+            0,
+            msg=f"stdout:\n{completed.stdout}\nstderr:\n{completed.stderr}",
         )
+        self.assertIn("--base-url", completed.stdout)
+
+    def test_module_imports_from_repository_root_without_running_the_smoke(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import scripts.run_live_post_deployment_smoke; print('IMPORT_OK')",
+            ],
+            cwd=ROOT,
+            env=_environment_without_pythonpath(),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(
+            completed.returncode,
+            0,
+            msg=f"stdout:\n{completed.stdout}\nstderr:\n{completed.stderr}",
+        )
+        self.assertEqual(completed.stdout.strip(), "IMPORT_OK")
+        self.assertNotIn("Traceback", completed.stderr)
 
 
 if __name__ == "__main__":
