@@ -22,6 +22,7 @@
 - A resolved legacy finding must be removed from the baseline; stale baseline entries are errors.
 - No external package or network dependency may be added.
 - No auto-merge; human approval remains the final merge gate.
+- Implementation must start from a fresh non-`main` branch created from current `main`. Before the first code commit, record `BASE_SHA=$(git rev-parse HEAD)`; that exact SHA is the provenance recorded in the initial legacy baseline.
 
 ---
 
@@ -55,7 +56,7 @@ The scanner interface must remain independent of `validate_repo.py` so tests can
 
 - [ ] **Step 1: Write failing tests for the policy schema and fail-closed loading**
 
-Add the first test module with concrete fixtures:
+Add the first test module with a module-level JSON helper shared by all test classes:
 
 ```python
 from __future__ import annotations
@@ -73,23 +74,24 @@ if str(ROOT) not in sys.path:
 from scripts.code_language_guard import LanguagePolicyError, load_baseline, load_policy
 
 
-class LanguagePolicyLoadingTest(unittest.TestCase):
-    def _write(self, root: Path, relative: str, payload: object) -> None:
-        path = root / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload, ensure_ascii=False) + "\n", encoding="utf-8")
+def _write_json(root: Path, relative: str, payload: object) -> None:
+    path = root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False) + "\n", encoding="utf-8")
 
+
+class LanguagePolicyLoadingTest(unittest.TestCase):
     def test_policy_requires_exact_schema(self):
         with TemporaryDirectory() as td:
             root = Path(td)
-            self._write(root, "config/code_language_policy.json", {"schema": "wrong"})
+            _write_json(root, "config/code_language_policy.json", {"schema": "wrong"})
             with self.assertRaisesRegex(LanguagePolicyError, "invalid language policy schema"):
                 load_policy(root)
 
     def test_baseline_requires_exact_schema(self):
         with TemporaryDirectory() as td:
             root = Path(td)
-            self._write(root, "config/code_language_legacy_baseline.json", {"schema": "wrong"})
+            _write_json(root, "config/code_language_legacy_baseline.json", {"schema": "wrong"})
             with self.assertRaisesRegex(LanguagePolicyError, "invalid language baseline schema"):
                 load_baseline(root)
 ```
@@ -112,11 +114,13 @@ Create `scripts/code_language_guard.py` with these public types and constants:
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
 POLICY_SCHEMA = "genoma-code-language-policy-v1"
 BASELINE_SCHEMA = "genoma-code-language-legacy-baseline-v1"
+SHA40 = re.compile(r"^[0-9a-f]{40}$")
 
 
 class LanguagePolicyError(RuntimeError):
@@ -149,6 +153,7 @@ class LanguagePolicy:
 Implement `load_policy()` and `load_baseline()` so they:
 
 - require the exact schema names above;
+- require a 40-character lowercase hexadecimal `source_commit` in the baseline;
 - require non-empty `reason` on every excluded root;
 - reject absolute paths and `..` traversal in excluded roots and baseline entries;
 - require `count >= 1` for every baseline entry;
@@ -207,17 +212,17 @@ Create `config/code_language_policy.json` in this shape:
 }
 ```
 
-Create the baseline file initially with an empty `entries` list so Task 3 can populate it from the actual base revision:
+Create the baseline file initially with an empty `entries` list and the exact `BASE_SHA` captured before the first code commit:
 
 ```json
 {
   "schema": "genoma-code-language-legacy-baseline-v1",
-  "source_commit": "67b3133b6dd881a120ebee2edd9435458674fef8",
+  "source_commit": "<BASE_SHA captured from current main>",
   "entries": []
 }
 ```
 
-The implementation task must first re-read current `main`; if `main` has advanced from `67b3133b6dd881a120ebee2edd9435458674fef8`, replace `source_commit` with the exact implementation branch base SHA before generating entries.
+When implementing, replace the angle-bracket example with the actual 40-hex `BASE_SHA`; do not commit the example text.
 
 - [ ] **Step 5: Run loader tests**
 
@@ -270,7 +275,7 @@ class PythonLanguageScannerTest(unittest.TestCase):
                 {"path": "normative/sealed", "reason": "sealed transport"}
             ]
         }
-        self._write(root, "config/code_language_policy.json", policy)
+        _write_json(root, "config/code_language_policy.json", policy)
         for relative, source in files.items():
             path = root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -330,11 +335,11 @@ Add:
 
 ```python
 import ast
-import io
-import re
 import tokenize
 import unicodedata
 from collections import Counter
+
+SKIP_PARTS = frozenset({".git", "node_modules", "dist", "__pycache__", ".pytest_cache", ".venv"})
 
 
 @dataclass(frozen=True, order=True)
@@ -372,6 +377,8 @@ Implement AST traversal for identifiers from:
 Do not classify imported external module names themselves as repository naming violations.
 
 Use `tokenize.generate_tokens()` for `COMMENT` tokens and AST first-statement string literals for module/class/function docstrings. Before comment/docstring word matching, remove exact `contract_literals` from the text. Do not scan ordinary string literals in PR 1.
+
+`scan_repository()` must skip any path containing a `SKIP_PARTS` component and skip only the explicit `excluded_roots` loaded from policy. It must not silently add runtime-code directories to exclusions.
 
 If a Python file cannot be read or parsed/tokenized, raise `LanguagePolicyError` with the relative path; the repository guard must fail closed rather than skip the file.
 
@@ -418,7 +425,7 @@ git commit -m "feat: detect Portuguese Python implementation language"
 
 **Interfaces:**
 - Consumes: grouped current findings and grouped baseline entries.
-- Produces: `BaselineDelta`, `compare_to_baseline(current: tuple[BaselineEntry, ...], baseline: tuple[BaselineEntry, ...]) -> BaselineDelta`, CLI modes `--check` and `--write-baseline`.
+- Produces: `BaselineDelta`, `compare_to_baseline(current: tuple[BaselineEntry, ...], baseline: tuple[BaselineEntry, ...]) -> BaselineDelta`, `validate_code_language(root: Path, errors: list[str]) -> None`, CLI modes `--check` and `--write-baseline --source-commit <sha>`.
 
 - [ ] **Step 1: Write failing tests that distinguish new debt from resolved debt**
 
@@ -459,7 +466,7 @@ python3 -m unittest tests.test_code_language_guard.LanguageBaselineTest -v
 
 Expected: FAIL because `compare_to_baseline` is absent.
 
-- [ ] **Step 3: Implement exact set comparison and CLI**
+- [ ] **Step 3: Implement exact set comparison and the library validation entrypoint**
 
 Add:
 
@@ -484,9 +491,28 @@ def compare_to_baseline(
         unexpected=tuple(sorted(current_set - baseline_set)),
         stale=tuple(sorted(baseline_set - current_set)),
     )
+
+
+def validate_code_language(root: Path, errors: list[str]) -> None:
+    policy = load_policy(root)
+    baseline = load_baseline(root)
+    current = group_findings(scan_repository(root, policy))
+    delta = compare_to_baseline(current, baseline)
+    errors.extend(
+        f"new Portuguese technical language debt: {entry.path}: {entry.kind}: {entry.token}: {entry.count}"
+        for entry in delta.unexpected
+    )
+    errors.extend(
+        f"resolved language baseline entry must be removed: {entry.path}: {entry.kind}: {entry.token}: {entry.count}"
+        for entry in delta.stale
+    )
 ```
 
-Implement CLI semantics:
+`validate_code_language()` deliberately raises `LanguagePolicyError` from invalid/missing policy, baseline, or source parsing so `validate_repo.py` can fail closed with a single integration wrapper in Task 4.
+
+- [ ] **Step 4: Implement deterministic CLI behavior**
+
+Implement:
 
 ```text
 python3 scripts/code_language_guard.py --check
@@ -498,31 +524,34 @@ python3 scripts/code_language_guard.py --check
 - exit 1 on either kind of delta;
 - exit 2 on invalid policy/baseline or unreadable/unparseable scanned source.
 
-And:
+Implement baseline writing as:
 
 ```text
-python3 scripts/code_language_guard.py --write-baseline
+python3 scripts/code_language_guard.py --write-baseline --source-commit <40-hex-base-sha>
 ```
 
-- deterministically replace `entries` with the current grouped findings;
+- require `--source-commit` in write mode;
+- validate it against `SHA40`;
+- deterministically replace `entries` with current grouped findings;
 - preserve schema;
-- set `source_commit` from `git rev-parse HEAD` only when the command succeeds and returns a 40-hex SHA;
-- refuse to write if Git metadata is unavailable, rather than inventing a source commit;
+- set `source_commit` to the explicitly supplied base SHA, never inferred from mutable branch state;
 - use `ensure_ascii=False`, `indent=2`, sorted entries, and a final newline.
 
-- [ ] **Step 4: Generate the initial baseline on the implementation branch base**
+- [ ] **Step 5: Generate the initial baseline against the recorded implementation base**
 
-Before generation:
+Confirm the recorded base is unchanged:
 
 ```bash
-git status --short
-git rev-parse HEAD
+printf '%s\n' "$BASE_SHA"
+git merge-base HEAD main
 ```
 
-The working tree must contain only the intended Task 1–3 changes. Then run:
+The merge-base must equal `BASE_SHA`; otherwise synchronize/restart the implementation branch before generating the initial baseline.
+
+Then run:
 
 ```bash
-python3 scripts/code_language_guard.py --write-baseline
+python3 scripts/code_language_guard.py --write-baseline --source-commit "$BASE_SHA"
 python3 scripts/code_language_guard.py --check
 ```
 
@@ -530,11 +559,14 @@ Expected: `--check` exits 0 immediately after deterministic baseline generation.
 
 Review the generated file and confirm every entry references active `.py` code, not `docs/history/**` or `normative/sealed/**`.
 
-- [ ] **Step 5: Add repository-level baseline regression**
+- [ ] **Step 6: Add repository-level baseline regression**
 
 Add:
 
 ```python
+from scripts.code_language_guard import group_findings
+
+
 class RepositoryLanguageBaselineTest(unittest.TestCase):
     def test_repository_matches_tracked_language_baseline(self):
         policy = load_policy(ROOT)
@@ -544,7 +576,7 @@ class RepositoryLanguageBaselineTest(unittest.TestCase):
         self.assertTrue(delta.clean, delta)
 ```
 
-- [ ] **Step 6: Run all language-guard tests**
+- [ ] **Step 7: Run all language-guard tests**
 
 Run:
 
@@ -554,7 +586,7 @@ python3 -m unittest tests.test_code_language_guard -v
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit the baseline mechanism and generated debt inventory**
+- [ ] **Step 8: Commit the baseline mechanism and generated debt inventory**
 
 ```bash
 git add scripts/code_language_guard.py config/code_language_legacy_baseline.json tests/test_code_language_guard.py
@@ -628,18 +660,17 @@ Call `validate_language_policy(ROOT, errors)` in the existing validation sequenc
 
 `validate_code_language()` must append actionable messages for new/stale debt and must not print PASS itself when called as a library.
 
-- [ ] **Step 4: Update repository-required paths**
+- [ ] **Step 4: Protect the executable policy files as required repository paths**
 
-Add these active files to `REQUIRED_PATHS` in `scripts/validate_repo.py` so deleting the policy cannot silently disable enforcement:
+Add these active files to `REQUIRED_PATHS` in `scripts/validate_repo.py`:
 
 ```text
 config/code_language_policy.json
 config/code_language_legacy_baseline.json
 scripts/code_language_guard.py
-docs/CODE_LANGUAGE_POLICY.md
 ```
 
-The documentation file is added in Task 5; until then, keep this change and Task 5 in the same implementation batch before running the full validator.
+Do not add the documentation file in this task; Task 5 creates it and then adds it to `REQUIRED_PATHS`, keeping every task's committed state independently valid.
 
 - [ ] **Step 5: Re-run integration and focused repository validation**
 
@@ -648,9 +679,10 @@ Run:
 ```bash
 python3 -m unittest tests.test_code_language_guard.ValidateRepoLanguageIntegrationTest -v
 python3 scripts/code_language_guard.py --check
+python3 scripts/validate_repo.py
 ```
 
-Expected: PASS/exit 0.
+Expected: all commands exit 0.
 
 - [ ] **Step 6: Commit repository-gate integration**
 
@@ -666,6 +698,7 @@ git commit -m "ci: enforce code language baseline in repository validation"
 **Files:**
 - Create: `docs/CODE_LANGUAGE_POLICY.md`
 - Modify: `AGENTS.md`
+- Modify: `scripts/validate_repo.py`
 - Modify: `tests/test_code_language_guard.py`
 
 **Interfaces:**
@@ -714,7 +747,7 @@ The document must state these exact operational rules:
 - `config/code_language_legacy_baseline.json` contains temporary measured debt, not approved style;
 - adding a baseline entry to make CI pass is forbidden unless the PR explicitly documents why the new occurrence cannot yet be migrated without breaking compatibility;
 - normal development must run `python3 scripts/code_language_guard.py --check`;
-- migration PRs that remove Portuguese debt run `--write-baseline` only after reviewing the diff and ensuring no new debt replaced the removed debt;
+- migration PRs that remove Portuguese debt run `--write-baseline --source-commit <base-sha>` only after reviewing the diff and ensuring no new debt replaced the removed debt;
 - PR 1 enforces Python only; the same policy applies to other languages, whose automated adapters are introduced before their bulk migration layers.
 
 - [ ] **Step 4: Update `AGENTS.md`**
@@ -731,20 +764,31 @@ Under change-control/before-editing guidance, add a concise section containing:
 - When a migration removes tracked debt, update the baseline in the same PR and review the generated diff.
 ```
 
-- [ ] **Step 5: Run the documentation contract test**
+- [ ] **Step 5: Protect the policy documentation as a required repository path**
+
+Add:
+
+```text
+docs/CODE_LANGUAGE_POLICY.md
+```
+
+to `REQUIRED_PATHS` in `scripts/validate_repo.py` only after the file exists.
+
+- [ ] **Step 6: Run the documentation and repository contract tests**
 
 Run:
 
 ```bash
 python3 -m unittest tests.test_code_language_guard.LanguagePolicyDocumentationTest -v
+python3 scripts/validate_repo.py
 ```
 
-Expected: PASS.
+Expected: PASS/exit 0.
 
-- [ ] **Step 6: Commit documentation**
+- [ ] **Step 7: Commit documentation**
 
 ```bash
-git add docs/CODE_LANGUAGE_POLICY.md AGENTS.md tests/test_code_language_guard.py
+git add docs/CODE_LANGUAGE_POLICY.md AGENTS.md scripts/validate_repo.py tests/test_code_language_guard.py
 git commit -m "docs: establish English-first code language policy"
 ```
 
@@ -778,28 +822,28 @@ Expected: exit 1 with at least one `NEW_LANGUAGE_DEBT` line naming `scripts/_lan
 
 - [ ] **Step 2: Prove the guard detects stale debt**
 
-Use a temporary copy of the baseline rather than editing the tracked file in place:
+Use a temporary synthetic entry without editing the tracked baseline:
 
 ```bash
 python3 - <<'PY'
-import json
+from scripts.code_language_guard import BaselineEntry, compare_to_baseline, load_baseline
 from pathlib import Path
-p = Path('config/code_language_legacy_baseline.json')
-data = json.loads(p.read_text(encoding='utf-8'))
-assert data['entries'], 'baseline must contain measured legacy debt on the implementation base'
-data['entries'].append({
-    'path': 'scripts/nonexistent.py',
-    'kind': 'identifier',
-    'token': 'validar_arquivo',
-    'count': 1,
-})
-Path('/tmp/code-language-stale-baseline.json').write_text(
-    json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8'
+
+root = Path.cwd()
+baseline = load_baseline(root)
+synthetic = BaselineEntry(
+    path='scripts/nonexistent.py',
+    kind='identifier',
+    token='validar_arquivo',
+    count=1,
 )
+delta = compare_to_baseline((), (synthetic,))
+assert delta.stale == (synthetic,), delta
+print('STALE_BASELINE_DETECTION_PASS')
 PY
 ```
 
-Then exercise `compare_to_baseline()` against the temporary payload in a one-off Python command and confirm the synthetic entry appears under `stale`. The tracked baseline must remain unchanged.
+Expected: `STALE_BASELINE_DETECTION_PASS`.
 
 - [ ] **Step 3: Run the complete focused suite**
 
@@ -854,7 +898,7 @@ Expected:
 - no changes under `manifests/`, `normative/`, or `template_store/`;
 - no changes to `reporting/reference_v3_manifest.json`;
 - no whitespace errors;
-- diff limited to the seven planned policy/guard/documentation files plus the design/plan files only if they intentionally travel with PR 1.
+- implementation diff limited to the seven planned policy/guard/documentation files; design/plan documents may also appear if they intentionally travel with PR 1.
 
 - [ ] **Step 7: Run CodeRabbit CLI only if installed and authenticated**
 
