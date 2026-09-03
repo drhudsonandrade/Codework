@@ -32,7 +32,12 @@ from pathlib import Path
 from typing import Any
 
 import normative
-from array_pipeline.completeness import INTERPRETABLE, NAO_DETECTADO, NAO_TESTADO
+from array_pipeline.completeness import (
+    COMPARISON_APPLICABLE,
+    INTERPRETABLE,
+    NAO_DETECTADO,
+    NAO_TESTADO,
+)
 from array_pipeline.targets import read_manifest_text, sha256_json
 from reporting.case_dossier import (
     SEX_FEMALE,
@@ -533,6 +538,15 @@ def _interpretation(
             "kind": NAO_INTERROGADO,
             "basis": f"locus classificado {classification}: {entry.get('basis')}",
         }
+    if entry.get("assessed_comparison") != COMPARISON_APPLICABLE:
+        return {
+            "kind": SEM_INTERPRETACAO,
+            "basis": (
+                "o genótipo foi chamado, mas nenhuma comparação aplicável com um alelo "
+                "avaliado foi realizada; nem presença nem ausência foi estabelecida "
+                f"({entry.get('basis')})"
+            ),
+        }
     if classification == NAO_DETECTADO:
         return {
             "kind": NEGATIVO,
@@ -895,7 +909,10 @@ def build_clinical_findings(
         rsid = str(entry["rsid"]).lower()
         classification = str(entry.get("classification"))
         gene = entry.get("gene")
-        interrogated = classification in INTERPRETABLE
+        interrogated = (
+            entry.get("interpretable") is True
+            and entry.get("assessed_comparison") == COMPARISON_APPLICABLE
+        )
 
         if not interrogated:
             # A locus the array never carried has nothing per-locus to say beyond its

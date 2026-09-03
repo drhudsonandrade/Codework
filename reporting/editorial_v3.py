@@ -195,6 +195,11 @@ def _disclose_programmatic_render(
             return disclosed
         supplied = final_authorization.strip() if isinstance(final_authorization, str) else ""
         trusted_preparation = isinstance(disclosed, _AuthorizedEditorialRender)
+        if supplied and isinstance(recorded, str) and supplied != recorded.strip():
+            raise UnapprovedRendererError(
+                "programmatic_final_authorization diverges from the authorization already "
+                "recorded in the Execution Manifest"
+            )
         if isinstance(recorded, str) and (
             (supplied and supplied == recorded.strip()) or trusted_preparation
         ):

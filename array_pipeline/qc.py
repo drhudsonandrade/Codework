@@ -944,7 +944,7 @@ def inspect_array(
             "os registros (escritos na fita plus) sairia invertida, e a inversão não é "
             "corrigida em silêncio"
         )
-    elif strand not in FORWARD_STRANDS:
+    elif normalized_strand not in FORWARD_STRANDS:
         build_reasons.append("strand convention not explicitly verified")
     elif not strand_evidence_verified:
         build_reasons.append("strand provenance is not a structured VERIFICADO/SATISFIED attestation bound to input SHA-256")

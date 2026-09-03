@@ -123,9 +123,13 @@ def build_payload(
     matrix = Artifact.from_path("completeness-matrix", matrix_path)
     passport = Artifact.from_path("pgx-passport", passport_path) if passport_path else None
 
-    case_id = matrix.payload.get("case_id") or UNAVAILABLE
+    matrix_case = matrix.payload.get("case_id")
+    matrix_case = matrix_case.strip() if isinstance(matrix_case, str) else ""
+    if not matrix_case:
+        raise ValueError("completeness matrix must declare a non-empty case_id")
+    case_id = matrix_case
     compiler = PayloadCompiler(
-        case_id=str(case_id),
+        case_id=case_id,
         report_id=REPORT_ID,
         policy_evaluation=policy_evaluation,
         post_deployment_witness=post_deployment_witness,
@@ -142,6 +146,12 @@ def build_payload(
         if not passport_input or not matrix_input or passport_input != matrix_input:
             raise ValueError(
                 "passport and completeness matrix must describe the same non-empty input_sha256"
+            )
+        passport_case = passport.payload.get("case_id")
+        passport_case = passport_case.strip() if isinstance(passport_case, str) else ""
+        if not passport_case or passport_case != matrix_case:
+            raise ValueError(
+                "passport and completeness matrix must describe the same non-empty case_id"
             )
 
     verified = matrix.payload.get("operational_status") == "VERIFICADO"

@@ -76,7 +76,12 @@ REGISTRY = {
 }
 
 
-def _artifacts(root: Path, rows: str, *, registry: dict | None = None):
+def _artifacts(
+    root: Path,
+    rows: str,
+    *,
+    registry: dict | None = None,
+) -> tuple[Path, dict[str, Any], Path]:
     """Build a genotype file, its QC, the completeness matrix and the passport from these rows.
 
     Everything downstream is derived from the same array file and its SHA-256, so a test cannot
@@ -87,17 +92,19 @@ def _artifacts(root: Path, rows: str, *, registry: dict | None = None):
         fh.write(HEADER)
         fh.write(rows)
     sha = hashlib.sha256(array.read_bytes()).hexdigest()
-    evidence = lambda asserted: json.dumps({
-        "status": "VERIFICADO", "decision": "SATISFIED", "asserted_value": asserted,
-        "justification": "Fixture determinístico declara build e fita.",
-        "evidence_refs": ["synthetic-pgx-fixture"],
-        "trace": {
-            "attestation_id": "pgx-fixture", "created_at": "2026-08-18T00:00:00Z",
-            "actor_type": "SOFTWARE", "actor_id": "tests.test_pharmacogenomics",
-            "method": "deterministic fixture", "run_id": "unit-test",
-            "input_sha256": [sha], "output_sha256": [], "tool_versions": {"test": "1"},
-        },
-    })
+    def evidence(asserted: str) -> str:
+        """A provenance attestation for one asserted fixture value."""
+        return json.dumps({
+            "status": "VERIFICADO", "decision": "SATISFIED", "asserted_value": asserted,
+            "justification": "Fixture determinístico declara build e fita.",
+            "evidence_refs": ["synthetic-pgx-fixture"],
+            "trace": {
+                "attestation_id": "pgx-fixture", "created_at": "2026-08-18T00:00:00Z",
+                "actor_type": "SOFTWARE", "actor_id": "tests.test_pharmacogenomics",
+                "method": "deterministic fixture", "run_id": "unit-test",
+                "input_sha256": [sha], "output_sha256": [], "tool_versions": {"test": "1"},
+            },
+        })
     qc = inspect_array(array, case_id="SYN-PGX", build="GRCh37", strand="forward",
                        build_evidence=evidence("GRCh37"), strand_evidence=evidence("forward"))
     (root / "qc.json").write_text(json.dumps(qc), encoding="utf-8")

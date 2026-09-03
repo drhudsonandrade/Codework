@@ -16,6 +16,10 @@ from reporting import deployment_target
 def _target(addresses: list[str]) -> dict[str, object]:
     """A witness target block that is internally honest about its own addresses."""
     return {
+        "authority": "https://deployment.example:443",
+        "scheme": "https",
+        "host": "deployment.example",
+        "port": 443,
         "network_class": deployment_target.aggregate(addresses),
         "resolved_addresses": addresses,
     }
@@ -48,10 +52,19 @@ class DeploymentTargetRefusalTest(unittest.TestCase):
 
     def test_a_tampered_network_class_is_refused(self):
         """Claiming a reachable class over loopback addresses must not buy a PASS."""
-        tampered = {"network_class": "public-host", "resolved_addresses": ["127.0.0.1"]}
+        tampered = _target(["127.0.0.1"])
+        tampered["network_class"] = "public-host"
         refusal = deployment_target.refusal(tampered)
         self.assertIsNotNone(refusal)
         self.assertIn("classificam como", refusal)
+
+    def test_a_tampered_authority_is_refused(self):
+        """The printed service identity must agree with its recorded URL components."""
+        tampered = _target(["93.184.216.34"])
+        tampered["authority"] = "https://different.example:443"
+        refusal = deployment_target.refusal(tampered)
+        self.assertIsNotNone(refusal)
+        self.assertIn("autoridade", refusal)
 
     def test_every_refusable_class_is_covered_by_the_reachability_rule(self):
         """The rule is expressed over the vocabulary, not over a hardcoded pair."""

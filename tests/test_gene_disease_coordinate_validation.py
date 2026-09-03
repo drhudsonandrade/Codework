@@ -34,7 +34,7 @@ class ClinvarCoordinateIdentityTests(unittest.TestCase):
     """A ClinVar record is accepted only when its own coordinate matches the target's."""
     def _run(self, summary: dict) -> dict:
         """Run the curation against this ClinVar summary."""
-        search = {"esearchresult": {"idlist": ["1"]}}
+        search = {"esearchresult": {"count": "1", "idlist": ["1"]}}
         placement = {
             "GRCh38": {
                 "seq_id": "NC_000001.11",
@@ -187,6 +187,28 @@ class ClinvarCoordinateIdentityTests(unittest.TestCase):
                 message = str(caught.exception)
                 self.assertIn("refusing partial curation", message)
                 self.assertNotIn("não retorna registro", message)
+
+    def test_missing_count_is_refused_instead_of_assuming_one_complete_page(self):
+        """A full first page without a total cannot be called a complete collection."""
+        placement = {
+            "GRCh38": {
+                "seq_id": "NC_000001.11",
+                "position": 101,
+                "reference_allele": "A",
+            }
+        }
+        page = {"esearchresult": {"idlist": [str(i) for i in range(50)]}}
+        with (
+            patch.object(CURATE, "fetch_refsnp", return_value={}),
+            patch.object(CURATE, "placements", return_value=placement),
+            patch.object(CURATE, "_json", return_value=page),
+            patch.object(CURATE.time, "sleep"),
+        ):
+            with self.assertRaisesRegex(
+                CURATE.CurationError,
+                "omitted count.*refusing partial curation",
+            ):
+                CURATE.fetch_clinvar_conditions("rs123")
 
     def test_clinvar_fetch_failure_is_local_to_one_locus(self):
         """A real fetch-path CurationError is local to one locus."""

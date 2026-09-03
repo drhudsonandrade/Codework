@@ -62,6 +62,8 @@ CLASSES = (OBSERVADO, NAO_DETECTADO, NO_CALL, NAO_TESTADO, NAO_REPORTAVEL)
 
 #: Classes that may support a statement about this person's genotype at that locus.
 INTERPRETABLE = frozenset({OBSERVADO, NAO_DETECTADO})
+COMPARISON_APPLICABLE = "APLICÁVEL"
+COMPARISON_NOT_APPLICABLE = "NÃO APLICÁVEL"
 
 
 def assessed_bases(target: dict[str, Any]) -> set[str]:
@@ -323,6 +325,24 @@ def build_completeness_matrix(
         target = targets[rsid]
         schema, row = seen.get(rsid, (None, None))
         classification, basis = _classify(row, schema, target, file_schema)
+        called_genotype = (
+            _canonical_gt((row or {}).get("CONSENSUS_RESULT") or (row or {}).get("RESULT"))
+            if row is not None
+            else None
+        )
+        compared_alleles = assessed_bases(target)
+        comparison_applicable = bool(
+            classification in INTERPRETABLE
+            and called_genotype
+            and len(called_genotype) == 2
+            and not (set(called_genotype) - set("ACGT"))
+            and compared_alleles
+            and all(
+                len(allele) == 1 and allele in set("ACGT")
+                for allele in compared_alleles
+            )
+        )
+        interpretable = classification in INTERPRETABLE and comparison_applicable
         entries.append(
             {
                 "rsid": rsid,
@@ -331,18 +351,23 @@ def build_completeness_matrix(
                 "label": target.get("label"),
                 "classification": classification,
                 "basis": basis,
-                "interpretable": classification in INTERPRETABLE,
+                "interpretable": interpretable,
+                "assessed_comparison": (
+                    COMPARISON_APPLICABLE
+                    if comparison_applicable
+                    else COMPARISON_NOT_APPLICABLE
+                ),
                 # The genotype is withheld unless the locus is interpretable. A conflicting
                 # or unoriented record still *has* a called value, and carrying it in the
                 # entry meant every consumer that printed `genotype or classification`
                 # displayed it as though it were usable — which is precisely the arbitration
                 # the NÃO REPORTÁVEL class exists to refuse.
                 "genotype": (
-                    _canonical_gt((row or {}).get("CONSENSUS_RESULT") or (row or {}).get("RESULT"))
-                    if row is not None and classification in INTERPRETABLE
+                    called_genotype
+                    if row is not None and interpretable
                     else None
                 ),
-                "genotype_withheld": row is not None and classification not in INTERPRETABLE,
+                "genotype_withheld": row is not None and not interpretable,
                 "assessed_allele": target.get("assessed_allele"),
                 # Every base the classification was actually able to test for. Empty means
                 # the registry could name none, so OBSERVADO at this locus says "chamado",

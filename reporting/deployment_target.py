@@ -187,6 +187,25 @@ def refusal(target: Any) -> str | None:
     addresses = target.get("resolved_addresses")
     if not isinstance(addresses, list) or not all(isinstance(item, str) for item in addresses):
         return "a testemunha não registra os endereços para os quais o alvo resolveu"
+    scheme = target.get("scheme")
+    host = target.get("host")
+    port = target.get("port")
+    if (
+        not isinstance(scheme, str)
+        or not isinstance(host, str)
+        or isinstance(port, bool)
+        or not isinstance(port, int)
+    ):
+        return (
+            "a testemunha não registra scheme/host/port do alvo; sem eles a autoridade "
+            "impressa no cabeçalho não pode ser recomputada"
+        )
+    recomputed_authority = _authority(scheme, host.lower(), port)
+    if target.get("authority") != recomputed_authority:
+        return (
+            f"a testemunha declara a autoridade {target.get('authority')!r}, e os campos "
+            f"que ela mesma registra compõem {recomputed_authority!r}"
+        )
     recomputed = aggregate(addresses)
     if recomputed != declared:
         return (

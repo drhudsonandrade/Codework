@@ -49,11 +49,47 @@ class OnePageSummaryIdentityTest(unittest.TestCase):
             root = Path(td)
             matrix = root / "matrix.json"
             passport = root / "passport.json"
-            matrix.write_text(json.dumps({"operational_status": "VERIFICADO"}), encoding="utf-8")
+            matrix.write_text(
+                json.dumps({"case_id": "CASE", "operational_status": "VERIFICADO"}),
+                encoding="utf-8",
+            )
             passport.write_text(json.dumps({"case_id": "CASE"}), encoding="utf-8")
             with self.assertRaises(ValueError) as caught:
                 build_payload(matrix_path=matrix, passport_path=passport)
             self.assertIn("input_sha256", str(caught.exception))
+
+    def test_matrix_requires_a_non_empty_text_case_id(self):
+        """An absent matrix identity cannot be replaced with an unavailable marker."""
+        from scripts.build_one_page_summary import build_payload
+
+        with tempfile.TemporaryDirectory() as td:
+            matrix = Path(td) / "matrix.json"
+            matrix.write_text(json.dumps({"operational_status": "VERIFICADO"}), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "non-empty case_id"):
+                build_payload(matrix_path=matrix, passport_path=None)
+
+    def test_passport_and_matrix_case_ids_must_match(self):
+        """A shared input digest cannot join artifacts from different cases."""
+        from scripts.build_one_page_summary import build_payload
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            matrix = root / "matrix.json"
+            passport = root / "passport.json"
+            matrix.write_text(
+                json.dumps({
+                    "case_id": "CASE-A",
+                    "input_sha256": "a" * 64,
+                    "operational_status": "VERIFICADO",
+                }),
+                encoding="utf-8",
+            )
+            passport.write_text(
+                json.dumps({"case_id": "CASE-B", "input_sha256": "a" * 64}),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "same non-empty case_id"):
+                build_payload(matrix_path=matrix, passport_path=passport)
 
 
 class WgsQcSummaryValidationTest(unittest.TestCase):

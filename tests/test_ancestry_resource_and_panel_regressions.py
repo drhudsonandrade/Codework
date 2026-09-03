@@ -150,6 +150,27 @@ class AncestryRegressionTest(unittest.TestCase):
                     with self.assertRaises(error):
                         namespace["load_panel"](path)
 
+    def test_panel_rejects_case_insensitive_duplicate_rsids(self):
+        """The same locus cannot be weighted twice through different rsid casing."""
+        namespace = _load_without_optional_numpy()
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "panel.json"
+            path.write_text(
+                json.dumps(_panel([_marker("rs1", [0.1, 0.2]), _marker("RS1", [0.3, 0.4])])),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(namespace["AncestryPanelError"], "more than once"):
+                namespace["load_panel"](path)
+
+    def test_panel_persists_canonical_allele_case(self):
+        """Validated mixed-case alleles are returned in the form dosage compares."""
+        marker = _marker("rs1", [0.1, 0.2])
+        marker["reference_allele"] = "a"
+        marker["effect_allele"] = "g"
+        _namespace, _path, panel = self._load(_panel([marker]))
+        self.assertEqual(panel["markers"][0]["reference_allele"], "A")
+        self.assertEqual(panel["markers"][0]["effect_allele"], "G")
+
     def test_panel_requires_a_non_admixed_reference_centroid(self):
         """A panel with no non-admixed reference centroid is refused."""
         namespace = _load_without_optional_numpy()

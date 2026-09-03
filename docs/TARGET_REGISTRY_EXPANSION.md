@@ -42,7 +42,9 @@ Esse é o limite do que o HEAD atual sustenta para esse corte.
 No artefato **1★** que está efetivamente versionado, as contagens de validade são
 reproduzíveis: **4.408 genes**, **3.895 com validade estabelecida**, **540 estabelecidos
 apenas pelo PanelApp**, **3 apenas pelo GenCC**, **0 apenas por ClinGen Dosage**, **3.249**
-com sobreposição PanelApp/GenCC, **1.289** com curadoria de dosagem, **3.990** com métrica de
+com sobreposição PanelApp/GenCC e **103 estabelecidos por ClinGen Gene-Disease Validity fora
+dessas categorias PanelApp/GenCC**. Essa decomposição exaustiva fecha os **3.895** estabelecidos;
+além dela, **1.289** têm curadoria de dosagem e **3.990** têm métrica de
 restrição do gnomAD e **1.004** com pLI ≥ 0,90. Esses números vêm de
 `docs/evidence/GENE_DISEASE_VALIDITY_1STAR.json.gz`; PanelApp sobreposto ao GenCC continua
 marcado como uma única base de curadoria, e gnomAD continua sem poder estabelecer relação

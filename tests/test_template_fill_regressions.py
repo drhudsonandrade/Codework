@@ -62,6 +62,18 @@ class TemplateFillAssayTest(unittest.TestCase):
             },
         )
 
+    def test_wgs_does_not_fall_back_to_pgx_artifacts_for_qc(self):
+        """A WGS report without WGS QC cannot cite unrelated PGx artifacts as its QC."""
+        payload = {
+            "case_id": "CASE",
+            "input": {"schema": "wgs_vcf_projection_v1"},
+            "execution_manifest": {
+                "PGX_PASSPORT_SHA256": "p" * 64,
+                "COMPLETENESS_MATRIX_SHA256": "m" * 64,
+            },
+        }
+        self.assertIsNone(_resolve("01", "RELATORIO_QC", payload))
+
     def test_only_counts_defined_by_the_finding_contract_are_derived(self):
         """Dead aliases outside the compiled finding contract remain explicitly unavailable."""
         payload = {

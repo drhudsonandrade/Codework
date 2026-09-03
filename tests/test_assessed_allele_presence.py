@@ -197,6 +197,7 @@ class InterpretationRefusesUntestedLociTest(unittest.TestCase):
 
         result = self._interpret({
             "classification": "OBSERVADO", "genotype": "AA", "scope": "CLINICO",
+            "assessed_comparison": "APLICÁVEL",
             "assessed_alleles": ["A"], "assessed_allele": "A", "basis": "contém o alelo avaliado A",
         })
         self.assertEqual(result["kind"], GENOTIPO_DE_RISCO)
@@ -207,6 +208,7 @@ class InterpretationRefusesUntestedLociTest(unittest.TestCase):
 
         result = self._interpret({
             "classification": "OBSERVADO", "genotype": "AA", "scope": "CLINICO",
+            "assessed_comparison": "APLICÁVEL",
             "assessed_alleles": ["A", "G"], "assessed_allele": None,
             "basis": "contém o alelo avaliado A",
         })

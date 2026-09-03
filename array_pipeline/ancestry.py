@@ -164,18 +164,22 @@ def load_panel(path: Path) -> dict[str, Any]:
         rsid = str(marker.get("rsid") or "").strip()
         if not rsid:
             raise AncestryPanelError("ancestry panel marker must carry a non-empty rsid")
-        if rsid in seen_rsids:
+        normalized_rsid = rsid.lower()
+        if normalized_rsid in seen_rsids:
             raise AncestryPanelError(
                 f"ancestry panel lists {rsid!r} more than once; a repeated marker would weight "
                 "one locus twice in the projection"
             )
-        seen_rsids.add(rsid)
+        seen_rsids.add(normalized_rsid)
         reference = str(marker.get("reference_allele") or "").strip().upper()
         effect = str(marker.get("effect_allele") or "").strip().upper()
         if reference not in COMPLEMENT or effect not in COMPLEMENT or reference == effect:
             raise AncestryPanelError(
                 f"ancestry panel marker {rsid!r} must carry two distinct A/C/G/T alleles"
             )
+        marker["rsid"] = rsid
+        marker["reference_allele"] = reference
+        marker["effect_allele"] = effect
         frequency = marker.get("effect_allele_frequency")
         if (
             isinstance(frequency, bool)

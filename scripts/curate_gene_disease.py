@@ -339,8 +339,13 @@ def fetch_clinvar_conditions(rsid: str) -> dict[str, Any]:
         search_result = search.get("esearchresult") or {}
         page = [str(uid) for uid in (search_result.get("idlist") or []) if str(uid)]
         if count is None:
+            raw_count = search_result.get("count")
+            if raw_count in (None, ""):
+                raise CurationError(
+                    f"{rsid}: ClinVar esearch omitted count; refusing partial curation"
+                )
             try:
-                count = int(search_result.get("count") or len(page))
+                count = int(raw_count)
             except (TypeError, ValueError) as exc:
                 raise CurationError(
                     f"{rsid}: ClinVar esearch returned an invalid count"

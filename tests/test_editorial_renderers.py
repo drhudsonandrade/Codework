@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 import zipfile
+from copy import deepcopy
 from pathlib import Path
 
 from ruleset_test_support import RULESET
@@ -74,7 +75,7 @@ class EditorialRendererTest(unittest.TestCase):
         from reporting.engine import render_document
 
         rendered = render_document("01", final_data(), mode="FINAL")
-        limitations = rendered["data"]["limitations"]
+        limitations = deepcopy(rendered["data"]["limitations"])
         disclosed = _disclose_programmatic_render(
             rendered, final_authorization="unit-test visual QA"
         )
@@ -135,6 +136,21 @@ class EditorialRendererTest(unittest.TestCase):
             "unit-test visual QA",
         )
         self.assertEqual(once["data"]["execution_manifest"], twice["data"]["execution_manifest"])
+
+    def test_repreparing_with_a_different_authorization_is_refused(self):
+        """A later caller cannot silently replace or discard the recorded authorization."""
+        from reporting.engine import render_document
+        from reporting.editorial_v3 import prepare_editorial_render, UnapprovedRendererError
+
+        rendered = render_document("01", final_data(), mode="FINAL")
+        prepared = prepare_editorial_render(
+            rendered, programmatic_final_authorization="authorization A"
+        )
+        with self.assertRaisesRegex(UnapprovedRendererError, "diverges"):
+            prepare_editorial_render(
+                prepared,
+                programmatic_final_authorization="authorization B",
+            )
 
     def test_idempotency_is_not_a_way_around_the_final_opt_in(self):
         """A payload that pre-sets the marker must not skip the authorization gate."""

@@ -130,7 +130,7 @@ class StrandVerificationBoundaryTest(unittest.TestCase):
                 "# forward strand\n"
                 "RSID,CHROMOSOME,POSITION,CONSENSUS_RESULT,STATUS,"
                 "GENERA_RESULT,MYHERITAGE_RESULT,SOURCES\n"
-                "rs1,1,100,AA,consensus,AA,AA,GM\n",
+                "rs7412,19,44908822,AA,consensus,AA,AA,GM\n",
                 encoding="utf-8",
             )
             with mock.patch(
@@ -142,6 +142,56 @@ class StrandVerificationBoundaryTest(unittest.TestCase):
         self.assertEqual(qc["input"]["strand"], "forward")
         self.assertTrue(qc["input"]["strand_evidence_verified"])
         self.assertEqual(qc["gates"]["BUILD_STRAND_GATE"]["state"], "PASS")
+
+    def test_mixed_case_forward_strand_is_coherent_with_the_gate_and_markers(self):
+        with tempfile.TemporaryDirectory() as td:
+            array = Path(td) / "array.csv"
+            array.write_text(
+                "RSID,CHROMOSOME,POSITION,CONSENSUS_RESULT,STATUS,"
+                "GENERA_RESULT,MYHERITAGE_RESULT,SOURCES\n"
+                "rs7412,19,44908822,AA,consensus,AA,AA,GM\n",
+                encoding="utf-8",
+            )
+            input_sha = hashlib.sha256(array.read_bytes()).hexdigest()
+
+            def evidence(asserted_value: str) -> str:
+                return json.dumps({
+                    "status": "VERIFICADO",
+                    "decision": "SATISFIED",
+                    "asserted_value": asserted_value,
+                    "justification": "deterministic mixed-case fixture",
+                    "evidence_refs": ["fixture"],
+                    "trace": {
+                        "attestation_id": "mixed-case",
+                        "created_at": "2026-08-24T00:00:00Z",
+                        "actor_type": "SOFTWARE",
+                        "actor_id": "tests",
+                        "method": "deterministic fixture",
+                        "run_id": "unit-test",
+                        "input_sha256": [input_sha],
+                        "output_sha256": [],
+                        "tool_versions": {"test": "1"},
+                    },
+                })
+
+            with mock.patch(
+                "array_pipeline.qc._strand_marker_alleles",
+                return_value={},
+            ):
+                qc = inspect_array(
+                    array,
+                    case_id="MIXED-CASE-STRAND",
+                    build="GRCh38",
+                    strand="Forward",
+                    build_evidence=evidence("GRCh38"),
+                    strand_evidence=evidence("forward"),
+                )
+
+        self.assertEqual(qc["gates"]["BUILD_STRAND_GATE"]["state"], "PASS")
+        self.assertEqual(
+            qc["baseline_marker_observations"][0]["orientation_operational_status"],
+            "VERIFICADO",
+        )
 
     def test_legacy_text_does_not_substitute_for_an_explicit_boolean_verdict(self):
         for verdict in (None, "true", 1, {}, []):

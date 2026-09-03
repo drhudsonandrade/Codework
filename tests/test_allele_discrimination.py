@@ -534,7 +534,7 @@ class WorstGroupPerAxisTest(unittest.TestCase):
     the uncertain axis, for the same reason.
     """
 
-    def _spec(self, freq_a, freq_b):
+    def _spec(self, freq_a, freq_b) -> dict[str, Any]:
         """A two-allele spec with these altered and uncertain frequencies per population group."""
         return {
             "alleles": {

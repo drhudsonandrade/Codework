@@ -7,6 +7,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from array_pipeline.completeness import (
+    COMPARISON_NOT_APPLICABLE,
+    NAO_DETECTADO,
     NAO_REPORTAVEL,
     NO_CALL,
     OBSERVADO,
@@ -141,6 +143,25 @@ class CompletenessRegressionTest(unittest.TestCase):
                 self.assertEqual(classification, OBSERVADO)
                 self.assertIn("SNP diploide", basis)
                 self.assertIn("ACGT", basis)
+    def test_non_comparable_called_genotype_is_structurally_not_applicable(self):
+        """A called indel is not forwarded as an interpretable allele comparison."""
+        entry = self._entry_for_rows(
+            [("raw_snp_array_v1", {"RSID": "rs1", "RESULT": "ID"})]
+        )
+        self.assertEqual(entry["assessed_comparison"], COMPARISON_NOT_APPLICABLE)
+        self.assertFalse(entry["interpretable"])
+        self.assertTrue(entry["genotype_withheld"])
+
+    def test_a_single_base_assessed_allele_absent_from_the_genotype_is_not_detected(self):
+        """Controle positivo: alelo SNP avaliado ausente continua NÃO DETECTADO."""
+        classification, basis = _classify(
+            {"RESULT": "GG", "__orientation_status": "VERIFICADO"},
+            "raw_snp_array_v1",
+            {"assessed_allele": "A"},
+            "raw_snp_array_v1",
+        )
+        self.assertEqual(classification, NAO_DETECTADO)
+        self.assertIn("ausência vale apenas para este locus", basis)
 
 
 if __name__ == "__main__":

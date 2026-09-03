@@ -92,16 +92,20 @@ def _qc_reference(payload: dict[str, Any]) -> Any:
     direct = _manifest(payload, f"{assay.evidence_prefix.upper()}_QC_SHA256")
     if direct:
         return direct
-    manifest = payload.get("execution_manifest")
-    if isinstance(manifest, dict):
-        pgx = {
-            key: manifest[key]
-            for key in ("PGX_PASSPORT_SHA256", "COMPLETENESS_MATRIX_SHA256")
-            if manifest.get(key)
-        }
-        if pgx:
-            return pgx
     return None
+
+
+def _pgx_reference(payload: dict[str, Any]) -> Any:
+    """The two artifacts that jointly establish report 06, scoped to that report only."""
+    manifest = payload.get("execution_manifest")
+    if not isinstance(manifest, dict):
+        return None
+    references = {
+        key: manifest[key]
+        for key in ("PGX_PASSPORT_SHA256", "COMPLETENESS_MATRIX_SHA256")
+        if manifest.get(key)
+    }
+    return references or None
 
 
 def _count_findings_with_field(
@@ -173,6 +177,7 @@ REPORT_RESOLVERS: dict[str, dict[str, Resolver]] = {
         "REGISTRO_DE_CONSULTAS": lambda p: _section(p, "Pipeline reproduzível"),
     },
     "06": {
+        "RELATORIO_QC": _pgx_reference,
         "LABORATORIO_E_PLATAFORMA": lambda p: _section(p, "Identificação e controle"),
         "GENE": lambda p: _section(p, "Camada técnica por gene"),
         "ESCOPO": lambda p: _section(p, "Resumo farmacogenômico"),
