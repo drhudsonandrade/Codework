@@ -186,13 +186,22 @@ class DirectSmokeInvocationTest(unittest.TestCase):
         )
         self.assertIn("--base-url", completed.stdout)
 
-    def test_module_imports_from_repository_root_without_running_the_smoke(self):
+    def test_module_loads_by_file_path_without_running_the_smoke(self):
+        script = (ROOT / "scripts" / "run_live_post_deployment_smoke.py").resolve()
+        import_code = (
+            "import importlib.util, sys\n"
+            f"sys.path.insert(0, {str(script.parent)!r})\n"
+            "spec = importlib.util.spec_from_file_location(\n"
+            f"    'run_live_post_deployment_smoke', {str(script)!r}\n"
+            ")\n"
+            "assert spec is not None and spec.loader is not None\n"
+            "module = importlib.util.module_from_spec(spec)\n"
+            "sys.modules[spec.name] = module\n"
+            "spec.loader.exec_module(module)\n"
+            "print('IMPORT_OK')\n"
+        )
         completed = subprocess.run(
-            [
-                sys.executable,
-                "-c",
-                "import scripts.run_live_post_deployment_smoke; print('IMPORT_OK')",
-            ],
+            [sys.executable, "-c", import_code],
             cwd=ROOT,
             env=_environment_without_pythonpath(),
             text=True,
