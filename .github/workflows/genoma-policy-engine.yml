@@ -13,20 +13,74 @@ on:
       - 'scripts/validate_repo.py'
       - 'scripts/verify_supply_chain_lock.py'
       - 'scripts/materialize_ruleset.py'
+      - 'scripts/sealed_ruleset.py'
+      - 'scripts/ci_change_classifier.py'
       - 'scripts/run_live_post_deployment_smoke.py'
       - 'adapters/**'
+      - '.github/governance/**'
       - '.github/workflows/genoma-policy-engine.yml'
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Policy change classifier
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      policy_relevant: ${{ steps.scope.outputs.policy_relevant }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify policy-relevant pull request paths
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "policy_relevant=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed_paths="$RUNNER_TEMP/policy-changed-paths.zlist"
+          git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$changed_paths"
+          while IFS= read -r -d '' changed_path; do
+            case "$changed_path" in
+              scripts/ci_change_classifier.py|.github/workflows/genoma-policy-engine.yml)
+                echo "policy_relevant=true" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+            esac
+          done < "$changed_paths"
+          policy_relevant=$(python3 scripts/ci_change_classifier.py policy --changed "$changed_paths")
+          echo "policy_relevant=$policy_relevant" >> "$GITHUB_OUTPUT"
+
   policy:
+    needs: changes
+    if: >-
+      always() &&
+      (needs.changes.result != 'success' ||
+       needs.changes.outputs.policy_relevant == 'true')
     name: Canonical policy + 263-rule contract
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Require successful scope classification
+        if: needs.changes.result != 'success'
+        run: |
+          echo 'Policy scope classification failed or was cancelled.' >&2
+          exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -74,10 +128,20 @@ jobs:
           if-no-files-found: error
 
   rego:
+    needs: changes
+    if: >-
+      always() &&
+      (needs.changes.result != 'success' ||
+       needs.changes.outputs.policy_relevant == 'true')
     name: OPA/Rego parity
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Require successful scope classification
+        if: needs.changes.result != 'success'
+        run: |
+          echo 'Policy scope classification failed or was cancelled.' >&2
+          exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: open-policy-agent/setup-opa@b2b258e089860efaadaaf71bf6e3aecb4a3eeff1 # v2.4.0
         with:
@@ -96,10 +160,20 @@ jobs:
         run: docker run --rm -v "$PWD:/repo:ro" ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:b109bc5f8f76a38196a3e413704fc5b9e3c32360bce4e4b603bd6f45b3721dbb dir /repo --config /repo/.gitleaks.toml --no-banner --no-color --redact --verbose --exit-code 1
 
   container:
+    needs: changes
+    if: >-
+      always() &&
+      (needs.changes.result != 'success' ||
+       needs.changes.outputs.policy_relevant == 'true')
     name: Real Docker + canonical read-only mount
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Require successful scope classification
+        if: needs.changes.result != 'success'
+        run: |
+          echo 'Policy scope classification failed or was cancelled.' >&2
+          exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: docker build --file policy_engine/Dockerfile --tag genoma-policy-engine:${{ github.sha }} .
       - name: Materialize exact canonical ruleset

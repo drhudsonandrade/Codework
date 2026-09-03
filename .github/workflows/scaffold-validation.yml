@@ -6,14 +6,83 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Scaffold change classifier
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      validation_required: ${{ steps.scope.outputs.validation_required }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify Markdown-only changes
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request)
+              BASE_SHA="$PR_BASE_SHA"
+              HEAD_SHA="$PR_HEAD_SHA"
+              ;;
+            push)
+              BASE_SHA="$PUSH_BASE_SHA"
+              HEAD_SHA="$CURRENT_SHA"
+              ;;
+            *)
+              echo "validation_required=true" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+          changed_paths="$RUNNER_TEMP/scaffold-changed-paths.zlist"
+          deleted_paths="$RUNNER_TEMP/scaffold-deleted-paths.zlist"
+          if [ "$EVENT_NAME" = "push" ]; then
+            bash scripts/ci_changed_paths.sh "$BASE_SHA" "$HEAD_SHA" "$changed_paths" "$deleted_paths"
+          else
+            git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$changed_paths"
+            git diff --no-renames --diff-filter=D --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$deleted_paths"
+            while IFS= read -r -d '' changed_path; do
+              case "$changed_path" in
+                scripts/ci_changed_paths.sh|scripts/ci_change_classifier.py|.github/workflows/scaffold-validation.yml)
+                  echo "validation_required=true" >> "$GITHUB_OUTPUT"
+                  exit 0
+                  ;;
+              esac
+            done < "$changed_paths"
+          fi
+          validation_required=$(python3 scripts/ci_change_classifier.py markdown --changed "$changed_paths" --deleted "$deleted_paths")
+          echo "validation_required=$validation_required" >> "$GITHUB_OUTPUT"
+
   static:
+    needs: changes
+    if: >-
+      always() &&
+      (needs.changes.result != 'success' ||
+       needs.changes.outputs.validation_required == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Require successful scope classification
+        if: needs.changes.result != 'success'
+        run: |
+          echo 'Scaffold scope classification failed or was cancelled.' >&2
+          exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -36,11 +105,13 @@ jobs:
         run: python3 scripts/validate_repo.py
       - name: Validate shell and Python
         run: |
-          bash -n scripts/*.sh tests/test_wgs_align_or_stage.sh
+          bash -n scripts/*.sh tests/test_wgs_align_or_stage.sh tests/test_ci_changed_paths.sh
           python3 -m compileall -q policy_engine/genoma_policy scripts evidence_adapters
           python3 -m unittest discover -s tests -v
       - name: Exercise WGS alignment trust boundary
         run: bash tests/test_wgs_align_or_stage.sh
+      - name: Exercise CI changed-path push contract
+        run: bash tests/test_ci_changed_paths.sh
       - name: Test Codacy comment behavior
         run: node --test tests/test_codacy_pr_comment.js
       - name: Build and test MCP
@@ -50,9 +121,19 @@ jobs:
           npm test
 
   container-canary:
+    needs: changes
+    if: >-
+      always() &&
+      (needs.changes.result != 'success' ||
+       needs.changes.outputs.validation_required == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      - name: Require successful scope classification
+        if: needs.changes.result != 'success'
+        run: |
+          echo 'Scaffold scope classification failed or was cancelled.' >&2
+          exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build pinned tool image
         run: docker build --tag codework-genome:${{ github.sha }} .

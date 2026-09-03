@@ -753,7 +753,7 @@ def validate(root: Path) -> list[str]:
             errors.append("externally approved GRCh38 lock must not be committed")
         if path.suffix == ".json":
             try:
-                json.loads(path.read_text())
+                json.loads(path.read_text(encoding="utf-8"))
             except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                 errors.append(f"invalid JSON: {relative}: {exc}")
     return errors
