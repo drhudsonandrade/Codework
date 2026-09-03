@@ -4,8 +4,6 @@ on:
   pull_request:
   push:
     branches: [main]
-    paths-ignore:
-      - '**/*.md'
   workflow_dispatch:
 
 concurrency:
@@ -27,23 +25,41 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Classify Markdown-only pull requests
+      - name: Classify Markdown-only changes
         id: scope
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          if [ "$EVENT_NAME" != "pull_request" ]; then
-            echo "validation_required=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          case "$EVENT_NAME" in
+            pull_request)
+              BASE_SHA="$PR_BASE_SHA"
+              HEAD_SHA="$PR_HEAD_SHA"
+              ;;
+            push)
+              BASE_SHA="$PUSH_BASE_SHA"
+              HEAD_SHA="$CURRENT_SHA"
+              ;;
+            *)
+              echo "validation_required=true" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
           changed_paths="$RUNNER_TEMP/scaffold-changed-paths.zlist"
           deleted_paths="$RUNNER_TEMP/scaffold-deleted-paths.zlist"
-          git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$changed_paths"
-          git diff --no-renames --diff-filter=D --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$deleted_paths"
+          NULL_SHA=0000000000000000000000000000000000000000
+          if [ "$BASE_SHA" = "$NULL_SHA" ]; then
+            git ls-tree -r --name-only -z "$HEAD_SHA" -- > "$changed_paths"
+            : > "$deleted_paths"
+          else
+            git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$changed_paths"
+            git diff --no-renames --diff-filter=D --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$deleted_paths"
+          fi
           while IFS= read -r -d '' changed_path; do
             case "$changed_path" in
               scripts/ci_change_classifier.py|.github/workflows/scaffold-validation.yml)

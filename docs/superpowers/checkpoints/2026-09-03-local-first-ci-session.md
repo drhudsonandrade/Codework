@@ -50,7 +50,7 @@ Implemented optimization direction:
 
 - use PR-number concurrency groups and unique `github.run_id` groups for non-PR runs;
 - narrow Fallow to explicit JavaScript/TypeScript and required configuration surfaces;
-- keep potentially protected policy/scaffold PR workflows unfiltered and make job-level classifiers fail closed;
+- keep potentially protected policy PR and scaffold PR/main-push workflows unfiltered and make job-level classifiers fail closed;
 - make policy rename-aware and include direct ruleset/classifier dependencies;
 - skip audit/scaffold heavy jobs only for proven-safe Markdown additions/modifications with no deletions;
 - preserve production witness, production ceremony, reference foundry, canonical names, hashes, and fail-closed behavior.

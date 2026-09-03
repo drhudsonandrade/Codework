@@ -83,7 +83,7 @@ Keep the workflow trigger broad. A lightweight fail-closed job classifies change
 
 ### Scaffold validation
 
-Keep `pull_request` unfiltered at workflow level and preserve the existing `static` and `container-canary` job names. A lightweight fail-closed classifier may skip those heavy jobs only for additions/modifications consisting exclusively of Markdown; deletions, renames from non-Markdown paths, non-Markdown changes, and classifier failures require validation.
+Keep both `pull_request` and `push` to `main` unfiltered at workflow level and preserve the existing `static` and `container-canary` job names. A lightweight fail-closed classifier may skip those heavy jobs only for additions/modifications consisting exclusively of Markdown; deletions, renames from non-Markdown paths, non-Markdown changes, and classifier failures require validation. Null push bases classify the full HEAD tree.
 
 The Docker canary remains the independent runtime check for code changes in this optimization. Linux/container execution remains authoritative on GitHub when Docker is unavailable on the NOAR host.
 
@@ -195,7 +195,7 @@ Therefore:
 - On unrelated PRs, skip the policy, Rego, and policy-container jobs at job level while preserving their names; classifier errors run those jobs and fail closed.
 - Keep `Gitleaks secret scan` active on every PR so secret scanning is not weakened.
 - Preserve the targeted policy-engine `push.paths` filter for `main` pushes and include direct ruleset/classifier dependencies.
-- `scaffold-validation.yml` remains unfiltered at `pull_request` workflow level.
+- `scaffold-validation.yml` remains unfiltered at both `pull_request` and `push`-to-`main` workflow level.
 - Use the shared deletion/rename-aware Markdown classifier for `scaffold-validation.yml`.
 - Only safe Markdown additions/modifications may skip `static` and `container-canary`; deletions, non-Markdown rename sources, other non-Markdown changes, and classifier failures require those jobs.
 - Fallow may use workflow-level explicit path filters because it does not provide the protected baseline check names.

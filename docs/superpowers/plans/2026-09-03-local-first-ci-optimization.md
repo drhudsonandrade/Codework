@@ -159,7 +159,7 @@ Add `needs: changes` and `always()` to `policy`, `rego`, and `container`; execut
 
 - [ ] **Step 3: Add the scaffold classifier job**
 
-For pull requests, have the workflow generate checked rename-aware changed/deleted NUL path lists, force validation when the classifier or scaffold workflow changes, then pass those files to `ci_change_classifier.py markdown`. Set `validation_required=false` only for Markdown additions/modifications with no deletions. For push/manual events, set it to `true`. Preserve the PR trigger without workflow-level path filters.
+For pull requests and `main` pushes, have the workflow generate checked rename-aware changed/deleted NUL path lists, force validation when the classifier or scaffold workflow changes, then pass those files to `ci_change_classifier.py markdown`. Set `validation_required=false` only for Markdown additions/modifications with no deletions. A null push base is treated as the full HEAD tree with no deletions; manual dispatch forces validation. Preserve both PR and `main` push triggers without workflow-level path filters.
 
 - [ ] **Step 4: Gate scaffold heavy jobs fail closed**
 

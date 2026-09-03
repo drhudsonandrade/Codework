@@ -1,3 +1,4 @@
+import ast
 import importlib.util
 import unittest
 from pathlib import Path
@@ -40,6 +41,20 @@ def _read(name: str) -> str:
     return (WORKFLOWS / name).read_text(encoding="utf-8")
 
 
+def _subprocess_references(source: str) -> list[str]:
+    findings: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            findings.extend(alias.name for alias in node.names if alias.name == "subprocess" or alias.name.startswith("subprocess."))
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            if module == "subprocess" or module.startswith("subprocess."):
+                findings.append(module)
+        elif isinstance(node, ast.Name) and node.id == "subprocess":
+            findings.append(node.id)
+    return findings
+
+
 def _job_block(workflow: str, job_name: str) -> str:
     marker = f"  {job_name}:\n"
     if marker not in workflow:
@@ -80,8 +95,8 @@ class CIOptimizationContractTest(unittest.TestCase):
 
     def test_classifier_is_process_free_and_path_list_driven(self):
         source = CLASSIFIER.read_text(encoding="utf-8")
-        self.assertNotIn("import subprocess", source)
-        self.assertNotIn("subprocess.", source)
+        self.assertEqual([], _subprocess_references(source))
+        self.assertNotEqual([], _subprocess_references("from subprocess import run\nrun([])\n"))
         self.assertIn('parser.add_argument("--changed"', source)
         self.assertIn('parser.add_argument("--deleted"', source)
 
@@ -176,7 +191,9 @@ class CIOptimizationContractTest(unittest.TestCase):
         workflow = _read("scaffold-validation.yml")
         header = workflow.split("permissions:", 1)[0]
         pull_request = header.split("  pull_request:\n", 1)[1].split("  push:\n", 1)[0]
+        push = header.split("  push:\n", 1)[1].split("  workflow_dispatch:\n", 1)[0]
         self.assertNotIn("paths:", pull_request)
+        self.assertNotIn("paths-ignore:", push)
         changes = _job_block(workflow, "changes")
         self.assertIn("validation_required:", changes)
         self.assertIn('changed_paths="$RUNNER_TEMP/scaffold-changed-paths.zlist"', changes)
@@ -185,6 +202,9 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertIn('git diff --no-renames --diff-filter=D --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$deleted_paths"', changes)
         self.assertIn('scripts/ci_change_classifier.py markdown --changed "$changed_paths" --deleted "$deleted_paths"', changes)
         self.assertIn('scripts/ci_change_classifier.py|.github/workflows/scaffold-validation.yml', changes)
+        self.assertIn('PUSH_BASE_SHA: ${{ github.event.before }}', changes)
+        self.assertIn('CURRENT_SHA: ${{ github.sha }}', changes)
+        self.assertIn('git ls-tree -r --name-only -z "$HEAD_SHA" -- > "$changed_paths"', changes)
 
         for job_name in ("static", "container-canary"):
             job = _job_block(workflow, job_name)
