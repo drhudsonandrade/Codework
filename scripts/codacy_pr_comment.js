@@ -621,11 +621,17 @@ function includeCreatedComment(comments, created) {
 }
 
 async function deleteReportComment({ github, owner, repo, comment_id }) {
-  await github.rest.issues.deleteComment({
-    owner,
-    repo,
-    comment_id,
-  });
+  try {
+    await github.rest.issues.deleteComment({
+      owner,
+      repo,
+      comment_id,
+    });
+  } catch (error) {
+    if (error?.status !== 404) {
+      throw error;
+    }
+  }
 }
 
 async function pruneOlderComments({ github, owner, repo, comments, winner }) {
