@@ -75,7 +75,7 @@ Use explicit PR path filters for TypeScript/JavaScript sources plus the MCP pack
 
 ### Policy engine
 
-Keep `pull_request` unfiltered at workflow level so potentially required status checks remain present. A lightweight fail-closed classifier evaluates both sides of renames (`git diff --no-renames`) and invokes the shared `scripts/ci_change_classifier.py`; policy, Rego, and policy-container jobs run when policy-relevant paths are present or when classification itself fails. `Gitleaks secret scan` remains unconditional. Preserve the existing targeted `push.paths`, including direct classifier and ruleset-verification dependencies.
+Keep `pull_request` unfiltered at workflow level so potentially required status checks remain present. The shared fail-closed `scripts/ci_change_classifier.py` owns rename-aware `git diff --no-renames` execution from exact base/head SHAs; policy, Rego, and policy-container jobs run when policy-relevant paths are present or when classification itself fails. `Gitleaks secret scan` remains unconditional. Preserve the targeted `push.paths`, including direct classifier/ruleset dependencies and `.github/governance/**`.
 
 ### Four-plane audit
 
@@ -191,7 +191,7 @@ For workflows that provide status-check names which may be required by repositor
 Therefore:
 
 - `genoma-policy-engine.yml` remains unfiltered at `pull_request` workflow level.
-- Add a lightweight PR change-classifier job to `genoma-policy-engine.yml`, backed by `scripts/ci_change_classifier.py` and rename-aware `git diff --no-renames` input.
+- Add a lightweight PR change-classifier job to `genoma-policy-engine.yml`; it passes exact base/head SHAs to `scripts/ci_change_classifier.py`, which owns checked rename-aware `git diff --no-renames` execution and treats `.github/governance/**` as policy relevant.
 - On unrelated PRs, skip the policy, Rego, and policy-container jobs at job level while preserving their names; classifier errors run those jobs and fail closed.
 - Keep `Gitleaks secret scan` active on every PR so secret scanning is not weakened.
 - Preserve the targeted policy-engine `push.paths` filter for `main` pushes and include direct ruleset/classifier dependencies.

@@ -40,11 +40,7 @@ jobs:
             echo "validation_required=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          changed_paths="$RUNNER_TEMP/scaffold-changed-paths.zlist"
-          deleted_paths="$RUNNER_TEMP/scaffold-deleted-paths.zlist"
-          git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$changed_paths"
-          git diff --no-renames --diff-filter=D --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$deleted_paths"
-          validation_required=$(python3 scripts/ci_change_classifier.py markdown --changed "$changed_paths" --deleted "$deleted_paths")
+          validation_required=$(python3 scripts/ci_change_classifier.py markdown --base "$BASE_SHA" --head "$HEAD_SHA")
           echo "validation_required=$validation_required" >> "$GITHUB_OUTPUT"
 
   static:

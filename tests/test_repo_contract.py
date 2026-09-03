@@ -39,11 +39,13 @@ class RepoContractTest(unittest.TestCase):
             original_read_text = Path.read_text
 
             def guarded_read_text(candidate, encoding=None, errors=None) -> str:
-                if candidate == payload and encoding is None:
-                    raise UnicodeDecodeError("charmap", b"\x8d", 0, 1, "test default encoding")
+                if candidate == payload and encoding != "utf-8":
+                    raise UnicodeDecodeError("charmap", b"\x8d", 0, 1, "test non-UTF-8 encoding")
                 return original_read_text(candidate, encoding=encoding, errors=errors)
 
             with patch.object(Path, "read_text", guarded_read_text):
+                with self.assertRaises(UnicodeDecodeError):
+                    payload.read_text(encoding="latin-1")
                 errors = validator.validate(root)
         self.assertFalse(any("invalid JSON: utf8.json" in error for error in errors), errors)
 

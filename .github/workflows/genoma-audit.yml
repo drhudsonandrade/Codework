@@ -50,11 +50,7 @@ jobs:
               exit 0
               ;;
           esac
-          changed_paths="$RUNNER_TEMP/audit-changed-paths.zlist"
-          deleted_paths="$RUNNER_TEMP/audit-deleted-paths.zlist"
-          git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$changed_paths"
-          git diff --no-renames --diff-filter=D --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$deleted_paths"
-          audit_required=$(python3 scripts/ci_change_classifier.py markdown --changed "$changed_paths" --deleted "$deleted_paths")
+          audit_required=$(python3 scripts/ci_change_classifier.py markdown --base "$BASE_SHA" --head "$HEAD_SHA")
           echo "audit_required=$audit_required" >> "$GITHUB_OUTPUT"
 
   audit:

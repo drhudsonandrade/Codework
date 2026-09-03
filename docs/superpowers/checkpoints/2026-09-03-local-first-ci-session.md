@@ -76,3 +76,17 @@ The review-hardened code was validated at exact SHA `595328650830206f3d6d6f5e0a2
 That evidence records successful repository-contract and supply-chain commands, `35` focused Python tests with zero failures/errors, `18` Node regression tests with zero failures, the MCP TypeScript build, Bash syntax validation, `git diff --check`, and a clean worktree. Its external log is integrity-pinned by SHA-256 `0E882329AEF91A0B9C3EFA247C3330C19E617445543FE7AA652A2DD197FB4511`.
 
 The evidence deliberately does not claim a complete native-Windows suite pass. Docker is not installed on NOAR, and Linux/container checks remain authoritative in GitHub Actions for the final pushed SHA.
+
+## Emergency restart checkpoint — 2026-09-03 16:24 BRT
+
+Machine restart expected within ~15 minutes. This section is a continuity checkpoint, not a final validation claim.
+
+- Branch: `ci/local-first-actions-optimization-impl`.
+- Remote PR: `#36`.
+- Last remote/local HEAD before this checkpoint: `b1ca539c95e032709b3567ba95db31c4ac18364e`.
+- Current uncommitted review-fix files: `genoma-audit.yml`, `genoma-policy-engine.yml`, `scaffold-validation.yml`, implementation plan/spec, `scripts/ci_change_classifier.py`, `tests/test_ci_optimization_contract.py`, and `tests/test_repo_contract.py`.
+- Implemented locally after `b1ca539`: `.github/governance/**` is policy-relevant; shared classifier owns checked `git diff --no-renames`; null push base SHA is handled with `git ls-tree` of HEAD and no deletions; UTF-8 regression rejects non-UTF-8 encodings; integration coverage uses a temporary real Git repository for rename/deletion/invalid-SHA cases.
+- Latest focused verification after the null-SHA/UTF-8 edits: `python -m unittest tests.test_ci_optimization_contract.CIOptimizationContractTest.test_classifier_executes_git_diff_and_propagates_failures tests.test_repo_contract.RepoContractTest.test_json_scan_reads_utf8_explicitly -v` → 2 tests passed.
+- The earlier 36-test focused block passed before the latest null-SHA/UTF-8 edits and must be rerun after restart before any completion claim.
+- Still pending from the latest CodeRabbit review: update the versioned local-validation evidence to replace mutable `origin/main` with the exact base SHA used for that historical verification, then rerun the complete focused pre-push gate on the final SHA.
+- Do not merge automatically. Final human approval remains required.

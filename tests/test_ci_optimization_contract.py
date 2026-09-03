@@ -1,6 +1,10 @@
 import importlib.util
+import shutil
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
+from types import ModuleType
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -8,7 +12,7 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 CLASSIFIER = ROOT / "scripts" / "ci_change_classifier.py"
 
 
-def _load_classifier():
+def _load_classifier() -> ModuleType:
     if not CLASSIFIER.is_file():
         raise AssertionError("CI change classifier is missing")
     spec = importlib.util.spec_from_file_location("ci_change_classifier", CLASSIFIER)
@@ -62,6 +66,7 @@ class CIOptimizationContractTest(unittest.TestCase):
         classifier = _load_classifier()
         self.assertTrue(classifier.policy_relevant(["policy_engine/policy/rego/main.rego"]))
         self.assertTrue(classifier.policy_relevant(["scripts/sealed_ruleset.py"]))
+        self.assertTrue(classifier.policy_relevant([".github/governance/main-ruleset.json"]))
         self.assertTrue(
             classifier.policy_relevant(["notes.md", "policy_engine/policy/rego/main.rego"])
         )
@@ -75,6 +80,46 @@ class CIOptimizationContractTest(unittest.TestCase):
         )
         self.assertTrue(classifier.validation_required(["notes.md", "src/code.py"], []))
         self.assertTrue(classifier.validation_required(["src/code.py", "notes.md"], ["src/code.py"]))
+
+    def test_classifier_executes_git_diff_and_propagates_failures(self):
+        classifier = _load_classifier()
+        git = shutil.which("git")
+        if git is None:
+            self.skipTest("git executable is required for classifier integration coverage")
+
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            subprocess.check_call([git, "init", "-q"], cwd=repo)
+            subprocess.check_call([git, "config", "user.email", "ci@example.invalid"], cwd=repo)
+            subprocess.check_call([git, "config", "user.name", "CI Contract"], cwd=repo)
+            (repo / "policy_engine").mkdir()
+            (repo / "docs").mkdir()
+            (repo / "policy_engine/policy.rego").write_text("package fixture\n", encoding="utf-8")
+            (repo / "docs/required.md").write_text("# required\n", encoding="utf-8")
+            subprocess.check_call([git, "add", "."], cwd=repo)
+            subprocess.check_call([git, "commit", "-q", "-m", "base"], cwd=repo)
+            base = subprocess.check_output([git, "rev-parse", "HEAD"], cwd=repo, text=True).strip()
+            null_base = "0" * 40
+            self.assertTrue(classifier.classify_git_diff("policy", null_base, base, repo))
+            self.assertTrue(classifier.classify_git_diff("markdown", null_base, base, repo))
+
+            subprocess.check_call([git, "mv", "policy_engine/policy.rego", "notes.md"], cwd=repo)
+            (repo / "docs/required.md").unlink()
+            subprocess.check_call([git, "add", "-A"], cwd=repo)
+            subprocess.check_call([git, "commit", "-q", "-m", "rename and delete"], cwd=repo)
+            changed = subprocess.check_output([git, "rev-parse", "HEAD"], cwd=repo, text=True).strip()
+            self.assertTrue(classifier.classify_git_diff("policy", base, changed, repo))
+            self.assertTrue(classifier.classify_git_diff("markdown", base, changed, repo))
+
+            (repo / "notes.md").write_text("package fixture\n# docs only\n", encoding="utf-8")
+            subprocess.check_call([git, "add", "notes.md"], cwd=repo)
+            subprocess.check_call([git, "commit", "-q", "-m", "docs only"], cwd=repo)
+            docs_only = subprocess.check_output([git, "rev-parse", "HEAD"], cwd=repo, text=True).strip()
+            self.assertFalse(classifier.classify_git_diff("policy", changed, docs_only, repo))
+            self.assertFalse(classifier.classify_git_diff("markdown", changed, docs_only, repo))
+
+            with self.assertRaises(subprocess.CalledProcessError):
+                classifier.classify_git_diff("policy", "not-a-valid-sha", docs_only, repo)
 
     def test_fallow_runs_only_for_javascript_typescript_surfaces(self):
         workflow = _read("fallow.yml")
@@ -106,9 +151,8 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertNotIn("paths-ignore:", push)
         changes = _job_block(workflow, "changes")
         self.assertIn("audit_required:", changes)
-        self.assertIn("git diff --no-renames --name-only -z", changes)
-        self.assertIn("git diff --no-renames --diff-filter=D --name-only -z", changes)
         self.assertIn("scripts/ci_change_classifier.py markdown", changes)
+        self.assertIn('--base "$BASE_SHA" --head "$HEAD_SHA"', changes)
         audit = _job_block(workflow, "audit")
         self.assertIn("needs: changes", audit)
         self.assertIn("needs.changes.result != 'success'", audit)
@@ -122,11 +166,12 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertNotIn("paths:", pull_request)
         changes = _job_block(workflow, "changes")
         self.assertIn("policy_relevant:", changes)
-        self.assertIn("git diff --no-renames --name-only -z", changes)
         self.assertIn("scripts/ci_change_classifier.py policy", changes)
+        self.assertIn('--base "$BASE_SHA" --head "$HEAD_SHA"', changes)
         push = header.split("  push:\n", 1)[1].split("  workflow_dispatch:\n", 1)[0]
         self.assertIn("'scripts/sealed_ruleset.py'", push)
         self.assertIn("'scripts/ci_change_classifier.py'", push)
+        self.assertIn("'.github/governance/**'", push)
 
         for job_name in ("policy", "rego", "container"):
             job = _job_block(workflow, job_name)
@@ -147,17 +192,13 @@ class CIOptimizationContractTest(unittest.TestCase):
         ):
             self.assertIn(f"name: {required_name}", workflow)
 
-    def test_required_check_classifiers_propagate_git_diff_failure_and_renames(self):
+    def test_required_check_classifiers_delegate_git_diff_to_shared_classifier(self):
         for workflow_name in ("genoma-policy-engine.yml", "scaffold-validation.yml"):
             with self.subTest(workflow=workflow_name):
                 changes = _job_block(_read(workflow_name), "changes")
-                self.assertNotIn("done < <(git diff", changes)
-                self.assertIn('changed_paths="$RUNNER_TEMP/', changes)
-                self.assertIn(
-                    'git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$changed_paths"',
-                    changes,
-                )
+                self.assertNotIn("git diff", changes)
                 self.assertIn("scripts/ci_change_classifier.py", changes)
+                self.assertIn('--base "$BASE_SHA" --head "$HEAD_SHA"', changes)
 
     def test_scaffold_required_checks_use_job_level_markdown_gate(self):
         workflow = _read("scaffold-validation.yml")
@@ -166,9 +207,8 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertNotIn("paths:", pull_request)
         changes = _job_block(workflow, "changes")
         self.assertIn("validation_required:", changes)
-        self.assertIn("git diff --no-renames --name-only -z", changes)
-        self.assertIn("git diff --no-renames --diff-filter=D --name-only -z", changes)
         self.assertIn("scripts/ci_change_classifier.py markdown", changes)
+        self.assertIn('--base "$BASE_SHA" --head "$HEAD_SHA"', changes)
 
         for job_name in ("static", "container-canary"):
             job = _job_block(workflow, job_name)
