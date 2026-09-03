@@ -22,7 +22,7 @@
 Executed locally on NOAR:
 
 - `python -m unittest tests.test_workflow_contracts tests.test_codacy_workflow_security -v`
-- Result: **22 tests, PASS**.
+- Historical pre-implementation result recorded before the SHA-bound evidence workflow; it is not used as final merge evidence.
 - `python scripts/validate_repo.py`
 - Result: **FAIL on Windows only during JSON decoding**.
 
@@ -33,13 +33,13 @@ Root cause confirmed:
 - The same file read with `encoding='utf-8'` parses successfully with `json.loads()`.
 - Reproduction confirmed with `config/case_dossier.example.json`.
 
-No workflow production code has been changed yet.
+At that baseline stage, no workflow production code had been changed yet.
 
-## Workflow optimization findings
+## Original pre-implementation workflow findings
 
-Targeted already: NGS runtime gate, SNP-array, visual QA, PR30 regressions.
+At the time of the baseline capture, NGS runtime gate, SNP-array, visual QA, and PR30 regressions were already targeted.
 
-Broad PR execution still present in:
+Broad PR execution at that stage was present in:
 
 - `fallow.yml`
 - `genoma-audit.yml`
@@ -71,40 +71,8 @@ No auto-merge. Manual human approval remains the final merge gate.
 
 Current implementation branch: `ci/local-first-actions-optimization-impl`.
 
-Implemented and locally committed:
+The review-hardened code was validated at exact SHA `595328650830206f3d6d6f5e0a2ea5fed6665ece`. Reproducible command lines, exit codes, test totals, scope limitations, the external log path, and the log SHA-256 are recorded in `docs/superpowers/evidence/2026-09-03-pr36-local-validation-5953286.md`.
 
-- deterministic UTF-8 JSON scanning in `scripts/validate_repo.py`, with RED/GREEN regression coverage;
-- concurrency cancellation on eight PR validation workflows;
-- narrow Fallow PR path filtering;
-- Markdown-only skipping for the non-required four-plane audit;
-- fail-closed job-level relevance classifier for policy checks, while Gitleaks remains unconditional;
-- fail-closed Markdown-only classifier for `static` and `container-canary` without suppressing their check names;
-- structural CI regression suite protecting triggers, job names, and scope semantics.
+That evidence records successful repository-contract and supply-chain commands, `35` focused Python tests with zero failures/errors, `18` Node regression tests with zero failures, the MCP TypeScript build, Bash syntax validation, `git diff --check`, and a clean worktree. Its external log is integrity-pinned by SHA-256 `0E882329AEF91A0B9C3EFA247C3330C19E617445543FE7AA652A2DD197FB4511`.
 
-Executed results:
-
-- `python scripts/validate_repo.py`: PASS.
-- `python scripts/verify_supply_chain_lock.py`: PASS.
-- workflow/repository focused Python tests: 32 tests, PASS.
-- workflow structural block: 27 tests, PASS.
-- `node --test tests/test_codacy_pr_comment.js`: 18 tests, PASS.
-- Git for Windows Bash syntax check: PASS.
-- `git diff --check main...HEAD`: PASS.
-
-Full-suite comparison on the same NOAR Windows environment, same isolated venv, and `PYTHONUTF8=1`:
-
-- `main`: 886 tests; 19 failures; 35 errors; 3 skipped.
-- implementation branch: 892 tests; 19 failures; 35 errors; 3 skipped.
-- Net: six new tests execute and pass; the pre-existing failure/error counts do not increase.
-
-The pinned reporting dependencies were installed in the external local environment `C:\Users\noaruser\Documents\Codework-local-venv`, not inside the repository. This reduced raw environment errors from 70 to 35.
-
-MCP local evidence:
-
-- `npm ci --ignore-scripts`: completed; 0 vulnerabilities reported.
-- TypeScript build: PASS.
-- MCP Node suite on Windows: 35 pass, 9 fail, 1 skipped. The failures are POSIX/Linux assumptions (for example `/srv/...` path expectations, POSIX file modes, and Unix process spawning). MCP source code was not changed in this CI optimization.
-
-Local Docker: NÃO DISPONÍVEL (`docker` executable not installed). Therefore Linux/container checks remain authoritative in GitHub Actions for the final pushed SHA, per the approved architecture.
-
-No claim is made that the complete Windows test suite passes. The evidence supports that this branch adds no new full-suite failure/error count relative to the local `main` baseline and that all tests directly added/affected by this CI optimization pass locally.
+The evidence deliberately does not claim a complete native-Windows suite pass. Docker is not installed on NOAR, and Linux/container checks remain authoritative in GitHub Actions for the final pushed SHA.
