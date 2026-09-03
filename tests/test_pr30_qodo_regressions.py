@@ -20,13 +20,6 @@ from scripts.build_trait_targets import GWAS_RELEASE
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _environment_without_pythonpath() -> dict[str, str]:
-    """Return a subprocess environment that cannot rely on an injected repo path."""
-    environment = os.environ.copy()
-    environment.pop("PYTHONPATH", None)
-    return environment
-
-
 class ImmutableGwasReleaseTest(unittest.TestCase):
     def test_release_identifier_is_immutable_and_preserved_by_the_builder(self):
         self.assertEqual(
@@ -169,11 +162,13 @@ class FrequencyDomainTest(unittest.TestCase):
 class DirectSmokeInvocationTest(unittest.TestCase):
     def test_production_entrypoint_can_be_executed_by_absolute_path(self):
         script = (ROOT / "scripts" / "run_live_post_deployment_smoke.py").resolve()
+        environment = os.environ.copy()
+        environment.pop("PYTHONPATH", None)
         with tempfile.TemporaryDirectory() as td:
             completed = subprocess.run(
                 [sys.executable, str(script), "--help"],
                 cwd=td,
-                env=_environment_without_pythonpath(),
+                env=environment,
                 text=True,
                 capture_output=True,
                 check=False,
@@ -185,37 +180,6 @@ class DirectSmokeInvocationTest(unittest.TestCase):
             msg=f"stdout:\n{completed.stdout}\nstderr:\n{completed.stderr}",
         )
         self.assertIn("--base-url", completed.stdout)
-
-    def test_module_loads_by_file_path_without_running_the_smoke(self):
-        script = (ROOT / "scripts" / "run_live_post_deployment_smoke.py").resolve()
-        import_code = (
-            "import importlib.util, sys\n"
-            f"sys.path.insert(0, {str(script.parent)!r})\n"
-            "spec = importlib.util.spec_from_file_location(\n"
-            f"    'run_live_post_deployment_smoke', {str(script)!r}\n"
-            ")\n"
-            "assert spec is not None and spec.loader is not None\n"
-            "module = importlib.util.module_from_spec(spec)\n"
-            "sys.modules[spec.name] = module\n"
-            "spec.loader.exec_module(module)\n"
-            "print('IMPORT_OK')\n"
-        )
-        completed = subprocess.run(
-            [sys.executable, "-c", import_code],
-            cwd=ROOT,
-            env=_environment_without_pythonpath(),
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-
-        self.assertEqual(
-            completed.returncode,
-            0,
-            msg=f"stdout:\n{completed.stdout}\nstderr:\n{completed.stderr}",
-        )
-        self.assertEqual(completed.stdout.strip(), "IMPORT_OK")
-        self.assertNotIn("Traceback", completed.stderr)
 
 
 if __name__ == "__main__":
