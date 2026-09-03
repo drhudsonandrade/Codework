@@ -129,9 +129,7 @@ class EditorialRendererTest(unittest.TestCase):
         once = prepare_editorial_render(
             rendered, programmatic_final_authorization="unit-test visual QA"
         )
-        twice = prepare_editorial_render(
-            once, programmatic_final_authorization="unit-test visual QA"
-        )
+        twice = prepare_editorial_render(once)
         self.assertEqual(
             twice["data"]["execution_manifest"]["PROGRAMMATIC_FINAL_AUTHORIZATION"],
             "unit-test visual QA",

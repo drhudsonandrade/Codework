@@ -234,11 +234,39 @@ class SectionCurationValidationTest(unittest.TestCase):
         """Direct callers cannot bypass curation validation and trigger a KeyError."""
         payload = self._payload()
         payload["sections"] = {"1": {"evidence_refs": []}}
-        with self.assertRaisesRegex(CurationError, "missing required curation fields"):
+        with self.assertRaisesRegex(CurationError, "invalid curation"):
             build_attestations(
                 payload,
                 artifact_sha256={},
                 input_sha256="a" * 64,
+                run_id="RUN-1",
+                created_at="2026-08-24T00:00:00Z",
+            )
+
+    def test_attestation_builder_refuses_required_fields_with_invalid_types(self):
+        """Non-empty containers and numbers are not valid attestation fields."""
+        payload = self._payload()
+        payload["sections"] = {
+            "1": {
+                "applicability": "APPLICABLE",
+                "decision": "SATISFIED",
+                "status": [],
+                "justification": "fixture",
+                "rule_sha256": "a" * 64,
+                "evidence_refs": ["evidence"],
+            }
+        }
+        with (
+            patch(
+                "reporting.section_attestations._canonical_section_hashes",
+                return_value={1: "a" * 64},
+            ),
+            self.assertRaisesRegex(CurationError, "status.*invalid"),
+        ):
+            build_attestations(
+                payload,
+                artifact_sha256={"evidence": "b" * 64},
+                input_sha256="c" * 64,
                 run_id="RUN-1",
                 created_at="2026-08-24T00:00:00Z",
             )

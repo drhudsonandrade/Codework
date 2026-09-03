@@ -649,7 +649,6 @@ def inspect_array(
     attestation bound to this exact input SHA-256; plain prose never unlocks the gate.
     """
     path = path.resolve()
-    normalized_strand = str(strand or "").strip().lower()
     input_sha = sha256_file(path)
     input_size = path.stat().st_size
 
@@ -663,6 +662,7 @@ def inspect_array(
             build = metadata_build
         if strand is None and metadata.get("strand"):
             strand = metadata.get("strand")
+        normalized_strand = str(strand or "").strip().lower()
         if build_evidence is None and metadata.get("reference") and metadata_build:
             build_evidence = _metadata_attestation(
                 "reference_build",

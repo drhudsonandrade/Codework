@@ -258,6 +258,10 @@ def build_attestations(
     produced. A cited id with no digest is refused rather than dropped: an attestation whose
     evidence does not exist in the run is the shape of the defect this gate is for.
     """
+    problems = validate_curation(curation)
+    if problems:
+        raise CurationError("invalid curation: " + "; ".join(problems))
+
     stamp = created_at or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     attestations: list[dict[str, Any]] = []
     for key, entry in sorted(curation.get("sections", {}).items(), key=lambda kv: int(kv[0])):

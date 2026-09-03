@@ -16,7 +16,7 @@ from unittest import mock
 from array_pipeline.allele_discrimination import _numeric
 from array_pipeline.clinical_findings import _clinvar_for
 from array_pipeline.pharmacogenomics import build_pharmacogenomic_passport
-from array_pipeline.qc import _orientation
+from array_pipeline.qc import _orientation, inspect_array
 from scripts.build_trait_targets import GWAS_RELEASE
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -122,6 +122,27 @@ class ClinvarAlleleIdentityTest(unittest.TestCase):
 
 
 class StrandVerificationBoundaryTest(unittest.TestCase):
+    def test_metadata_strand_is_normalized_after_header_parsing(self):
+        with tempfile.TemporaryDirectory() as td:
+            array = Path(td) / "array.csv"
+            array.write_text(
+                "##reference=GRCh38\n"
+                "# forward strand\n"
+                "RSID,CHROMOSOME,POSITION,CONSENSUS_RESULT,STATUS,"
+                "GENERA_RESULT,MYHERITAGE_RESULT,SOURCES\n"
+                "rs1,1,100,AA,consensus,AA,AA,GM\n",
+                encoding="utf-8",
+            )
+            with mock.patch(
+                "array_pipeline.qc._strand_marker_alleles",
+                return_value={},
+            ):
+                qc = inspect_array(array, case_id="METADATA-STRAND")
+
+        self.assertEqual(qc["input"]["strand"], "forward")
+        self.assertTrue(qc["input"]["strand_evidence_verified"])
+        self.assertEqual(qc["gates"]["BUILD_STRAND_GATE"]["state"], "PASS")
+
     def test_legacy_text_does_not_substitute_for_an_explicit_boolean_verdict(self):
         for verdict in (None, "true", 1, {}, []):
             with self.subTest(verdict=verdict):
