@@ -522,7 +522,7 @@ class BaselineWriteSafetyTest(unittest.TestCase):
                 with self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
                     guard._bootstrap_baseline(root, source_commit)
 
-    def test_write_baseline_rejects_reintroduced_debt_absent_from_trusted_pull_request_base(self):
+    def test_write_baseline_rejects_baseline_entry_absent_from_trusted_pull_request_base(self):
         from scripts import code_language_guard as guard
         td, root, source_commit = self._repo()
         with td:
@@ -531,7 +531,6 @@ class BaselineWriteSafetyTest(unittest.TestCase):
             _git(root, "add", ".")
             _git(root, "commit", "-m", "remove legacy debt")
             trusted_base = _git(root, "rev-parse", "HEAD")
-            tracked.write_text("# validar\nvalue = 1\n", encoding="utf-8")
             _write_json(root, "event.json", {"pull_request": {"base": {"sha": trusted_base}}})
             with mock.patch.dict(
                 os.environ,
@@ -541,7 +540,7 @@ class BaselineWriteSafetyTest(unittest.TestCase):
                 with self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
                     guard._write_baseline(root, source_commit)
 
-    def test_check_rejects_reintroduced_debt_absent_from_trusted_pull_request_base(self):
+    def test_check_rejects_baseline_entry_absent_from_trusted_pull_request_base(self):
         from scripts import code_language_guard as guard
         td, root, source_commit = self._repo()
         with td:
@@ -550,7 +549,6 @@ class BaselineWriteSafetyTest(unittest.TestCase):
             _git(root, "add", ".")
             _git(root, "commit", "-m", "remove legacy debt")
             trusted_base = _git(root, "rev-parse", "HEAD")
-            tracked.write_text("# validar\nvalue = 1\n", encoding="utf-8")
             _write_json(root, "event.json", {"pull_request": {"base": {"sha": trusted_base}}})
             with mock.patch.dict(
                 os.environ,

@@ -51,7 +51,8 @@ def _step_run_commands(step: str) -> tuple[str, ...]:
     in_block = False
     control_depth = 0
     heredoc_end: str | None = None
-    block_starters = re.compile(r"^(?:if|for|while|until|case)\b")
+    block_starters = re.compile(r"(?:^|[;&|]\s*)(?:if|for|while|until|case)\b")
+    short_circuit_group = re.compile(r"(?:&&|\|\|)\s*\{")
     block_enders = re.compile(r"^(?:fi|done|esac)\b")
     function_starter = re.compile(
         r"^(?:(?:function\s+)?[A-Za-z_][A-Za-z0-9_]*\s*\(\)\s*\{|function\s+[A-Za-z_][A-Za-z0-9_]*\s*\{)\s*$"
@@ -79,12 +80,15 @@ def _step_run_commands(step: str) -> tuple[str, ...]:
         if block_enders.match(command) or (command == "}" and control_depth > 0):
             control_depth = max(0, control_depth - 1)
             continue
-        if control_depth == 0:
+        opens_control = block_starters.search(command) is not None
+        opens_function = function_starter.match(command) is not None
+        opens_short_circuit_group = short_circuit_group.search(command) is not None
+        if control_depth == 0 and not (opens_control or opens_function or opens_short_circuit_group):
             commands.append(command)
         heredoc = heredoc_pattern.search(command)
         if heredoc is not None:
             heredoc_end = heredoc.group(1)
-        if block_starters.match(command) or function_starter.match(command):
+        if opens_control or opens_function or opens_short_circuit_group:
             control_depth += 1
     return tuple(commands)
 
@@ -262,6 +266,22 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertFalse(_step_runs_validate_repo(false_branch))
         self.assertFalse(_step_runs_validate_repo(heredoc))
         self.assertTrue(_step_runs_validate_repo(direct))
+
+    def test_validate_repo_command_detection_rejects_midline_and_short_circuit_blocks(self):
+        midline_if = """      - name: misleading
+        run: |
+          setup(); if false; then
+            python3 scripts/validate_repo.py
+          fi
+"""
+        short_circuit_group = """      - name: misleading
+        run: |
+          false && {
+            python3 scripts/validate_repo.py
+          }
+"""
+        self.assertFalse(_step_runs_validate_repo(midline_if))
+        self.assertFalse(_step_runs_validate_repo(short_circuit_group))
 
     def test_validate_repo_command_detection_ignores_non_executable_mentions(self):
         echo_only = "      - name: misleading\n        run: |\n          echo 'python3 scripts/validate_repo.py'\n          # python3 scripts/validate_repo.py\n"
