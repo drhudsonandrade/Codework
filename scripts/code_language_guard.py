@@ -4,6 +4,7 @@ import argparse
 import ast
 import io
 import json
+import os
 import re
 import subprocess  # nosec B404 -- fixed-argv Git provenance checks; shell is never enabled.
 import sys
@@ -413,9 +414,33 @@ def _run_git(root: Path, *args: str, allow_nonzero: bool = False) -> subprocess.
     return result
 
 
+def _trusted_pull_request_base() -> str | None:
+    if os.environ.get("GITHUB_EVENT_NAME") != "pull_request":
+        return None
+    event_path = os.environ.get("GITHUB_EVENT_PATH")
+    if not event_path:
+        raise LanguagePolicyError("trusted pull request event path is unavailable")
+    payload = _read_json(Path(event_path), "GitHub pull request event")
+    if not isinstance(payload, dict):
+        raise LanguagePolicyError("invalid GitHub pull request event")
+    pull_request = payload.get("pull_request")
+    if not isinstance(pull_request, dict):
+        raise LanguagePolicyError("invalid GitHub pull request event")
+    base = pull_request.get("base")
+    if not isinstance(base, dict):
+        raise LanguagePolicyError("invalid GitHub pull request base")
+    sha = base.get("sha")
+    if not isinstance(sha, str) or not SHA40.fullmatch(sha):
+        raise LanguagePolicyError("invalid trusted pull request base SHA")
+    return sha
+
+
 def _validate_source_commit(root: Path, source_commit: str) -> None:
     if not SHA40.fullmatch(source_commit):
         raise LanguagePolicyError("invalid language baseline source_commit")
+    trusted_base = _trusted_pull_request_base()
+    if trusted_base is not None and source_commit != trusted_base:
+        raise LanguagePolicyError("language baseline source_commit does not match trusted pull request base")
     kind_result = _run_git(root, "cat-file", "-t", source_commit, allow_nonzero=True)
     if kind_result.returncode != 0:
         raise LanguagePolicyError("language baseline source_commit does not exist")

@@ -96,7 +96,7 @@ The update command rejects new baseline keys and count increases, and every reta
 
 Neither writing mode infers provenance from a mutable branch name.
 
-Every `--check` and repository-level validation revalidates the tracked baseline provenance. The recorded `source_commit` must resolve to a real ancestor commit, and every baseline entry/count must be supported by the Python findings measured from that immutable commit tree. A direct JSON edit therefore cannot manufacture new legacy debt.
+Every `--check` and repository-level validation revalidates the tracked baseline provenance. In a GitHub `pull_request` run, the runner-provided `pull_request.base.sha` is the trusted base and the recorded `source_commit` must match it exactly. Outside pull-request CI, `source_commit` must still resolve to a real ancestor commit. In all cases, every baseline entry/count must be supported by the Python findings measured from that immutable commit tree. A direct JSON edit therefore cannot manufacture new legacy debt.
 
 ## Scope progression
 

@@ -522,7 +522,7 @@ python3 scripts/code_language_guard.py --check
 ```
 
 - exit 0 only when the current grouped findings exactly match the tracked legacy baseline;
-- before comparison, revalidate the tracked `source_commit` as a real ancestor commit and prove every baseline entry/count is supported by findings measured from that immutable Git tree;
+- before comparison, in GitHub `pull_request` CI require `source_commit` to equal the runner-provided `pull_request.base.sha` exactly; outside pull-request CI require it to be a real ancestor commit; in all cases prove every baseline entry/count is supported by findings measured from that immutable Git tree;
 - print each unexpected entry as `NEW_LANGUAGE_DEBT\t<path>\t<kind>\t<token>\t<count>`;
 - print each stale entry as `RESOLVED_BASELINE_ENTRY\t<path>\t<kind>\t<token>\t<count>`;
 - exit 1 on either kind of delta;

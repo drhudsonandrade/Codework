@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import unittest
 from unittest import mock
@@ -358,6 +359,46 @@ class BaselineWriteSafetyTest(unittest.TestCase):
             _write_json(root, "config/code_language_legacy_baseline.json", payload)
             with self.assertRaisesRegex(LanguagePolicyError, "source_commit"):
                 guard.validate_code_language(root, [])
+
+    def test_check_accepts_exact_trusted_pull_request_base(self):
+        from scripts import code_language_guard as guard
+        td, root, base = self._repo()
+        with td:
+            _write_json(root, "event.json", {"pull_request": {"base": {"sha": base}}})
+            event_path = root / "event.json"
+            with mock.patch.dict(
+                os.environ,
+                {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(event_path)},
+                clear=False,
+            ):
+                self.assertEqual(guard._check(root), 0)
+
+    def test_check_rejects_source_commit_after_trusted_pull_request_base(self):
+        from scripts import code_language_guard as guard
+        td, root, base = self._repo()
+        with td:
+            new_file = root / "pkg" / "new.py"
+            new_file.write_text("# validar\nvalue = 2\n", encoding="utf-8")
+            _git(root, "add", ".")
+            _git(root, "commit", "-m", "introduce later debt")
+            later = _git(root, "rev-parse", "HEAD")
+            _write_json(root, "config/code_language_legacy_baseline.json", {
+                "schema": "genoma-code-language-legacy-baseline-v1",
+                "source_commit": later,
+                "entries": [
+                    {"path": "pkg/base.py", "kind": "comment", "token": TERM_VALIDATE, "count": 1},
+                    {"path": "pkg/new.py", "kind": "comment", "token": TERM_VALIDATE, "count": 1},
+                ],
+            })
+            _write_json(root, "event.json", {"pull_request": {"base": {"sha": base}}})
+            event_path = root / "event.json"
+            with mock.patch.dict(
+                os.environ,
+                {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(event_path)},
+                clear=False,
+            ):
+                with self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
+                    guard._check(root)
 
 
 class LanguageBaselineTest(unittest.TestCase):
