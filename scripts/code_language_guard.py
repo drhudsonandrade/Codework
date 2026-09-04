@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import argparse
 import ast
 import io
 import json
 import re
+import sys
 import tokenize
 import unicodedata
 from collections import Counter
@@ -290,3 +292,94 @@ def group_findings(findings: tuple[LanguageFinding, ...]) -> tuple[BaselineEntry
         BaselineEntry(path=path, kind=kind, token=token, count=count)
         for (path, kind, token), count in sorted(counts.items())
     )
+
+@dataclass(frozen=True)
+class BaselineDelta:
+    unexpected: tuple[BaselineEntry, ...]
+    stale: tuple[BaselineEntry, ...]
+
+    @property
+    def clean(self) -> bool:
+        return not self.unexpected and not self.stale
+
+
+def compare_to_baseline(
+    current: tuple[BaselineEntry, ...],
+    baseline: tuple[BaselineEntry, ...],
+) -> BaselineDelta:
+    current_set = set(current)
+    baseline_set = set(baseline)
+    return BaselineDelta(
+        unexpected=tuple(sorted(current_set - baseline_set)),
+        stale=tuple(sorted(baseline_set - current_set)),
+    )
+
+
+def validate_code_language(root: Path, errors: list[str]) -> None:
+    policy = load_policy(root)
+    baseline = load_baseline(root)
+    current = group_findings(scan_repository(root, policy))
+    delta = compare_to_baseline(current, baseline)
+    errors.extend(
+        f"new Portuguese technical language debt: {entry.path}: {entry.kind}: {entry.token}: {entry.count}"
+        for entry in delta.unexpected
+    )
+    errors.extend(
+        f"resolved language baseline entry must be removed: {entry.path}: {entry.kind}: {entry.token}: {entry.count}"
+        for entry in delta.stale
+    )
+
+
+def _write_baseline(root: Path, source_commit: str) -> None:
+    if not SHA40.fullmatch(source_commit):
+        raise LanguagePolicyError("invalid language baseline source_commit")
+    policy = load_policy(root)
+    entries = group_findings(scan_repository(root, policy))
+    payload = {
+        "schema": BASELINE_SCHEMA,
+        "source_commit": source_commit,
+        "entries": [
+            {"path": entry.path, "kind": entry.kind, "token": entry.token, "count": entry.count}
+            for entry in entries
+        ],
+    }
+    path = root / "config" / "code_language_legacy_baseline.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _check(root: Path) -> int:
+    policy = load_policy(root)
+    baseline = load_baseline(root)
+    current = group_findings(scan_repository(root, policy))
+    delta = compare_to_baseline(current, baseline)
+    for entry in delta.unexpected:
+        print(f"NEW_LANGUAGE_DEBT\t{entry.path}\t{entry.kind}\t{entry.token}\t{entry.count}")
+    for entry in delta.stale:
+        print(f"RESOLVED_BASELINE_ENTRY\t{entry.path}\t{entry.kind}\t{entry.token}\t{entry.count}")
+    return 0 if delta.clean else 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Check English-first technical code language policy.")
+    modes = parser.add_mutually_exclusive_group(required=True)
+    modes.add_argument("--check", action="store_true")
+    modes.add_argument("--write-baseline", action="store_true")
+    parser.add_argument("--source-commit")
+    args = parser.parse_args(argv)
+    root = Path(__file__).resolve().parents[1]
+    try:
+        if args.write_baseline:
+            if not args.source_commit:
+                raise LanguagePolicyError("--source-commit is required with --write-baseline")
+            _write_baseline(root, args.source_commit)
+            return 0
+        if args.source_commit:
+            raise LanguagePolicyError("--source-commit is only valid with --write-baseline")
+        return _check(root)
+    except LanguagePolicyError as exc:
+        print(f"LANGUAGE_POLICY_ERROR\t{exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

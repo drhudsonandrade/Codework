@@ -1,5 +1,36 @@
 {
   "schema": "genoma-code-language-legacy-baseline-v1",
   "source_commit": "c66d47f60fa92d360927194568daa5b19b99e698",
-  "entries": []
+  "entries": [
+    {
+      "path": "array_pipeline/completeness.py",
+      "kind": "docstring",
+      "token": "relatorio",
+      "count": 1
+    },
+    {
+      "path": "array_pipeline/pharmacogenomics.py",
+      "kind": "comment",
+      "token": "limite",
+      "count": 1
+    },
+    {
+      "path": "reporting/assay.py",
+      "kind": "docstring",
+      "token": "arquivo",
+      "count": 1
+    },
+    {
+      "path": "reporting/deployment_target.py",
+      "kind": "docstring",
+      "token": "executar",
+      "count": 1
+    },
+    {
+      "path": "reporting/section_attestations.py",
+      "kind": "comment",
+      "token": "arquivo",
+      "count": 1
+    }
+  ]
 }

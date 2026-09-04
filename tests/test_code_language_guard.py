@@ -10,7 +10,15 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.code_language_guard import LanguagePolicyError, load_baseline, load_policy, scan_repository
+from scripts.code_language_guard import (
+    BaselineEntry,
+    LanguagePolicyError,
+    compare_to_baseline,
+    group_findings,
+    load_baseline,
+    load_policy,
+    scan_repository,
+)
 
 
 def _write_json(root: Path, relative: str, payload: object) -> None:
@@ -91,6 +99,36 @@ class PythonLanguageScannerTest(unittest.TestCase):
         with td:
             findings = scan_repository(root, load_policy(root))
         self.assertEqual(findings, ())
+
+
+class LanguageBaselineTest(unittest.TestCase):
+    def test_new_finding_is_unexpected(self):
+        current = (BaselineEntry("pkg/a.py", "identifier", "validar_arquivo", 1),)
+        delta = compare_to_baseline(current, ())
+        self.assertEqual(delta.unexpected, current)
+        self.assertEqual(delta.stale, ())
+
+    def test_resolved_finding_makes_baseline_stale(self):
+        baseline = (BaselineEntry("pkg/a.py", "identifier", "validar_arquivo", 1),)
+        delta = compare_to_baseline((), baseline)
+        self.assertEqual(delta.unexpected, ())
+        self.assertEqual(delta.stale, baseline)
+
+    def test_partial_cleanup_changes_count_and_requires_baseline_update(self):
+        baseline = (BaselineEntry("pkg/a.py", "comment", "validar", 2),)
+        current = (BaselineEntry("pkg/a.py", "comment", "validar", 1),)
+        delta = compare_to_baseline(current, baseline)
+        self.assertEqual(delta.unexpected, current)
+        self.assertEqual(delta.stale, baseline)
+
+
+class RepositoryLanguageBaselineTest(unittest.TestCase):
+    def test_repository_matches_tracked_language_baseline(self):
+        policy = load_policy(ROOT)
+        baseline = load_baseline(ROOT)
+        current = group_findings(scan_repository(ROOT, policy))
+        delta = compare_to_baseline(current, baseline)
+        self.assertTrue(delta.clean, delta)
 
 
 if __name__ == "__main__":
