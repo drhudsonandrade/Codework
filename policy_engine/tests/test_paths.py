@@ -41,10 +41,10 @@ class PathResolutionTests(unittest.TestCase):
             ruleset = root / RULESET.name
             shutil.copyfile(RULESET, ruleset)
             explicit = root / "explicit.sha256"
-            explicit.write_text("0" * 64 + "  " + RULESET.name + "\n")
+            explicit.write_text("0" * 64 + "  " + RULESET.name + "\n", encoding="utf-8")
             other = root / "manifests" / "RULESET_V3.4.sha256"
             other.parent.mkdir()
-            other.write_text("1" * 64 + "  " + RULESET.name + "\n")
+            other.write_text("1" * 64 + "  " + RULESET.name + "\n", encoding="utf-8")
             os.environ["GENOMA_RULESET_SHA_MANIFEST"] = str(explicit)
             self.assertEqual(resolve_manifest_path(ruleset, root), explicit.resolve())
 

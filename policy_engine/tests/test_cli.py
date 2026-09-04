@@ -179,7 +179,7 @@ class CliTests(unittest.TestCase):
             output = Path(td) / "catalog.json"
             result = self.run_cli("catalog", "--output", str(output))
             self.assertEqual(result.returncode, 0, result.stderr)
-            payload = json.loads(output.read_text())
+            payload = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(len(payload["rules"]), 263)
             self.assertEqual(payload["rules"][0]["rule_id"], "GENOMA-V3.4-S000")
             self.assertEqual(payload["rules"][-1]["rule_id"], "GENOMA-V3.4-S262")
@@ -189,7 +189,7 @@ class CliTests(unittest.TestCase):
             output = Path(td) / "manifest.json"
             result = self.run_cli("scaffold", "--case-id", "CASE-SCAFFOLD-1", "--output", str(output))
             self.assertEqual(result.returncode, 0, result.stderr)
-            payload = json.loads(output.read_text())
+            payload = json.loads(output.read_text(encoding="utf-8"))
 
             self.assertEqual(payload["case_id"], "CASE-SCAFFOLD-1")
             self.assertEqual(payload["session_id"], "SESSION-ID")
@@ -238,14 +238,14 @@ class CliTests(unittest.TestCase):
             output = Path(td) / "manifest.json"
             result = self.run_cli("scaffold", "--output", str(output))
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(json.loads(output.read_text())["case_id"], "CASE-ID")
+            self.assertEqual(json.loads(output.read_text(encoding="utf-8"))["case_id"], "CASE-ID")
 
     def test_ledger_cli_append_and_verify(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             payload = root / "payload.json"
             ledger = root / "audit.jsonl"
-            payload.write_text(json.dumps({"ready": False}))
+            payload.write_text(json.dumps({"ready": False}), encoding="utf-8")
             appended = self.run_cli("ledger-append", str(ledger), "POLICY_EVALUATED", str(payload))
             self.assertEqual(appended.returncode, 0, appended.stderr)
             verified = self.run_cli("ledger-verify", str(ledger))
