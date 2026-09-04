@@ -383,6 +383,40 @@ class BaselineWriteSafetyTest(unittest.TestCase):
             ):
                 self.assertEqual(guard._check(root), 0)
 
+    def test_bootstrap_rejects_source_commit_after_trusted_pull_request_base(self):
+        from scripts import code_language_guard as guard
+        td, root, base = self._repo()
+        with td:
+            (root / "pkg" / "later.py").write_text("# validar\nvalue = 2\n", encoding="utf-8")
+            _git(root, "add", ".")
+            _git(root, "commit", "-m", "later debt")
+            later = _git(root, "rev-parse", "HEAD")
+            (root / "config/code_language_legacy_baseline.json").unlink()
+            _write_json(root, "event.json", {"pull_request": {"base": {"sha": base}}})
+            with mock.patch.dict(
+                os.environ,
+                {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(root / "event.json")},
+                clear=False,
+            ):
+                with self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
+                    guard._bootstrap_baseline(root, later)
+
+    def test_write_baseline_rejects_source_commit_after_trusted_pull_request_base(self):
+        from scripts import code_language_guard as guard
+        td, root, base = self._repo()
+        with td:
+            _git(root, "add", ".")
+            _git(root, "commit", "--allow-empty", "-m", "later commit")
+            later = _git(root, "rev-parse", "HEAD")
+            _write_json(root, "event.json", {"pull_request": {"base": {"sha": base}}})
+            with mock.patch.dict(
+                os.environ,
+                {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(root / "event.json")},
+                clear=False,
+            ):
+                with self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
+                    guard._write_baseline(root, later)
+
     def test_check_rejects_source_commit_after_trusted_pull_request_base(self):
         from scripts import code_language_guard as guard
         td, root, base = self._repo()

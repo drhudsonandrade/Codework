@@ -29,6 +29,50 @@ def _shell_test_lines(step: str) -> list[str]:
     return [line.strip() for line in step.splitlines() if line.strip().startswith("test ")]
 
 
+def _job_steps(workflow: str, job_name: str) -> list[str]:
+    job = _job_block(workflow, job_name)
+    marker = "    steps:\n"
+    if marker not in job:
+        raise AssertionError(f"job {job_name!r} has no steps")
+    tail = job.split(marker, 1)[1]
+    parts = tail.split("\n      - ")
+    steps: list[str] = []
+    for index, part in enumerate(parts):
+        block = part if index == 0 else "      - " + part
+        if block.strip():
+            steps.append(block)
+    return steps
+
+
+def _with_mapping(step: str) -> dict[str, object]:
+    lines = step.splitlines()
+    try:
+        start = lines.index("        with:") + 1
+    except ValueError:
+        return {}
+    values: dict[str, object] = {}
+    for line in lines[start:]:
+        if not line.startswith("          "):
+            break
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        if ":" not in stripped:
+            break
+        key, raw = stripped.split(":", 1)
+        value = raw.strip()
+        if value == "false":
+            parsed: object = False
+        elif value == "true":
+            parsed = True
+        elif value.isdigit():
+            parsed = int(value)
+        else:
+            parsed = value.strip("'\"")
+        values[key] = parsed
+    return values
+
+
 def _assert_attestation_step_is_in_main_gated_ceremony_job(workflow: str) -> None:
     expected_if = "github.ref == 'refs/heads/main'"
     if _job_if_condition(workflow, "live-section-260") != expected_if:
@@ -149,12 +193,23 @@ class WorkflowContractTest(unittest.TestCase):
             workflow = (ROOT / ".github/workflows" / filename).read_text(encoding="utf-8")
             for job_name in jobs:
                 with self.subTest(workflow=filename, job=job_name):
-                    job = _job_block(workflow, job_name)
-                    self.assertIn("scripts/validate_repo.py", job)
-                    marker = "      - uses: actions/checkout@"
-                    self.assertIn(marker, job)
-                    checkout = job.split(marker, 1)[1].split("\n      - ", 1)[0]
-                    self.assertIn("fetch-depth: 0", checkout)
+                    steps = _job_steps(workflow, job_name)
+                    checkout_indexes = [i for i, step in enumerate(steps) if "uses: actions/checkout@" in step]
+                    validation_indexes = [i for i, step in enumerate(steps) if "scripts/validate_repo.py" in step]
+                    self.assertEqual(len(checkout_indexes), 1)
+                    self.assertTrue(validation_indexes)
+                    checkout_index = checkout_indexes[0]
+                    self.assertLess(checkout_index, min(validation_indexes))
+                    checkout_config = _with_mapping(steps[checkout_index])
+                    self.assertEqual(checkout_config.get("fetch-depth"), 0)
+                    hardened = {
+                        ("genoma-ngs-runtime-gate.yml", "preflight"),
+                        ("genoma-ngs-runtime-gate.yml", "full-grch38"),
+                        ("genoma-policy-engine.yml", "policy"),
+                        ("genoma-snp-array.yml", "array-qc-contract"),
+                    }
+                    if (filename, job_name) in hardened:
+                        self.assertIs(checkout_config.get("persist-credentials"), False)
 
     def test_main_required_policy_checks_have_unconditional_pr_provider(self):
         policy = (ROOT / ".github/workflows/genoma-policy-engine.yml").read_text(encoding="utf-8")
