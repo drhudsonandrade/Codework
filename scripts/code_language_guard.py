@@ -5,7 +5,6 @@ import ast
 import io
 import json
 import re
-import shutil
 import subprocess  # nosec B404 -- fixed-argv Git provenance checks; shell is never enabled.
 import sys
 import tarfile
@@ -384,13 +383,9 @@ def validate_code_language(root: Path, errors: list[str]) -> None:
 
 
 def _run_git(root: Path, *args: str, allow_nonzero: bool = False) -> subprocess.CompletedProcess[bytes]:
-    git_executable = shutil.which("git")
-    if git_executable is None:
-        raise LanguagePolicyError("git is required for language baseline provenance checks")
-    git_path = str(Path(git_executable).resolve())
     try:
-        result = subprocess.run(  # nosec B603 -- absolute Git path, argv list, no shell.
-            [git_path, "-C", str(root), *args],
+        result = subprocess.run(  # nosec B603 B607 -- fixed git executable, argv list, no shell.
+            ["git", "-C", str(root), *args],
             check=False,
             capture_output=True,
         )
