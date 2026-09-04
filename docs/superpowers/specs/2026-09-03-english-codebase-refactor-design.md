@@ -5,7 +5,7 @@
 **Strategy:** Progressive migration by layers
 **Repository:** `drhudsonandrade/Codework`
 **Implementation reference:** `scripts/code_language_guard.py`
-**Reproducible validation:** `python3 -m unittest tests.test_code_language_guard -v` and `python3 scripts/code_language_guard.py --check`
+**Reproducible validation:** `python3 -m unittest tests.test_code_language_guard -v` and `python3 scripts/code_language_guard.py --check` (the checkout must contain full Git history, equivalent to `actions/checkout` with `fetch-depth: 0`, because provenance verification resolves the recorded baseline commit)
 
 ## 1. Objective
 

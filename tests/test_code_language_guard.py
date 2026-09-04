@@ -76,6 +76,19 @@ class LanguagePolicyLoadingTest(unittest.TestCase):
             with self.assertRaisesRegex(LanguagePolicyError, "invalid excluded root path"):
                 load_policy(root)
 
+    def test_policy_rejects_repository_root_exclusion(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            _write_json(root, "config/code_language_policy.json", {
+                "schema": "genoma-code-language-policy-v1",
+                "scan_suffixes": [".py"],
+                "technical_terms": ["arquivo"],
+                "contract_literals": [],
+                "excluded_roots": [{"path": ".", "reason": "must never exclude whole repository"}],
+            })
+            with self.assertRaisesRegex(LanguagePolicyError, "invalid excluded root path"):
+                load_policy(root)
+
     def test_baseline_rejects_parent_traversal_entry(self):
         with TemporaryDirectory() as td:
             root = Path(td)
@@ -154,7 +167,7 @@ class PythonLanguageScannerTest(unittest.TestCase):
         matches = [f for f in findings if f.kind == "comment" and f.token == TERM_VALIDATE]
         self.assertEqual(len(matches), 2, findings)
 
-    def test_unlisted_portuguese_lemma_is_reported_across_scanned_surfaces(self):
+    def test_configured_portuguese_lemma_is_reported_across_scanned_surfaces(self):
         source = 'def calcular_total():\n    """calcular resultado"""\n    # calcular agora\n    return 1\n'
         td, root = self._repo({"pkg/mod.py": source})
         with td:
@@ -235,6 +248,15 @@ class PythonLanguageScannerTest(unittest.TestCase):
         with td:
             findings = scan_repository(root, load_policy(root))
         self.assertTrue(any(f.kind == "identifier" and f.token == TERM_ARCHIVE for f in findings), findings)
+
+    def test_python_type_parameter_identifier_is_scanned(self):
+        td, root = self._repo({"pkg/mod.py": "def build[arquivo]():\n    return 1\n"})
+        with td:
+            findings = scan_repository(root, load_policy(root))
+        self.assertTrue(
+            any(f.kind == "identifier" and f.token == TERM_ARCHIVE for f in findings),
+            findings,
+        )
 
     def test_unparseable_python_fails_closed(self):
         td, root = self._repo({"pkg/mod.py": "def broken(:\n    pass\n"})
@@ -416,6 +438,23 @@ class BaselineWriteSafetyTest(unittest.TestCase):
             ):
                 with self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
                     guard._write_baseline(root, later)
+
+    def test_check_accepts_source_commit_ancestor_of_trusted_pull_request_base(self):
+        from scripts import code_language_guard as guard
+        td, root, source_commit = self._repo()
+        with td:
+            (root / "README.md").write_text("future pull request base\n", encoding="utf-8")
+            _git(root, "add", ".")
+            _git(root, "commit", "-m", "advance protected base")
+            trusted_base = _git(root, "rev-parse", "HEAD")
+            self.assertNotEqual(source_commit, trusted_base)
+            _write_json(root, "event.json", {"pull_request": {"base": {"sha": trusted_base}}})
+            with mock.patch.dict(
+                os.environ,
+                {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(root / "event.json")},
+                clear=False,
+            ):
+                self.assertEqual(guard._check(root), 0)
 
     def test_check_rejects_source_commit_after_trusted_pull_request_base(self):
         from scripts import code_language_guard as guard

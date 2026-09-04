@@ -59,7 +59,7 @@ def _relative_path(value: object, label: str) -> str:
     if not isinstance(value, str) or not value:
         raise LanguagePolicyError(f"invalid {label} path")
     path = Path(value)
-    if path.is_absolute() or ".." in path.parts:
+    if path == Path(".") or not path.parts or path.is_absolute() or ".." in path.parts:
         raise LanguagePolicyError(f"invalid {label} path: {value}")
     return path.as_posix()
 
@@ -269,6 +269,10 @@ def _identifier_occurrences(tree: ast.AST) -> tuple[tuple[str, int], ...]:
             occurrences.append((node.name, line))
         elif isinstance(node, ast.MatchMapping) and isinstance(node.rest, str):
             occurrences.append((node.rest, line))
+        elif type(node).__name__ in {"TypeVar", "ParamSpec", "TypeVarTuple"}:
+            name = getattr(node, "name", None)
+            if isinstance(name, str):
+                occurrences.append((name, line))
     return tuple(occurrences)
 
 
@@ -439,14 +443,21 @@ def _validate_source_commit(root: Path, source_commit: str) -> None:
     if not SHA40.fullmatch(source_commit):
         raise LanguagePolicyError("invalid language baseline source_commit")
     trusted_base = _trusted_pull_request_base()
-    if trusted_base is not None and source_commit != trusted_base:
-        raise LanguagePolicyError("language baseline source_commit does not match trusted pull request base")
     kind_result = _run_git(root, "cat-file", "-t", source_commit, allow_nonzero=True)
     if kind_result.returncode != 0:
         raise LanguagePolicyError("language baseline source_commit does not exist")
     kind = kind_result.stdout.decode("utf-8", errors="replace").strip()
     if kind != "commit":
         raise LanguagePolicyError("language baseline source_commit is not a commit")
+    if trusted_base is not None:
+        trusted_kind = _run_git(root, "cat-file", "-t", trusted_base, allow_nonzero=True)
+        if trusted_kind.returncode != 0 or trusted_kind.stdout.decode("utf-8", errors="replace").strip() != "commit":
+            raise LanguagePolicyError("trusted pull request base commit is unavailable")
+        trusted_ancestor = _run_git(
+            root, "merge-base", "--is-ancestor", source_commit, trusted_base, allow_nonzero=True
+        )
+        if trusted_ancestor.returncode != 0:
+            raise LanguagePolicyError("language baseline source_commit is not an ancestor of trusted pull request base")
     ancestor = _run_git(root, "merge-base", "--is-ancestor", source_commit, "HEAD", allow_nonzero=True)
     if ancestor.returncode != 0:
         raise LanguagePolicyError("language baseline source_commit is not an ancestor of HEAD")

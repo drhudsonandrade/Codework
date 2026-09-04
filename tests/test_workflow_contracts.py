@@ -1,4 +1,5 @@
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -42,6 +43,32 @@ def _job_steps(workflow: str, job_name: str) -> list[str]:
         if block.strip():
             steps.append(block)
     return steps
+
+
+def _step_run_commands(step: str) -> tuple[str, ...]:
+    lines = step.splitlines()
+    commands: list[str] = []
+    in_block = False
+    for line in lines:
+        if line.startswith("        run:"):
+            value = line.split("run:", 1)[1].strip()
+            if value in {"|", ">"}:
+                in_block = True
+            elif value:
+                commands.append(value)
+            continue
+        if in_block:
+            if not line.startswith("          "):
+                break
+            command = line.strip()
+            if command and not command.startswith("#"):
+                commands.append(command)
+    return tuple(commands)
+
+
+def _step_runs_validate_repo(step: str) -> bool:
+    pattern = re.compile(r"^(?:python3|python)\s+scripts/validate_repo\.py(?:\s|$)")
+    return any(pattern.search(command) is not None for command in _step_run_commands(step))
 
 
 def _with_mapping(step: str) -> dict[str, object]:
@@ -179,6 +206,12 @@ class WorkflowContractTest(unittest.TestCase):
         with self.assertRaises(AssertionError):
             _assert_attestation_step_is_in_main_gated_ceremony_job(mutated)
 
+    def test_validate_repo_command_detection_ignores_non_executable_mentions(self):
+        echo_only = "      - name: misleading\n        run: |\n          echo 'python3 scripts/validate_repo.py'\n          # python3 scripts/validate_repo.py\n"
+        executable = "      - name: validate\n        run: python3 scripts/validate_repo.py\n"
+        self.assertFalse(_step_runs_validate_repo(echo_only))
+        self.assertTrue(_step_runs_validate_repo(executable))
+
     def test_validate_repo_jobs_fetch_full_history_for_baseline_provenance(self):
         targets = {
             "genoma-audit.yml": ("audit",),
@@ -195,7 +228,7 @@ class WorkflowContractTest(unittest.TestCase):
                 with self.subTest(workflow=filename, job=job_name):
                     steps = _job_steps(workflow, job_name)
                     checkout_indexes = [i for i, step in enumerate(steps) if "uses: actions/checkout@" in step]
-                    validation_indexes = [i for i, step in enumerate(steps) if "scripts/validate_repo.py" in step]
+                    validation_indexes = [i for i, step in enumerate(steps) if _step_runs_validate_repo(step)]
                     self.assertEqual(len(checkout_indexes), 1)
                     self.assertTrue(validation_indexes)
                     checkout_index = checkout_indexes[0]

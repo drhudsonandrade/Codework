@@ -155,7 +155,7 @@ Implement `load_policy()` and `load_baseline()` so they:
 - require the exact schema names above;
 - require a 40-character lowercase hexadecimal `source_commit` in the baseline;
 - require non-empty `reason` on every excluded root;
-- reject absolute paths and `..` traversal in excluded roots and baseline entries;
+- reject absolute paths, `..` traversal, and the repository root (`.`) in excluded roots and baseline entries;
 - require `count >= 1` for every baseline entry;
 - reject duplicate baseline keys `(path, kind, token)`;
 - accept only `.py` in `scan_suffixes` for PR 1;
@@ -169,27 +169,55 @@ Create `config/code_language_policy.json` in this shape:
 ```json
 {
   "schema": "genoma-code-language-policy-v1",
-  "scan_suffixes": [".py"],
+  "scan_suffixes": [
+    ".py"
+  ],
   "technical_terms": [
     "acao",
     "amostra",
     "arquivo",
     "atualizar",
     "buscar",
+    "calcular",
+    "caminho",
     "carregar",
+    "chamada",
+    "comparar",
     "configuracao",
+    "confirmar",
+    "consultar",
     "conteudo",
+    "dado",
     "dados",
+    "disponivel",
+    "entrada",
     "erro",
+    "escrever",
     "executar",
+    "falha",
+    "falhar",
+    "fonte",
     "gerar",
+    "interpretar",
+    "leitura",
+    "ler",
     "limite",
+    "metodo",
+    "normalizar",
+    "parametro",
+    "processar",
+    "regra",
+    "relatar",
     "relatorio",
+    "remover",
     "resultado",
+    "saida",
+    "salvar",
     "validacao",
     "validar",
     "verificacao",
-    "verificar"
+    "verificar",
+    "versao"
   ],
   "contract_literals": [
     "VIGENTE",
@@ -197,7 +225,16 @@ Create `config/code_language_policy.json` in this shape:
     "VERIFICADO",
     "INFERIDO",
     "PROPOSTO",
-    "NÃO DISPONÍVEL"
+    "NÃO DISPONÍVEL",
+    "FATO CONFIRMADO",
+    "INFERÊNCIA",
+    "ASSOCIAÇÃO",
+    "HIPÓTESE",
+    "DESCONHECIDO",
+    "CLÍNICO",
+    "PREDISPOSIÇÃO",
+    "PESQUISA",
+    "CURIOSIDADE"
   ],
   "excluded_roots": [
     {
@@ -211,6 +248,8 @@ Create `config/code_language_policy.json` in this shape:
   ]
 }
 ```
+
+The tracked JSON file is the authoritative deterministic vocabulary. It is intentionally versioned rather than inferred at runtime; repository-baseline regression tests require every tracked legacy entry to remain detectable under that vocabulary before a baseline can be accepted.
 
 Create the baseline file initially with an empty `entries` list and the exact `BASE_SHA` captured before the first code commit:
 
@@ -357,10 +396,22 @@ def _normalize_word(value: str) -> str:
 
 
 def _identifier_words(identifier: str) -> tuple[str, ...]:
-    expanded = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", identifier)
+    expanded: list[str] = []
+    for index, current in enumerate(identifier):
+        previous = identifier[index - 1] if index else ""
+        following = identifier[index + 1] if index + 1 < len(identifier) else ""
+        boundary = (
+            (current.isupper() and (previous.islower() or previous.isdigit()))
+            or (current.isupper() and previous.isupper() and following.islower())
+            or (current.isdigit() and previous.isalpha())
+            or (current.isalpha() and previous.isdigit())
+        )
+        if boundary:
+            expanded.append("_")
+        expanded.append(current)
     return tuple(
         word
-        for part in re.split(r"[^A-Za-zÀ-ÖØ-öø-ÿ0-9]+", expanded)
+        for part in re.split(r"[_\W]+", "".join(expanded), flags=re.UNICODE)
         if (word := _normalize_word(part))
     )
 ```
@@ -375,7 +426,8 @@ Implement AST traversal for identifiers from:
 - imported names and aliases (`ast.alias.name` / `asname`);
 - keyword argument names;
 - exception/global/nonlocal bindings;
-- structural-pattern capture names.
+- structural-pattern capture names;
+- Python 3.12+ type-parameter names (`TypeVar`, `ParamSpec`, and `TypeVarTuple`).
 
 Exact normative contract literals remain protected. Imported names are scanned because re-exports are part of repository implementation vocabulary; deliberate compatibility exceptions must remain explicit rather than becoming a broad import bypass.
 
@@ -499,6 +551,7 @@ def compare_to_baseline(
 def validate_code_language(root: Path, errors: list[str]) -> None:
     policy = load_policy(root)
     baseline = load_baseline(root)
+    _validate_baseline_provenance(root, policy, baseline)
     current = group_findings(scan_repository(root, policy))
     delta = compare_to_baseline(current, baseline)
     errors.extend(
@@ -522,7 +575,7 @@ python3 scripts/code_language_guard.py --check
 ```
 
 - exit 0 only when the current grouped findings exactly match the tracked legacy baseline;
-- before comparison, in GitHub `pull_request` CI require `source_commit` to equal the runner-provided `pull_request.base.sha` exactly; outside pull-request CI require it to be a real ancestor commit; in all cases prove every baseline entry/count is supported by findings measured from that immutable Git tree;
+- before comparison, in GitHub `pull_request` CI require `source_commit` to equal or precede the runner-provided `pull_request.base.sha`; reject any source commit introduced after that trusted base; outside pull-request CI require a real ancestor of `HEAD`; in all cases prove every baseline entry/count is supported by findings measured from that immutable Git tree;
 - print each unexpected entry as `NEW_LANGUAGE_DEBT\t<path>\t<kind>\t<token>\t<count>`;
 - print each stale entry as `RESOLVED_BASELINE_ENTRY\t<path>\t<kind>\t<token>\t<count>`;
 - exit 1 on either kind of delta;
@@ -535,7 +588,7 @@ python3 scripts/code_language_guard.py --bootstrap-baseline --source-commit <40-
 python3 scripts/code_language_guard.py --write-baseline --source-commit <40-hex-base-sha>
 ```
 
-- require `--source-commit` in either writing mode and resolve it as a real Git commit that is an ancestor of `HEAD`;
+- require `--source-commit` in either writing mode and resolve it as a real Git commit that is an ancestor of `HEAD`; in pull-request CI it must also be an ancestor of the trusted PR base;
 - bootstrap findings from the Git tree of `source_commit`, never from the current worktree; if a baseline already exists, bootstrap may refresh detector coverage only for the same recorded source commit;
 - normal `--write-baseline` is reduction-only: reject new keys and count increases relative to the tracked baseline;
 - before writing a reduction, prove each retained current finding also exists in the explicitly supplied source commit at an equal or greater count;
