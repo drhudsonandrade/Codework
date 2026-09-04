@@ -49,6 +49,8 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - name: Initialize and verify supply chain
         run: |
           mkdir -p results/runtime-gate results/freshness results/canary results/nextflow-canary results/evidence-sources
@@ -96,6 +98,8 @@ jobs:
     timeout-minutes: 1440
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - name: Validate host, repository and immutable supply chain
         run: |
           mkdir -p results/runtime-gate results/freshness results/canary results/nextflow-canary results/grch38 results/evidence-sources

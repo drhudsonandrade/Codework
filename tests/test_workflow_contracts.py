@@ -135,6 +135,27 @@ class WorkflowContractTest(unittest.TestCase):
         with self.assertRaises(AssertionError):
             _assert_attestation_step_is_in_main_gated_ceremony_job(mutated)
 
+    def test_validate_repo_jobs_fetch_full_history_for_baseline_provenance(self):
+        targets = {
+            "genoma-audit.yml": ("audit",),
+            "genoma-ngs-runtime-gate.yml": ("preflight", "full-grch38"),
+            "genoma-policy-engine.yml": ("policy",),
+            "genoma-production-ceremony.yml": ("live-section-260",),
+            "genoma-production-witness.yml": ("witness",),
+            "genoma-snp-array.yml": ("array-qc-contract",),
+            "scaffold-validation.yml": ("static",),
+        }
+        for filename, jobs in targets.items():
+            workflow = (ROOT / ".github/workflows" / filename).read_text(encoding="utf-8")
+            for job_name in jobs:
+                with self.subTest(workflow=filename, job=job_name):
+                    job = _job_block(workflow, job_name)
+                    self.assertIn("scripts/validate_repo.py", job)
+                    marker = "      - uses: actions/checkout@"
+                    self.assertIn(marker, job)
+                    checkout = job.split(marker, 1)[1].split("\n      - ", 1)[0]
+                    self.assertIn("fetch-depth: 0", checkout)
+
     def test_main_required_policy_checks_have_unconditional_pr_provider(self):
         policy = (ROOT / ".github/workflows/genoma-policy-engine.yml").read_text(encoding="utf-8")
         header = policy.split("permissions:", 1)[0]
