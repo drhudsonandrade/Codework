@@ -1,8 +1,8 @@
 # GENOMA English Codebase Refactor — Compatibility-Preserving Design
 
-**Date:** 2026-09-03  
-**Status:** Approved design direction; implementation not started  
-**Strategy:** Progressive migration by layers  
+**Date:** 2026-09-03
+**Status:** Approved design direction; implementation not started
+**Strategy:** Progressive migration by layers
 **Repository:** `drhudsonandrade/Codework`
 
 ## 1. Objective
