@@ -322,6 +322,43 @@ class BaselineWriteSafetyTest(unittest.TestCase):
             entries = load_baseline(root)
         self.assertEqual(entries, (BaselineEntry("pkg/base.py", "comment", "validar", 1),))
 
+    def test_check_rejects_nonexistent_source_commit(self):
+        from scripts import code_language_guard as guard
+        td, root, _ = self._repo()
+        with td:
+            payload = json.loads((root / "config/code_language_legacy_baseline.json").read_text(encoding="utf-8"))
+            payload["source_commit"] = "0" * 40
+            _write_json(root, "config/code_language_legacy_baseline.json", payload)
+            with self.assertRaisesRegex(LanguagePolicyError, "source_commit"):
+                guard._check(root)
+
+    def test_check_rejects_entry_absent_from_source_commit(self):
+        from scripts import code_language_guard as guard
+        td, root, base = self._repo()
+        with td:
+            new_file = root / "pkg" / "new.py"
+            new_file.write_text("# validar\nvalue = 2\n", encoding="utf-8")
+            _write_json(root, "config/code_language_legacy_baseline.json", {
+                "schema": "genoma-code-language-legacy-baseline-v1",
+                "source_commit": base,
+                "entries": [
+                    {"path": "pkg/base.py", "kind": "comment", "token": TERM_VALIDATE, "count": 1},
+                    {"path": "pkg/new.py", "kind": "comment", "token": TERM_VALIDATE, "count": 1},
+                ],
+            })
+            with self.assertRaisesRegex(LanguagePolicyError, "supported by source_commit"):
+                guard._check(root)
+
+    def test_library_validation_rejects_invalid_baseline_provenance(self):
+        from scripts import code_language_guard as guard
+        td, root, _ = self._repo()
+        with td:
+            payload = json.loads((root / "config/code_language_legacy_baseline.json").read_text(encoding="utf-8"))
+            payload["source_commit"] = "0" * 40
+            _write_json(root, "config/code_language_legacy_baseline.json", payload)
+            with self.assertRaisesRegex(LanguagePolicyError, "source_commit"):
+                guard.validate_code_language(root, [])
+
 
 class LanguageBaselineTest(unittest.TestCase):
     def test_new_finding_is_unexpected(self):

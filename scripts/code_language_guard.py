@@ -378,6 +378,7 @@ def compare_to_baseline(
 def validate_code_language(root: Path, errors: list[str]) -> None:
     policy = load_policy(root)
     baseline = load_baseline(root)
+    _validate_baseline_provenance(root, policy, baseline)
     current = group_findings(scan_repository(root, policy))
     delta = compare_to_baseline(current, baseline)
     errors.extend(
@@ -470,6 +471,29 @@ def _entry_counts(entries: tuple[BaselineEntry, ...]) -> dict[tuple[str, str, st
     return {(entry.path, entry.kind, entry.token): entry.count for entry in entries}
 
 
+def _baseline_source_commit(root: Path) -> str:
+    payload = _read_json(root / "config" / "code_language_legacy_baseline.json", "language baseline")
+    if not isinstance(payload, dict) or payload.get("schema") != BASELINE_SCHEMA:
+        raise LanguagePolicyError("invalid language baseline schema")
+    source_commit = payload.get("source_commit")
+    if not isinstance(source_commit, str) or not SHA40.fullmatch(source_commit):
+        raise LanguagePolicyError("invalid language baseline source_commit")
+    return source_commit
+
+
+def _validate_baseline_provenance(
+    root: Path, policy: LanguagePolicy, baseline: tuple[BaselineEntry, ...]
+) -> None:
+    source_commit = _baseline_source_commit(root)
+    source_counts = _entry_counts(_scan_source_commit(root, source_commit, policy))
+    for entry in baseline:
+        key = (entry.path, entry.kind, entry.token)
+        if key not in source_counts or entry.count > source_counts[key]:
+            raise LanguagePolicyError(
+                f"language baseline entry is not supported by source_commit: {entry.path}: {entry.kind}: {entry.token}"
+            )
+
+
 def _bootstrap_baseline(root: Path, source_commit: str) -> None:
     policy = load_policy(root)
     path = root / "config" / "code_language_legacy_baseline.json"
@@ -503,6 +527,7 @@ def _write_baseline(root: Path, source_commit: str) -> None:
 def _check(root: Path) -> int:
     policy = load_policy(root)
     baseline = load_baseline(root)
+    _validate_baseline_provenance(root, policy, baseline)
     current = group_findings(scan_repository(root, policy))
     delta = compare_to_baseline(current, baseline)
     for entry in delta.unexpected:

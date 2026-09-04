@@ -96,6 +96,8 @@ The update command rejects new baseline keys and count increases, and every reta
 
 Neither writing mode infers provenance from a mutable branch name.
 
+Every `--check` and repository-level validation revalidates the tracked baseline provenance. The recorded `source_commit` must resolve to a real ancestor commit, and every baseline entry/count must be supported by the Python findings measured from that immutable commit tree. A direct JSON edit therefore cannot manufacture new legacy debt.
+
 ## Scope progression
 
 PR 1 enforces Python only. Future language adapters must preserve the same policy categories and fail-closed baseline semantics before TypeScript, shell, Nextflow, or other implementation layers are migrated in bulk.

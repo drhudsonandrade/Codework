@@ -522,10 +522,11 @@ python3 scripts/code_language_guard.py --check
 ```
 
 - exit 0 only when the current grouped findings exactly match the tracked legacy baseline;
+- before comparison, revalidate the tracked `source_commit` as a real ancestor commit and prove every baseline entry/count is supported by findings measured from that immutable Git tree;
 - print each unexpected entry as `NEW_LANGUAGE_DEBT\t<path>\t<kind>\t<token>\t<count>`;
 - print each stale entry as `RESOLVED_BASELINE_ENTRY\t<path>\t<kind>\t<token>\t<count>`;
 - exit 1 on either kind of delta;
-- exit 2 on invalid policy/baseline or unreadable/unparseable scanned source.
+- exit 2 on invalid policy/baseline/provenance or unreadable/unparseable scanned source.
 
 Implement two distinct baseline-writing modes:
 
