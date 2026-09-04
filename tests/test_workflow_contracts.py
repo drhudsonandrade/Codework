@@ -55,9 +55,10 @@ def _step_run_commands(step: str) -> tuple[str, ...]:
     short_circuit_group = re.compile(r"(?:&&|\|\|)\s*\{")
     block_enders = re.compile(r"^(?:fi|done|esac)\b")
     function_starter = re.compile(
-        r"^(?:(?:function\s+)?[A-Za-z_][A-Za-z0-9_]*\s*\(\)\s*\{|function\s+[A-Za-z_][A-Za-z0-9_]*\s*\{)\s*$"
+        r"^(?:(?:function\s+)?[A-Za-z_][A-Za-z0-9_]*\s*\(\)\s*\{?"
+        r"|function\s+[A-Za-z_][A-Za-z0-9_]*\s*\{?)\s*$"
     )
-    heredoc_pattern = re.compile(r"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?")
+    heredoc_pattern = re.compile(r"<<-?\s*['\"]?([A-Za-z0-9_]+)['\"]?")
     for line in lines:
         if line.startswith("        run:"):
             value = line.split("run:", 1)[1].strip()
@@ -282,6 +283,23 @@ class WorkflowContractTest(unittest.TestCase):
 """
         self.assertFalse(_step_runs_validate_repo(midline_if))
         self.assertFalse(_step_runs_validate_repo(short_circuit_group))
+
+    def test_validate_repo_command_detection_rejects_multiline_function_and_numeric_heredoc(self):
+        multiline_function = """      - name: misleading
+        run: |
+          validate_gate()
+          {
+            python3 scripts/validate_repo.py
+          }
+"""
+        numeric_heredoc = """      - name: misleading
+        run: |
+          cat <<1EOF
+          python3 scripts/validate_repo.py
+          1EOF
+"""
+        self.assertFalse(_step_runs_validate_repo(multiline_function))
+        self.assertFalse(_step_runs_validate_repo(numeric_heredoc))
 
     def test_validate_repo_command_detection_ignores_non_executable_mentions(self):
         echo_only = "      - name: misleading\n        run: |\n          echo 'python3 scripts/validate_repo.py'\n          # python3 scripts/validate_repo.py\n"
