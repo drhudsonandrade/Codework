@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 import unittest
+from unittest import mock
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -19,6 +20,8 @@ from scripts.code_language_guard import (
     load_policy,
     scan_repository,
 )
+
+import scripts.validate_repo as validate_repo
 
 
 def _write_json(root: Path, relative: str, payload: object) -> None:
@@ -129,6 +132,19 @@ class RepositoryLanguageBaselineTest(unittest.TestCase):
         current = group_findings(scan_repository(ROOT, policy))
         delta = compare_to_baseline(current, baseline)
         self.assertTrue(delta.clean, delta)
+
+
+class ValidateRepoLanguageIntegrationTest(unittest.TestCase):
+    def test_validate_repo_invokes_language_guard(self):
+        errors: list[str] = []
+        with mock.patch.object(
+            validate_repo,
+            "validate_code_language",
+            side_effect=lambda root, out: out.append("language guard sentinel"),
+        ) as guard:
+            validate_repo.validate_language_policy(ROOT, errors)
+        guard.assert_called_once_with(ROOT, errors)
+        self.assertEqual(errors, ["language guard sentinel"])
 
 
 if __name__ == "__main__":

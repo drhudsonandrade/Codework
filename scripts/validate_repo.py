@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.code_language_guard import LanguagePolicyError, validate_code_language
 from scripts.sealed_ruleset import EXPECTED_NAME, EXPECTED_SHA, SealedRulesetError, verify_transport
 
 CANONICAL_RULESET = EXPECTED_NAME
@@ -26,9 +27,11 @@ REQUIRED_PATHS = (
     ".github/workflows/genoma-snp-array.yml", ".gitignore", "Dockerfile", "environment.yml", "main.nf",
     "nextflow.config", "workflows/wgs.nf", "workflows/array.nf", "array_pipeline/qc.py",
     "array_pipeline/annotation.py", "array_pipeline/targets.py", "config/partial_genome_annotation_targets.json",
+    "config/code_language_policy.json", "config/code_language_legacy_baseline.json",
     "manifests/GRCh38.sources.tsv", "manifests/GRCh38.lock.sha256.example", "manifests/RULESET_V3.4.sha256",
     "normative/sealed/MANIFEST.json", "normative/sealed/README.md",
-    "scripts/__init__.py", "scripts/sealed_ruleset.py", "scripts/check_versions.sh", "scripts/fetch_grch38.sh",
+    "scripts/__init__.py", "scripts/sealed_ruleset.py", "scripts/code_language_guard.py",
+    "scripts/check_versions.sh", "scripts/fetch_grch38.sh",
     "scripts/build_bwa_mem2_index.sh", "scripts/validate_grch38.sh", "scripts/validate_bwa_mem2_functional.sh",
     "scripts/generate_canary.py", "scripts/score_variants.py", "scripts/run_canary.sh", "scripts/verify_ruleset.sh",
     "scripts/materialize_ruleset.py", "scripts/bootstrap_attestation.py", "scripts/run_live_post_deployment_smoke.py",
@@ -589,6 +592,13 @@ def validate_core_runtime_dependencies(root: Path, errors: list[str]) -> None:
                     )
 
 
+def validate_language_policy(root: Path, errors: list[str]) -> None:
+    try:
+        validate_code_language(root, errors)
+    except LanguagePolicyError as exc:
+        errors.append(f"code language policy unavailable: {exc}")
+
+
 def validate(root: Path) -> list[str]:
     """Run every static repository check and return the accumulated errors.
 
@@ -756,6 +766,7 @@ def validate(root: Path) -> list[str]:
                 json.loads(path.read_text(encoding="utf-8"))
             except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                 errors.append(f"invalid JSON: {relative}: {exc}")
+    validate_language_policy(root, errors)
     return errors
 
 
