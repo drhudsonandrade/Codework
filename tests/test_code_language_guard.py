@@ -278,6 +278,16 @@ class GitProvenanceExecutionTest(unittest.TestCase):
 
 
 class BaselineWriteSafetyTest(unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch.dict(
+            os.environ,
+            {"GITHUB_EVENT_NAME": "unit_test", "GITHUB_EVENT_PATH": ""},
+            clear=False,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def _repo(self) -> tuple[TemporaryDirectory, Path, str]:
         td = TemporaryDirectory()
         root = Path(td.name)
