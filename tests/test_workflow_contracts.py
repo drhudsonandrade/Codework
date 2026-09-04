@@ -56,9 +56,11 @@ def _step_run_commands(step: str) -> tuple[str, ...]:
     block_enders = re.compile(r"^(?:fi|done|esac)\b")
     function_starter = re.compile(
         r"^(?:(?:function\s+)?[A-Za-z_][A-Za-z0-9_]*\s*\(\)\s*\{?"
-        r"|function\s+[A-Za-z_][A-Za-z0-9_]*\s*\{?)\s*$"
+        r"|function\s+[A-Za-z_][A-Za-z0-9_]*\s*\{?)\s*(?:#.*)?$"
     )
-    heredoc_pattern = re.compile(r"<<-?\s*['\"]?([A-Za-z0-9_]+)['\"]?")
+    heredoc_pattern = re.compile(
+        r"<<-?\s*(?:'([^']+)'|\"([^\"]+)\"|([^\s;&|<>]+))"
+    )
     for line in lines:
         if line.startswith("        run:"):
             value = line.split("run:", 1)[1].strip()
@@ -88,7 +90,7 @@ def _step_run_commands(step: str) -> tuple[str, ...]:
             commands.append(command)
         heredoc = heredoc_pattern.search(command)
         if heredoc is not None:
-            heredoc_end = heredoc.group(1)
+            heredoc_end = next(group for group in heredoc.groups() if group is not None)
         if opens_control or opens_function or opens_short_circuit_group:
             control_depth += 1
     return tuple(commands)
@@ -300,6 +302,23 @@ class WorkflowContractTest(unittest.TestCase):
 """
         self.assertFalse(_step_runs_validate_repo(multiline_function))
         self.assertFalse(_step_runs_validate_repo(numeric_heredoc))
+
+    def test_validate_repo_command_detection_rejects_commented_function_and_hyphenated_heredoc(self):
+        commented_function = """      - name: misleading
+        run: |
+          validate_gate() { # definition only
+            python3 scripts/validate_repo.py
+          }
+"""
+        hyphenated_heredoc = """      - name: misleading
+        run: |
+          cat <<'EOF-1'
+          EOF
+          python3 scripts/validate_repo.py
+          EOF-1
+"""
+        self.assertFalse(_step_runs_validate_repo(commented_function))
+        self.assertFalse(_step_runs_validate_repo(hyphenated_heredoc))
 
     def test_validate_repo_command_detection_ignores_non_executable_mentions(self):
         echo_only = "      - name: misleading\n        run: |\n          echo 'python3 scripts/validate_repo.py'\n          # python3 scripts/validate_repo.py\n"
