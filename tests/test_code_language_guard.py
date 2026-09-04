@@ -20,6 +20,11 @@ IDENTIFIER_CALCULATE_TOTAL = "calcular_total"
 IDENTIFIER_PROCESSED_FILES = "arquivos_processados"
 IDENTIFIER_XML_FILE = "XMLArquivo"
 IDENTIFIER_SAMPLE_ONE = "amostra1"
+IDENTIFIER_UNICODE_CAMEL = "relatórioArquivo"
+IDENTIFIER_UNICODE_UPPER = "arquivoÁrvore"
+IDENTIFIER_AVAILABLE = "disponivel"
+TERM_VERIFICATION = "verificacao"
+TERM_PROCESS = "processar"
 
 
 from scripts.code_language_guard import (
@@ -121,10 +126,13 @@ class PythonLanguageScannerTest(unittest.TestCase):
         self.assertTrue(any(f.kind == "identifier" and f.token == PORTUGUESE_FIXTURE_CLASS for f in findings), findings)
 
     def test_accented_comment_is_normalized_and_reported(self):
-        td, root = self._repo({"pkg/mod.py": "# verificação do arquivo\nvalue = 1\n"})
+        td, root = self._repo({"pkg/mod.py": "# verificação\nvalue = 1\n"})
         with td:
             findings = scan_repository(root, load_policy(root))
-        self.assertTrue(any(f.kind == "comment" for f in findings), findings)
+        self.assertTrue(
+            any(f.kind == "comment" and f.token == TERM_VERIFICATION for f in findings),
+            findings,
+        )
 
     def test_docstring_is_scanned(self):
         td, root = self._repo({"pkg/mod.py": 'def build():\n    """Validar a amostra antes da chamada."""\n    return 1\n'})
@@ -158,13 +166,52 @@ class PythonLanguageScannerTest(unittest.TestCase):
         td, root = self._repo({"pkg/mod.py": "def arquivos_processados():\n    return True\n"})
         with td:
             findings = scan_repository(root, load_policy(root))
-        self.assertTrue(any(f.kind == "identifier" and f.token == IDENTIFIER_PROCESSED_FILES for f in findings), findings)
+        finding = next(
+            f for f in findings
+            if f.kind == "identifier" and f.token == IDENTIFIER_PROCESSED_FILES
+        )
+        self.assertIn(TERM_PROCESS, finding.matched_terms)
 
     def test_acronym_pascal_case_identifier_is_split(self):
         td, root = self._repo({"pkg/mod.py": "class XMLArquivo:\n    pass\n"})
         with td:
             findings = scan_repository(root, load_policy(root))
         self.assertTrue(any(f.kind == "identifier" and f.token == IDENTIFIER_XML_FILE for f in findings), findings)
+
+    def test_unicode_camel_case_identifier_is_split(self):
+        td, root = self._repo({"pkg/mod.py": "relatórioArquivo = 1\n"})
+        with td:
+            findings = scan_repository(root, load_policy(root))
+        finding = next(
+            f for f in findings
+            if f.kind == "identifier" and f.token == IDENTIFIER_UNICODE_CAMEL
+        )
+        self.assertIn(TERM_ARCHIVE, finding.matched_terms)
+
+    def test_unicode_uppercase_boundary_is_split(self):
+        td, root = self._repo({"pkg/mod.py": "arquivoÁrvore = 1\n"})
+        with td:
+            findings = scan_repository(root, load_policy(root))
+        finding = next(
+            f for f in findings
+            if f.kind == "identifier" and f.token == IDENTIFIER_UNICODE_UPPER
+        )
+        self.assertIn(TERM_ARCHIVE, finding.matched_terms)
+
+    def test_contract_literal_word_does_not_exempt_identifier(self):
+        td, root = self._repo({"pkg/mod.py": "def disponivel():\n    return True\n"})
+        with td:
+            findings = scan_repository(root, load_policy(root))
+        self.assertTrue(
+            any(f.kind == "identifier" and f.token == IDENTIFIER_AVAILABLE for f in findings),
+            findings,
+        )
+
+    def test_full_contract_literal_identifier_form_is_preserved(self):
+        td, root = self._repo({"pkg/mod.py": "NAO_DISPONIVEL = 1\n"})
+        with td:
+            findings = scan_repository(root, load_policy(root))
+        self.assertEqual(findings, ())
 
     def test_letter_digit_boundary_does_not_hide_term(self):
         td, root = self._repo({"pkg/mod.py": "amostra1 = 1\n"})
@@ -212,6 +259,21 @@ def _init_git_repo(root: Path) -> str:
     _git(root, "add", ".")
     _git(root, "commit", "-m", "baseline")
     return _git(root, "rev-parse", "HEAD")
+
+
+class GitProvenanceExecutionTest(unittest.TestCase):
+    def test_git_provenance_uses_absolute_trusted_executable(self):
+        from scripts import code_language_guard as guard
+        completed = guard.subprocess.CompletedProcess(args=[], returncode=0, stdout=b"", stderr=b"")
+        with mock.patch.object(guard.subprocess, "run", return_value=completed) as runner:
+            guard._run_git(ROOT, "status")
+        command = runner.call_args.args[0]
+        executable = Path(command[0])
+        self.assertTrue(executable.is_absolute(), command)
+        if sys.platform == "win32":
+            self.assertEqual(executable, Path(r"C:\Program Files\Git\cmd\git.exe"))
+        else:
+            self.assertEqual(executable, Path("/usr/bin/git"))
 
 
 class BaselineWriteSafetyTest(unittest.TestCase):

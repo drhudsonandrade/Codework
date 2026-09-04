@@ -93,6 +93,12 @@
       "count": 1
     },
     {
+      "path": "tests/test_evidence_adapters.py",
+      "kind": "identifier",
+      "token": "test_query_snapshot_is_verificado_only_with_retrieval_trace",
+      "count": 1
+    },
+    {
       "path": "tests/test_execution_manifest_anchoring.py",
       "kind": "docstring",
       "token": "versao",
@@ -102,6 +108,24 @@
       "path": "tests/test_pharmacogenomics.py",
       "kind": "docstring",
       "token": "carregar",
+      "count": 1
+    },
+    {
+      "path": "tests/test_pharmacogenomics.py",
+      "kind": "identifier",
+      "token": "test_a_diplotype_on_a_complete_unambiguous_panel_is_inferido_never_executado",
+      "count": 1
+    },
+    {
+      "path": "tests/test_target_expansion.py",
+      "kind": "identifier",
+      "token": "test_a_successful_lookup_reports_executado",
+      "count": 1
+    },
+    {
+      "path": "tests/test_target_expansion.py",
+      "kind": "identifier",
+      "token": "test_no_uids_is_executado_not_a_failure",
       "count": 1
     }
   ]

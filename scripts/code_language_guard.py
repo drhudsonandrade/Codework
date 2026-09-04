@@ -159,14 +159,22 @@ PORTUGUESE_VERB_SUFFIXES = frozenset({
 
 
 def _identifier_words(identifier: str) -> tuple[str, ...]:
-    expanded = re.sub(
-        r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|(?<=[A-Za-z])(?=\d)|(?<=\d)(?=[A-Za-z])",
-        "_",
-        identifier,
-    )
+    expanded: list[str] = []
+    for index, current in enumerate(identifier):
+        previous = identifier[index - 1] if index else ""
+        following = identifier[index + 1] if index + 1 < len(identifier) else ""
+        boundary = (
+            (current.isupper() and (previous.islower() or previous.isdigit()))
+            or (current.isupper() and previous.isupper() and following.islower())
+            or (current.isdigit() and previous.isalpha())
+            or (current.isalpha() and previous.isdigit())
+        )
+        if boundary:
+            expanded.append("_")
+        expanded.append(current)
     return tuple(
         word
-        for part in re.split(r"[_\W]+", expanded, flags=re.UNICODE)
+        for part in re.split(r"[_\W]+", "".join(expanded), flags=re.UNICODE)
         if (word := _normalize_word(part))
     )
 
@@ -191,20 +199,20 @@ def _canonical_technical_term(word: str, policy: LanguagePolicy) -> str | None:
     return None
 
 
-def _contract_identifier_words(policy: LanguagePolicy) -> frozenset[str]:
+def _contract_identifier_forms(policy: LanguagePolicy) -> frozenset[str]:
     return frozenset(
-        _normalize_word(part)
+        "_".join(_identifier_words(literal))
         for literal in policy.contract_literals
-        for part in re.findall(r"[^\W_]+", literal, flags=re.UNICODE)
     )
 
 
 def _matched_identifier_terms(identifier: str, policy: LanguagePolicy) -> tuple[str, ...]:
-    protected = _contract_identifier_words(policy)
+    words = _identifier_words(identifier)
+    if "_".join(words) in _contract_identifier_forms(policy):
+        return ()
     matched = {
         canonical
-        for word in _identifier_words(identifier)
-        if word not in protected
+        for word in words
         if (canonical := _canonical_technical_term(word, policy)) is not None
     }
     return tuple(sorted(matched))
@@ -384,13 +392,20 @@ def validate_code_language(root: Path, errors: list[str]) -> None:
 
 def _run_git(root: Path, *args: str, allow_nonzero: bool = False) -> subprocess.CompletedProcess[bytes]:
     try:
-        result = subprocess.run(  # nosec B603 B607 -- fixed git executable, argv list, no shell.
-            ["git", "-C", str(root), *args],
-            check=False,
-            capture_output=True,
-        )
+        if sys.platform == "win32":
+            result = subprocess.run(  # nosec B603 -- approved absolute Git path, argv list, no shell.
+                [r"C:\Program Files\Git\cmd\git.exe", "-C", str(root), *args],
+                check=False,
+                capture_output=True,
+            )
+        else:
+            result = subprocess.run(  # nosec B603 -- approved absolute Git path, argv list, no shell.
+                ["/usr/bin/git", "-C", str(root), *args],
+                check=False,
+                capture_output=True,
+            )
     except OSError as exc:
-        raise LanguagePolicyError("unable to execute git for language baseline provenance") from exc
+        raise LanguagePolicyError("unable to execute trusted git for language baseline provenance") from exc
     if result.returncode != 0 and not allow_nonzero:
         detail = result.stderr.decode("utf-8", errors="replace").strip()
         raise LanguagePolicyError(f"git baseline provenance check failed: {detail or args[0]}")
