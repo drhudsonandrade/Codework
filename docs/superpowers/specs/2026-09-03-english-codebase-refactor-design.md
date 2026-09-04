@@ -1,9 +1,11 @@
 # GENOMA English Codebase Refactor — Compatibility-Preserving Design
 
 **Date:** 2026-09-03
-**Status:** Approved design direction; implementation not started
+**Status:** PR 1 implementation started; guardrails implemented in PR #38
 **Strategy:** Progressive migration by layers
 **Repository:** `drhudsonandrade/Codework`
+**Implementation reference:** `scripts/code_language_guard.py`
+**Reproducible validation:** `python3 -m unittest tests.test_code_language_guard -v` and `python3 scripts/code_language_guard.py --check`
 
 ## 1. Objective
 

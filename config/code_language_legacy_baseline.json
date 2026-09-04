@@ -15,9 +15,27 @@
       "count": 1
     },
     {
+      "path": "normative/__init__.py",
+      "kind": "comment",
+      "token": "fonte",
+      "count": 1
+    },
+    {
+      "path": "normative/__init__.py",
+      "kind": "docstring",
+      "token": "regra",
+      "count": 1
+    },
+    {
       "path": "reporting/assay.py",
       "kind": "docstring",
       "token": "arquivo",
+      "count": 1
+    },
+    {
+      "path": "reporting/assay.py",
+      "kind": "docstring",
+      "token": "leitura",
       "count": 1
     },
     {
@@ -27,9 +45,63 @@
       "count": 1
     },
     {
+      "path": "reporting/deployment_target.py",
+      "kind": "docstring",
+      "token": "falha",
+      "count": 1
+    },
+    {
+      "path": "reporting/provenance.py",
+      "kind": "comment",
+      "token": "falha",
+      "count": 1
+    },
+    {
+      "path": "reporting/provenance.py",
+      "kind": "comment",
+      "token": "verificar",
+      "count": 1
+    },
+    {
       "path": "reporting/section_attestations.py",
       "kind": "comment",
       "token": "arquivo",
+      "count": 1
+    },
+    {
+      "path": "reporting/wgs_qc_record.py",
+      "kind": "docstring",
+      "token": "disponivel",
+      "count": 1
+    },
+    {
+      "path": "reporting/wgs_qc_record.py",
+      "kind": "docstring",
+      "token": "interpretar",
+      "count": 2
+    },
+    {
+      "path": "scripts/genoma_audit.py",
+      "kind": "docstring",
+      "token": "interpretar",
+      "count": 1
+    },
+    {
+      "path": "tests/test_assessed_allele_presence.py",
+      "kind": "docstring",
+      "token": "interpretar",
+      "count": 1
+    },
+    {
+      "path": "tests/test_execution_manifest_anchoring.py",
+      "kind": "docstring",
+      "token": "versao",
+      "count": 1
+    },
+    {
+      "path": "tests/test_pharmacogenomics.py",
+      "kind": "docstring",
+      "token": "carregar",
       "count": 1
     }
   ]

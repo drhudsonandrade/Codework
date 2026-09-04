@@ -56,7 +56,7 @@ Action: do not rewrite for cosmetic translation. New English documentation may e
 
 `config/code_language_legacy_baseline.json` records measured pre-migration debt. It is temporary debt inventory, not approved style and not permission to introduce new Portuguese implementation language.
 
-The current Python scanner analyzes identifiers, comments, and module/class/function docstrings without executing repository code. It normalizes accents for matching and fails closed on unreadable, unparseable, or untokenizable scanned Python source.
+The current Python scanner analyzes identifiers, comments, and module/class/function docstrings without executing repository code. It uses a deterministic technical Portuguese vocabulary plus conservative plural and verb-inflection normalization, splits snake_case/CamelCase/acronym/digit boundaries, preserves exact contract literals, and fails closed on unreadable, unparseable, or untokenizable scanned Python source.
 
 Baseline identity is `(path, kind, token, count)`. Line numbers are diagnostic only, so unrelated line movement does not rewrite the baseline, while partial cleanup changes the count and requires an explicit baseline update.
 
@@ -78,15 +78,23 @@ New debt causes the guard to fail. Removing tracked debt also requires updating 
 
 Adding a baseline entry merely to make CI pass is forbidden unless the pull request explicitly documents why the new occurrence cannot yet be migrated without breaking a supported compatibility requirement.
 
-Migration pull requests that remove tracked Portuguese debt may regenerate the baseline only with an explicit immutable base SHA:
+The initial detector inventory is bootstrapped only from an explicit Git source tree:
+
+```bash
+python3 scripts/code_language_guard.py --bootstrap-baseline --source-commit <base-sha>
+```
+
+Bootstrap resolves `<base-sha>` as a real ancestor commit and scans that commit tree, not the current worktree. If a baseline already exists, bootstrap may refresh detector coverage only for the same recorded source commit.
+
+Migration pull requests that remove tracked Portuguese debt use the reduction-only update mode:
 
 ```bash
 python3 scripts/code_language_guard.py --write-baseline --source-commit <base-sha>
 ```
 
-Before committing a regenerated baseline, review the diff, verify the recorded base SHA, and confirm that removed debt was not replaced by new debt elsewhere.
+The update command rejects new baseline keys and count increases, and every retained finding must also be supported by the supplied source commit. Before committing a regenerated baseline, review the diff and verify the recorded base SHA.
 
-The write command never infers its provenance from a mutable branch name.
+Neither writing mode infers provenance from a mutable branch name.
 
 ## Scope progression
 

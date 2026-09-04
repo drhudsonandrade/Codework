@@ -268,7 +268,7 @@ class PythonLanguageScannerTest(unittest.TestCase):
         policy = {
             "schema": "genoma-code-language-policy-v1",
             "scan_suffixes": [".py"],
-            "technical_terms": ["arquivo", "amostra", "relatorio", "validar", "verificacao"],
+            "technical_terms": ["arquivo", "amostra", "disponivel", "relatorio", "validar", "verificacao"],
             "contract_literals": ["VERIFICADO", "NÃO DISPONÍVEL"],
             "excluded_roots": [
                 {"path": "docs/history", "reason": "historical evidence"},
@@ -372,9 +372,12 @@ Implement AST traversal for identifiers from:
 - class names;
 - attribute names;
 - assignment targets;
-- import aliases only when `asname` is present.
+- imported names and aliases (`ast.alias.name` / `asname`);
+- keyword argument names;
+- exception/global/nonlocal bindings;
+- structural-pattern capture names.
 
-Do not classify imported external module names themselves as repository naming violations.
+Exact normative contract literals remain protected. Imported names are scanned because re-exports are part of repository implementation vocabulary; deliberate compatibility exceptions must remain explicit rather than becoming a broad import bypass.
 
 Use `tokenize.generate_tokens()` for `COMMENT` tokens and AST first-statement string literals for module/class/function docstrings. Before comment/docstring word matching, remove exact `contract_literals` from the text. Do not scan ordinary string literals in PR 1.
 
@@ -425,7 +428,7 @@ git commit -m "feat: detect Portuguese Python implementation language"
 
 **Interfaces:**
 - Consumes: grouped current findings and grouped baseline entries.
-- Produces: `BaselineDelta`, `compare_to_baseline(current: tuple[BaselineEntry, ...], baseline: tuple[BaselineEntry, ...]) -> BaselineDelta`, `validate_code_language(root: Path, errors: list[str]) -> None`, CLI modes `--check` and `--write-baseline --source-commit <sha>`.
+- Produces: `BaselineDelta`, `compare_to_baseline(current: tuple[BaselineEntry, ...], baseline: tuple[BaselineEntry, ...]) -> BaselineDelta`, `validate_code_language(root: Path, errors: list[str]) -> None`, CLI modes `--check`, `--bootstrap-baseline --source-commit <sha>`, and reduction-only `--write-baseline --source-commit <sha>`.
 
 - [ ] **Step 1: Write failing tests that distinguish new debt from resolved debt**
 
@@ -524,17 +527,18 @@ python3 scripts/code_language_guard.py --check
 - exit 1 on either kind of delta;
 - exit 2 on invalid policy/baseline or unreadable/unparseable scanned source.
 
-Implement baseline writing as:
+Implement two distinct baseline-writing modes:
 
 ```text
+python3 scripts/code_language_guard.py --bootstrap-baseline --source-commit <40-hex-base-sha>
 python3 scripts/code_language_guard.py --write-baseline --source-commit <40-hex-base-sha>
 ```
 
-- require `--source-commit` in write mode;
-- validate it against `SHA40`;
-- deterministically replace `entries` with current grouped findings;
-- preserve schema;
-- set `source_commit` to the explicitly supplied base SHA, never inferred from mutable branch state;
+- require `--source-commit` in either writing mode and resolve it as a real Git commit that is an ancestor of `HEAD`;
+- bootstrap findings from the Git tree of `source_commit`, never from the current worktree; if a baseline already exists, bootstrap may refresh detector coverage only for the same recorded source commit;
+- normal `--write-baseline` is reduction-only: reject new keys and count increases relative to the tracked baseline;
+- before writing a reduction, prove each retained current finding also exists in the explicitly supplied source commit at an equal or greater count;
+- preserve schema and set `source_commit` only to the verified commit supplied explicitly;
 - use `ensure_ascii=False`, `indent=2`, sorted entries, and a final newline.
 
 - [ ] **Step 5: Generate the initial baseline against the recorded implementation base**
@@ -551,7 +555,7 @@ The merge-base must equal `BASE_SHA`; otherwise synchronize/restart the implemen
 Then run:
 
 ```bash
-python3 scripts/code_language_guard.py --write-baseline --source-commit "$BASE_SHA"
+python3 scripts/code_language_guard.py --bootstrap-baseline --source-commit "$BASE_SHA"
 python3 scripts/code_language_guard.py --check
 ```
 
@@ -747,7 +751,7 @@ The document must state these exact operational rules:
 - `config/code_language_legacy_baseline.json` contains temporary measured debt, not approved style;
 - adding a baseline entry to make CI pass is forbidden unless the PR explicitly documents why the new occurrence cannot yet be migrated without breaking compatibility;
 - normal development must run `python3 scripts/code_language_guard.py --check`;
-- migration PRs that remove Portuguese debt run `--write-baseline --source-commit <base-sha>` only after reviewing the diff and ensuring no new debt replaced the removed debt;
+- migration PRs that remove Portuguese debt run `--write-baseline --source-commit <base-sha>` only after reviewing the diff; the command rejects new keys/count increases and verifies retained entries against that Git source tree;
 - PR 1 enforces Python only; the same policy applies to other languages, whose automated adapters are introduced before their bulk migration layers.
 
 - [ ] **Step 4: Update `AGENTS.md`**

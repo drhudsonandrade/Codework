@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 import unittest
 from unittest import mock
@@ -10,6 +11,10 @@ from tempfile import TemporaryDirectory
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+PORTUGUESE_FIXTURE_IDENTIFIER = "validar_arquivo"
+PORTUGUESE_FIXTURE_CLASS = "RelatorioBuilder"
+
 
 from scripts.code_language_guard import (
     BaselineEntry,
@@ -45,6 +50,35 @@ class LanguagePolicyLoadingTest(unittest.TestCase):
             with self.assertRaisesRegex(LanguagePolicyError, "invalid language baseline schema"):
                 load_baseline(root)
 
+    def test_policy_rejects_parent_traversal_exclusion(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            _write_json(root, "config/code_language_policy.json", {
+                "schema": "genoma-code-language-policy-v1",
+                "scan_suffixes": [".py"],
+                "technical_terms": ["arquivo"],
+                "contract_literals": [],
+                "excluded_roots": [{"path": "../escape", "reason": "invalid"}],
+            })
+            with self.assertRaisesRegex(LanguagePolicyError, "invalid excluded root path"):
+                load_policy(root)
+
+    def test_baseline_rejects_parent_traversal_entry(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            _write_json(root, "config/code_language_legacy_baseline.json", {
+                "schema": "genoma-code-language-legacy-baseline-v1",
+                "source_commit": "0" * 40,
+                "entries": [{"path": "../escape.py", "kind": "comment", "token": "arquivo", "count": 1}],
+            })
+            with self.assertRaisesRegex(LanguagePolicyError, "invalid baseline entry path"):
+                load_baseline(root)
+
+    def test_repository_policy_covers_common_technical_lemmas(self):
+        policy = load_policy(ROOT)
+        self.assertTrue({"calcular", "processar", "arquivo"} <= policy.technical_terms)
+
+
 
 class PythonLanguageScannerTest(unittest.TestCase):
     def _repo(self, files: dict[str, str]) -> tuple[TemporaryDirectory, Path]:
@@ -53,7 +87,7 @@ class PythonLanguageScannerTest(unittest.TestCase):
         policy = {
             "schema": "genoma-code-language-policy-v1",
             "scan_suffixes": [".py"],
-            "technical_terms": ["arquivo", "amostra", "relatorio", "validar", "verificacao"],
+            "technical_terms": ["arquivo", "amostra", "calcular", "disponivel", "processar", "relatorio", "validar", "verificacao"],
             "contract_literals": ["VERIFICADO", "NÃO DISPONÍVEL"],
             "excluded_roots": [
                 {"path": "docs/history", "reason": "historical evidence"},
@@ -71,16 +105,16 @@ class PythonLanguageScannerTest(unittest.TestCase):
         td, root = self._repo({"pkg/mod.py": "def validar_arquivo():\n    return True\n"})
         with td:
             findings = scan_repository(root, load_policy(root))
-        self.assertTrue(any(f.kind == "identifier" and f.token == "validar_arquivo" for f in findings), findings)
+        self.assertTrue(any(f.kind == "identifier" and f.token == PORTUGUESE_FIXTURE_IDENTIFIER for f in findings), findings)
 
     def test_camel_case_portuguese_identifier_is_reported(self):
         td, root = self._repo({"pkg/mod.py": "class RelatorioBuilder:\n    pass\n"})
         with td:
             findings = scan_repository(root, load_policy(root))
-        self.assertTrue(any(f.kind == "identifier" and f.token == "RelatorioBuilder" for f in findings), findings)
+        self.assertTrue(any(f.kind == "identifier" and f.token == PORTUGUESE_FIXTURE_CLASS for f in findings), findings)
 
     def test_accented_comment_is_normalized_and_reported(self):
-        td, root = self._repo({"pkg/mod.py": "# verificação do arquivo\nvalue = 1\n"})
+        td, root = self._repo({"pkg/mod.py": "# verificaÃ§Ã£o do arquivo\nvalue = 1\n"})
         with td:
             findings = scan_repository(root, load_policy(root))
         self.assertTrue(any(f.kind == "comment" for f in findings), findings)
@@ -97,11 +131,133 @@ class PythonLanguageScannerTest(unittest.TestCase):
             findings = scan_repository(root, load_policy(root))
         self.assertEqual(findings, ())
 
+    def test_repeated_comment_term_preserves_occurrence_count(self):
+        td, root = self._repo({"pkg/mod.py": "# validar validar\nvalue = 1\n"})
+        with td:
+            findings = scan_repository(root, load_policy(root))
+        matches = [f for f in findings if f.kind == "comment" and f.token == "validar"]
+        self.assertEqual(len(matches), 2, findings)
+
+    def test_unlisted_portuguese_lemma_is_reported_across_scanned_surfaces(self):
+        source = 'def calcular_total():\n    """calcular resultado"""\n    # calcular agora\n    return 1\n'
+        td, root = self._repo({"pkg/mod.py": source})
+        with td:
+            findings = scan_repository(root, load_policy(root))
+        self.assertTrue(any(f.kind == "identifier" and f.token == "calcular_total" for f in findings), findings)
+        self.assertTrue(any(f.kind == "comment" and f.token == "calcular" for f in findings), findings)
+        self.assertTrue(any(f.kind == "docstring" and f.token == "calcular" for f in findings), findings)
+
+    def test_portuguese_plural_and_participle_are_normalized(self):
+        td, root = self._repo({"pkg/mod.py": "def arquivos_processados():\n    return True\n"})
+        with td:
+            findings = scan_repository(root, load_policy(root))
+        self.assertTrue(any(f.kind == "identifier" and f.token == "arquivos_processados" for f in findings), findings)
+
+    def test_acronym_pascal_case_identifier_is_split(self):
+        td, root = self._repo({"pkg/mod.py": "class XMLArquivo:\n    pass\n"})
+        with td:
+            findings = scan_repository(root, load_policy(root))
+        self.assertTrue(any(f.kind == "identifier" and f.token == "XMLArquivo" for f in findings), findings)
+
+    def test_letter_digit_boundary_does_not_hide_term(self):
+        td, root = self._repo({"pkg/mod.py": "amostra1 = 1\n"})
+        with td:
+            findings = scan_repository(root, load_policy(root))
+        self.assertTrue(any(f.kind == "identifier" and f.token == "amostra1" for f in findings), findings)
+
+    def test_unaliased_import_and_keyword_argument_are_scanned(self):
+        source = "from pacote import validar_arquivo\nfunc(arquivo=True)\n"
+        td, root = self._repo({"pkg/mod.py": source})
+        with td:
+            findings = scan_repository(root, load_policy(root))
+        tokens = {f.token for f in findings if f.kind == "identifier"}
+        self.assertIn("validar_arquivo", tokens)
+        self.assertIn("arquivo", tokens)
+
+    def test_pattern_binding_names_are_scanned(self):
+        source = 'match payload:\n    case {"item": arquivo}:\n        pass\n'
+        td, root = self._repo({"pkg/mod.py": source})
+        with td:
+            findings = scan_repository(root, load_policy(root))
+        self.assertTrue(any(f.kind == "identifier" and f.token == "arquivo" for f in findings), findings)
+
+    def test_unparseable_python_fails_closed(self):
+        td, root = self._repo({"pkg/mod.py": "def broken(:\n    pass\n"})
+        with td, self.assertRaisesRegex(LanguagePolicyError, "unable to parse scanned Python source"):
+            scan_repository(root, load_policy(root))
+
     def test_historical_root_is_not_scanned(self):
         td, root = self._repo({"docs/history/v3.3/example.py": "def validar_arquivo():\n    return True\n"})
         with td:
             findings = scan_repository(root, load_policy(root))
         self.assertEqual(findings, ())
+
+
+def _git(root: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(root), *args],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    return result.stdout.strip()
+
+
+def _init_git_repo(root: Path) -> str:
+    _git(root, "init")
+    _git(root, "config", "user.email", "tests@example.invalid")
+    _git(root, "config", "user.name", "Language Guard Tests")
+    _git(root, "add", ".")
+    _git(root, "commit", "-m", "baseline")
+    return _git(root, "rev-parse", "HEAD")
+
+
+class BaselineWriteSafetyTest(unittest.TestCase):
+    def _repo(self) -> tuple[TemporaryDirectory, Path, str]:
+        td = TemporaryDirectory()
+        root = Path(td.name)
+        policy = {
+            "schema": "genoma-code-language-policy-v1",
+            "scan_suffixes": [".py"],
+            "technical_terms": ["arquivo", "validar"],
+            "contract_literals": ["VERIFICADO", "NÃO DISPONÍVEL"],
+            "excluded_roots": [],
+        }
+        _write_json(root, "config/code_language_policy.json", policy)
+        source = root / "pkg" / "base.py"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text("# validar\nvalue = 1\n", encoding="utf-8")
+        base = _init_git_repo(root)
+        _write_json(root, "config/code_language_legacy_baseline.json", {
+            "schema": "genoma-code-language-legacy-baseline-v1",
+            "source_commit": base,
+            "entries": [{"path": "pkg/base.py", "kind": "comment", "token": "validar", "count": 1}],
+        })
+        return td, root, base
+
+    def test_write_baseline_rejects_new_debt(self):
+        from scripts import code_language_guard as guard
+        td, root, base = self._repo()
+        with td:
+            (root / "pkg" / "new.py").write_text("# validar\nvalue = 2\n", encoding="utf-8")
+            with self.assertRaisesRegex(LanguagePolicyError, "new language debt"):
+                guard._write_baseline(root, base)
+
+    def test_write_baseline_rejects_nonexistent_commit(self):
+        from scripts import code_language_guard as guard
+        td, root, _ = self._repo()
+        with td, self.assertRaisesRegex(LanguagePolicyError, "source_commit"):
+            guard._write_baseline(root, "0" * 40)
+
+    def test_bootstrap_baseline_uses_source_tree_not_worktree(self):
+        from scripts import code_language_guard as guard
+        td, root, base = self._repo()
+        with td:
+            (root / "pkg" / "new.py").write_text("# validar\nvalue = 2\n", encoding="utf-8")
+            guard._bootstrap_baseline(root, base)
+            entries = load_baseline(root)
+        self.assertEqual(entries, (BaselineEntry("pkg/base.py", "comment", "validar", 1),))
 
 
 class LanguageBaselineTest(unittest.TestCase):
@@ -136,15 +292,17 @@ class RepositoryLanguageBaselineTest(unittest.TestCase):
 
 class ValidateRepoLanguageIntegrationTest(unittest.TestCase):
     def test_validate_repo_invokes_language_guard(self):
-        errors: list[str] = []
         with mock.patch.object(
             validate_repo,
             "validate_code_language",
-            side_effect=lambda root, out: out.append("language guard sentinel"),
+            side_effect=lambda _root, out: out.append("language guard sentinel"),
         ) as guard:
-            validate_repo.validate_language_policy(ROOT, errors)
-        guard.assert_called_once_with(ROOT, errors)
-        self.assertEqual(errors, ["language guard sentinel"])
+            errors = validate_repo.validate(ROOT)
+        guard.assert_called_once()
+        called_root, called_errors = guard.call_args.args
+        self.assertEqual(called_root, ROOT)
+        self.assertIs(called_errors, errors)
+        self.assertIn("language guard sentinel", errors)
 
 
 class LanguagePolicyDocumentationTest(unittest.TestCase):

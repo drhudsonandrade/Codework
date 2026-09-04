@@ -5,12 +5,15 @@ import ast
 import io
 import json
 import re
+import subprocess
 import sys
+import tarfile
 import tokenize
 import unicodedata
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 POLICY_SCHEMA = "genoma-code-language-policy-v1"
 BASELINE_SCHEMA = "genoma-code-language-legacy-baseline-v1"
@@ -93,7 +96,7 @@ def load_policy(root: Path) -> LanguagePolicy:
     return LanguagePolicy(
         schema=POLICY_SCHEMA,
         scan_suffixes=(".py",),
-        technical_terms=frozenset(raw_terms),
+        technical_terms=frozenset(_normalize_word(term) for term in raw_terms),
         contract_literals=tuple(raw_literals),
         excluded_roots=tuple(excluded),
     )
@@ -148,8 +151,19 @@ def _normalize_word(value: str) -> str:
     return "".join(ch for ch in normalized if not unicodedata.combining(ch)).casefold()
 
 
+PORTUGUESE_VERB_SUFFIXES = frozenset({
+    "ar", "ando", "ado", "ada", "ados", "adas", "amos", "am", "ou", "ei",
+    "ava", "avam", "aria", "ariam", "er", "endo", "ido", "ida", "idos",
+    "idas", "ir", "indo", "iu", "iram",
+})
+
+
 def _identifier_words(identifier: str) -> tuple[str, ...]:
-    expanded = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", identifier)
+    expanded = re.sub(
+        r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|(?<=[A-Za-z])(?=\d)|(?<=\d)(?=[A-Za-z])",
+        "_",
+        identifier,
+    )
     return tuple(
         word
         for part in re.split(r"[_\W]+", expanded, flags=re.UNICODE)
@@ -157,14 +171,43 @@ def _identifier_words(identifier: str) -> tuple[str, ...]:
     )
 
 
+def _canonical_technical_term(word: str, policy: LanguagePolicy) -> str | None:
+    normalized = _normalize_word(word)
+    terms = policy.technical_terms
+    if normalized in terms:
+        return normalized
+    if normalized.endswith("oes"):
+        singular = normalized[:-3] + "ao"
+        if singular in terms:
+            return singular
+    if normalized.endswith("s") and normalized[:-1] in terms:
+        return normalized[:-1]
+    for term in sorted(terms, key=len, reverse=True):
+        if not term.endswith(("ar", "er", "ir")) or len(term) < 5:
+            continue
+        stem = term[:-2]
+        if normalized.startswith(stem) and normalized[len(stem):] in PORTUGUESE_VERB_SUFFIXES:
+            return term
+    return None
 
-def _technical_terms(policy: LanguagePolicy) -> frozenset[str]:
-    return frozenset(_normalize_word(term) for term in policy.technical_terms)
+
+def _contract_identifier_words(policy: LanguagePolicy) -> frozenset[str]:
+    return frozenset(
+        _normalize_word(part)
+        for literal in policy.contract_literals
+        for part in re.findall(r"[^\W_]+", literal, flags=re.UNICODE)
+    )
 
 
 def _matched_identifier_terms(identifier: str, policy: LanguagePolicy) -> tuple[str, ...]:
-    terms = _technical_terms(policy)
-    return tuple(sorted(set(_identifier_words(identifier)) & terms))
+    protected = _contract_identifier_words(policy)
+    matched = {
+        canonical
+        for word in _identifier_words(identifier)
+        if word not in protected
+        if (canonical := _canonical_technical_term(word, policy)) is not None
+    }
+    return tuple(sorted(matched))
 
 
 def _strip_contract_literals(text: str, policy: LanguagePolicy) -> str:
@@ -174,13 +217,13 @@ def _strip_contract_literals(text: str, policy: LanguagePolicy) -> str:
 
 
 def _matched_text_terms(text: str, policy: LanguagePolicy) -> tuple[str, ...]:
-    terms = _technical_terms(policy)
     cleaned = _strip_contract_literals(text, policy)
-    words = {
-        _normalize_word(part)
-        for part in re.findall(r"[^\W_]+", cleaned, flags=re.UNICODE)
-    }
-    return tuple(sorted(words & terms))
+    matches: list[str] = []
+    for part in re.findall(r"[^\W_]+", cleaned, flags=re.UNICODE):
+        canonical = _canonical_technical_term(part, policy)
+        if canonical is not None:
+            matches.append(canonical)
+    return tuple(matches)
 
 
 def _relative_source_path(path: Path, root: Path) -> str:
@@ -194,20 +237,29 @@ def _relative_source_path(path: Path, root: Path) -> str:
 def _identifier_occurrences(tree: ast.AST) -> tuple[tuple[str, int], ...]:
     occurrences: list[tuple[str, int]] = []
     for node in ast.walk(tree):
+        line = getattr(node, "lineno", 1)
         if isinstance(node, ast.Name):
-            occurrences.append((node.id, node.lineno))
+            occurrences.append((node.id, line))
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            occurrences.append((node.name, node.lineno))
+            occurrences.append((node.name, line))
         elif isinstance(node, ast.arg):
-            occurrences.append((node.arg, node.lineno))
+            occurrences.append((node.arg, line))
         elif isinstance(node, ast.Attribute):
-            occurrences.append((node.attr, node.lineno))
-        elif isinstance(node, (ast.Import, ast.ImportFrom)):
-            for alias in node.names:
-                if alias.asname:
-                    occurrences.append((alias.asname, node.lineno))
+            occurrences.append((node.attr, line))
+        elif isinstance(node, ast.alias):
+            occurrences.append((node.name, line))
+            if node.asname:
+                occurrences.append((node.asname, line))
+        elif isinstance(node, ast.keyword) and isinstance(node.arg, str):
+            occurrences.append((node.arg, line))
         elif isinstance(node, ast.ExceptHandler) and isinstance(node.name, str):
-            occurrences.append((node.name, node.lineno))
+            occurrences.append((node.name, line))
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            occurrences.extend((name, line) for name in node.names)
+        elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and isinstance(node.name, str):
+            occurrences.append((node.name, line))
+        elif isinstance(node, ast.MatchMapping) and isinstance(node.rest, str):
+            occurrences.append((node.rest, line))
     return tuple(occurrences)
 
 
@@ -330,11 +382,62 @@ def validate_code_language(root: Path, errors: list[str]) -> None:
     )
 
 
-def _write_baseline(root: Path, source_commit: str) -> None:
+def _run_git(root: Path, *args: str, allow_nonzero: bool = False) -> subprocess.CompletedProcess[bytes]:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), *args],
+            check=False,
+            capture_output=True,
+        )
+    except OSError as exc:
+        raise LanguagePolicyError("unable to execute git for language baseline provenance") from exc
+    if result.returncode != 0 and not allow_nonzero:
+        detail = result.stderr.decode("utf-8", errors="replace").strip()
+        raise LanguagePolicyError(f"git baseline provenance check failed: {detail or args[0]}")
+    return result
+
+
+def _validate_source_commit(root: Path, source_commit: str) -> None:
     if not SHA40.fullmatch(source_commit):
         raise LanguagePolicyError("invalid language baseline source_commit")
-    policy = load_policy(root)
-    entries = group_findings(scan_repository(root, policy))
+    kind_result = _run_git(root, "cat-file", "-t", source_commit, allow_nonzero=True)
+    if kind_result.returncode != 0:
+        raise LanguagePolicyError("language baseline source_commit does not exist")
+    kind = kind_result.stdout.decode("utf-8", errors="replace").strip()
+    if kind != "commit":
+        raise LanguagePolicyError("language baseline source_commit is not a commit")
+    ancestor = _run_git(root, "merge-base", "--is-ancestor", source_commit, "HEAD", allow_nonzero=True)
+    if ancestor.returncode != 0:
+        raise LanguagePolicyError("language baseline source_commit is not an ancestor of HEAD")
+
+
+def _scan_source_commit(root: Path, source_commit: str, policy: LanguagePolicy) -> tuple[BaselineEntry, ...]:
+    _validate_source_commit(root, source_commit)
+    archive = _run_git(root, "archive", "--format=tar", source_commit).stdout
+    with TemporaryDirectory() as td:
+        snapshot = Path(td)
+        try:
+            with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as bundle:
+                for member in bundle.getmembers():
+                    if not member.isfile() or not member.name.endswith(policy.scan_suffixes):
+                        continue
+                    relative = _relative_path(member.name, "archived source")
+                    extracted = bundle.extractfile(member)
+                    if extracted is None:
+                        raise LanguagePolicyError(f"unable to read archived Python source: {relative}")
+                    try:
+                        source = extracted.read().decode("utf-8")
+                    except UnicodeError as exc:
+                        raise LanguagePolicyError(f"unable to read archived Python source: {relative}") from exc
+                    target = snapshot / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_text(source, encoding="utf-8")
+        except tarfile.TarError as exc:
+            raise LanguagePolicyError("unable to inspect language baseline source_commit archive") from exc
+        return group_findings(scan_repository(snapshot, policy))
+
+
+def _write_baseline_payload(root: Path, source_commit: str, entries: tuple[BaselineEntry, ...]) -> None:
     payload = {
         "schema": BASELINE_SCHEMA,
         "source_commit": source_commit,
@@ -344,7 +447,41 @@ def _write_baseline(root: Path, source_commit: str) -> None:
         ],
     }
     path = root / "config" / "code_language_legacy_baseline.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _entry_counts(entries: tuple[BaselineEntry, ...]) -> dict[tuple[str, str, str], int]:
+    return {(entry.path, entry.kind, entry.token): entry.count for entry in entries}
+
+
+def _bootstrap_baseline(root: Path, source_commit: str) -> None:
+    policy = load_policy(root)
+    path = root / "config" / "code_language_legacy_baseline.json"
+    if path.exists():
+        load_baseline(root)
+        payload = _read_json(path, "language baseline")
+        assert isinstance(payload, dict)
+        if payload.get("source_commit") != source_commit:
+            raise LanguagePolicyError("bootstrap baseline may not change an existing source_commit")
+    entries = _scan_source_commit(root, source_commit, policy)
+    _write_baseline_payload(root, source_commit, entries)
+
+
+def _write_baseline(root: Path, source_commit: str) -> None:
+    policy = load_policy(root)
+    existing = load_baseline(root)
+    source_entries = _scan_source_commit(root, source_commit, policy)
+    current = group_findings(scan_repository(root, policy))
+    existing_counts = _entry_counts(existing)
+    source_counts = _entry_counts(source_entries)
+    for entry in current:
+        key = (entry.path, entry.kind, entry.token)
+        if key not in existing_counts or entry.count > existing_counts[key]:
+            raise LanguagePolicyError(f"new language debt cannot be added to baseline: {entry.path}: {entry.kind}: {entry.token}")
+        if key not in source_counts or entry.count > source_counts[key]:
+            raise LanguagePolicyError(f"language baseline entry is not supported by source_commit: {entry.path}: {entry.kind}: {entry.token}")
+    _write_baseline_payload(root, source_commit, current)
 
 
 def _check(root: Path) -> int:
@@ -364,17 +501,22 @@ def main(argv: list[str] | None = None) -> int:
     modes = parser.add_mutually_exclusive_group(required=True)
     modes.add_argument("--check", action="store_true")
     modes.add_argument("--write-baseline", action="store_true")
+    modes.add_argument("--bootstrap-baseline", action="store_true")
     parser.add_argument("--source-commit")
     args = parser.parse_args(argv)
     root = Path(__file__).resolve().parents[1]
     try:
-        if args.write_baseline:
+        if args.write_baseline or args.bootstrap_baseline:
             if not args.source_commit:
-                raise LanguagePolicyError("--source-commit is required with --write-baseline")
-            _write_baseline(root, args.source_commit)
+                mode = "--write-baseline" if args.write_baseline else "--bootstrap-baseline"
+                raise LanguagePolicyError(f"--source-commit is required with {mode}")
+            if args.bootstrap_baseline:
+                _bootstrap_baseline(root, args.source_commit)
+            else:
+                _write_baseline(root, args.source_commit)
             return 0
         if args.source_commit:
-            raise LanguagePolicyError("--source-commit is only valid with --write-baseline")
+            raise LanguagePolicyError("--source-commit is only valid with a baseline-writing mode")
         return _check(root)
     except LanguagePolicyError as exc:
         print(f"LANGUAGE_POLICY_ERROR\t{exc}", file=sys.stderr)
