@@ -53,6 +53,9 @@ def _step_run_commands(step: str) -> tuple[str, ...]:
     heredoc_end: str | None = None
     block_starters = re.compile(r"^(?:if|for|while|until|case)\b")
     block_enders = re.compile(r"^(?:fi|done|esac)\b")
+    function_starter = re.compile(
+        r"^(?:(?:function\s+)?[A-Za-z_][A-Za-z0-9_]*\s*\(\)\s*\{|function\s+[A-Za-z_][A-Za-z0-9_]*\s*\{)\s*$"
+    )
     heredoc_pattern = re.compile(r"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?")
     for line in lines:
         if line.startswith("        run:"):
@@ -73,7 +76,7 @@ def _step_run_commands(step: str) -> tuple[str, ...]:
             if command == heredoc_end:
                 heredoc_end = None
             continue
-        if block_enders.match(command):
+        if block_enders.match(command) or (command == "}" and control_depth > 0):
             control_depth = max(0, control_depth - 1)
             continue
         if control_depth == 0:
@@ -81,7 +84,7 @@ def _step_run_commands(step: str) -> tuple[str, ...]:
         heredoc = heredoc_pattern.search(command)
         if heredoc is not None:
             heredoc_end = heredoc.group(1)
-        if block_starters.match(command):
+        if block_starters.match(command) or function_starter.match(command):
             control_depth += 1
     return tuple(commands)
 
@@ -225,6 +228,19 @@ class WorkflowContractTest(unittest.TestCase):
         )
         with self.assertRaises(AssertionError):
             _assert_attestation_step_is_in_main_gated_ceremony_job(mutated)
+
+    def test_validate_repo_command_detection_rejects_uncalled_shell_function(self):
+        function_only = """      - name: misleading
+        run: |
+          validate_gate() {
+            python3 scripts/validate_repo.py
+          }
+"""
+        direct = """      - name: validate
+        run: python3 scripts/validate_repo.py
+"""
+        self.assertFalse(_step_runs_validate_repo(function_only))
+        self.assertTrue(_step_runs_validate_repo(direct))
 
     def test_validate_repo_command_detection_rejects_unreachable_shell_and_heredoc(self):
         false_branch = """      - name: misleading

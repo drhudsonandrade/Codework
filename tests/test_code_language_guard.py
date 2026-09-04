@@ -423,6 +423,23 @@ class BaselineWriteSafetyTest(unittest.TestCase):
             with self.assertRaisesRegex(LanguagePolicyError, "source_commit"):
                 guard.validate_code_language(root, [])
 
+    def test_check_rejects_technical_term_removed_from_trusted_pull_request_base(self):
+        from scripts import code_language_guard as guard
+        td, root, base = self._repo()
+        with td:
+            policy_path = root / "config/code_language_policy.json"
+            payload = json.loads(policy_path.read_text(encoding="utf-8"))
+            payload["technical_terms"] = ["arquivo"]
+            _write_json(root, "config/code_language_policy.json", payload)
+            _write_json(root, "event.json", {"pull_request": {"base": {"sha": base}}})
+            with mock.patch.dict(
+                os.environ,
+                {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(root / "event.json")},
+                clear=False,
+            ):
+                with self.assertRaisesRegex(LanguagePolicyError, "technical_terms"):
+                    guard._check(root)
+
     def test_check_accepts_exact_trusted_pull_request_base(self):
         from scripts import code_language_guard as guard
         td, root, base = self._repo()

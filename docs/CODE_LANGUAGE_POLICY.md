@@ -96,6 +96,8 @@ The update command rejects new baseline keys and count increases, and every reta
 
 Neither writing mode infers provenance from a mutable branch name.
 
+Within policy schema v1, `technical_terms` is monotonic across pull requests: when the trusted PR base already contains the language policy, the current policy must retain every normalized technical term present at that base. New terms may be added, but removing a term requires an explicit future policy-schema migration rather than a baseline rewrite.
+
 Every `--check` and repository-level validation revalidates the tracked baseline provenance. In a GitHub `pull_request` run, the runner-provided `pull_request.base.sha` is the trusted boundary and the recorded `source_commit` must be that commit or an ancestor of it; a commit introduced after the trusted base is rejected. Outside pull-request CI, `source_commit` must still resolve to a real ancestor of `HEAD`. Every baseline entry/count must be supported by the Python findings measured from the historical `source_commit`; during pull-request validation it must also be supported by findings measured from the trusted PR base using the current detector and policy. This second support check prevents debt removed before the PR from being reintroduced by restoring an older baseline entry, while a legitimately older immutable `source_commit` remains valid across future PRs.
 
 ## Scope progression

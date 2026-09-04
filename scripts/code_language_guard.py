@@ -517,6 +517,38 @@ def _baseline_source_commit(root: Path) -> str:
     return source_commit
 
 
+def _technical_terms_at_commit(root: Path, commit: str) -> frozenset[str] | None:
+    ref = f"{commit}:config/code_language_policy.json"
+    exists = _run_git(root, "cat-file", "-e", ref, allow_nonzero=True)
+    if exists.returncode != 0:
+        return None
+    payload_result = _run_git(root, "show", ref)
+    try:
+        payload = json.loads(payload_result.stdout.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise LanguagePolicyError("trusted pull request base language policy is invalid") from exc
+    if not isinstance(payload, dict) or payload.get("schema") != POLICY_SCHEMA:
+        raise LanguagePolicyError("trusted pull request base language policy schema is invalid")
+    raw_terms = payload.get("technical_terms")
+    if not isinstance(raw_terms, list) or not raw_terms or not all(isinstance(term, str) and term for term in raw_terms):
+        raise LanguagePolicyError("trusted pull request base technical_terms are invalid")
+    return frozenset(_normalize_word(term) for term in raw_terms)
+
+
+def _validate_policy_monotonicity(root: Path, policy: LanguagePolicy) -> None:
+    trusted_base = _trusted_pull_request_base()
+    if trusted_base is None:
+        return
+    base_terms = _technical_terms_at_commit(root, trusted_base)
+    if base_terms is None:
+        return
+    removed = sorted(base_terms - policy.technical_terms)
+    if removed:
+        raise LanguagePolicyError(
+            "language policy technical_terms may not remove trusted pull request base terms: " + ", ".join(removed)
+        )
+
+
 def _require_entries_supported(
     entries: tuple[BaselineEntry, ...],
     supported: tuple[BaselineEntry, ...],
@@ -534,6 +566,7 @@ def _require_entries_supported(
 def _validate_baseline_provenance(
     root: Path, policy: LanguagePolicy, baseline: tuple[BaselineEntry, ...]
 ) -> None:
+    _validate_policy_monotonicity(root, policy)
     source_commit = _baseline_source_commit(root)
     source_entries = _scan_source_commit(root, source_commit, policy)
     _require_entries_supported(baseline, source_entries, "source_commit")
@@ -545,6 +578,7 @@ def _validate_baseline_provenance(
 
 def _bootstrap_baseline(root: Path, source_commit: str) -> None:
     policy = load_policy(root)
+    _validate_policy_monotonicity(root, policy)
     path = root / "config" / "code_language_legacy_baseline.json"
     if path.exists():
         load_baseline(root)

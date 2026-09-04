@@ -249,6 +249,8 @@ Create `config/code_language_policy.json` in this shape:
 }
 ```
 
+For schema v1, vocabulary changes are monotonic in pull-request CI: if the trusted PR base already contains `config/code_language_policy.json`, every normalized `technical_terms` entry from that base must remain present. This prevents a baseline update from erasing debt merely by making the detector forget a word.
+
 The tracked JSON file is the authoritative deterministic vocabulary. It is intentionally versioned rather than inferred at runtime; repository-baseline regression tests require every tracked legacy entry to remain detectable under that vocabulary before a baseline can be accepted.
 
 Create the baseline file initially with an empty `entries` list and the exact `BASE_SHA` captured before the first code commit:
