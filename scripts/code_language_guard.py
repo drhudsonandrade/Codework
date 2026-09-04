@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import ast
+import io
 import json
 import re
+import tokenize
+import unicodedata
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -122,3 +127,166 @@ def load_baseline(root: Path) -> tuple[BaselineEntry, ...]:
         seen.add(key)
         entries.append(BaselineEntry(path=path, kind=kind, token=token, count=count))
     return tuple(sorted(entries))
+
+
+SKIP_PARTS = frozenset({".git", "node_modules", "dist", "__pycache__", ".pytest_cache", ".venv"})
+
+
+@dataclass(frozen=True, order=True)
+class LanguageFinding:
+    path: str
+    line: int
+    kind: str
+    token: str
+    matched_terms: tuple[str, ...]
+
+
+def _normalize_word(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value)
+    return "".join(ch for ch in normalized if not unicodedata.combining(ch)).casefold()
+
+
+def _identifier_words(identifier: str) -> tuple[str, ...]:
+    expanded = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", identifier)
+    return tuple(
+        word
+        for part in re.split(r"[_\W]+", expanded, flags=re.UNICODE)
+        if (word := _normalize_word(part))
+    )
+
+
+
+def _technical_terms(policy: LanguagePolicy) -> frozenset[str]:
+    return frozenset(_normalize_word(term) for term in policy.technical_terms)
+
+
+def _matched_identifier_terms(identifier: str, policy: LanguagePolicy) -> tuple[str, ...]:
+    terms = _technical_terms(policy)
+    return tuple(sorted(set(_identifier_words(identifier)) & terms))
+
+
+def _strip_contract_literals(text: str, policy: LanguagePolicy) -> str:
+    for literal in policy.contract_literals:
+        text = text.replace(literal, " ")
+    return text
+
+
+def _matched_text_terms(text: str, policy: LanguagePolicy) -> tuple[str, ...]:
+    terms = _technical_terms(policy)
+    cleaned = _strip_contract_literals(text, policy)
+    words = {
+        _normalize_word(part)
+        for part in re.findall(r"[^\W_]+", cleaned, flags=re.UNICODE)
+    }
+    return tuple(sorted(words & terms))
+
+
+def _relative_source_path(path: Path, root: Path) -> str:
+    try:
+        return path.resolve().relative_to(root.resolve()).as_posix()
+    except (OSError, ValueError) as exc:
+        raise LanguagePolicyError(f"scanned source is outside repository root: {path}") from exc
+
+
+
+def _identifier_occurrences(tree: ast.AST) -> tuple[tuple[str, int], ...]:
+    occurrences: list[tuple[str, int]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            occurrences.append((node.id, node.lineno))
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            occurrences.append((node.name, node.lineno))
+        elif isinstance(node, ast.arg):
+            occurrences.append((node.arg, node.lineno))
+        elif isinstance(node, ast.Attribute):
+            occurrences.append((node.attr, node.lineno))
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                if alias.asname:
+                    occurrences.append((alias.asname, node.lineno))
+        elif isinstance(node, ast.ExceptHandler) and isinstance(node.name, str):
+            occurrences.append((node.name, node.lineno))
+    return tuple(occurrences)
+
+
+def _docstrings(tree: ast.AST) -> tuple[tuple[str, int], ...]:
+    values: list[tuple[str, int]] = []
+    doc_nodes = (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+    for node in ast.walk(tree):
+        if not isinstance(node, doc_nodes) or not node.body:
+            continue
+        first = node.body[0]
+        if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) and isinstance(first.value.value, str):
+            values.append((first.value.value, first.lineno))
+    return tuple(values)
+
+
+
+def scan_python_file(path: Path, root: Path, policy: LanguagePolicy) -> tuple[LanguageFinding, ...]:
+    relative = _relative_source_path(path, root)
+    try:
+        source = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise LanguagePolicyError(f"unable to read scanned Python source: {relative}") from exc
+
+    try:
+        tree = ast.parse(source, filename=relative)
+    except (SyntaxError, ValueError) as exc:
+        raise LanguagePolicyError(f"unable to parse scanned Python source: {relative}") from exc
+
+    try:
+        token_stream = tuple(tokenize.generate_tokens(io.StringIO(source).readline))
+    except (tokenize.TokenError, IndentationError, SyntaxError) as exc:
+        raise LanguagePolicyError(f"unable to tokenize scanned Python source: {relative}") from exc
+
+    findings: list[LanguageFinding] = []
+    for identifier, line in _identifier_occurrences(tree):
+        matched = _matched_identifier_terms(identifier, policy)
+        if matched:
+            findings.append(LanguageFinding(relative, line, "identifier", identifier, matched))
+
+
+    for token_info in token_stream:
+        if token_info.type != tokenize.COMMENT:
+            continue
+        for term in _matched_text_terms(token_info.string, policy):
+            findings.append(LanguageFinding(relative, token_info.start[0], "comment", term, (term,)))
+
+    for docstring, line in _docstrings(tree):
+        for term in _matched_text_terms(docstring, policy):
+            findings.append(LanguageFinding(relative, line, "docstring", term, (term,)))
+
+    return tuple(sorted(findings))
+
+
+def _is_excluded(relative: Path, policy: LanguagePolicy) -> bool:
+    parts = relative.parts
+    for excluded in policy.excluded_roots:
+        excluded_parts = Path(excluded.path).parts
+        if parts[: len(excluded_parts)] == excluded_parts:
+            return True
+    return False
+
+
+def scan_repository(root: Path, policy: LanguagePolicy) -> tuple[LanguageFinding, ...]:
+    findings: list[LanguageFinding] = []
+    candidates: set[Path] = set()
+    for suffix in policy.scan_suffixes:
+        candidates.update(root.rglob(f"*{suffix}"))
+    for path in sorted(candidates, key=lambda item: item.as_posix()):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(root)
+        if any(part in SKIP_PARTS for part in relative.parts) or _is_excluded(relative, policy):
+            continue
+        findings.extend(scan_python_file(path, root, policy))
+    return tuple(sorted(findings))
+
+
+
+def group_findings(findings: tuple[LanguageFinding, ...]) -> tuple[BaselineEntry, ...]:
+    counts = Counter((finding.path, finding.kind, finding.token) for finding in findings)
+    return tuple(
+        BaselineEntry(path=path, kind=kind, token=token, count=count)
+        for (path, kind, token), count in sorted(counts.items())
+    )
