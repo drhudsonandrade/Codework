@@ -249,6 +249,37 @@ class PythonLanguageScannerTest(unittest.TestCase):
             findings = scan_repository(root, load_policy(root))
         self.assertTrue(any(f.kind == "identifier" and f.token == TERM_ARCHIVE for f in findings), findings)
 
+    def test_match_as_and_match_star_bindings_are_scanned_independently(self):
+        cases = {
+            "match_as": "match payload:\n    case arquivo:\n        pass\n",
+            "match_star": "match payload:\n    case [*arquivo]:\n        pass\n",
+        }
+        for label, source in cases.items():
+            with self.subTest(label=label):
+                td, root = self._repo({"pkg/mod.py": source})
+                with td:
+                    findings = scan_repository(root, load_policy(root))
+                self.assertTrue(
+                    any(f.kind == "identifier" and f.token == TERM_ARCHIVE for f in findings),
+                    findings,
+                )
+
+    def test_each_python_type_parameter_kind_is_scanned(self):
+        cases = {
+            "TypeVar": "def build[arquivo]():\n    return 1\n",
+            "TypeVarTuple": "def build[*arquivo]():\n    return 1\n",
+            "ParamSpec": "def build[**arquivo]():\n    return 1\n",
+        }
+        for label, source in cases.items():
+            with self.subTest(label=label):
+                td, root = self._repo({"pkg/mod.py": source})
+                with td:
+                    findings = scan_repository(root, load_policy(root))
+                self.assertTrue(
+                    any(f.kind == "identifier" and f.token == TERM_ARCHIVE for f in findings),
+                    findings,
+                )
+
     def test_python_type_parameter_identifier_is_scanned(self):
         td, root = self._repo({"pkg/mod.py": "def build[arquivo]():\n    return 1\n"})
         with td:
@@ -455,6 +486,63 @@ class BaselineWriteSafetyTest(unittest.TestCase):
                 clear=False,
             ):
                 self.assertEqual(guard._check(root), 0)
+
+    def test_bootstrap_rejects_debt_absent_from_trusted_pull_request_base(self):
+        from scripts import code_language_guard as guard
+        td, root, source_commit = self._repo()
+        with td:
+            tracked = root / "pkg/base.py"
+            tracked.write_text("value = 1\n", encoding="utf-8")
+            _git(root, "add", ".")
+            _git(root, "commit", "-m", "remove legacy debt")
+            trusted_base = _git(root, "rev-parse", "HEAD")
+            _write_json(root, "event.json", {"pull_request": {"base": {"sha": trusted_base}}})
+            with mock.patch.dict(
+                os.environ,
+                {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(root / "event.json")},
+                clear=False,
+            ):
+                with self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
+                    guard._bootstrap_baseline(root, source_commit)
+
+    def test_write_baseline_rejects_reintroduced_debt_absent_from_trusted_pull_request_base(self):
+        from scripts import code_language_guard as guard
+        td, root, source_commit = self._repo()
+        with td:
+            tracked = root / "pkg/base.py"
+            tracked.write_text("value = 1\n", encoding="utf-8")
+            _git(root, "add", ".")
+            _git(root, "commit", "-m", "remove legacy debt")
+            trusted_base = _git(root, "rev-parse", "HEAD")
+            tracked.write_text("# validar\nvalue = 1\n", encoding="utf-8")
+            _write_json(root, "event.json", {"pull_request": {"base": {"sha": trusted_base}}})
+            with mock.patch.dict(
+                os.environ,
+                {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(root / "event.json")},
+                clear=False,
+            ):
+                with self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
+                    guard._write_baseline(root, source_commit)
+
+    def test_check_rejects_reintroduced_debt_absent_from_trusted_pull_request_base(self):
+        from scripts import code_language_guard as guard
+        td, root, source_commit = self._repo()
+        with td:
+            tracked = root / "pkg/base.py"
+            tracked.write_text("value = 1\n", encoding="utf-8")
+            _git(root, "add", ".")
+            _git(root, "commit", "-m", "remove legacy debt")
+            trusted_base = _git(root, "rev-parse", "HEAD")
+            tracked.write_text("# validar\nvalue = 1\n", encoding="utf-8")
+            _write_json(root, "event.json", {"pull_request": {"base": {"sha": trusted_base}}})
+            with mock.patch.dict(
+                os.environ,
+                {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(root / "event.json")},
+                clear=False,
+            ):
+                with self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
+                    guard._check(root)
+            self.assertNotEqual(source_commit, trusted_base)
 
     def test_check_rejects_source_commit_after_trusted_pull_request_base(self):
         from scripts import code_language_guard as guard

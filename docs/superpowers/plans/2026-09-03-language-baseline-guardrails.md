@@ -368,6 +368,9 @@ python3 -m unittest tests.test_code_language_guard.PythonLanguageScannerTest -v
 
 Expected: FAIL because scanning interfaces are not implemented.
 
+
+Review-hardening regression coverage for this task must also exercise identifier-bearing AST fields independently: `ast.MatchAs`, `ast.MatchStar`, `TypeVar`, `ParamSpec`, and `TypeVarTuple`. Each fixture must fail if its corresponding collector is removed rather than passing because another Portuguese token is present in the same source.
+
 - [ ] **Step 3: Implement normalized token matching without executing repository code**
 
 Add:
@@ -575,7 +578,7 @@ python3 scripts/code_language_guard.py --check
 ```
 
 - exit 0 only when the current grouped findings exactly match the tracked legacy baseline;
-- before comparison, in GitHub `pull_request` CI require `source_commit` to equal or precede the runner-provided `pull_request.base.sha`; reject any source commit introduced after that trusted base; outside pull-request CI require a real ancestor of `HEAD`; in all cases prove every baseline entry/count is supported by findings measured from that immutable Git tree;
+- before comparison, in GitHub `pull_request` CI require `source_commit` to equal or precede the runner-provided `pull_request.base.sha`; reject any source commit introduced after that trusted base; outside pull-request CI require a real ancestor of `HEAD`; prove every baseline entry/count is supported by findings from `source_commit`, and in pull-request CI also by findings from the trusted base using the current detector/policy so removed debt cannot be reintroduced;
 - print each unexpected entry as `NEW_LANGUAGE_DEBT\t<path>\t<kind>\t<token>\t<count>`;
 - print each stale entry as `RESOLVED_BASELINE_ENTRY\t<path>\t<kind>\t<token>\t<count>`;
 - exit 1 on either kind of delta;
@@ -589,9 +592,9 @@ python3 scripts/code_language_guard.py --write-baseline --source-commit <40-hex-
 ```
 
 - require `--source-commit` in either writing mode and resolve it as a real Git commit that is an ancestor of `HEAD`; in pull-request CI it must also be an ancestor of the trusted PR base;
-- bootstrap findings from the Git tree of `source_commit`, never from the current worktree; if a baseline already exists, bootstrap may refresh detector coverage only for the same recorded source commit;
+- bootstrap findings from the Git tree of `source_commit`, never from the current worktree; if a baseline already exists, bootstrap may refresh detector coverage only for the same recorded source commit; in pull-request CI every candidate entry must also exist at the trusted base under the current detector/policy;
 - normal `--write-baseline` is reduction-only: reject new keys and count increases relative to the tracked baseline;
-- before writing a reduction, prove each retained current finding also exists in the explicitly supplied source commit at an equal or greater count;
+- before writing a reduction, prove each retained current finding also exists in the explicitly supplied source commit at an equal or greater count and, in pull-request CI, is still present at the trusted base;
 - preserve schema and set `source_commit` only to the verified commit supplied explicitly;
 - use `ensure_ascii=False`, `indent=2`, sorted entries, and a final newline.
 

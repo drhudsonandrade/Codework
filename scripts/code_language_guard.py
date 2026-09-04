@@ -517,17 +517,30 @@ def _baseline_source_commit(root: Path) -> str:
     return source_commit
 
 
+def _require_entries_supported(
+    entries: tuple[BaselineEntry, ...],
+    supported: tuple[BaselineEntry, ...],
+    label: str,
+) -> None:
+    supported_counts = _entry_counts(supported)
+    for entry in entries:
+        key = (entry.path, entry.kind, entry.token)
+        if key not in supported_counts or entry.count > supported_counts[key]:
+            raise LanguagePolicyError(
+                f"language baseline entry is not supported by {label}: {entry.path}: {entry.kind}: {entry.token}"
+            )
+
+
 def _validate_baseline_provenance(
     root: Path, policy: LanguagePolicy, baseline: tuple[BaselineEntry, ...]
 ) -> None:
     source_commit = _baseline_source_commit(root)
-    source_counts = _entry_counts(_scan_source_commit(root, source_commit, policy))
-    for entry in baseline:
-        key = (entry.path, entry.kind, entry.token)
-        if key not in source_counts or entry.count > source_counts[key]:
-            raise LanguagePolicyError(
-                f"language baseline entry is not supported by source_commit: {entry.path}: {entry.kind}: {entry.token}"
-            )
+    source_entries = _scan_source_commit(root, source_commit, policy)
+    _require_entries_supported(baseline, source_entries, "source_commit")
+    trusted_base = _trusted_pull_request_base()
+    if trusted_base is not None:
+        trusted_entries = source_entries if trusted_base == source_commit else _scan_source_commit(root, trusted_base, policy)
+        _require_entries_supported(baseline, trusted_entries, "trusted pull request base")
 
 
 def _bootstrap_baseline(root: Path, source_commit: str) -> None:
@@ -541,12 +554,16 @@ def _bootstrap_baseline(root: Path, source_commit: str) -> None:
         if payload.get("source_commit") != source_commit:
             raise LanguagePolicyError("bootstrap baseline may not change an existing source_commit")
     entries = _scan_source_commit(root, source_commit, policy)
+    trusted_base = _trusted_pull_request_base()
+    if trusted_base is not None and trusted_base != source_commit:
+        _require_entries_supported(entries, _scan_source_commit(root, trusted_base, policy), "trusted pull request base")
     _write_baseline_payload(root, source_commit, entries)
 
 
 def _write_baseline(root: Path, source_commit: str) -> None:
     policy = load_policy(root)
     existing = load_baseline(root)
+    _validate_baseline_provenance(root, policy, existing)
     source_entries = _scan_source_commit(root, source_commit, policy)
     current = group_findings(scan_repository(root, policy))
     existing_counts = _entry_counts(existing)
@@ -557,6 +574,9 @@ def _write_baseline(root: Path, source_commit: str) -> None:
             raise LanguagePolicyError(f"new language debt cannot be added to baseline: {entry.path}: {entry.kind}: {entry.token}")
         if key not in source_counts or entry.count > source_counts[key]:
             raise LanguagePolicyError(f"language baseline entry is not supported by source_commit: {entry.path}: {entry.kind}: {entry.token}")
+    trusted_base = _trusted_pull_request_base()
+    if trusted_base is not None and trusted_base != source_commit:
+        _require_entries_supported(current, _scan_source_commit(root, trusted_base, policy), "trusted pull request base")
     _write_baseline_payload(root, source_commit, current)
 
 

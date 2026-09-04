@@ -49,6 +49,11 @@ def _step_run_commands(step: str) -> tuple[str, ...]:
     lines = step.splitlines()
     commands: list[str] = []
     in_block = False
+    control_depth = 0
+    heredoc_end: str | None = None
+    block_starters = re.compile(r"^(?:if|for|while|until|case)\b")
+    block_enders = re.compile(r"^(?:fi|done|esac)\b")
+    heredoc_pattern = re.compile(r"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?")
     for line in lines:
         if line.startswith("        run:"):
             value = line.split("run:", 1)[1].strip()
@@ -57,18 +62,33 @@ def _step_run_commands(step: str) -> tuple[str, ...]:
             elif value:
                 commands.append(value)
             continue
-        if in_block:
-            if not line.startswith("          "):
-                break
-            command = line.strip()
-            if command and not command.startswith("#"):
-                commands.append(command)
+        if not in_block:
+            continue
+        if not line.startswith("          "):
+            break
+        command = line.strip()
+        if not command or command.startswith("#"):
+            continue
+        if heredoc_end is not None:
+            if command == heredoc_end:
+                heredoc_end = None
+            continue
+        if block_enders.match(command):
+            control_depth = max(0, control_depth - 1)
+            continue
+        if control_depth == 0:
+            commands.append(command)
+        heredoc = heredoc_pattern.search(command)
+        if heredoc is not None:
+            heredoc_end = heredoc.group(1)
+        if block_starters.match(command):
+            control_depth += 1
     return tuple(commands)
 
 
 def _step_runs_validate_repo(step: str) -> bool:
-    pattern = re.compile(r"^(?:python3|python)\s+scripts/validate_repo\.py(?:\s|$)")
-    return any(pattern.search(command) is not None for command in _step_run_commands(step))
+    pattern = re.compile(r"^(?:python3|python)\s+scripts/validate_repo\.py$")
+    return any(pattern.fullmatch(command) is not None for command in _step_run_commands(step))
 
 
 def _with_mapping(step: str) -> dict[str, object]:
@@ -205,6 +225,27 @@ class WorkflowContractTest(unittest.TestCase):
         )
         with self.assertRaises(AssertionError):
             _assert_attestation_step_is_in_main_gated_ceremony_job(mutated)
+
+    def test_validate_repo_command_detection_rejects_unreachable_shell_and_heredoc(self):
+        false_branch = """      - name: misleading
+        run: |
+          if false; then
+            python3 scripts/validate_repo.py
+          fi
+"""
+        heredoc = """      - name: misleading
+        run: |
+          cat <<'EOF'
+          python3 scripts/validate_repo.py
+          EOF
+"""
+        direct = """      - name: validate
+        run: |
+          python3 scripts/validate_repo.py
+"""
+        self.assertFalse(_step_runs_validate_repo(false_branch))
+        self.assertFalse(_step_runs_validate_repo(heredoc))
+        self.assertTrue(_step_runs_validate_repo(direct))
 
     def test_validate_repo_command_detection_ignores_non_executable_mentions(self):
         echo_only = "      - name: misleading\n        run: |\n          echo 'python3 scripts/validate_repo.py'\n          # python3 scripts/validate_repo.py\n"

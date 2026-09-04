@@ -96,7 +96,7 @@ The update command rejects new baseline keys and count increases, and every reta
 
 Neither writing mode infers provenance from a mutable branch name.
 
-Every `--check` and repository-level validation revalidates the tracked baseline provenance. In a GitHub `pull_request` run, the runner-provided `pull_request.base.sha` is the trusted boundary and the recorded `source_commit` must be that commit or an ancestor of it; a commit introduced after the trusted base is rejected. Outside pull-request CI, `source_commit` must still resolve to a real ancestor of `HEAD`. In all cases, every baseline entry/count must be supported by the Python findings measured from that immutable commit tree. A direct JSON edit therefore cannot manufacture new legacy debt, while a baseline established by an earlier merged PR remains valid for later PRs.
+Every `--check` and repository-level validation revalidates the tracked baseline provenance. In a GitHub `pull_request` run, the runner-provided `pull_request.base.sha` is the trusted boundary and the recorded `source_commit` must be that commit or an ancestor of it; a commit introduced after the trusted base is rejected. Outside pull-request CI, `source_commit` must still resolve to a real ancestor of `HEAD`. Every baseline entry/count must be supported by the Python findings measured from the historical `source_commit`; during pull-request validation it must also be supported by findings measured from the trusted PR base using the current detector and policy. This second support check prevents debt removed before the PR from being reintroduced by restoring an older baseline entry, while a legitimately older immutable `source_commit` remains valid across future PRs.
 
 ## Scope progression
 
