@@ -5,7 +5,8 @@ import ast
 import io
 import json
 import re
-import subprocess
+import shutil
+import subprocess  # nosec B404 -- fixed-argv Git provenance checks; shell is never enabled.
 import sys
 import tarfile
 import tokenize
@@ -383,9 +384,13 @@ def validate_code_language(root: Path, errors: list[str]) -> None:
 
 
 def _run_git(root: Path, *args: str, allow_nonzero: bool = False) -> subprocess.CompletedProcess[bytes]:
+    git_executable = shutil.which("git")
+    if git_executable is None:
+        raise LanguagePolicyError("git is required for language baseline provenance checks")
+    git_path = str(Path(git_executable).resolve())
     try:
-        result = subprocess.run(
-            ["git", "-C", str(root), *args],
+        result = subprocess.run(  # nosec B603 -- absolute Git path, argv list, no shell.
+            [git_path, "-C", str(root), *args],
             check=False,
             capture_output=True,
         )
@@ -461,7 +466,8 @@ def _bootstrap_baseline(root: Path, source_commit: str) -> None:
     if path.exists():
         load_baseline(root)
         payload = _read_json(path, "language baseline")
-        assert isinstance(payload, dict)
+        if not isinstance(payload, dict):
+            raise LanguagePolicyError("invalid language baseline structure")
         if payload.get("source_commit") != source_commit:
             raise LanguagePolicyError("bootstrap baseline may not change an existing source_commit")
     entries = _scan_source_commit(root, source_commit, policy)
