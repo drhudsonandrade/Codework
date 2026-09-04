@@ -147,5 +147,16 @@ class ValidateRepoLanguageIntegrationTest(unittest.TestCase):
         self.assertEqual(errors, ["language guard sentinel"])
 
 
+class LanguagePolicyDocumentationTest(unittest.TestCase):
+    def test_agent_and_policy_docs_name_the_enforced_contract(self):
+        agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        policy_doc = (ROOT / "docs" / "CODE_LANGUAGE_POLICY.md").read_text(encoding="utf-8")
+        self.assertIn("English-first technical code", agents)
+        self.assertIn("code_language_legacy_baseline.json", agents)
+        self.assertIn("Category A — Private implementation identifier", policy_doc)
+        self.assertIn("Category E — Immutable or historical evidence", policy_doc)
+        self.assertIn("python3 scripts/code_language_guard.py --check", policy_doc)
+
+
 if __name__ == "__main__":
     unittest.main()

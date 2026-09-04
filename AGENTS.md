@@ -38,6 +38,14 @@ CodeRabbit also uses this file as a review guideline.
   `scripts/materialize_ruleset.py`, manifests, policy engine and CI as one contract
   surface and verify consistency across them.
 
+## Code language policy
+
+- English-first technical code is required for new implementation identifiers, comments and docstrings.
+- Portuguese remains valid only where it is an explicit normative, serialized compatibility, localized, canonical, or historical requirement.
+- `config/code_language_legacy_baseline.json` records pre-migration debt; it is not permission to add new Portuguese implementation language.
+- Run `python3 scripts/code_language_guard.py --check` for changes touching scanned languages.
+- When a migration removes tracked debt, update the baseline in the same PR and review the generated diff.
+
 ## Required implementation sequence
 
 1. Create or use a non-`main` branch.
