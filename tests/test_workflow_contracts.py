@@ -101,26 +101,33 @@ def _shell_code_before_comment(command: str) -> str:
     in_single_quote = False
     in_double_quote = False
     escaped = False
+    previous_boundary_escaped = False
     for index, char in enumerate(command):
         if escaped:
+            previous_boundary_escaped = char.isspace() or char in ";&|()<>"
             escaped = False
             continue
         if char == "\\" and not in_single_quote:
             escaped = True
+            previous_boundary_escaped = False
             continue
         if char == "'" and not in_double_quote:
             in_single_quote = not in_single_quote
+            previous_boundary_escaped = False
             continue
         if char == '"' and not in_single_quote:
             in_double_quote = not in_double_quote
+            previous_boundary_escaped = False
             continue
         if (
             char == "#"
             and not in_single_quote
             and not in_double_quote
+            and not previous_boundary_escaped
             and (index == 0 or command[index - 1].isspace() or command[index - 1] in ";&|()<>")
         ):
             return command[:index].rstrip()
+        previous_boundary_escaped = False
     return command
 
 
@@ -460,6 +467,16 @@ class WorkflowContractTest(unittest.TestCase):
             "      - name: validate\n"
             "        run: |\n"
             f"          echo setup # {slash}\n"
+            "          python3 scripts/validate_repo.py\n"
+        )
+        self.assertTrue(_step_runs_validate_repo(executable))
+
+    def test_validate_repo_comment_detection_respects_escaped_word_boundary(self):
+        slash = "\\"
+        executable = (
+            "      - name: validate\n"
+            "        run: |\n"
+            f"          echo {slash} #\n"
             "          python3 scripts/validate_repo.py\n"
         )
         self.assertTrue(_step_runs_validate_repo(executable))
