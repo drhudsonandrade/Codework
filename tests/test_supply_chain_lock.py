@@ -5,6 +5,8 @@ import re
 import unittest
 from pathlib import Path
 
+from scripts import verify_supply_chain_lock
+
 ROOT = Path(__file__).resolve().parents[1]
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
 
@@ -33,16 +35,26 @@ class SupplyChainLockTest(unittest.TestCase):
                 self.assertIn(name, allowed, f"{wf}: {name}")
                 self.assertEqual(sha, allowed[name]["sha"], f"{wf}: {name}")
 
-    def test_runtime_lock_uses_container_digests(self):
+    def test_runtime_lock_pins_external_secret_scanner_identity(self):
         payload = json.loads((ROOT / "locks/runtime-lock.json").read_text())
         self.assertIn("@sha256:", payload["base_image"]["reference"])
-        self.assertNotIn("secret_scanner", payload)
+        scanner = payload["secret_scanner"]
+        self.assertEqual(scanner["context"], "GitGuardian Security Checks")
+        self.assertEqual(scanner["integration_id"], 46505)
+        self.assertEqual(scanner["execution"], "external_github_app")
 
-    def test_supply_chain_verifier_does_not_require_retired_gitleaks_job(self):
+    def test_external_secret_scanner_identity_matches_governance(self):
+        runtime = json.loads((ROOT / "locks/runtime-lock.json").read_text())
+        ruleset = json.loads((ROOT / ".github/governance/main-ruleset.json").read_text())
+        verify_supply_chain_lock._verify_external_secret_scanner(runtime, ruleset)
+        mutated = json.loads(json.dumps(runtime))
+        mutated["secret_scanner"]["integration_id"] += 1
+        with self.assertRaises(SystemExit):
+            verify_supply_chain_lock._verify_external_secret_scanner(mutated, ruleset)
+
+    def test_supply_chain_verifier_does_not_reference_retired_gitleaks(self):
         verifier = (ROOT / "scripts/verify_supply_chain_lock.py").read_text(encoding="utf-8")
         self.assertNotIn("gitleaks", verifier.casefold())
-        self.assertNotIn("secret_scanner", verifier)
-
 
 if __name__ == "__main__":
     unittest.main()
