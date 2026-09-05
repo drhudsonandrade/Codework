@@ -13,6 +13,7 @@ concurrency:
 
 jobs:
   witness:
+    if: ${{ vars.GENOMA_PRODUCTION_WITNESS_ENABLED == 'true' }}
     name: Independent live witness
     runs-on: ubuntu-latest
     timeout-minutes: 30

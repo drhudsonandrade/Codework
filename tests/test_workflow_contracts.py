@@ -10,6 +10,10 @@ from tests.workflow_test_utils import job_block as _job_block
 
 ROOT = Path(__file__).resolve().parents[1]
 
+PRODUCTION_WITNESS_CAPABILITY_GUARD = (
+    "${{ vars.GENOMA_PRODUCTION_WITNESS_ENABLED == 'true' }}"
+)
+
 
 RETIRED_CODACY_IDENTIFIERS = (
     "codacy_api_report",
@@ -255,6 +259,18 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("push:\n    branches: [main]", header)
         push_block = header.split("push:\n", 1)[1].split("workflow_dispatch:", 1)[0]
         self.assertNotIn("paths:", push_block)
+
+    def test_production_witness_requires_exact_job_level_capability_guard(self):
+        workflow = (ROOT / ".github/workflows/genoma-production-witness.yml").read_text(encoding="utf-8")
+        self.assertEqual(_job_if_condition(workflow, "witness"), PRODUCTION_WITNESS_CAPABILITY_GUARD)
+        self.assertIn("needs: witness", _job_block(workflow, "publish-witness"))
+        for weakened in (
+            "${{ vars.GENOMA_PRODUCTION_WITNESS_ENABLED }}",
+            "${{ vars.GENOMA_PRODUCTION_WITNESS_ENABLED != 'false' }}",
+            "${{ vars.GENOMA_PRODUCTION_WITNESS_ENABLED == 'TRUE' }}",
+        ):
+            mutated = workflow.replace(f"    if: {PRODUCTION_WITNESS_CAPABILITY_GUARD}\n", f"    if: {weakened}\n", 1)
+            self.assertNotEqual(_job_if_condition(mutated, "witness"), PRODUCTION_WITNESS_CAPABILITY_GUARD)
 
     def test_production_witness_publisher_uses_restricted_deploy_key_without_token_write(self):
         workflow = (ROOT / ".github/workflows/genoma-production-witness.yml").read_text(encoding="utf-8")
