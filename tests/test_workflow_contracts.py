@@ -97,6 +97,33 @@ def _job_steps(workflow: str, job_name: str) -> list[str]:
     return steps
 
 
+def _shell_code_before_comment(command: str) -> str:
+    in_single_quote = False
+    in_double_quote = False
+    escaped = False
+    for index, char in enumerate(command):
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\" and not in_single_quote:
+            escaped = True
+            continue
+        if char == "'" and not in_double_quote:
+            in_single_quote = not in_single_quote
+            continue
+        if char == '"' and not in_single_quote:
+            in_double_quote = not in_double_quote
+            continue
+        if (
+            char == "#"
+            and not in_single_quote
+            and not in_double_quote
+            and (index == 0 or command[index - 1].isspace() or command[index - 1] in ";&|()<>")
+        ):
+            return command[:index].rstrip()
+    return command
+
+
 def _step_run_commands(step: str) -> tuple[str, ...]:
     lines = step.splitlines()
     commands: list[str] = []
@@ -135,19 +162,20 @@ def _step_run_commands(step: str) -> tuple[str, ...]:
             if command == heredoc_ends[0]:
                 heredoc_ends.pop(0)
             continue
-        if block_enders.match(command) or (command == "}" and control_depth > 0):
+        shell_code = _shell_code_before_comment(command)
+        if block_enders.match(shell_code) or (shell_code == "}" and control_depth > 0):
             control_depth = max(0, control_depth - 1)
             continue
         was_command_continuation = command_continuation
-        command_continuation = continued_command.search(command) is not None
-        opens_control = block_starters.search(command) is not None
-        opens_function = function_starter.match(command) is not None
-        opens_short_circuit_group = short_circuit_group.search(command) is not None
+        command_continuation = continued_command.search(shell_code) is not None
+        opens_control = block_starters.search(shell_code) is not None
+        opens_function = function_starter.match(shell_code) is not None
+        opens_short_circuit_group = short_circuit_group.search(shell_code) is not None
         if control_depth == 0 and not was_command_continuation and not (
             opens_control or opens_function or opens_short_circuit_group
         ):
-            commands.append(command)
-        for heredoc in heredoc_pattern.finditer(command):
+            commands.append(shell_code)
+        for heredoc in heredoc_pattern.finditer(shell_code):
             delimiter = next((group for group in heredoc.groups() if group is not None), None)
             if delimiter is not None:
                 heredoc_ends.append(delimiter)
@@ -425,6 +453,16 @@ class WorkflowContractTest(unittest.TestCase):
             "          true\n"
         )
         self.assertFalse(_step_runs_validate_repo(continued))
+
+    def test_validate_repo_command_detection_ignores_backslash_in_inline_comment(self):
+        slash = "\\"
+        executable = (
+            "      - name: validate\n"
+            "        run: |\n"
+            f"          echo setup # {slash}\n"
+            "          python3 scripts/validate_repo.py\n"
+        )
+        self.assertTrue(_step_runs_validate_repo(executable))
 
     def test_validate_repo_command_detection_rejects_multiple_heredocs(self):
         multiple_heredocs = """      - name: misleading
