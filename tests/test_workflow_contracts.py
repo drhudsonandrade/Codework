@@ -206,6 +206,25 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("GRCh38.lock.sha256.approved", workflow)
         self.assertIn("validate_bwa_mem2_functional.sh", workflow)
 
+    def test_retired_codacy_api_reporting_is_fully_removed(self):
+        retired_paths = (
+            ".github/workflows/codacy-api-report.yml",
+            ".github/workflows/codacy-api-report-tests.yml",
+            "scripts/codacy_api_report.py",
+            "scripts/codacy_pr_comment.js",
+            "tests/test_codacy_api_report.py",
+            "tests/test_codacy_pr_comment.js",
+            "tests/test_codacy_workflow_security.py",
+            "docs/CODACY_API_INTEGRATION.md",
+        )
+        for path in retired_paths:
+            self.assertFalse((ROOT / path).exists(), f"retired Codacy API component remains: {path}")
+
+        for path in (".fallowrc.json", ".github/workflows/fallow.yml", ".github/workflows/scaffold-validation.yml"):
+            content = (ROOT / path).read_text(encoding="utf-8")
+            self.assertNotIn("codacy_pr_comment", content)
+            self.assertNotIn("Codacy comment behavior", content)
+
 
 if __name__ == "__main__":
     unittest.main()

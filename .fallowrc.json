@@ -2,9 +2,7 @@
   "$schema": "./mcp/node_modules/fallow/schema.json",
   "entry": [
     "mcp/src/server.ts",
-    "mcp/test/**/*.test.ts",
-    "scripts/codacy_pr_comment.js",
-    "tests/test_codacy_pr_comment.js"
+    "mcp/test/**/*.test.ts"
   ],
   "rules": {
     "unused-files": "error",
