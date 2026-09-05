@@ -9,7 +9,7 @@ Target branch: `main`.
 Required policy:
 
 - require a pull request before changes reach `main`;
-- require at least one approving review;
+- require at least one approving review for actors without the scoped maintainer bypass;
 - dismiss stale approvals after new code-modifying commits;
 - require approval of the most recent reviewable push when GitHub makes that control available;
 - require status checks to pass before merge;
@@ -21,7 +21,12 @@ Required policy:
 
 The required checks must be selected from checks that have actually reported on the repository recently. Do not invent check names. For the current architecture, the selected set must cover the repository/scaffold contract, policy contract, MCP contract, supply-chain/security checks and CodeRabbit review policy used by the active PR process. Any check configured as required must have an unconditional pull-request provider; a path-filtered workflow must not be made globally required because unrelated PRs would wait forever for a check that never starts.
 
-The versioned definition is `.github/governance/main-ruleset.json`. It is a desired-state artifact, not evidence that GitHub has applied the ruleset.
+The desired state for `main` is split into two layered rulesets:
+
+- `.github/governance/main-ruleset.json` - deletion, non-fast-forward, and all required CI/security status checks, with **no bypass actors**;
+- `.github/governance/main-approval-ruleset.json` - pull-request/review policy only, with `drhudsonandrade` as a `User` bypass actor in `pull_request` mode.
+
+The approval-layer bypass does not apply to the Security & CI ruleset, so required checks cannot be bypassed through this architecture. These files are desired-state artifacts, not evidence that GitHub has applied the rulesets.
 
 ## `audit-evidence`
 
