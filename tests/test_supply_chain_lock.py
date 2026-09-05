@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import re
 import unittest
@@ -47,14 +48,23 @@ class SupplyChainLockTest(unittest.TestCase):
         runtime = json.loads((ROOT / "locks/runtime-lock.json").read_text())
         ruleset = json.loads((ROOT / ".github/governance/main-ruleset.json").read_text())
         verify_supply_chain_lock._verify_external_secret_scanner(runtime, ruleset)
-        mutated = json.loads(json.dumps(runtime))
-        mutated["secret_scanner"]["integration_id"] += 1
-        with self.assertRaises(SystemExit):
-            verify_supply_chain_lock._verify_external_secret_scanner(mutated, ruleset)
+
+        mutations = (
+            ("integration_id", runtime["secret_scanner"]["integration_id"] + 1),
+            ("context", "GitGuardian Security Checks spoofed"),
+            ("execution", "github_actions"),
+        )
+        for field, value in mutations:
+            with self.subTest(field=field):
+                mutated = copy.deepcopy(runtime)
+                mutated["secret_scanner"][field] = value
+                with self.assertRaises(SystemExit):
+                    verify_supply_chain_lock._verify_external_secret_scanner(mutated, ruleset)
 
     def test_supply_chain_verifier_does_not_reference_retired_gitleaks(self):
         verifier = (ROOT / "scripts/verify_supply_chain_lock.py").read_text(encoding="utf-8")
         self.assertNotIn("gitleaks", verifier.casefold())
+
 
 if __name__ == "__main__":
     unittest.main()
