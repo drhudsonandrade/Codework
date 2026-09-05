@@ -539,6 +539,9 @@ class WorkflowContractTest(unittest.TestCase):
                     if (filename, job_name) in hardened:
                         self.assertIs(checkout_config.get("persist-credentials"), False)
 
+    def _assert_no_retired_gitleaks_workflow(self, workflow: str) -> None:
+        self.assertNotIn("gitleaks", workflow.casefold())
+
     def test_main_required_policy_checks_have_unconditional_pr_provider(self):
         policy = (ROOT / ".github/workflows/genoma-policy-engine.yml").read_text(encoding="utf-8")
         header = policy.split("permissions:", 1)[0]
@@ -552,11 +555,32 @@ class WorkflowContractTest(unittest.TestCase):
         for context in (
             "Canonical policy + 263-rule contract",
             "OPA/Rego parity",
-            "Gitleaks secret scan",
             "Real Docker + canonical read-only mount",
         ):
             self.assertIn(context, contexts)
             self.assertIn(f"name: {context}", policy)
+        for external_context in (
+            "GitGuardian Security Checks",
+            "semgrep-cloud-platform/scan",
+        ):
+            self.assertIn(external_context, contexts)
+        self.assertNotIn("Gitleaks secret scan", contexts)
+        self._assert_no_retired_gitleaks_workflow(policy)
+
+    def test_retired_gitleaks_scan_rejects_renamed_active_job(self):
+        workflow = (ROOT / ".github/workflows/genoma-policy-engine.yml").read_text(encoding="utf-8")
+        injected_job = """
+  credential-audit:
+    name: Repository credential audit
+    runs-on: ubuntu-latest
+    steps:
+      - run: docker run --rm ghcr.io/GITLEAKS/gitleaks:v8.30.1 dir /repo
+
+"""
+        mutated = workflow.replace("\n  container:\n", injected_job + "  container:\n", 1)
+        self.assertNotEqual(mutated, workflow, "mutation must inject a renamed retired scanner job")
+        with self.assertRaises(AssertionError):
+            self._assert_no_retired_gitleaks_workflow(mutated)
 
     def test_legacy_editorial_chunk_materializer_is_removed(self):
         self.assertFalse((ROOT / ".github/workflows/genoma-materialize-editorial-upload.yml").exists())

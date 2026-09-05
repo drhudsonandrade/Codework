@@ -312,13 +312,13 @@ class CIOptimizationContractTest(unittest.TestCase):
         for job_name in ("policy", "rego", "container"):
             self._assert_job_gate(workflow, job_name, "policy_relevant")
 
-        secrets = _job_block(workflow, "secrets")
-        self.assertNotIn("needs: changes", secrets)
-        self.assertNotIn("policy_relevant", secrets)
+        self.assertNotIn("\n  secrets:\n", workflow)
+        self.assertNotIn("Gitleaks secret scan", workflow)
+        publish = _job_block(workflow, "publish")
+        self.assertIn("needs: [policy, rego, container]", publish)
         for required_name in (
             "Canonical policy + 263-rule contract",
             "OPA/Rego parity",
-            "Gitleaks secret scan",
             "Real Docker + canonical read-only mount",
         ):
             self.assertIn(f"name: {required_name}", workflow)

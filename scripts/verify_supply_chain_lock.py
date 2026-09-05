@@ -16,9 +16,49 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
+def _verify_external_secret_scanner(runtime: dict[str, object], ruleset: dict[str, object]) -> None:
+    scanner = runtime.get("secret_scanner")
+    if not isinstance(scanner, dict):
+        fail("runtime-lock secret_scanner identity missing")
+    context = scanner.get("context")
+    integration_id = scanner.get("integration_id")
+    if scanner.get("execution") != "external_github_app":
+        fail("secret scanner must execute as an external GitHub App")
+    if not isinstance(context, str) or not isinstance(integration_id, int):
+        fail("secret scanner context/integration_id identity invalid")
+
+    status_rule = next(
+        (
+            rule
+            for rule in ruleset.get("rules", [])
+            if isinstance(rule, dict) and rule.get("type") == "required_status_checks"
+        ),
+        None,
+    )
+    if not isinstance(status_rule, dict):
+        fail("main ruleset required_status_checks rule missing")
+    parameters = status_rule.get("parameters")
+    if not isinstance(parameters, dict):
+        fail("main ruleset required_status_checks parameters missing")
+    checks = parameters.get("required_status_checks")
+    if not isinstance(checks, list):
+        fail("main ruleset required_status_checks list missing")
+    matched = next(
+        (
+            item
+            for item in checks
+            if isinstance(item, dict) and item.get("context") == context
+        ),
+        None,
+    )
+    if not isinstance(matched, dict) or matched.get("integration_id") != integration_id:
+        fail(f"secret scanner identity mismatch for {context}: expected integration_id={integration_id}")
+
+
 def main() -> int:
     actions = json.loads((ROOT / "locks/actions-lock.json").read_text(encoding="utf-8"))["actions"]
     runtime = json.loads((ROOT / "locks/runtime-lock.json").read_text(encoding="utf-8"))
+    ruleset = json.loads((ROOT / ".github/governance/main-ruleset.json").read_text(encoding="utf-8"))
     expected = {name: meta["sha"] for name, meta in actions.items()}
     seen: set[str] = set()
 
@@ -46,10 +86,7 @@ def main() -> int:
     if not dockerfile.startswith(f"FROM {base}\n"):
         fail("Dockerfile base image is not the immutable runtime-lock reference")
 
-    policy_wf = (ROOT / ".github/workflows/genoma-policy-engine.yml").read_text(encoding="utf-8")
-    scanner = runtime["secret_scanner"]["reference"]
-    if scanner not in policy_wf:
-        fail("Gitleaks image is not pinned to runtime-lock digest")
+    _verify_external_secret_scanner(runtime, ruleset)
 
     env = (ROOT / "environment.yml").read_text(encoding="utf-8")
     for package, version in runtime["conda"].items():
@@ -61,7 +98,8 @@ def main() -> int:
             fail(f"locked artifact missing: {required}")
 
     print(f"PASS\tactions_immutable\t{len(seen)} action identities observed")
-    print("PASS\tcontainer_digests\tbase image + Gitleaks")
+    print("PASS\tcontainer_digests\tbase image")
+    print(f"PASS\texternal_secret_scanner\t{runtime['secret_scanner']['context']}@{runtime['secret_scanner']['integration_id']}")
     print("PASS\truntime_versions\texact critical conda pins")
     return 0
 
