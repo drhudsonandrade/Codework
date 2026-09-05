@@ -295,9 +295,21 @@ class PostMergeBootstrapGovernanceTests(unittest.TestCase):
         types = {rule["type"] for rule in ruleset["rules"]}
         self.assertTrue({"deletion", "non_fast_forward", "pull_request", "required_status_checks"} <= types)
         status_rule = next(rule for rule in ruleset["rules"] if rule["type"] == "required_status_checks")
-        contexts = {item["context"] for item in status_rule["parameters"]["required_status_checks"]}
-        self.assertIn("CodeRabbit", contexts)
-        self.assertNotIn("Gitleaks secret scan", contexts)
+        checks = {item["context"]: item.get("integration_id") for item in status_rule["parameters"]["required_status_checks"]}
+        self.assertIn("CodeRabbit", checks)
+        self.assertEqual(checks.get("Greptile Review"), 867647)
+        self.assertEqual(checks.get("GitGuardian Security Checks"), 46505)
+        for context in (
+            "DeepSource: Python",
+            "DeepSource: JavaScript",
+            "DeepSource: Shell",
+            "DeepSource: Docker",
+            "DeepSource: SQL",
+        ):
+            self.assertEqual(checks.get(context), 16372)
+        self.assertIn("security/snyk (drhudsonandrade)", checks)
+        self.assertEqual(checks.get("semgrep-cloud-platform/scan"), 4836909)
+        self.assertNotIn("Gitleaks secret scan", checks)
         self.assertTrue(status_rule["parameters"]["strict_required_status_checks_policy"])
 
     def test_audit_evidence_governance_is_layered(self) -> None:

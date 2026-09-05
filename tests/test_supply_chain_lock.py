@@ -36,7 +36,7 @@ class SupplyChainLockTest(unittest.TestCase):
     def test_runtime_lock_uses_container_digests(self):
         payload = json.loads((ROOT / "locks/runtime-lock.json").read_text())
         self.assertIn("@sha256:", payload["base_image"]["reference"])
-        self.assertIn("@sha256:", payload["secret_scanner"]["reference"])
+        self.assertNotIn("secret_scanner", payload)
 
     def test_supply_chain_verifier_does_not_require_retired_gitleaks_job(self):
         verifier = (ROOT / "scripts/verify_supply_chain_lock.py").read_text(encoding="utf-8")

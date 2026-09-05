@@ -556,6 +556,11 @@ class WorkflowContractTest(unittest.TestCase):
         ):
             self.assertIn(context, contexts)
             self.assertIn(f"name: {context}", policy)
+        for external_context in (
+            "GitGuardian Security Checks",
+            "semgrep-cloud-platform/scan",
+        ):
+            self.assertIn(external_context, contexts)
         self.assertNotIn("Gitleaks secret scan", contexts)
         self.assertNotIn("Gitleaks secret scan", policy)
 
