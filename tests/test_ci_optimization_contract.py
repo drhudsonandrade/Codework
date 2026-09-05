@@ -38,6 +38,19 @@ CONCURRENCY_BLOCK = """concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 """
 
+DRAFT_READY_TYPES = "types: [opened, synchronize, reopened, ready_for_review]"
+DRAFT_GATE = "github.event_name != 'pull_request' || github.event.pull_request.draft == false"
+DRAFT_GATED_JOBS = {
+    "fallow.yml": ("audit",),
+    "genoma-audit.yml": ("changes", "audit"),
+    "genoma-ngs-runtime-gate.yml": ("preflight",),
+    "genoma-policy-engine.yml": ("changes", "policy", "rego", "secrets", "container"),
+    "genoma-snp-array.yml": ("array-qc-contract", "array-nextflow-orchestration"),
+    "genoma-visual-qa-candidates.yml": ("render-candidates",),
+    "pr30-regressions.yml": ("regressions",),
+    "scaffold-validation.yml": ("changes", "static", "container-canary"),
+}
+
 
 def _read(name: str) -> str:
     return (WORKFLOWS / name).read_text(encoding="utf-8")
@@ -70,6 +83,17 @@ class CIOptimizationContractTest(unittest.TestCase):
         for name in CONCURRENCY_WORKFLOWS:
             with self.subTest(workflow=name):
                 self.assertIn(CONCURRENCY_BLOCK, _read(name))
+
+    def test_draft_pr_validation_defers_runner_jobs_until_ready(self):
+        for workflow_name, job_names in DRAFT_GATED_JOBS.items():
+            with self.subTest(workflow=workflow_name):
+                workflow = _read(workflow_name)
+                header = workflow.split("permissions:", 1)[0]
+                pull_request = header.split("  pull_request:\n", 1)[1]
+                self.assertIn(DRAFT_READY_TYPES, pull_request)
+                for job_name in job_names:
+                    with self.subTest(workflow=workflow_name, job=job_name):
+                        self.assertIn(DRAFT_GATE, _job_block(workflow, job_name))
 
     def test_policy_classifier_behavior_on_real_path_lists(self):
         classifier = _load_classifier()

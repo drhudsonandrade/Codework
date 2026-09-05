@@ -2,6 +2,7 @@ name: GENOMA SNP-array partial-genome gate
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'array_pipeline/**'
       - 'config/partial_genome_annotation_targets.json'
@@ -43,6 +44,7 @@ permissions:
 
 jobs:
   array-qc-contract:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -137,6 +139,7 @@ jobs:
           fi
 
   array-nextflow-orchestration:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:

@@ -2,6 +2,7 @@ name: GENOMA NGS Runtime Resource Gate
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'environment.yml'
       - 'Dockerfile'
@@ -44,7 +45,9 @@ permissions:
 
 jobs:
   preflight:
-    if: github.event_name != 'workflow_dispatch' || inputs.mode == 'preflight'
+    if: >-
+      (github.event_name != 'pull_request' || github.event.pull_request.draft == false) &&
+      (github.event_name != 'workflow_dispatch' || inputs.mode == 'preflight')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
