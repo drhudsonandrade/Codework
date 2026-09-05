@@ -289,6 +289,13 @@ class WorkflowContractTest(unittest.TestCase):
                 validate_repo.validate_production_witness_contract(root, errors)
                 self.assertTrue(any("capability guard" in error for error in errors))
 
+    def test_production_ceremony_documents_capability_gate_pending_semantics(self):
+        text = (ROOT / "docs/PRODUCTION_CEREMONY.md").read_text(encoding="utf-8")
+        self.assertIn("GENOMA_PRODUCTION_WITNESS_ENABLED", text)
+        self.assertIn("POST-DEPLOYMENT PENDENTE", text)
+        self.assertIn("does not grant POST-DEPLOYMENT PASS", text)
+        self.assertIn("job is skipped before runner allocation", text)
+
     def test_production_witness_publisher_uses_restricted_deploy_key_without_token_write(self):
         workflow = (ROOT / ".github/workflows/genoma-production-witness.yml").read_text(encoding="utf-8")
         self.assertIn("permissions:\n  contents: read", workflow)

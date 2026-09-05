@@ -71,6 +71,16 @@ The live smoke re-reads the source snapshot and recomputes the attestation, but 
 
 If the platform does not expose a machine-readable Project Instructions API, the owner-exported snapshot is the explicit evidence boundary for snapshot verification only. Installation status remains `NÃO DISPONÍVEL`, and POST-DEPLOYMENT remains fail-closed; the snapshot must not be described as direct platform verification.
 
+### 4.3 Production Witness capability gate
+
+`GENOMA_PRODUCTION_WITNESS_ENABLED` controls whether the independent Production Witness may allocate a GitHub-hosted runner. It is an operational capability flag only.
+
+If the repository variable is absent or has any value other than exact `true`, the `witness` job is skipped before runner allocation. The corresponding state remains `POST-DEPLOYMENT PENDENTE`; a skipped run creates no witness evidence and does not grant POST-DEPLOYMENT PASS.
+
+Setting the variable to exact `true` only arms the existing witness. It does not prove `PROJECT_BOOTSTRAP_INSTALLED`, does not bypass any fail-closed condition, and does not change the 15/15, zero-critical-failure, exact-SHA, evidence-integrity, or publisher requirements.
+
+Operational rollback is to remove the variable or set it to a value other than exact `true`. Historical evidence is never rewritten.
+
 ## 5. Evidence package
 
 The ceremony uploads a 365-day artifact named `genoma-post-deployment-evidence-<commit>` containing the materialization record, runtime-generated ruleset bootstrap attestation, container metadata, live ruleset response, the Project Instructions snapshot verification recorded in the live summary, all 15 case results, container log, and a sorted SHA-256 manifest.
