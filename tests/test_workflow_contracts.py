@@ -50,9 +50,11 @@ def _step_run_commands(step: str) -> tuple[str, ...]:
     commands: list[str] = []
     in_block = False
     control_depth = 0
+    conditional_continuation = False
     heredoc_ends: list[str] = []
     block_starters = re.compile(r"(?:^|[;&|]\s*)(?:if|for|while|until|case)\b")
     short_circuit_group = re.compile(r"(?:&&|\|\|)\s*\{")
+    continued_short_circuit = re.compile(r"(?:&&|\|\|)\s*(?:#.*)?$")
     block_enders = re.compile(r"^(?:fi|done|esac)\b")
     function_starter = re.compile(
         r"^(?:(?:function\s+)?[A-Za-z_][A-Za-z0-9_]*\s*\(\)"
@@ -84,10 +86,14 @@ def _step_run_commands(step: str) -> tuple[str, ...]:
         if block_enders.match(command) or (command == "}" and control_depth > 0):
             control_depth = max(0, control_depth - 1)
             continue
+        was_conditional_continuation = conditional_continuation
+        conditional_continuation = continued_short_circuit.search(command) is not None
         opens_control = block_starters.search(command) is not None
         opens_function = function_starter.match(command) is not None
         opens_short_circuit_group = short_circuit_group.search(command) is not None
-        if control_depth == 0 and not (opens_control or opens_function or opens_short_circuit_group):
+        if control_depth == 0 and not was_conditional_continuation and not (
+            opens_control or opens_function or opens_short_circuit_group
+        ):
             commands.append(command)
         for heredoc in heredoc_pattern.finditer(command):
             delimiter = next((group for group in heredoc.groups() if group is not None), None)
@@ -321,6 +327,22 @@ class WorkflowContractTest(unittest.TestCase):
 """
         self.assertFalse(_step_runs_validate_repo(commented_function))
         self.assertFalse(_step_runs_validate_repo(hyphenated_heredoc))
+
+    def test_validate_repo_command_detection_rejects_continued_short_circuit_operators(self):
+        continued_and = """      - name: misleading
+        run: |
+          false &&
+          python3 scripts/validate_repo.py
+          true
+"""
+        continued_or = """      - name: misleading
+        run: |
+          true ||
+          python3 scripts/validate_repo.py
+          true
+"""
+        self.assertFalse(_step_runs_validate_repo(continued_and))
+        self.assertFalse(_step_runs_validate_repo(continued_or))
 
     def test_validate_repo_command_detection_rejects_multiple_heredocs(self):
         multiple_heredocs = """      - name: misleading
