@@ -672,7 +672,11 @@ class ValidateRepoLanguageIntegrationTest(unittest.TestCase):
         td, root, _ = BaselineWriteSafetyTest._repo()
         with td:
             errors: list[str] = []
-            with mock.patch.object(
+            with mock.patch.dict(
+                os.environ,
+                {"GITHUB_EVENT_NAME": "", "GITHUB_EVENT_PATH": ""},
+                clear=False,
+            ), mock.patch.object(
                 guard.Path,
                 "mkdir",
                 side_effect=OSError("simulated snapshot write failure"),
