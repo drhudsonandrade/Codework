@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from scripts import validate_repo
 from tests.workflow_test_utils import job_block as _job_block
 
 
@@ -271,6 +272,22 @@ class WorkflowContractTest(unittest.TestCase):
         ):
             mutated = workflow.replace(f"    if: {PRODUCTION_WITNESS_CAPABILITY_GUARD}\n", f"    if: {weakened}\n", 1)
             self.assertNotEqual(_job_if_condition(mutated, "witness"), PRODUCTION_WITNESS_CAPABILITY_GUARD)
+
+    def test_validate_repo_rejects_missing_or_weakened_production_witness_guard(self):
+        source = (ROOT / ".github/workflows/genoma-production-witness.yml").read_text(encoding="utf-8")
+        mutations = (
+            source.replace(f"    if: {PRODUCTION_WITNESS_CAPABILITY_GUARD}\n", "", 1),
+            source.replace(f"    if: {PRODUCTION_WITNESS_CAPABILITY_GUARD}\n", "    if: ${{ vars.GENOMA_PRODUCTION_WITNESS_ENABLED }}\n", 1),
+        )
+        for mutated in mutations:
+            with self.subTest(mutated=mutated[:80]), tempfile.TemporaryDirectory() as td:
+                root = Path(td)
+                path = root / ".github/workflows/genoma-production-witness.yml"
+                path.parent.mkdir(parents=True)
+                path.write_text(mutated, encoding="utf-8")
+                errors: list[str] = []
+                validate_repo.validate_production_witness_contract(root, errors)
+                self.assertTrue(any("capability guard" in error for error in errors))
 
     def test_production_witness_publisher_uses_restricted_deploy_key_without_token_write(self):
         workflow = (ROOT / ".github/workflows/genoma-production-witness.yml").read_text(encoding="utf-8")
