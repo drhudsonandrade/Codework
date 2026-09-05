@@ -1,4 +1,6 @@
 import json
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -6,6 +8,56 @@ from tests.workflow_test_utils import job_block as _job_block
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+RETIRED_CODACY_IDENTIFIERS = (
+    "codacy_api_report",
+    "codacy_pr_comment",
+    "codacy-api-report",
+    "CODACY_REPORT_",
+    "Codacy API",
+)
+RETIRED_CODACY_REFERENCE_ALLOWLIST = frozenset(
+    {
+        "docs/superpowers/evidence/2026-09-03-pr36-local-validation-5953286.md",
+        "docs/superpowers/evidence/2026-09-03-pr36-local-validation-977a531.md",
+        "docs/superpowers/specs/2026-09-03-local-first-ci-architecture-design.md",
+        "tests/test_workflow_contracts.py",
+    }
+)
+
+
+def _tracked_repository_paths(root: Path) -> tuple[Path, ...]:
+    completed = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "-z"],
+        check=True,
+        stdout=subprocess.PIPE,
+    )
+    return tuple(
+        Path(raw.decode("utf-8"))
+        for raw in completed.stdout.split(b"\0")
+        if raw
+    )
+
+
+def _retired_codacy_reference_violations(
+    root: Path, paths: tuple[Path, ...]
+) -> list[str]:
+    violations: list[str] = []
+    for relative in paths:
+        normalized = relative.as_posix()
+        if normalized in RETIRED_CODACY_REFERENCE_ALLOWLIST:
+            continue
+        candidate = root / relative
+        if not candidate.is_file():
+            continue
+        try:
+            content = candidate.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        for identifier in RETIRED_CODACY_IDENTIFIERS:
+            if identifier in content:
+                violations.append(f"{normalized}: {identifier}")
+    return violations
 
 
 def _job_if_condition(workflow: str, job_name: str) -> str:
@@ -206,6 +258,37 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("GRCh38.lock.sha256.approved", workflow)
         self.assertIn("validate_bwa_mem2_functional.sh", workflow)
 
+    def test_retired_codacy_scan_rejects_stray_active_reference(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            stray = root / "scripts" / "stray.py"
+            stray.parent.mkdir(parents=True)
+            stray.write_text("value = 'CODACY_REPORT_TOKEN'\n", encoding="utf-8")
+            self.assertEqual(
+                ["scripts/stray.py: CODACY_REPORT_"],
+                _retired_codacy_reference_violations(root, (Path("scripts/stray.py"),)),
+            )
+
+    def test_retired_codacy_scan_allows_only_explicit_history_and_its_own_contract(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            historical = root / "docs/superpowers/evidence/2026-09-03-pr36-local-validation-5953286.md"
+            protected = root / "tests/stray_regression.py"
+            historical.parent.mkdir(parents=True)
+            protected.parent.mkdir(parents=True)
+            historical.write_text("legacy codacy-api-report note\n", encoding="utf-8")
+            protected.write_text("legacy codacy-api-report note\n", encoding="utf-8")
+            self.assertEqual(
+                ["tests/stray_regression.py: codacy-api-report"],
+                _retired_codacy_reference_violations(
+                    root,
+                    (
+                        Path("docs/superpowers/evidence/2026-09-03-pr36-local-validation-5953286.md"),
+                        Path("tests/stray_regression.py"),
+                    ),
+                ),
+            )
+
     def test_retired_codacy_api_reporting_is_fully_removed(self):
         retired_paths = (
             ".github/workflows/codacy-api-report.yml",
@@ -220,10 +303,10 @@ class WorkflowContractTest(unittest.TestCase):
         for path in retired_paths:
             self.assertFalse((ROOT / path).exists(), f"retired Codacy API component remains: {path}")
 
-        for path in (".fallowrc.json", ".github/workflows/fallow.yml", ".github/workflows/scaffold-validation.yml"):
-            content = (ROOT / path).read_text(encoding="utf-8")
-            self.assertNotIn("codacy_pr_comment", content)
-            self.assertNotIn("Codacy comment behavior", content)
+        violations = _retired_codacy_reference_violations(
+            ROOT, _tracked_repository_paths(ROOT)
+        )
+        self.assertEqual([], violations)
 
 
 if __name__ == "__main__":
