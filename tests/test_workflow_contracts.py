@@ -309,6 +309,14 @@ class WorkflowContractTest(unittest.TestCase):
                 self.assertIn("restore pre-gate execution", text.lower())
                 self.assertIn("exact `true`", text)
 
+    def test_production_witness_design_status_tracks_implementation_stage(self):
+        text = (ROOT / "docs/superpowers/specs/2026-09-05-production-witness-capability-gate-design.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "Status: approved design, implementation plan and implementation complete; pending validation/review",
+            text,
+        )
+        self.assertNotIn("Status: approved design, pending implementation plan", text)
+
     def test_production_witness_publisher_uses_restricted_deploy_key_without_token_write(self):
         workflow = (ROOT / ".github/workflows/genoma-production-witness.yml").read_text(encoding="utf-8")
         self.assertIn("permissions:\n  contents: read", workflow)

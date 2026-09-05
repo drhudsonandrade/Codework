@@ -1,7 +1,7 @@
 # Production Witness Capability Gate Design
 
 Date: 2026-09-05
-Status: approved design, pending implementation plan
+Status: approved design, implementation plan and implementation complete; pending validation/review
 Base commit: `8788e49444e79fe4c91a108de86abb0bd1617a8f`
 
 ## 1. Problem
