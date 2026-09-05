@@ -318,6 +318,7 @@ class PostMergeBootstrapGovernanceTests(unittest.TestCase):
             (ROOT / ".github/governance/main-approval-ruleset.json").read_text(encoding="utf-8")
         )
         self.assertEqual(approval["name"], "GENOMA approval gate")
+        self.assertEqual(approval["target"], "branch")
         self.assertEqual(approval["enforcement"], "active")
         self.assertEqual(approval["conditions"]["ref_name"]["include"], ["refs/heads/main"])
         self.assertEqual(
