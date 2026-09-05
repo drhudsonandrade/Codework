@@ -40,6 +40,7 @@ CONCURRENCY_BLOCK = """concurrency:
 """
 
 DRAFT_READY_EVENT = "ready_for_review"
+REQUIRED_PR_TYPES = ("opened", "synchronize", "reopened", "ready_for_review")
 DRAFT_READY_TYPES_LINE = "types: [opened, synchronize, reopened, ready_for_review]"
 DRAFT_GATE = "github.event_name != 'pull_request' || github.event.pull_request.draft == false"
 
@@ -213,6 +214,8 @@ def _draft_contract_errors(workflow: str) -> list[str]:
     pr_types = _pull_request_types(workflow)
     if DRAFT_READY_EVENT not in pr_types:
         errors.append("ready_for_review is missing from on.pull_request.types")
+    elif pr_types != REQUIRED_PR_TYPES:
+        errors.append("on.pull_request.types does not match the required event list")
 
     runner_jobs = _runner_job_conditions(workflow)
     if not runner_jobs:
@@ -301,6 +304,14 @@ class CIOptimizationContractTest(unittest.TestCase):
         )
         event_errors = _draft_contract_errors(event_mutant)
         self.assertIn("ready_for_review is missing from on.pull_request.types", event_errors)
+
+        incomplete_event_mutant = workflow.replace(
+            f"    {DRAFT_READY_TYPES_LINE}",
+            "    types: [synchronize, reopened, ready_for_review]",
+            1,
+        )
+        incomplete_event_errors = _draft_contract_errors(incomplete_event_mutant)
+        self.assertIn("on.pull_request.types does not match the required event list", incomplete_event_errors)
 
     def test_policy_classifier_behavior_on_real_path_lists(self):
         classifier = _load_classifier()
