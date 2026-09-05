@@ -458,6 +458,30 @@ class BaselineWriteSafetyTest(unittest.TestCase):
             ), self.assertRaisesRegex(LanguagePolicyError, "technical_terms"):
                 guard._check(root)
 
+    def test_check_rejects_excluded_root_added_after_trusted_pull_request_base(self):
+        from scripts import code_language_guard as guard
+        td, root, _ = self._repo()
+        with td:
+            active = root / "active" / "service.py"
+            active.parent.mkdir(parents=True)
+            active.write_text("value = 1\n", encoding="utf-8")
+            _git(root, "add", ".")
+            _git(root, "commit", "-m", "add active implementation")
+            trusted_base = _git(root, "rev-parse", "HEAD")
+            policy_path = root / "config/code_language_policy.json"
+            payload = json.loads(policy_path.read_text(encoding="utf-8"))
+            payload["excluded_roots"] = [
+                {"path": "active", "reason": "hide active implementation"},
+            ]
+            _write_json(root, "config/code_language_policy.json", payload)
+            _write_json(root, "event.json", {"pull_request": {"base": {"sha": trusted_base}}})
+            with mock.patch.dict(
+                os.environ,
+                {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(root / "event.json")},
+                clear=False,
+            ), self.assertRaisesRegex(LanguagePolicyError, "excluded_roots"):
+                guard._check(root)
+
     def test_check_accepts_exact_trusted_pull_request_base(self):
         from scripts import code_language_guard as guard
         td, root, base = self._repo()
@@ -642,6 +666,21 @@ class ValidateRepoLanguageIntegrationTest(unittest.TestCase):
         self.assertEqual(called_root, ROOT)
         self.assertIs(called_errors, errors)
         self.assertIn("language guard sentinel", errors)
+
+    def test_validate_language_policy_reports_snapshot_io_failure(self):
+        from scripts import code_language_guard as guard
+        td, root, _ = BaselineWriteSafetyTest._repo()
+        with td:
+            errors: list[str] = []
+            with mock.patch.object(
+                guard.Path,
+                "mkdir",
+                side_effect=OSError("simulated snapshot write failure"),
+            ):
+                validate_repo.validate_language_policy(root, errors)
+        self.assertEqual(len(errors), 1)
+        self.assertTrue(errors[0].startswith("code language policy unavailable:"), errors)
+        self.assertIn("simulated snapshot write failure", errors[0])
 
 
 class LanguagePolicyDocumentationTest(unittest.TestCase):

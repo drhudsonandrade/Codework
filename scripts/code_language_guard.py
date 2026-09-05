@@ -484,8 +484,13 @@ def _scan_source_commit(root: Path, source_commit: str, policy: LanguagePolicy) 
                     except UnicodeError as exc:
                         raise LanguagePolicyError(f"unable to read archived Python source: {relative}") from exc
                     target = snapshot / relative
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_text(source, encoding="utf-8")
+                    try:
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.write_text(source, encoding="utf-8")
+                    except OSError as exc:
+                        raise LanguagePolicyError(
+                            f"unable to materialize archived Python source: {relative}: {exc}"
+                        ) from exc
         except tarfile.TarError as exc:
             raise LanguagePolicyError("unable to inspect language baseline source_commit archive") from exc
         return group_findings(scan_repository(snapshot, policy))
@@ -519,35 +524,43 @@ def _baseline_source_commit(root: Path) -> str:
     return source_commit
 
 
-def _technical_terms_at_commit(root: Path, commit: str) -> frozenset[str] | None:
+def _policy_at_commit(root: Path, commit: str) -> LanguagePolicy | None:
     ref = f"{commit}:config/code_language_policy.json"
     exists = _run_git(root, "cat-file", "-e", ref, allow_nonzero=True)
     if exists.returncode != 0:
         return None
     payload_result = _run_git(root, "show", ref)
-    try:
-        payload = json.loads(payload_result.stdout.decode("utf-8"))
-    except (UnicodeError, json.JSONDecodeError) as exc:
-        raise LanguagePolicyError("trusted pull request base language policy is invalid") from exc
-    if not isinstance(payload, dict) or payload.get("schema") != POLICY_SCHEMA:
-        raise LanguagePolicyError("trusted pull request base language policy schema is invalid")
-    raw_terms = payload.get("technical_terms")
-    if not isinstance(raw_terms, list) or not raw_terms or not all(isinstance(term, str) and term for term in raw_terms):
-        raise LanguagePolicyError("trusted pull request base technical_terms are invalid")
-    return frozenset(_normalize_word(term) for term in raw_terms)
+    with TemporaryDirectory() as td:
+        snapshot = Path(td)
+        policy_path = snapshot / "config" / "code_language_policy.json"
+        try:
+            policy_path.parent.mkdir(parents=True, exist_ok=True)
+            policy_path.write_bytes(payload_result.stdout)
+            return load_policy(snapshot)
+        except (OSError, LanguagePolicyError) as exc:
+            raise LanguagePolicyError(
+                f"trusted pull request base language policy is invalid: {exc}"
+            ) from exc
 
 
 def _validate_policy_monotonicity(root: Path, policy: LanguagePolicy) -> None:
     trusted_base = _trusted_pull_request_base()
     if trusted_base is None:
         return
-    base_terms = _technical_terms_at_commit(root, trusted_base)
-    if base_terms is None:
+    base_policy = _policy_at_commit(root, trusted_base)
+    if base_policy is None:
         return
-    removed = sorted(base_terms - policy.technical_terms)
+    removed = sorted(base_policy.technical_terms - policy.technical_terms)
     if removed:
         raise LanguagePolicyError(
             "language policy technical_terms may not remove trusted pull request base terms: " + ", ".join(removed)
+        )
+    base_excluded = {entry.path for entry in base_policy.excluded_roots}
+    added_excluded = sorted({entry.path for entry in policy.excluded_roots} - base_excluded)
+    if added_excluded:
+        raise LanguagePolicyError(
+            "language policy excluded_roots may not add trusted pull request base exclusions: "
+            + ", ".join(added_excluded)
         )
 
 
