@@ -2,6 +2,7 @@ name: GENOMA v0.8 four-plane audit
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
   workflow_dispatch:
@@ -15,6 +16,7 @@ permissions:
 
 jobs:
   changes:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     name: Four-plane audit change classifier
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -73,6 +75,7 @@ jobs:
     needs: changes
     if: >-
       always() &&
+      (github.event_name != 'pull_request' || github.event.pull_request.draft == false) &&
       (needs.changes.result != 'success' ||
        needs.changes.outputs.audit_required == 'true')
     runs-on: ubuntu-latest

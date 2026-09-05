@@ -2,6 +2,7 @@ name: PR30 regression gates
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'scripts/curate_assessed_alleles.py'
       - 'config/partial_genome_annotation_targets.json'
@@ -20,6 +21,7 @@ permissions:
 
 jobs:
   regressions:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

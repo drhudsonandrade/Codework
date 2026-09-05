@@ -59,14 +59,22 @@ CodeRabbit also uses this file as a review guideline.
    Fix findings that are supported by code, tests, contracts or documentation.
 8. Re-run affected tests after every corrective change.
 9. Review the final diff against `main` for unrelated changes and contract drift.
-10. Open a pull request only after local validation succeeds.
-11. Wait for the GitHub CodeRabbit review and GitHub Actions.
-12. If CodeRabbit or CI raises a blocking issue, fix it on the same branch, re-run
-    tests, and push. CodeRabbit will perform an incremental review.
-13. Never merge automatically. Human approval is the final gate.
+10. Use a draft pull request for iterative remote checkpoints. Push only coherent blocks
+    that already passed the applicable local validation; do not use GitHub Actions as an
+    iterative debugger and do not push every small correction.
+11. Keep the PR in draft while implementation is still changing. Draft PR validation
+    jobs are intentionally gated before runner allocation.
+12. When the exact current HEAD is locally ready, push the final coherent block and mark
+    the PR ready for review. The `ready_for_review` event is the boundary for external
+    review and the full applicable GitHub Actions pass.
+13. If CodeRabbit, another reviewer, or CI raises a blocking issue, return the PR to draft
+    before the next implementation push, batch the related fixes locally, re-run affected
+    tests, then mark the new exact HEAD ready again for revalidation.
+14. Never merge automatically. Human approval is the final gate.
 
 If CodeRabbit CLI is unavailable or unauthenticated, do not claim a pre-PR CodeRabbit
-review occurred. Continue with tests, open the PR, and rely on the CodeRabbit GitHub App.
+review occurred. Continue with local tests, keep the PR draft during implementation, and
+rely on the CodeRabbit GitHub App after the exact HEAD is marked ready for review.
 
 ## Baseline validation
 

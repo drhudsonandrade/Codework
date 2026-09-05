@@ -1,5 +1,6 @@
 import ast
 import importlib.util
+import re
 import unittest
 from pathlib import Path
 from types import ModuleType
@@ -38,9 +39,257 @@ CONCURRENCY_BLOCK = """concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 """
 
+DRAFT_READY_EVENT = "ready_for_review"
+REQUIRED_PR_TYPES = ("opened", "synchronize", "reopened", "ready_for_review")
+DRAFT_READY_TYPES_LINE = "types: [opened, synchronize, reopened, ready_for_review]"
+DRAFT_GATE = "github.event_name != 'pull_request' || github.event.pull_request.draft == false"
+
 
 def _read(name: str) -> str:
     return (WORKFLOWS / name).read_text(encoding="utf-8")
+
+
+def _indent(line: str) -> int:
+    return len(line) - len(line.lstrip(" "))
+
+
+def _pull_request_types(workflow: str) -> tuple[str, ...]:
+    in_on = False
+    in_pull_request = False
+    for line in workflow.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = _indent(line)
+        if indent == 0:
+            in_on = stripped == "on:"
+            in_pull_request = False
+            if stripped == "jobs:":
+                break
+            continue
+        if in_on and indent == 2:
+            in_pull_request = stripped == "pull_request:"
+            continue
+        if in_on and in_pull_request and indent == 4 and stripped.startswith("types:"):
+            value = stripped.split(":", 1)[1].strip()
+            if not (value.startswith("[") and value.endswith("]")):
+                raise AssertionError("pull_request.types must use the canonical inline list")
+            return tuple(
+                item.strip().strip("\"'")
+                for item in value[1:-1].split(",")
+                if item.strip()
+            )
+    return ()
+
+
+def _runner_job_conditions(workflow: str) -> dict[str, str]:
+    lines = workflow.splitlines()
+    jobs_start = next(
+        (index for index, line in enumerate(lines) if _indent(line) == 0 and line.strip() == "jobs:"),
+        None,
+    )
+    if jobs_start is None:
+        return {}
+
+    jobs: dict[str, str] = {}
+    index = jobs_start + 1
+    while index < len(lines):
+        line = lines[index]
+        stripped = line.strip()
+        indent = _indent(line)
+        if stripped and indent == 0:
+            break
+        if not stripped or indent != 2 or not stripped.endswith(":"):
+            index += 1
+            continue
+
+        job_name = stripped[:-1]
+        end = index + 1
+        while end < len(lines):
+            candidate = lines[end]
+            if candidate.strip() and _indent(candidate) <= 2:
+                break
+            end += 1
+
+        has_runner = False
+        job_if = ""
+        cursor = index + 1
+        while cursor < end:
+            candidate = lines[cursor]
+            candidate_stripped = candidate.strip()
+            if _indent(candidate) == 4 and candidate_stripped.startswith("runs-on:"):
+                has_runner = True
+            if _indent(candidate) == 4 and candidate_stripped.startswith("if:"):
+                raw = candidate_stripped.split(":", 1)[1].strip()
+                if raw in {">", ">-", "|", "|-"}:
+                    parts: list[str] = []
+                    nested = cursor + 1
+                    while nested < end and (not lines[nested].strip() or _indent(lines[nested]) > 4):
+                        if lines[nested].strip():
+                            parts.append(lines[nested].strip())
+                        nested += 1
+                    job_if = " ".join(parts)
+                else:
+                    job_if = raw
+            cursor += 1
+
+        if has_runner:
+            jobs[job_name] = " ".join(job_if.replace("${{", "").replace("}}", "").split())
+        index = end
+    return jobs
+
+
+def _job_is_non_pr_only(condition: str) -> bool:
+    if not condition or "||" in condition:
+        return False
+    required_events = re.findall(r"github\.event_name\s*==\s*['\"]([^'\"]+)['\"]", condition)
+    return bool(required_events) and all(event != "pull_request" for event in required_events)
+
+
+def _strip_wrapping_parentheses(expression: str) -> str:
+    expression = expression.strip()
+    while expression.startswith("(") and expression.endswith(")"):
+        depth = 0
+        quote = ""
+        wraps_entire_expression = True
+        for index, char in enumerate(expression):
+            if quote:
+                if char == quote and (index == 0 or expression[index - 1] != "\\"):
+                    quote = ""
+                continue
+            if char in {"'", '"'}:
+                quote = char
+            elif char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth == 0 and index != len(expression) - 1:
+                    wraps_entire_expression = False
+                    break
+        if not wraps_entire_expression or depth != 0:
+            break
+        expression = expression[1:-1].strip()
+    return " ".join(expression.split())
+
+
+def _top_level_and_terms(expression: str) -> list[str]:
+    terms: list[str] = []
+    depth = 0
+    quote = ""
+    start = 0
+    index = 0
+    while index < len(expression):
+        char = expression[index]
+        if quote:
+            if char == quote and (index == 0 or expression[index - 1] != "\\"):
+                quote = ""
+            index += 1
+            continue
+        if char in {"'", '"'}:
+            quote = char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+        elif depth == 0 and expression.startswith("&&", index):
+            terms.append(expression[start:index].strip())
+            index += 2
+            start = index
+            continue
+        index += 1
+    terms.append(expression[start:].strip())
+    return [term for term in terms if term]
+
+
+def _has_top_level_or(expression: str) -> bool:
+    depth = 0
+    quote = ""
+    index = 0
+    while index < len(expression):
+        char = expression[index]
+        if quote:
+            if char == quote and (index == 0 or expression[index - 1] != "\\"):
+                quote = ""
+            index += 1
+            continue
+        if char in {"'", '"'}:
+            quote = char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+        elif depth == 0 and expression.startswith("||", index):
+            return True
+        index += 1
+    return False
+
+
+def _draft_gate_is_required_conjunct(condition: str) -> bool:
+    normalized_gate = " ".join(DRAFT_GATE.split())
+    normalized_condition = _strip_wrapping_parentheses(condition)
+    if normalized_condition == normalized_gate:
+        return True
+    if _has_top_level_or(condition):
+        return False
+    return any(
+        _strip_wrapping_parentheses(term) == normalized_gate
+        for term in _top_level_and_terms(condition)
+    )
+
+
+def _draft_contract_errors(workflow: str) -> list[str]:
+    errors: list[str] = []
+    pr_types = _pull_request_types(workflow)
+    if DRAFT_READY_EVENT not in pr_types:
+        errors.append("ready_for_review is missing from on.pull_request.types")
+    elif pr_types != REQUIRED_PR_TYPES:
+        errors.append("on.pull_request.types does not match the required event list")
+
+    runner_jobs = _runner_job_conditions(workflow)
+    if not runner_jobs:
+        errors.append("workflow contains no runner jobs")
+        return errors
+
+    pr_runner_jobs = {
+        name: condition
+        for name, condition in runner_jobs.items()
+        if not _job_is_non_pr_only(condition)
+    }
+    if not pr_runner_jobs:
+        errors.append("workflow contains no pull-request-capable runner jobs")
+        return errors
+
+    normalized_gate = " ".join(DRAFT_GATE.split())
+    for job_name, condition in pr_runner_jobs.items():
+        if normalized_gate not in condition:
+            errors.append(f"{job_name}: job-level draft gate missing")
+        elif not _draft_gate_is_required_conjunct(condition):
+            errors.append(f"{job_name}: job-level draft gate not structurally enforced")
+    return errors
+
+
+def _pr_template_draft_flow_errors(template: str) -> list[str]:
+    errors: list[str] = []
+    visible_template = re.sub(r"<!--.*?(?:-->|$)", "", template, flags=re.DOTALL)
+    try:
+        section = visible_template.split("## CI / GitHub Actions", 1)[1].split("## Mudan\u00e7a can\u00f4nica", 1)[0]
+    except IndexError:
+        return ["CI / GitHub Actions section is missing or not bounded"]
+    markers = (
+        "mantenha a PR como Draft",
+        "Confirmar que o HEAD exato est\u00e1 validado localmente",
+        "Marcar a PR como Ready for Review",
+        "Ap\u00f3s Ready for Review, aguardar todos os checks obrigat\u00f3rios do GitHub Actions no HEAD exato",
+    )
+    positions: list[int] = []
+    for marker in markers:
+        index = section.find(marker)
+        if index < 0:
+            errors.append(f"draft-first flow marker missing: {marker}")
+        positions.append(index)
+    if all(index >= 0 for index in positions) and positions != sorted(positions):
+        errors.append("draft-first flow markers are out of order")
+    return errors
 
 
 def _subprocess_references(source: str) -> list[str]:
@@ -66,10 +315,97 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertIn(f"needs.changes.outputs.{output_name} == 'true'", job)
         self.assertIn("Require successful scope classification", job)
 
+    def test_pr_template_documents_draft_first_final_ci_boundary(self):
+        template = (ROOT / ".github" / "pull_request_template.md").read_text(encoding="utf-8")
+        self.assertEqual([], _pr_template_draft_flow_errors(template))
+
+    def test_pr_template_draft_flow_rejects_unrelated_or_reordered_markers(self):
+        template = (ROOT / ".github" / "pull_request_template.md").read_text(encoding="utf-8")
+        ci_section, rest = template.split("## Mudan\u00e7a can\u00f4nica", 1)
+        final_line = "- [ ] Ap\u00f3s Ready for Review, aguardar todos os checks obrigat\u00f3rios do GitHub Actions no HEAD exato\n"
+        mutant = ci_section.replace(final_line, "") + "## Mudan\u00e7a can\u00f4nica" + rest + "\n" + final_line
+        self.assertTrue(_pr_template_draft_flow_errors(mutant))
+
+        markers = (
+            "mantenha a PR como Draft",
+            "Confirmar que o HEAD exato est\u00e1 validado localmente",
+            "Marcar a PR como Ready for Review",
+            "Ap\u00f3s Ready for Review, aguardar todos os checks obrigat\u00f3rios do GitHub Actions no HEAD exato",
+        )
+        commented = template
+        for marker in markers:
+            commented = commented.replace(marker, "", 1)
+        payload = "<!-- " + " | ".join(markers) + " -->\n"
+        commented = commented.replace("## Mudan\u00e7a can\u00f4nica", payload + "## Mudan\u00e7a can\u00f4nica", 1)
+        self.assertTrue(_pr_template_draft_flow_errors(commented))
+
+        spanning_comment = template.replace("## CI / GitHub Actions", "<!--\n## CI / GitHub Actions", 1)
+        spanning_comment = spanning_comment.replace("## Mudan\u00e7a can\u00f4nica", "-->\n## Mudan\u00e7a can\u00f4nica", 1)
+        self.assertTrue(_pr_template_draft_flow_errors(spanning_comment))
+
+        unclosed_comment = template.replace("## CI / GitHub Actions", "<!--\n## CI / GitHub Actions", 1)
+        self.assertTrue(_pr_template_draft_flow_errors(unclosed_comment))
+
     def test_validation_workflows_cancel_superseded_pr_runs(self):
         for name in CONCURRENCY_WORKFLOWS:
             with self.subTest(workflow=name):
                 self.assertIn(CONCURRENCY_BLOCK, _read(name))
+
+    def test_draft_pr_validation_defers_runner_jobs_until_ready(self):
+        for workflow_name in CONCURRENCY_WORKFLOWS:
+            with self.subTest(workflow=workflow_name):
+                self.assertEqual([], _draft_contract_errors(_read(workflow_name)))
+
+    def test_draft_contract_rejects_misplaced_gate_and_ready_event(self):
+        workflow = _read("scaffold-validation.yml")
+
+        gate_mutant = workflow.replace(DRAFT_GATE, "true", 1)
+        gate_mutant = gate_mutant.replace(
+            "    runs-on:",
+            f"    # retained text must not satisfy the contract: {DRAFT_GATE}\n    runs-on:",
+            1,
+        )
+        gate_errors = _draft_contract_errors(gate_mutant)
+        self.assertTrue(any("job-level draft gate missing" in error for error in gate_errors), gate_errors)
+
+        weakened_mutant = workflow.replace(DRAFT_GATE, f"({DRAFT_GATE}) || true", 1)
+        weakened_errors = _draft_contract_errors(weakened_mutant)
+        self.assertTrue(
+            any("job-level draft gate not structurally enforced" in error for error in weakened_errors),
+            weakened_errors,
+        )
+
+        top_level_or_mutant = workflow.replace(
+            DRAFT_GATE,
+            f"({DRAFT_GATE}) && false || true",
+            1,
+        )
+        top_level_or_errors = _draft_contract_errors(top_level_or_mutant)
+        self.assertTrue(
+            any("job-level draft gate not structurally enforced" in error for error in top_level_or_errors),
+            top_level_or_errors,
+        )
+
+        event_mutant = workflow.replace(
+            f"    {DRAFT_READY_TYPES_LINE}",
+            "    types: [opened, synchronize, reopened]",
+            1,
+        )
+        event_mutant = event_mutant.replace(
+            "  push:",
+            f"  # misplaced text must not satisfy the contract: {DRAFT_READY_TYPES_LINE}\n  push:",
+            1,
+        )
+        event_errors = _draft_contract_errors(event_mutant)
+        self.assertIn("ready_for_review is missing from on.pull_request.types", event_errors)
+
+        incomplete_event_mutant = workflow.replace(
+            f"    {DRAFT_READY_TYPES_LINE}",
+            "    types: [synchronize, reopened, ready_for_review]",
+            1,
+        )
+        incomplete_event_errors = _draft_contract_errors(incomplete_event_mutant)
+        self.assertIn("on.pull_request.types does not match the required event list", incomplete_event_errors)
 
     def test_policy_classifier_behavior_on_real_path_lists(self):
         classifier = _load_classifier()
