@@ -54,7 +54,7 @@ def _step_run_commands(step: str) -> tuple[str, ...]:
     heredoc_ends: list[str] = []
     block_starters = re.compile(r"(?:^|[;&|]\s*)(?:if|for|while|until|case)\b")
     short_circuit_group = re.compile(r"(?:&&|\|\|)\s*\{")
-    continued_short_circuit = re.compile(r"(?:&&|\|\|)\s*(?:#.*)?$")
+    continued_short_circuit = re.compile(r"(?:&&|\|\|)\s*(?:\\\s*)?(?:#.*)?$")
     block_enders = re.compile(r"^(?:fi|done|esac)\b")
     function_starter = re.compile(
         r"^(?:(?:function\s+)?[A-Za-z_][A-Za-z0-9_]*\s*\(\)"
@@ -341,6 +341,25 @@ class WorkflowContractTest(unittest.TestCase):
           python3 scripts/validate_repo.py
           true
 """
+        self.assertFalse(_step_runs_validate_repo(continued_and))
+        self.assertFalse(_step_runs_validate_repo(continued_or))
+
+    def test_validate_repo_command_detection_rejects_backslash_continued_short_circuit_operators(self):
+        slash = "\\"
+        continued_and = (
+            "      - name: misleading\n"
+            "        run: |\n"
+            f"          false && {slash}\n"
+            "          python3 scripts/validate_repo.py\n"
+            "          true\n"
+        )
+        continued_or = (
+            "      - name: misleading\n"
+            "        run: |\n"
+            f"          true || {slash}\n"
+            "          python3 scripts/validate_repo.py\n"
+            "          true\n"
+        )
         self.assertFalse(_step_runs_validate_repo(continued_and))
         self.assertFalse(_step_runs_validate_repo(continued_or))
 
