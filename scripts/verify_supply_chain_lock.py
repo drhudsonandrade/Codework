@@ -46,11 +46,6 @@ def main() -> int:
     if not dockerfile.startswith(f"FROM {base}\n"):
         fail("Dockerfile base image is not the immutable runtime-lock reference")
 
-    policy_wf = (ROOT / ".github/workflows/genoma-policy-engine.yml").read_text(encoding="utf-8")
-    scanner = runtime["secret_scanner"]["reference"]
-    if scanner not in policy_wf:
-        fail("Gitleaks image is not pinned to runtime-lock digest")
-
     env = (ROOT / "environment.yml").read_text(encoding="utf-8")
     for package, version in runtime["conda"].items():
         if f"- {package}={version}" not in env:
@@ -61,7 +56,7 @@ def main() -> int:
             fail(f"locked artifact missing: {required}")
 
     print(f"PASS\tactions_immutable\t{len(seen)} action identities observed")
-    print("PASS\tcontainer_digests\tbase image + Gitleaks")
+    print("PASS\tcontainer_digests\tbase image")
     print("PASS\truntime_versions\texact critical conda pins")
     return 0
 

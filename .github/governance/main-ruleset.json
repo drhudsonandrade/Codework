@@ -47,9 +47,6 @@
             "context": "OPA/Rego parity"
           },
           {
-            "context": "Gitleaks secret scan"
-          },
-          {
             "context": "Real Docker + canonical read-only mount"
           },
           {

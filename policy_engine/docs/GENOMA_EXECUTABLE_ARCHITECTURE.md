@@ -18,7 +18,7 @@ Evidence is identified by stable IDs. Mutable sources carry version and checked-
 
 ## Plane 4 — Audit Plane
 
-The engine emits deterministic reports and an optional tamper-evident JSONL hash chain. CI records tests, independent safety smoke, OPA/Rego, Gitleaks, real Docker build/run and immutable OCI image digest/provenance.
+The engine emits deterministic reports and an optional tamper-evident JSONL hash chain. CI records tests, independent safety smoke, OPA/Rego, real Docker build/run and immutable OCI image digest/provenance. Required PR secret scanning is provided externally by GitGuardian.
 
 ## Optional interfaces
 

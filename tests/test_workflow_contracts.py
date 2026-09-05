@@ -552,11 +552,12 @@ class WorkflowContractTest(unittest.TestCase):
         for context in (
             "Canonical policy + 263-rule contract",
             "OPA/Rego parity",
-            "Gitleaks secret scan",
             "Real Docker + canonical read-only mount",
         ):
             self.assertIn(context, contexts)
             self.assertIn(f"name: {context}", policy)
+        self.assertNotIn("Gitleaks secret scan", contexts)
+        self.assertNotIn("Gitleaks secret scan", policy)
 
     def test_legacy_editorial_chunk_materializer_is_removed(self):
         self.assertFalse((ROOT / ".github/workflows/genoma-materialize-editorial-upload.yml").exists())

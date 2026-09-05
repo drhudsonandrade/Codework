@@ -297,7 +297,7 @@ class PostMergeBootstrapGovernanceTests(unittest.TestCase):
         status_rule = next(rule for rule in ruleset["rules"] if rule["type"] == "required_status_checks")
         contexts = {item["context"] for item in status_rule["parameters"]["required_status_checks"]}
         self.assertIn("CodeRabbit", contexts)
-        self.assertIn("Gitleaks secret scan", contexts)
+        self.assertNotIn("Gitleaks secret scan", contexts)
         self.assertTrue(status_rule["parameters"]["strict_required_status_checks_policy"])
 
     def test_audit_evidence_governance_is_layered(self) -> None:
