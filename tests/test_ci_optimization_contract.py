@@ -274,6 +274,7 @@ def _pr_template_draft_flow_errors(template: str) -> list[str]:
         section = template.split("## CI / GitHub Actions", 1)[1].split("## Mudan\u00e7a can\u00f4nica", 1)[0]
     except IndexError:
         return ["CI / GitHub Actions section is missing or not bounded"]
+    section = re.sub(r"<!--.*?-->", "", section, flags=re.DOTALL)
     markers = (
         "mantenha a PR como Draft",
         "Confirmar que o HEAD exato est\u00e1 validado localmente",
@@ -324,6 +325,20 @@ class CIOptimizationContractTest(unittest.TestCase):
         final_line = "- [ ] Ap\u00f3s Ready for Review, aguardar todos os checks obrigat\u00f3rios do GitHub Actions no HEAD exato\n"
         mutant = ci_section.replace(final_line, "") + "## Mudan\u00e7a can\u00f4nica" + rest + "\n" + final_line
         self.assertTrue(_pr_template_draft_flow_errors(mutant))
+
+        markers = (
+            "mantenha a PR como Draft",
+            "Confirmar que o HEAD exato est\u00e1 validado localmente",
+            "Marcar a PR como Ready for Review",
+            "Ap\u00f3s Ready for Review, aguardar todos os checks obrigat\u00f3rios do GitHub Actions no HEAD exato",
+        )
+        commented = template
+        for marker in markers:
+            commented = commented.replace(marker, "", 1)
+        payload = "<!-- " + " | ".join(markers) + " -->\n"
+        commented = commented.replace("## Mudan\u00e7a can\u00f4nica", payload + "## Mudan\u00e7a can\u00f4nica", 1)
+        self.assertTrue(_pr_template_draft_flow_errors(commented))
+
 
     def test_validation_workflows_cancel_superseded_pr_runs(self):
         for name in CONCURRENCY_WORKFLOWS:
