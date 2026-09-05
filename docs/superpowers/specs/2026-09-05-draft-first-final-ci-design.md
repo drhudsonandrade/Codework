@@ -61,4 +61,4 @@ Open implementation PRs as drafts. Run targeted tests and repository validation 
 
 ## Success criteria
 
-Structural regression tests prove all affected workflows retrigger on `ready_for_review` and gate runner jobs while draft. Local repository validation remains green. A real draft PR demonstrates skipped runner jobs before the PR is marked ready; the same exact HEAD then receives the full applicable CI after `ready_for_review`.
+Structural regression tests prove all affected workflows retrigger on `ready_for_review` and gate runner jobs while draft. Local repository validation remains green. A real draft PR demonstrates skipped runner jobs before the PR is marked ready; the same HEAD then receives the full applicable CI after `ready_for_review`.

@@ -1,5 +1,6 @@
 import ast
 import importlib.util
+import re
 import unittest
 from pathlib import Path
 from types import ModuleType
@@ -38,22 +39,137 @@ CONCURRENCY_BLOCK = """concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 """
 
-DRAFT_READY_TYPES = "types: [opened, synchronize, reopened, ready_for_review]"
+DRAFT_READY_EVENT = "ready_for_review"
+DRAFT_READY_TYPES_LINE = "types: [opened, synchronize, reopened, ready_for_review]"
 DRAFT_GATE = "github.event_name != 'pull_request' || github.event.pull_request.draft == false"
-DRAFT_GATED_JOBS = {
-    "fallow.yml": ("audit",),
-    "genoma-audit.yml": ("changes", "audit"),
-    "genoma-ngs-runtime-gate.yml": ("preflight",),
-    "genoma-policy-engine.yml": ("changes", "policy", "rego", "secrets", "container"),
-    "genoma-snp-array.yml": ("array-qc-contract", "array-nextflow-orchestration"),
-    "genoma-visual-qa-candidates.yml": ("render-candidates",),
-    "pr30-regressions.yml": ("regressions",),
-    "scaffold-validation.yml": ("changes", "static", "container-canary"),
-}
 
 
 def _read(name: str) -> str:
     return (WORKFLOWS / name).read_text(encoding="utf-8")
+
+
+def _indent(line: str) -> int:
+    return len(line) - len(line.lstrip(" "))
+
+
+def _pull_request_types(workflow: str) -> tuple[str, ...]:
+    in_on = False
+    in_pull_request = False
+    for line in workflow.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = _indent(line)
+        if indent == 0:
+            in_on = stripped == "on:"
+            in_pull_request = False
+            if stripped == "jobs:":
+                break
+            continue
+        if in_on and indent == 2:
+            in_pull_request = stripped == "pull_request:"
+            continue
+        if in_on and in_pull_request and indent == 4 and stripped.startswith("types:"):
+            value = stripped.split(":", 1)[1].strip()
+            if not (value.startswith("[") and value.endswith("]")):
+                raise AssertionError("pull_request.types must use the canonical inline list")
+            return tuple(
+                item.strip().strip("\"'")
+                for item in value[1:-1].split(",")
+                if item.strip()
+            )
+    return ()
+
+
+def _runner_job_conditions(workflow: str) -> dict[str, str]:
+    lines = workflow.splitlines()
+    jobs_start = next(
+        (index for index, line in enumerate(lines) if _indent(line) == 0 and line.strip() == "jobs:"),
+        None,
+    )
+    if jobs_start is None:
+        return {}
+
+    jobs: dict[str, str] = {}
+    index = jobs_start + 1
+    while index < len(lines):
+        line = lines[index]
+        stripped = line.strip()
+        indent = _indent(line)
+        if stripped and indent == 0:
+            break
+        if not stripped or indent != 2 or not stripped.endswith(":"):
+            index += 1
+            continue
+
+        job_name = stripped[:-1]
+        end = index + 1
+        while end < len(lines):
+            candidate = lines[end]
+            if candidate.strip() and _indent(candidate) <= 2:
+                break
+            end += 1
+
+        has_runner = False
+        job_if = ""
+        cursor = index + 1
+        while cursor < end:
+            candidate = lines[cursor]
+            candidate_stripped = candidate.strip()
+            if _indent(candidate) == 4 and candidate_stripped.startswith("runs-on:"):
+                has_runner = True
+            if _indent(candidate) == 4 and candidate_stripped.startswith("if:"):
+                raw = candidate_stripped.split(":", 1)[1].strip()
+                if raw in {">", ">-", "|", "|-"}:
+                    parts: list[str] = []
+                    nested = cursor + 1
+                    while nested < end and (not lines[nested].strip() or _indent(lines[nested]) > 4):
+                        if lines[nested].strip():
+                            parts.append(lines[nested].strip())
+                        nested += 1
+                    job_if = " ".join(parts)
+                else:
+                    job_if = raw
+            cursor += 1
+
+        if has_runner:
+            jobs[job_name] = " ".join(job_if.replace("${{", "").replace("}}", "").split())
+        index = end
+    return jobs
+
+
+def _job_is_non_pr_only(condition: str) -> bool:
+    if not condition or "||" in condition:
+        return False
+    required_events = re.findall(r"github\.event_name\s*==\s*['\"]([^'\"]+)['\"]", condition)
+    return bool(required_events) and all(event != "pull_request" for event in required_events)
+
+
+def _draft_contract_errors(workflow: str) -> list[str]:
+    errors: list[str] = []
+    pr_types = _pull_request_types(workflow)
+    if DRAFT_READY_EVENT not in pr_types:
+        errors.append("ready_for_review is missing from on.pull_request.types")
+
+    runner_jobs = _runner_job_conditions(workflow)
+    if not runner_jobs:
+        errors.append("workflow contains no runner jobs")
+        return errors
+
+    pr_runner_jobs = {
+        name: condition
+        for name, condition in runner_jobs.items()
+        if not _job_is_non_pr_only(condition)
+    }
+    if not pr_runner_jobs:
+        errors.append("workflow contains no pull-request-capable runner jobs")
+        return errors
+
+    normalized_gate = " ".join(DRAFT_GATE.split())
+    for job_name, condition in pr_runner_jobs.items():
+        if normalized_gate not in condition:
+            errors.append(f"{job_name}: job-level draft gate missing")
+    return errors
 
 
 def _subprocess_references(source: str) -> list[str]:
@@ -85,15 +201,34 @@ class CIOptimizationContractTest(unittest.TestCase):
                 self.assertIn(CONCURRENCY_BLOCK, _read(name))
 
     def test_draft_pr_validation_defers_runner_jobs_until_ready(self):
-        for workflow_name, job_names in DRAFT_GATED_JOBS.items():
+        for workflow_name in CONCURRENCY_WORKFLOWS:
             with self.subTest(workflow=workflow_name):
-                workflow = _read(workflow_name)
-                header = workflow.split("permissions:", 1)[0]
-                pull_request = header.split("  pull_request:\n", 1)[1]
-                self.assertIn(DRAFT_READY_TYPES, pull_request)
-                for job_name in job_names:
-                    with self.subTest(workflow=workflow_name, job=job_name):
-                        self.assertIn(DRAFT_GATE, _job_block(workflow, job_name))
+                self.assertEqual([], _draft_contract_errors(_read(workflow_name)))
+
+    def test_draft_contract_rejects_misplaced_gate_and_ready_event(self):
+        workflow = _read("scaffold-validation.yml")
+
+        gate_mutant = workflow.replace(DRAFT_GATE, "true", 1)
+        gate_mutant = gate_mutant.replace(
+            "    runs-on:",
+            f"    # retained text must not satisfy the contract: {DRAFT_GATE}\n    runs-on:",
+            1,
+        )
+        gate_errors = _draft_contract_errors(gate_mutant)
+        self.assertTrue(any("job-level draft gate missing" in error for error in gate_errors), gate_errors)
+
+        event_mutant = workflow.replace(
+            f"    {DRAFT_READY_TYPES_LINE}",
+            "    types: [opened, synchronize, reopened]",
+            1,
+        )
+        event_mutant = event_mutant.replace(
+            "  push:",
+            f"  # misplaced text must not satisfy the contract: {DRAFT_READY_TYPES_LINE}\n  push:",
+            1,
+        )
+        event_errors = _draft_contract_errors(event_mutant)
+        self.assertIn("ready_for_review is missing from on.pull_request.types", event_errors)
 
     def test_policy_classifier_behavior_on_real_path_lists(self):
         classifier = _load_classifier()

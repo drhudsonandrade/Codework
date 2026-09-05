@@ -6,7 +6,7 @@
 
 **Architecture:** Keep existing workflow topology, check names, classifiers, and path filters. Add `ready_for_review` to PR event types and combine a common draft predicate into runner jobs; main pushes and manual production workflows remain unchanged.
 
-**Tech Stack:** GitHub Actions YAML, Python 3.13, `unittest`, PyYAML, GitHub CLI.
+**Tech Stack:** GitHub Actions YAML; Python 3.12 for GitHub-hosted validation; Python 3.13 local on NOAR; package compatibility `requires-python = ">=3.11"`; `unittest`; GitHub CLI.
 
 **Spec:** `docs/superpowers/specs/2026-09-05-draft-first-final-ci-design.md`
 
@@ -146,7 +146,7 @@ Confirm the draft HEAD produces skipped GitHub-hosted PR jobs rather than runner
 
 - [ ] **Step 3: Mark the unchanged HEAD ready for review**
 
-Confirm `ready_for_review` starts the applicable checks for the same exact SHA.
+Confirm `ready_for_review` starts the applicable checks for the same SHA.
 
 - [ ] **Step 4: Record evidence**
 
