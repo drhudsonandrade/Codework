@@ -91,7 +91,7 @@ def _step_run_commands(step: str) -> tuple[str, ...]:
             commands.append(command)
         heredoc = heredoc_pattern.search(command)
         if heredoc is not None:
-            heredoc_end = next(group for group in heredoc.groups() if group is not None)
+            heredoc_end = next((group for group in heredoc.groups() if group is not None), None)
         if opens_control or opens_function or opens_short_circuit_group:
             control_depth += 1
     return tuple(commands)
@@ -375,7 +375,8 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertNotIn("paths:", pull_request_block)
 
         ruleset = json.loads((ROOT / ".github/governance/main-ruleset.json").read_text(encoding="utf-8"))
-        status_rule = next(rule for rule in ruleset["rules"] if rule["type"] == "required_status_checks")
+        status_rule = next((rule for rule in ruleset["rules"] if rule["type"] == "required_status_checks"), None)
+        self.assertIsNotNone(status_rule)
         contexts = {item["context"] for item in status_rule["parameters"]["required_status_checks"]}
         for context in (
             "Canonical policy + 263-rule contract",

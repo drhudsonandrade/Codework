@@ -25,6 +25,7 @@ IDENTIFIER_UNICODE_CAMEL = "relatórioArquivo"
 IDENTIFIER_UNICODE_UPPER = "arquivoÁrvore"
 IDENTIFIER_AVAILABLE = "disponivel"
 TERM_VERIFICATION = "verificacao"
+TERM_VALIDATION = "validacao"
 TERM_PROCESS = "processar"
 
 
@@ -107,13 +108,14 @@ class LanguagePolicyLoadingTest(unittest.TestCase):
 
 
 class PythonLanguageScannerTest(unittest.TestCase):
-    def _repo(self, files: dict[str, str]) -> tuple[TemporaryDirectory, Path]:
+    @staticmethod
+    def _repo(files: dict[str, str]) -> tuple[TemporaryDirectory, Path]:
         td = TemporaryDirectory()
         root = Path(td.name)
         policy = {
             "schema": "genoma-code-language-policy-v1",
             "scan_suffixes": [".py"],
-            "technical_terms": ["arquivo", "amostra", "calcular", "disponivel", "processar", "relatorio", "validar", "verificacao"],
+            "technical_terms": ["arquivo", "amostra", "calcular", "disponivel", "processar", "relatorio", "validacao", "validar", "verificacao"],
             "contract_literals": ["VERIFICADO", "NÃO DISPONÍVEL"],
             "excluded_roots": [
                 {"path": "docs/history", "reason": "historical evidence"},
@@ -180,10 +182,11 @@ class PythonLanguageScannerTest(unittest.TestCase):
         td, root = self._repo({"pkg/mod.py": "def arquivos_processados():\n    return True\n"})
         with td:
             findings = scan_repository(root, load_policy(root))
-        finding = next(
+        finding = next((
             f for f in findings
             if f.kind == "identifier" and f.token == IDENTIFIER_PROCESSED_FILES
-        )
+        ), None)
+        self.assertIsNotNone(finding)
         self.assertIn(TERM_PROCESS, finding.matched_terms)
 
     def test_acronym_pascal_case_identifier_is_split(self):
@@ -196,20 +199,22 @@ class PythonLanguageScannerTest(unittest.TestCase):
         td, root = self._repo({"pkg/mod.py": "relatórioArquivo = 1\n"})
         with td:
             findings = scan_repository(root, load_policy(root))
-        finding = next(
+        finding = next((
             f for f in findings
             if f.kind == "identifier" and f.token == IDENTIFIER_UNICODE_CAMEL
-        )
+        ), None)
+        self.assertIsNotNone(finding)
         self.assertIn(TERM_ARCHIVE, finding.matched_terms)
 
     def test_unicode_uppercase_boundary_is_split(self):
         td, root = self._repo({"pkg/mod.py": "arquivoÁrvore = 1\n"})
         with td:
             findings = scan_repository(root, load_policy(root))
-        finding = next(
+        finding = next((
             f for f in findings
             if f.kind == "identifier" and f.token == IDENTIFIER_UNICODE_UPPER
-        )
+        ), None)
+        self.assertIsNotNone(finding)
         self.assertIn(TERM_ARCHIVE, finding.matched_terms)
 
     def test_contract_literal_word_does_not_exempt_identifier(self):
@@ -232,6 +237,19 @@ class PythonLanguageScannerTest(unittest.TestCase):
         with td:
             findings = scan_repository(root, load_policy(root))
         self.assertTrue(any(f.kind == "identifier" and f.token == IDENTIFIER_SAMPLE_ONE for f in findings), findings)
+
+    def test_import_from_source_module_is_scanned(self):
+        td, root = self._repo({"pkg/mod.py": "from validacao import build\n"})
+        with td:
+            findings = scan_repository(root, load_policy(root))
+        self.assertTrue(
+            any(
+                finding.kind == "identifier"
+                and TERM_VALIDATION in finding.matched_terms
+                for finding in findings
+            ),
+            findings,
+        )
 
     def test_unaliased_import_and_keyword_argument_are_scanned(self):
         source = "from pacote import validar_arquivo\nfunc(arquivo=True)\n"
@@ -341,7 +359,8 @@ class BaselineWriteSafetyTest(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def _repo(self) -> tuple[TemporaryDirectory, Path, str]:
+    @staticmethod
+    def _repo() -> tuple[TemporaryDirectory, Path, str]:
         td = TemporaryDirectory()
         root = Path(td.name)
         policy = {
@@ -436,9 +455,8 @@ class BaselineWriteSafetyTest(unittest.TestCase):
                 os.environ,
                 {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(root / "event.json")},
                 clear=False,
-            ):
-                with self.assertRaisesRegex(LanguagePolicyError, "technical_terms"):
-                    guard._check(root)
+            ), self.assertRaisesRegex(LanguagePolicyError, "technical_terms"):
+                guard._check(root)
 
     def test_check_accepts_exact_trusted_pull_request_base(self):
         from scripts import code_language_guard as guard
@@ -467,9 +485,8 @@ class BaselineWriteSafetyTest(unittest.TestCase):
                 os.environ,
                 {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(root / "event.json")},
                 clear=False,
-            ):
-                with self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
-                    guard._bootstrap_baseline(root, later)
+            ), self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
+                guard._bootstrap_baseline(root, later)
 
     def test_write_baseline_rejects_source_commit_after_trusted_pull_request_base(self):
         from scripts import code_language_guard as guard
@@ -483,9 +500,8 @@ class BaselineWriteSafetyTest(unittest.TestCase):
                 os.environ,
                 {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(root / "event.json")},
                 clear=False,
-            ):
-                with self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
-                    guard._write_baseline(root, later)
+            ), self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
+                guard._write_baseline(root, later)
 
     def test_check_accepts_source_commit_ancestor_of_trusted_pull_request_base(self):
         from scripts import code_language_guard as guard
@@ -518,9 +534,8 @@ class BaselineWriteSafetyTest(unittest.TestCase):
                 os.environ,
                 {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(root / "event.json")},
                 clear=False,
-            ):
-                with self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
-                    guard._bootstrap_baseline(root, source_commit)
+            ), self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
+                guard._bootstrap_baseline(root, source_commit)
 
     def test_write_baseline_rejects_baseline_entry_absent_from_trusted_pull_request_base(self):
         from scripts import code_language_guard as guard
@@ -536,9 +551,8 @@ class BaselineWriteSafetyTest(unittest.TestCase):
                 os.environ,
                 {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(root / "event.json")},
                 clear=False,
-            ):
-                with self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
-                    guard._write_baseline(root, source_commit)
+            ), self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
+                guard._write_baseline(root, source_commit)
 
     def test_check_rejects_baseline_entry_absent_from_trusted_pull_request_base(self):
         from scripts import code_language_guard as guard
@@ -554,9 +568,8 @@ class BaselineWriteSafetyTest(unittest.TestCase):
                 os.environ,
                 {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(root / "event.json")},
                 clear=False,
-            ):
-                with self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
-                    guard._check(root)
+            ), self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
+                guard._check(root)
             self.assertNotEqual(source_commit, trusted_base)
 
     def test_check_rejects_source_commit_after_trusted_pull_request_base(self):
@@ -582,9 +595,8 @@ class BaselineWriteSafetyTest(unittest.TestCase):
                 os.environ,
                 {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(event_path)},
                 clear=False,
-            ):
-                with self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
-                    guard._check(root)
+            ), self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
+                guard._check(root)
 
 
 class LanguageBaselineTest(unittest.TestCase):

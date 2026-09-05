@@ -255,6 +255,8 @@ def _identifier_occurrences(tree: ast.AST) -> tuple[tuple[str, int], ...]:
             occurrences.append((node.arg, line))
         elif isinstance(node, ast.Attribute):
             occurrences.append((node.attr, line))
+        elif isinstance(node, ast.ImportFrom) and isinstance(node.module, str):
+            occurrences.append((node.module, line))
         elif isinstance(node, ast.alias):
             occurrences.append((node.name, line))
             if node.asname:
@@ -303,7 +305,7 @@ def scan_python_file(path: Path, root: Path, policy: LanguagePolicy) -> tuple[La
 
     try:
         token_stream = tuple(tokenize.generate_tokens(io.StringIO(source).readline))
-    except (tokenize.TokenError, IndentationError, SyntaxError) as exc:
+    except (tokenize.TokenError, SyntaxError) as exc:
         raise LanguagePolicyError(f"unable to tokenize scanned Python source: {relative}") from exc
 
     findings: list[LanguageFinding] = []
