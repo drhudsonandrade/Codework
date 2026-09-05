@@ -109,8 +109,6 @@ class CIOptimizationContractTest(unittest.TestCase):
             "'mcp/package-lock.json'",
             "'mcp/tsconfig.json'",
             "'mcp/.fallowrc.json'",
-            "'scripts/codacy_pr_comment.js'",
-            "'tests/test_codacy_pr_comment.js'",
             "'.fallowrc.json'",
             "'.github/workflows/fallow.yml'",
         )
