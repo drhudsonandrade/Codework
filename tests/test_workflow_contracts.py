@@ -296,6 +296,19 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("does not grant POST-DEPLOYMENT PASS", text)
         self.assertIn("job is skipped before runner allocation", text)
 
+    def test_production_witness_docs_distinguish_disarm_from_gate_rollback(self):
+        paths = (
+            ROOT / "docs/PRODUCTION_CEREMONY.md",
+            ROOT / "docs/superpowers/specs/2026-09-05-production-witness-capability-gate-design.md",
+            ROOT / "docs/superpowers/plans/2026-09-05-production-witness-capability-gate.md",
+        )
+        for path in paths:
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(path=path.name):
+                self.assertIn("disarm", text.lower())
+                self.assertIn("restore pre-gate execution", text.lower())
+                self.assertIn("exact `true`", text)
+
     def test_production_witness_publisher_uses_restricted_deploy_key_without_token_write(self):
         workflow = (ROOT / ".github/workflows/genoma-production-witness.yml").read_text(encoding="utf-8")
         self.assertIn("permissions:\n  contents: read", workflow)

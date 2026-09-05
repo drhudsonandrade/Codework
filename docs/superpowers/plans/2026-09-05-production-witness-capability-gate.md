@@ -250,7 +250,7 @@ If the repository variable is absent or has any value other than exact `true`, t
 
 Setting the variable to exact `true` only arms the existing witness. It does not prove `PROJECT_BOOTSTRAP_INSTALLED`, does not bypass any fail-closed condition, and does not change the 15/15, zero-critical-failure, exact-SHA, evidence-integrity, or publisher requirements.
 
-Operational rollback is to remove the variable or set it to a value other than exact `true`. Historical evidence is never rewritten.
+To disarm the witness capability and keep the no-runner state, remove the variable or set it to any value other than exact `true`. To restore pre-gate execution without changing code, set `GENOMA_PRODUCTION_WITNESS_ENABLED` to exact `true`; that is the operational rollback of the cost gate. Historical evidence is never rewritten.
 ```
 
 - [ ] **Step 4: Run documentation and workflow contracts and verify GREEN**

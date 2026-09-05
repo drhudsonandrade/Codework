@@ -64,7 +64,7 @@ The repository variable may be set to exact `true` only when the external capabi
 
 Enabling the variable does not grant PASS. It only permits the existing independent witness to allocate a runner and evaluate the full evidence chain.
 
-Disabling or removing the variable restores the no-runner state without changing code, hashes, rulesets, or historical evidence.
+To disarm the witness capability and restore the no-runner state, remove the variable or set it to any value other than exact `true`. This is the normal disabled operating mode, not rollback of the gate.
 
 ## 6. Required implementation surface
 
@@ -106,7 +106,7 @@ While the capability flag is absent or false, the heavy witness job should be sk
 
 ## 10. Rollback
 
-Operational rollback does not require a code change: set `GENOMA_PRODUCTION_WITNESS_ENABLED=true` to restore full witness execution on subsequent eligible `main` pushes.
+Operational rollback of the cost gate means restore pre-gate execution without changing code: set `GENOMA_PRODUCTION_WITNESS_ENABLED` to exact `true` so subsequent eligible `main` pushes execute the full witness.
 
 Code rollback, if needed, is a normal reviewed PR that removes the capability guard and its regression contract. Historical witness artifacts and the `audit-evidence` branch are never rewritten as part of rollback.
 
