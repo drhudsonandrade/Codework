@@ -268,6 +268,29 @@ def _draft_contract_errors(workflow: str) -> list[str]:
     return errors
 
 
+def _pr_template_draft_flow_errors(template: str) -> list[str]:
+    errors: list[str] = []
+    try:
+        section = template.split("## CI / GitHub Actions", 1)[1].split("## Mudan\u00e7a can\u00f4nica", 1)[0]
+    except IndexError:
+        return ["CI / GitHub Actions section is missing or not bounded"]
+    markers = (
+        "mantenha a PR como Draft",
+        "Confirmar que o HEAD exato est\u00e1 validado localmente",
+        "Marcar a PR como Ready for Review",
+        "Ap\u00f3s Ready for Review, aguardar todos os checks obrigat\u00f3rios do GitHub Actions no HEAD exato",
+    )
+    positions: list[int] = []
+    for marker in markers:
+        index = section.find(marker)
+        if index < 0:
+            errors.append(f"draft-first flow marker missing: {marker}")
+        positions.append(index)
+    if all(index >= 0 for index in positions) and positions != sorted(positions):
+        errors.append("draft-first flow markers are out of order")
+    return errors
+
+
 def _subprocess_references(source: str) -> list[str]:
     findings: list[str] = []
     for node in ast.walk(ast.parse(source)):
@@ -293,13 +316,14 @@ class CIOptimizationContractTest(unittest.TestCase):
 
     def test_pr_template_documents_draft_first_final_ci_boundary(self):
         template = (ROOT / ".github" / "pull_request_template.md").read_text(encoding="utf-8")
-        self.assertIn("PR como Draft", template)
-        self.assertIn("Ready for Review", template)
-        self.assertIn("HEAD exato", template)
-        self.assertIn(
-            "n\u00e3o aguarde os checks obrigat\u00f3rios do GitHub Actions enquanto a PR estiver em Draft",
-            template,
-        )
+        self.assertEqual([], _pr_template_draft_flow_errors(template))
+
+    def test_pr_template_draft_flow_rejects_unrelated_or_reordered_markers(self):
+        template = (ROOT / ".github" / "pull_request_template.md").read_text(encoding="utf-8")
+        ci_section, rest = template.split("## Mudan\u00e7a can\u00f4nica", 1)
+        final_line = "- [ ] Ap\u00f3s Ready for Review, aguardar todos os checks obrigat\u00f3rios do GitHub Actions no HEAD exato\n"
+        mutant = ci_section.replace(final_line, "") + "## Mudan\u00e7a can\u00f4nica" + rest + "\n" + final_line
+        self.assertTrue(_pr_template_draft_flow_errors(mutant))
 
     def test_validation_workflows_cancel_superseded_pr_runs(self):
         for name in CONCURRENCY_WORKFLOWS:
