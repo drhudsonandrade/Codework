@@ -55,8 +55,9 @@ def _step_run_commands(step: str) -> tuple[str, ...]:
     short_circuit_group = re.compile(r"(?:&&|\|\|)\s*\{")
     block_enders = re.compile(r"^(?:fi|done|esac)\b")
     function_starter = re.compile(
-        r"^(?:(?:function\s+)?[A-Za-z_][A-Za-z0-9_]*\s*\(\)\s*\{?"
-        r"|function\s+[A-Za-z_][A-Za-z0-9_]*\s*\{?)\s*(?:#.*)?$"
+        r"^(?:(?:function\s+)?[A-Za-z_][A-Za-z0-9_]*\s*\(\)"
+        r"|function\s+[A-Za-z_][A-Za-z0-9_]*)"
+        r"(?:\s*\{.*|\s*(?:#.*)?)$"
     )
     heredoc_pattern = re.compile(
         r"<<-?\s*(?:'([^']+)'|\"([^\"]+)\"|([^\s;&|<>]+))"
@@ -319,6 +320,15 @@ class WorkflowContractTest(unittest.TestCase):
 """
         self.assertFalse(_step_runs_validate_repo(commented_function))
         self.assertFalse(_step_runs_validate_repo(hyphenated_heredoc))
+
+    def test_validate_repo_command_detection_rejects_inline_body_function_definition(self):
+        inline_body_function = """      - name: misleading
+        run: |
+          validate_gate() { : "setup";
+            python3 scripts/validate_repo.py
+          }
+"""
+        self.assertFalse(_step_runs_validate_repo(inline_body_function))
 
     def test_validate_repo_command_detection_ignores_non_executable_mentions(self):
         echo_only = "      - name: misleading\n        run: |\n          echo 'python3 scripts/validate_repo.py'\n          # python3 scripts/validate_repo.py\n"
