@@ -50,7 +50,7 @@ def _step_run_commands(step: str) -> tuple[str, ...]:
     commands: list[str] = []
     in_block = False
     control_depth = 0
-    heredoc_end: str | None = None
+    heredoc_ends: list[str] = []
     block_starters = re.compile(r"(?:^|[;&|]\s*)(?:if|for|while|until|case)\b")
     short_circuit_group = re.compile(r"(?:&&|\|\|)\s*\{")
     block_enders = re.compile(r"^(?:fi|done|esac)\b")
@@ -77,9 +77,9 @@ def _step_run_commands(step: str) -> tuple[str, ...]:
         command = line.strip()
         if not command or command.startswith("#"):
             continue
-        if heredoc_end is not None:
-            if command == heredoc_end:
-                heredoc_end = None
+        if heredoc_ends:
+            if command == heredoc_ends[0]:
+                heredoc_ends.pop(0)
             continue
         if block_enders.match(command) or (command == "}" and control_depth > 0):
             control_depth = max(0, control_depth - 1)
@@ -89,9 +89,10 @@ def _step_run_commands(step: str) -> tuple[str, ...]:
         opens_short_circuit_group = short_circuit_group.search(command) is not None
         if control_depth == 0 and not (opens_control or opens_function or opens_short_circuit_group):
             commands.append(command)
-        heredoc = heredoc_pattern.search(command)
-        if heredoc is not None:
-            heredoc_end = next((group for group in heredoc.groups() if group is not None), None)
+        for heredoc in heredoc_pattern.finditer(command):
+            delimiter = next((group for group in heredoc.groups() if group is not None), None)
+            if delimiter is not None:
+                heredoc_ends.append(delimiter)
         if opens_control or opens_function or opens_short_circuit_group:
             control_depth += 1
     return tuple(commands)
@@ -320,6 +321,17 @@ class WorkflowContractTest(unittest.TestCase):
 """
         self.assertFalse(_step_runs_validate_repo(commented_function))
         self.assertFalse(_step_runs_validate_repo(hyphenated_heredoc))
+
+    def test_validate_repo_command_detection_rejects_multiple_heredocs(self):
+        multiple_heredocs = """      - name: misleading
+        run: |
+          cat <<FIRST <<SECOND
+          ignored first body
+          FIRST
+          python3 scripts/validate_repo.py
+          SECOND
+"""
+        self.assertFalse(_step_runs_validate_repo(multiple_heredocs))
 
     def test_validate_repo_command_detection_rejects_inline_body_function_definition(self):
         inline_body_function = """      - name: misleading
