@@ -1,0 +1,132 @@
+{
+  "schema": "genoma-code-language-legacy-baseline-v1",
+  "source_commit": "c9c16831352dfb4499d9cc955dbacd31d087bffe",
+  "entries": [
+    {
+      "path": "array_pipeline/completeness.py",
+      "kind": "docstring",
+      "token": "relatorio",
+      "count": 1
+    },
+    {
+      "path": "array_pipeline/pharmacogenomics.py",
+      "kind": "comment",
+      "token": "limite",
+      "count": 1
+    },
+    {
+      "path": "normative/__init__.py",
+      "kind": "comment",
+      "token": "fonte",
+      "count": 1
+    },
+    {
+      "path": "normative/__init__.py",
+      "kind": "docstring",
+      "token": "regra",
+      "count": 1
+    },
+    {
+      "path": "reporting/assay.py",
+      "kind": "docstring",
+      "token": "arquivo",
+      "count": 1
+    },
+    {
+      "path": "reporting/assay.py",
+      "kind": "docstring",
+      "token": "leitura",
+      "count": 1
+    },
+    {
+      "path": "reporting/deployment_target.py",
+      "kind": "docstring",
+      "token": "executar",
+      "count": 1
+    },
+    {
+      "path": "reporting/deployment_target.py",
+      "kind": "docstring",
+      "token": "falha",
+      "count": 1
+    },
+    {
+      "path": "reporting/provenance.py",
+      "kind": "comment",
+      "token": "falha",
+      "count": 1
+    },
+    {
+      "path": "reporting/provenance.py",
+      "kind": "comment",
+      "token": "verificar",
+      "count": 1
+    },
+    {
+      "path": "reporting/section_attestations.py",
+      "kind": "comment",
+      "token": "arquivo",
+      "count": 1
+    },
+    {
+      "path": "reporting/wgs_qc_record.py",
+      "kind": "docstring",
+      "token": "disponivel",
+      "count": 1
+    },
+    {
+      "path": "reporting/wgs_qc_record.py",
+      "kind": "docstring",
+      "token": "interpretar",
+      "count": 2
+    },
+    {
+      "path": "scripts/genoma_audit.py",
+      "kind": "docstring",
+      "token": "interpretar",
+      "count": 1
+    },
+    {
+      "path": "tests/test_assessed_allele_presence.py",
+      "kind": "docstring",
+      "token": "interpretar",
+      "count": 1
+    },
+    {
+      "path": "tests/test_evidence_adapters.py",
+      "kind": "identifier",
+      "token": "test_query_snapshot_is_verificado_only_with_retrieval_trace",
+      "count": 1
+    },
+    {
+      "path": "tests/test_execution_manifest_anchoring.py",
+      "kind": "docstring",
+      "token": "versao",
+      "count": 1
+    },
+    {
+      "path": "tests/test_pharmacogenomics.py",
+      "kind": "docstring",
+      "token": "carregar",
+      "count": 1
+    },
+    {
+      "path": "tests/test_pharmacogenomics.py",
+      "kind": "identifier",
+      "token": "test_a_diplotype_on_a_complete_unambiguous_panel_is_inferido_never_executado",
+      "count": 1
+    },
+    {
+      "path": "tests/test_target_expansion.py",
+      "kind": "identifier",
+      "token": "test_a_successful_lookup_reports_executado",
+      "count": 1
+    },
+    {
+      "path": "tests/test_target_expansion.py",
+      "kind": "identifier",
+      "token": "test_no_uids_is_executado_not_a_failure",
+      "count": 1
+    }
+  ]
+}

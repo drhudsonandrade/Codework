@@ -1,0 +1,80 @@
+{
+  "schema": "genoma-code-language-policy-v1",
+  "scan_suffixes": [
+    ".py"
+  ],
+  "technical_terms": [
+    "acao",
+    "amostra",
+    "arquivo",
+    "atualizar",
+    "buscar",
+    "calcular",
+    "caminho",
+    "carregar",
+    "chamada",
+    "comparar",
+    "configuracao",
+    "confirmar",
+    "consultar",
+    "conteudo",
+    "dado",
+    "dados",
+    "disponivel",
+    "entrada",
+    "erro",
+    "escrever",
+    "executar",
+    "falha",
+    "falhar",
+    "fonte",
+    "gerar",
+    "interpretar",
+    "leitura",
+    "ler",
+    "limite",
+    "metodo",
+    "normalizar",
+    "parametro",
+    "processar",
+    "regra",
+    "relatar",
+    "relatorio",
+    "remover",
+    "resultado",
+    "saida",
+    "salvar",
+    "validacao",
+    "validar",
+    "verificacao",
+    "verificar",
+    "versao"
+  ],
+  "contract_literals": [
+    "VIGENTE",
+    "EXECUTADO",
+    "VERIFICADO",
+    "INFERIDO",
+    "PROPOSTO",
+    "NÃO DISPONÍVEL",
+    "FATO CONFIRMADO",
+    "INFERÊNCIA",
+    "ASSOCIAÇÃO",
+    "HIPÓTESE",
+    "DESCONHECIDO",
+    "CLÍNICO",
+    "PREDISPOSIÇÃO",
+    "PESQUISA",
+    "CURIOSIDADE"
+  ],
+  "excluded_roots": [
+    {
+      "path": "docs/history",
+      "reason": "immutable historical evidence and superseded normative records"
+    },
+    {
+      "path": "normative/sealed",
+      "reason": "inactive byte-exact canonical normative transport"
+    }
+  ]
+}

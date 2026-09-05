@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 import tempfile
 import unittest
@@ -8,6 +9,7 @@ from tests.workflow_test_utils import job_block as _job_block
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
 
 RETIRED_CODACY_IDENTIFIERS = (
     "codacy_api_report",
@@ -59,7 +61,6 @@ def _retired_codacy_reference_violations(
                 violations.append(f"{normalized}: {identifier}")
     return violations
 
-
 def _job_if_condition(workflow: str, job_name: str) -> str:
     job = _job_block(workflow, job_name)
     conditions = [line.removeprefix("    if: ").strip() for line in job.splitlines() if line.startswith("    if: ")]
@@ -79,6 +80,149 @@ def _named_step_block(workflow: str, job_name: str, step_name: str) -> str:
 
 def _shell_test_lines(step: str) -> list[str]:
     return [line.strip() for line in step.splitlines() if line.strip().startswith("test ")]
+
+
+def _job_steps(workflow: str, job_name: str) -> list[str]:
+    job = _job_block(workflow, job_name)
+    marker = "    steps:\n"
+    if marker not in job:
+        raise AssertionError(f"job {job_name!r} has no steps")
+    tail = job.split(marker, 1)[1]
+    parts = tail.split("\n      - ")
+    steps: list[str] = []
+    for index, part in enumerate(parts):
+        block = part if index == 0 else "      - " + part
+        if block.strip():
+            steps.append(block)
+    return steps
+
+
+def _shell_code_before_comment(command: str) -> str:
+    in_single_quote = False
+    in_double_quote = False
+    escaped = False
+    previous_boundary_escaped = False
+    for index, char in enumerate(command):
+        if escaped:
+            previous_boundary_escaped = char.isspace() or char in ";&|()<>"
+            escaped = False
+            continue
+        if char == "\\" and not in_single_quote:
+            escaped = True
+            previous_boundary_escaped = False
+            continue
+        if char == "'" and not in_double_quote:
+            in_single_quote = not in_single_quote
+            previous_boundary_escaped = False
+            continue
+        if char == '"' and not in_single_quote:
+            in_double_quote = not in_double_quote
+            previous_boundary_escaped = False
+            continue
+        if (
+            char == "#"
+            and not in_single_quote
+            and not in_double_quote
+            and not previous_boundary_escaped
+            and (index == 0 or command[index - 1].isspace() or command[index - 1] in ";&|()<>")
+        ):
+            return command[:index].rstrip()
+        previous_boundary_escaped = False
+    return command
+
+
+def _step_run_commands(step: str) -> tuple[str, ...]:
+    lines = step.splitlines()
+    commands: list[str] = []
+    in_block = False
+    control_depth = 0
+    command_continuation = False
+    heredoc_ends: list[str] = []
+    block_starters = re.compile(r"(?:^|[;&|]\s*)(?:if|for|while|until|case)\b")
+    short_circuit_group = re.compile(r"(?:&&|\|\|)\s*\{")
+    continued_command = re.compile(r"(?:(?:&&|\|\|)\s*(?:\\\s*)?(?:#.*)?|\\\s*)$")
+    block_enders = re.compile(r"^(?:fi|done|esac)\b")
+    function_starter = re.compile(
+        r"^(?:(?:function\s+)?[A-Za-z_][A-Za-z0-9_]*\s*\(\)"
+        r"|function\s+[A-Za-z_][A-Za-z0-9_]*)"
+        r"(?:\s*\{.*|\s*(?:#.*)?)$"
+    )
+    heredoc_pattern = re.compile(
+        r"<<-?\s*(?:'([^']+)'|\"([^\"]+)\"|([^\s;&|<>]+))"
+    )
+    for line in lines:
+        if line.startswith("        run:"):
+            value = line.split("run:", 1)[1].strip()
+            if value in {"|", ">"}:
+                in_block = True
+            elif value:
+                commands.append(value)
+            continue
+        if not in_block:
+            continue
+        if not line.startswith("          "):
+            break
+        command = line.strip()
+        if not command or command.startswith("#"):
+            continue
+        if heredoc_ends:
+            if command == heredoc_ends[0]:
+                heredoc_ends.pop(0)
+            continue
+        shell_code = _shell_code_before_comment(command)
+        if block_enders.match(shell_code) or (shell_code == "}" and control_depth > 0):
+            control_depth = max(0, control_depth - 1)
+            continue
+        was_command_continuation = command_continuation
+        command_continuation = continued_command.search(shell_code) is not None
+        opens_control = block_starters.search(shell_code) is not None
+        opens_function = function_starter.match(shell_code) is not None
+        opens_short_circuit_group = short_circuit_group.search(shell_code) is not None
+        if control_depth == 0 and not was_command_continuation and not (
+            opens_control or opens_function or opens_short_circuit_group
+        ):
+            commands.append(shell_code)
+        for heredoc in heredoc_pattern.finditer(shell_code):
+            delimiter = next((group for group in heredoc.groups() if group is not None), None)
+            if delimiter is not None:
+                heredoc_ends.append(delimiter)
+        if opens_control or opens_function or opens_short_circuit_group:
+            control_depth += 1
+    return tuple(commands)
+
+
+def _step_runs_validate_repo(step: str) -> bool:
+    pattern = re.compile(r"^(?:python3|python)\s+scripts/validate_repo\.py$")
+    return any(pattern.fullmatch(command) is not None for command in _step_run_commands(step))
+
+
+def _with_mapping(step: str) -> dict[str, object]:
+    lines = step.splitlines()
+    try:
+        start = lines.index("        with:") + 1
+    except ValueError:
+        return {}
+    values: dict[str, object] = {}
+    for line in lines[start:]:
+        if not line.startswith("          "):
+            break
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        if ":" not in stripped:
+            break
+        key, raw = stripped.split(":", 1)
+        value = raw.strip()
+        if value == "false":
+            parsed: object = False
+        elif value == "true":
+            parsed = True
+        elif value.isdigit():
+            parsed = int(value)
+        else:
+            parsed = value.strip("'\"")
+        values[key] = parsed
+    return values
 
 
 def _assert_attestation_step_is_in_main_gated_ceremony_job(workflow: str) -> None:
@@ -187,6 +331,214 @@ class WorkflowContractTest(unittest.TestCase):
         with self.assertRaises(AssertionError):
             _assert_attestation_step_is_in_main_gated_ceremony_job(mutated)
 
+    def test_validate_repo_command_detection_rejects_uncalled_shell_function(self):
+        function_only = """      - name: misleading
+        run: |
+          validate_gate() {
+            python3 scripts/validate_repo.py
+          }
+"""
+        direct = """      - name: validate
+        run: python3 scripts/validate_repo.py
+"""
+        self.assertFalse(_step_runs_validate_repo(function_only))
+        self.assertTrue(_step_runs_validate_repo(direct))
+
+    def test_validate_repo_command_detection_rejects_unreachable_shell_and_heredoc(self):
+        false_branch = """      - name: misleading
+        run: |
+          if false; then
+            python3 scripts/validate_repo.py
+          fi
+"""
+        heredoc = """      - name: misleading
+        run: |
+          cat <<'EOF'
+          python3 scripts/validate_repo.py
+          EOF
+"""
+        direct = """      - name: validate
+        run: |
+          python3 scripts/validate_repo.py
+"""
+        self.assertFalse(_step_runs_validate_repo(false_branch))
+        self.assertFalse(_step_runs_validate_repo(heredoc))
+        self.assertTrue(_step_runs_validate_repo(direct))
+
+    def test_validate_repo_command_detection_rejects_midline_and_short_circuit_blocks(self):
+        midline_if = """      - name: misleading
+        run: |
+          setup(); if false; then
+            python3 scripts/validate_repo.py
+          fi
+"""
+        short_circuit_group = """      - name: misleading
+        run: |
+          false && {
+            python3 scripts/validate_repo.py
+          }
+"""
+        self.assertFalse(_step_runs_validate_repo(midline_if))
+        self.assertFalse(_step_runs_validate_repo(short_circuit_group))
+
+    def test_validate_repo_command_detection_rejects_multiline_function_and_numeric_heredoc(self):
+        multiline_function = """      - name: misleading
+        run: |
+          validate_gate()
+          {
+            python3 scripts/validate_repo.py
+          }
+"""
+        numeric_heredoc = """      - name: misleading
+        run: |
+          cat <<1EOF
+          python3 scripts/validate_repo.py
+          1EOF
+"""
+        self.assertFalse(_step_runs_validate_repo(multiline_function))
+        self.assertFalse(_step_runs_validate_repo(numeric_heredoc))
+
+    def test_validate_repo_command_detection_rejects_commented_function_and_hyphenated_heredoc(self):
+        commented_function = """      - name: misleading
+        run: |
+          validate_gate() { # definition only
+            python3 scripts/validate_repo.py
+          }
+"""
+        hyphenated_heredoc = """      - name: misleading
+        run: |
+          cat <<'EOF-1'
+          EOF
+          python3 scripts/validate_repo.py
+          EOF-1
+"""
+        self.assertFalse(_step_runs_validate_repo(commented_function))
+        self.assertFalse(_step_runs_validate_repo(hyphenated_heredoc))
+
+    def test_validate_repo_command_detection_rejects_continued_short_circuit_operators(self):
+        continued_and = """      - name: misleading
+        run: |
+          false &&
+          python3 scripts/validate_repo.py
+          true
+"""
+        continued_or = """      - name: misleading
+        run: |
+          true ||
+          python3 scripts/validate_repo.py
+          true
+"""
+        self.assertFalse(_step_runs_validate_repo(continued_and))
+        self.assertFalse(_step_runs_validate_repo(continued_or))
+
+    def test_validate_repo_command_detection_rejects_backslash_continued_short_circuit_operators(self):
+        slash = "\\"
+        continued_and = (
+            "      - name: misleading\n"
+            "        run: |\n"
+            f"          false && {slash}\n"
+            "          python3 scripts/validate_repo.py\n"
+            "          true\n"
+        )
+        continued_or = (
+            "      - name: misleading\n"
+            "        run: |\n"
+            f"          true || {slash}\n"
+            "          python3 scripts/validate_repo.py\n"
+            "          true\n"
+        )
+        self.assertFalse(_step_runs_validate_repo(continued_and))
+        self.assertFalse(_step_runs_validate_repo(continued_or))
+
+    def test_validate_repo_command_detection_rejects_generic_backslash_continuation(self):
+        slash = "\\"
+        continued = (
+            "      - name: misleading\n"
+            "        run: |\n"
+            f"          true {slash}\n"
+            "          python3 scripts/validate_repo.py\n"
+            "          true\n"
+        )
+        self.assertFalse(_step_runs_validate_repo(continued))
+
+    def test_validate_repo_command_detection_ignores_backslash_in_inline_comment(self):
+        slash = "\\"
+        executable = (
+            "      - name: validate\n"
+            "        run: |\n"
+            f"          echo setup # {slash}\n"
+            "          python3 scripts/validate_repo.py\n"
+        )
+        self.assertTrue(_step_runs_validate_repo(executable))
+
+    def test_validate_repo_comment_detection_respects_escaped_word_boundary(self):
+        slash = "\\"
+        executable = (
+            "      - name: validate\n"
+            "        run: |\n"
+            f"          echo {slash} #\n"
+            "          python3 scripts/validate_repo.py\n"
+        )
+        self.assertTrue(_step_runs_validate_repo(executable))
+
+    def test_validate_repo_command_detection_rejects_multiple_heredocs(self):
+        multiple_heredocs = """      - name: misleading
+        run: |
+          cat <<FIRST <<SECOND
+          ignored first body
+          FIRST
+          python3 scripts/validate_repo.py
+          SECOND
+"""
+        self.assertFalse(_step_runs_validate_repo(multiple_heredocs))
+
+    def test_validate_repo_command_detection_rejects_inline_body_function_definition(self):
+        inline_body_function = """      - name: misleading
+        run: |
+          validate_gate() { : "setup";
+            python3 scripts/validate_repo.py
+          }
+"""
+        self.assertFalse(_step_runs_validate_repo(inline_body_function))
+
+    def test_validate_repo_command_detection_ignores_non_executable_mentions(self):
+        echo_only = "      - name: misleading\n        run: |\n          echo 'python3 scripts/validate_repo.py'\n          # python3 scripts/validate_repo.py\n"
+        executable = "      - name: validate\n        run: python3 scripts/validate_repo.py\n"
+        self.assertFalse(_step_runs_validate_repo(echo_only))
+        self.assertTrue(_step_runs_validate_repo(executable))
+
+    def test_validate_repo_jobs_fetch_full_history_for_baseline_provenance(self):
+        targets = {
+            "genoma-audit.yml": ("audit",),
+            "genoma-ngs-runtime-gate.yml": ("preflight", "full-grch38"),
+            "genoma-policy-engine.yml": ("policy",),
+            "genoma-production-ceremony.yml": ("live-section-260",),
+            "genoma-production-witness.yml": ("witness",),
+            "genoma-snp-array.yml": ("array-qc-contract",),
+            "scaffold-validation.yml": ("static",),
+        }
+        for filename, jobs in targets.items():
+            workflow = (ROOT / ".github/workflows" / filename).read_text(encoding="utf-8")
+            for job_name in jobs:
+                with self.subTest(workflow=filename, job=job_name):
+                    steps = _job_steps(workflow, job_name)
+                    checkout_indexes = [i for i, step in enumerate(steps) if "uses: actions/checkout@" in step]
+                    validation_indexes = [i for i, step in enumerate(steps) if _step_runs_validate_repo(step)]
+                    self.assertEqual(len(checkout_indexes), 1)
+                    self.assertTrue(validation_indexes)
+                    checkout_index = checkout_indexes[0]
+                    self.assertLess(checkout_index, min(validation_indexes))
+                    checkout_config = _with_mapping(steps[checkout_index])
+                    self.assertEqual(checkout_config.get("fetch-depth"), 0)
+                    hardened = {
+                        ("genoma-ngs-runtime-gate.yml", "preflight"),
+                        ("genoma-ngs-runtime-gate.yml", "full-grch38"),
+                        ("genoma-policy-engine.yml", "policy"),
+                        ("genoma-snp-array.yml", "array-qc-contract"),
+                    }
+                    if (filename, job_name) in hardened:
+                        self.assertIs(checkout_config.get("persist-credentials"), False)
+
     def test_main_required_policy_checks_have_unconditional_pr_provider(self):
         policy = (ROOT / ".github/workflows/genoma-policy-engine.yml").read_text(encoding="utf-8")
         header = policy.split("permissions:", 1)[0]
@@ -194,7 +546,8 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertNotIn("paths:", pull_request_block)
 
         ruleset = json.loads((ROOT / ".github/governance/main-ruleset.json").read_text(encoding="utf-8"))
-        status_rule = next(rule for rule in ruleset["rules"] if rule["type"] == "required_status_checks")
+        status_rule = next((rule for rule in ruleset["rules"] if rule["type"] == "required_status_checks"), None)
+        self.assertIsNotNone(status_rule)
         contexts = {item["context"] for item in status_rule["parameters"]["required_status_checks"]}
         for context in (
             "Canonical policy + 263-rule contract",
@@ -258,6 +611,7 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("GRCh38.lock.sha256.approved", workflow)
         self.assertIn("validate_bwa_mem2_functional.sh", workflow)
 
+
     def test_retired_codacy_scan_rejects_stray_active_reference(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -270,6 +624,17 @@ class WorkflowContractTest(unittest.TestCase):
             )
 
     def test_retired_codacy_scan_allows_only_explicit_history_and_its_own_contract(self):
+        self.assertEqual(
+            RETIRED_CODACY_REFERENCE_ALLOWLIST,
+            frozenset(
+                {
+                    "docs/superpowers/evidence/2026-09-03-pr36-local-validation-5953286.md",
+                    "docs/superpowers/evidence/2026-09-03-pr36-local-validation-977a531.md",
+                    "docs/superpowers/specs/2026-09-03-local-first-ci-architecture-design.md",
+                    "tests/test_workflow_contracts.py",
+                }
+            ),
+        )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             historical = root / "docs/superpowers/evidence/2026-09-03-pr36-local-validation-5953286.md"
@@ -307,7 +672,6 @@ class WorkflowContractTest(unittest.TestCase):
             ROOT, _tracked_repository_paths(ROOT)
         )
         self.assertEqual([], violations)
-
 
 if __name__ == "__main__":
     unittest.main()
