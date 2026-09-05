@@ -569,6 +569,17 @@ class WorkflowContractTest(unittest.TestCase):
             )
 
     def test_retired_codacy_scan_allows_only_explicit_history_and_its_own_contract(self):
+        self.assertEqual(
+            RETIRED_CODACY_REFERENCE_ALLOWLIST,
+            frozenset(
+                {
+                    "docs/superpowers/evidence/2026-09-03-pr36-local-validation-5953286.md",
+                    "docs/superpowers/evidence/2026-09-03-pr36-local-validation-977a531.md",
+                    "docs/superpowers/specs/2026-09-03-local-first-ci-architecture-design.md",
+                    "tests/test_workflow_contracts.py",
+                }
+            ),
+        )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             historical = root / "docs/superpowers/evidence/2026-09-03-pr36-local-validation-5953286.md"
