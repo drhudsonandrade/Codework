@@ -38,7 +38,12 @@ Comandos realmente executados e resultados:
 
 ## CI / GitHub Actions
 
-- [ ] Aguardar todos os checks obrigatórios do GitHub Actions
+Durante a implementação, mantenha a PR como Draft e execute as correções e validações
+localmente. Para evitar consumo iterativo de runners, não aguarde os checks obrigatórios do GitHub Actions enquanto a PR estiver em Draft.
+
+- [ ] Confirmar que o HEAD exato está validado localmente antes da rodada final
+- [ ] Marcar a PR como Ready for Review somente quando o HEAD estiver pronto para validação final
+- [ ] Após Ready for Review, aguardar todos os checks obrigatórios do GitHub Actions no HEAD exato
 - [ ] Não usar resultado de CI inexistente como evidência
 
 ## Mudança canônica
@@ -57,4 +62,5 @@ Liste validações que não puderam ser executadas e por quê.
 ## Merge
 
 - [ ] Sem auto-merge
-- [ ] Merge somente após CodeRabbit + CI + aprovação humana
+- [ ] Merge manual somente após CodeRabbit + CI + todos os demais required checks
+- [ ] Se necessário, usar o bypass PR-only do owner somente na approval layer; nunca contornar Security & CI

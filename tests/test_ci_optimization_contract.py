@@ -291,6 +291,16 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertIn(f"needs.changes.outputs.{output_name} == 'true'", job)
         self.assertIn("Require successful scope classification", job)
 
+    def test_pr_template_documents_draft_first_final_ci_boundary(self):
+        template = (ROOT / ".github" / "pull_request_template.md").read_text(encoding="utf-8")
+        self.assertIn("PR como Draft", template)
+        self.assertIn("Ready for Review", template)
+        self.assertIn("HEAD exato", template)
+        self.assertIn(
+            "n\u00e3o aguarde os checks obrigat\u00f3rios do GitHub Actions enquanto a PR estiver em Draft",
+            template,
+        )
+
     def test_validation_workflows_cancel_superseded_pr_runs(self):
         for name in CONCURRENCY_WORKFLOWS:
             with self.subTest(workflow=name):
