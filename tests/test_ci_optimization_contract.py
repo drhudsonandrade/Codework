@@ -30,7 +30,6 @@ CONCURRENCY_WORKFLOWS = (
     "genoma-policy-engine.yml",
     "genoma-snp-array.yml",
     "genoma-visual-qa-candidates.yml",
-    "pr30-regressions.yml",
     "scaffold-validation.yml",
 )
 
@@ -345,6 +344,13 @@ class CIOptimizationContractTest(unittest.TestCase):
 
         unclosed_comment = template.replace("## CI / GitHub Actions", "<!--\n## CI / GitHub Actions", 1)
         self.assertTrue(_pr_template_draft_flow_errors(unclosed_comment))
+
+    def test_pr30_regressions_are_covered_by_required_static_suite_without_duplicate_workflow(self):
+        self.assertFalse((WORKFLOWS / "pr30-regressions.yml").exists())
+        self.assertTrue((ROOT / "tests" / "test_pr30_regressions.py").is_file())
+        static = _job_block(_read("scaffold-validation.yml"), "static")
+        self.assertIn("reporting/requirements.txt", static)
+        self.assertIn("python3 -m unittest discover -s tests -v", static)
 
     def test_validation_workflows_cancel_superseded_pr_runs(self):
         for name in CONCURRENCY_WORKFLOWS:
