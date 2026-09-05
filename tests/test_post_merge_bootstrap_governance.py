@@ -293,12 +293,44 @@ class PostMergeBootstrapGovernanceTests(unittest.TestCase):
         self.assertEqual(ruleset["enforcement"], "active")
         self.assertEqual(ruleset["bypass_actors"], [])
         types = {rule["type"] for rule in ruleset["rules"]}
-        self.assertTrue({"deletion", "non_fast_forward", "pull_request", "required_status_checks"} <= types)
+        self.assertEqual(types, {"deletion", "non_fast_forward", "required_status_checks"})
+        self.assertNotIn("pull_request", types)
         status_rule = next(rule for rule in ruleset["rules"] if rule["type"] == "required_status_checks")
-        contexts = {item["context"] for item in status_rule["parameters"]["required_status_checks"]}
-        self.assertIn("CodeRabbit", contexts)
-        self.assertIn("Gitleaks secret scan", contexts)
+        checks = {item["context"]: item.get("integration_id") for item in status_rule["parameters"]["required_status_checks"]}
+        self.assertIn("CodeRabbit", checks)
+        self.assertEqual(checks.get("Greptile Review"), 867647)
+        self.assertEqual(checks.get("GitGuardian Security Checks"), 46505)
+        for context in (
+            "DeepSource: Python",
+            "DeepSource: JavaScript",
+            "DeepSource: Shell",
+            "DeepSource: Docker",
+            "DeepSource: SQL",
+        ):
+            self.assertEqual(checks.get(context), 16372)
+        self.assertIn("security/snyk (drhudsonandrade)", checks)
+        self.assertEqual(checks.get("semgrep-cloud-platform/scan"), 4836909)
+        self.assertNotIn("Gitleaks secret scan", checks)
         self.assertTrue(status_rule["parameters"]["strict_required_status_checks_policy"])
+
+    def test_main_approval_gate_is_layered_and_pr_only_bypass(self) -> None:
+        approval = json.loads(
+            (ROOT / ".github/governance/main-approval-ruleset.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(approval["name"], "GENOMA approval gate")
+        self.assertEqual(approval["target"], "branch")
+        self.assertEqual(approval["enforcement"], "active")
+        self.assertEqual(approval["conditions"]["ref_name"]["include"], ["refs/heads/main"])
+        self.assertEqual(
+            approval["bypass_actors"],
+            [{"actor_id": 116986656, "actor_type": "User", "bypass_mode": "pull_request"}],
+        )
+        self.assertEqual({rule["type"] for rule in approval["rules"]}, {"pull_request"})
+        pull_request = approval["rules"][0]["parameters"]
+        self.assertEqual(pull_request["required_approving_review_count"], 1)
+        self.assertTrue(pull_request["dismiss_stale_reviews_on_push"])
+        self.assertTrue(pull_request["require_last_push_approval"])
+        self.assertTrue(pull_request["required_review_thread_resolution"])
 
     def test_audit_evidence_governance_is_layered(self) -> None:
         governance = ROOT / ".github/governance"
