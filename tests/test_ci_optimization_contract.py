@@ -270,11 +270,11 @@ def _draft_contract_errors(workflow: str) -> list[str]:
 
 def _pr_template_draft_flow_errors(template: str) -> list[str]:
     errors: list[str] = []
+    visible_template = re.sub(r"<!--.*?-->", "", template, flags=re.DOTALL)
     try:
-        section = template.split("## CI / GitHub Actions", 1)[1].split("## Mudan\u00e7a can\u00f4nica", 1)[0]
+        section = visible_template.split("## CI / GitHub Actions", 1)[1].split("## Mudan\u00e7a can\u00f4nica", 1)[0]
     except IndexError:
         return ["CI / GitHub Actions section is missing or not bounded"]
-    section = re.sub(r"<!--.*?-->", "", section, flags=re.DOTALL)
     markers = (
         "mantenha a PR como Draft",
         "Confirmar que o HEAD exato est\u00e1 validado localmente",
@@ -339,6 +339,9 @@ class CIOptimizationContractTest(unittest.TestCase):
         commented = commented.replace("## Mudan\u00e7a can\u00f4nica", payload + "## Mudan\u00e7a can\u00f4nica", 1)
         self.assertTrue(_pr_template_draft_flow_errors(commented))
 
+        spanning_comment = template.replace("## CI / GitHub Actions", "<!--\n## CI / GitHub Actions", 1)
+        spanning_comment = spanning_comment.replace("## Mudan\u00e7a can\u00f4nica", "-->\n## Mudan\u00e7a can\u00f4nica", 1)
+        self.assertTrue(_pr_template_draft_flow_errors(spanning_comment))
 
     def test_validation_workflows_cancel_superseded_pr_runs(self):
         for name in CONCURRENCY_WORKFLOWS:
