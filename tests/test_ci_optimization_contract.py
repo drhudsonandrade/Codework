@@ -145,6 +145,69 @@ def _job_is_non_pr_only(condition: str) -> bool:
     return bool(required_events) and all(event != "pull_request" for event in required_events)
 
 
+def _strip_wrapping_parentheses(expression: str) -> str:
+    expression = expression.strip()
+    while expression.startswith("(") and expression.endswith(")"):
+        depth = 0
+        quote = ""
+        wraps_entire_expression = True
+        for index, char in enumerate(expression):
+            if quote:
+                if char == quote and (index == 0 or expression[index - 1] != "\\"):
+                    quote = ""
+                continue
+            if char in {"'", '"'}:
+                quote = char
+            elif char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth == 0 and index != len(expression) - 1:
+                    wraps_entire_expression = False
+                    break
+        if not wraps_entire_expression or depth != 0:
+            break
+        expression = expression[1:-1].strip()
+    return " ".join(expression.split())
+
+
+def _top_level_and_terms(expression: str) -> list[str]:
+    terms: list[str] = []
+    depth = 0
+    quote = ""
+    start = 0
+    index = 0
+    while index < len(expression):
+        char = expression[index]
+        if quote:
+            if char == quote and (index == 0 or expression[index - 1] != "\\"):
+                quote = ""
+            index += 1
+            continue
+        if char in {"'", '"'}:
+            quote = char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+        elif depth == 0 and expression.startswith("&&", index):
+            terms.append(expression[start:index].strip())
+            index += 2
+            start = index
+            continue
+        index += 1
+    terms.append(expression[start:].strip())
+    return [term for term in terms if term]
+
+
+def _draft_gate_is_required_conjunct(condition: str) -> bool:
+    normalized_gate = " ".join(DRAFT_GATE.split())
+    return any(
+        _strip_wrapping_parentheses(term) == normalized_gate
+        for term in _top_level_and_terms(condition)
+    )
+
+
 def _draft_contract_errors(workflow: str) -> list[str]:
     errors: list[str] = []
     pr_types = _pull_request_types(workflow)
@@ -169,6 +232,8 @@ def _draft_contract_errors(workflow: str) -> list[str]:
     for job_name, condition in pr_runner_jobs.items():
         if normalized_gate not in condition:
             errors.append(f"{job_name}: job-level draft gate missing")
+        elif not _draft_gate_is_required_conjunct(condition):
+            errors.append(f"{job_name}: job-level draft gate not structurally enforced")
     return errors
 
 
@@ -216,6 +281,13 @@ class CIOptimizationContractTest(unittest.TestCase):
         )
         gate_errors = _draft_contract_errors(gate_mutant)
         self.assertTrue(any("job-level draft gate missing" in error for error in gate_errors), gate_errors)
+
+        weakened_mutant = workflow.replace(DRAFT_GATE, f"({DRAFT_GATE}) || true", 1)
+        weakened_errors = _draft_contract_errors(weakened_mutant)
+        self.assertTrue(
+            any("job-level draft gate not structurally enforced" in error for error in weakened_errors),
+            weakened_errors,
+        )
 
         event_mutant = workflow.replace(
             f"    {DRAFT_READY_TYPES_LINE}",
