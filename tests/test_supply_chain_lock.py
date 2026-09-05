@@ -41,6 +41,7 @@ class SupplyChainLockTest(unittest.TestCase):
     def test_supply_chain_verifier_does_not_require_retired_gitleaks_job(self):
         verifier = (ROOT / "scripts/verify_supply_chain_lock.py").read_text(encoding="utf-8")
         self.assertNotIn("gitleaks", verifier.casefold())
+        self.assertNotIn("secret_scanner", verifier)
 
 
 if __name__ == "__main__":
