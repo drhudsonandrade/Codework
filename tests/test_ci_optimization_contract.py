@@ -201,8 +201,36 @@ def _top_level_and_terms(expression: str) -> list[str]:
     return [term for term in terms if term]
 
 
+def _has_top_level_or(expression: str) -> bool:
+    depth = 0
+    quote = ""
+    index = 0
+    while index < len(expression):
+        char = expression[index]
+        if quote:
+            if char == quote and (index == 0 or expression[index - 1] != "\\"):
+                quote = ""
+            index += 1
+            continue
+        if char in {"'", '"'}:
+            quote = char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+        elif depth == 0 and expression.startswith("||", index):
+            return True
+        index += 1
+    return False
+
+
 def _draft_gate_is_required_conjunct(condition: str) -> bool:
     normalized_gate = " ".join(DRAFT_GATE.split())
+    normalized_condition = _strip_wrapping_parentheses(condition)
+    if normalized_condition == normalized_gate:
+        return True
+    if _has_top_level_or(condition):
+        return False
     return any(
         _strip_wrapping_parentheses(term) == normalized_gate
         for term in _top_level_and_terms(condition)
@@ -290,6 +318,17 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertTrue(
             any("job-level draft gate not structurally enforced" in error for error in weakened_errors),
             weakened_errors,
+        )
+
+        top_level_or_mutant = workflow.replace(
+            DRAFT_GATE,
+            f"({DRAFT_GATE}) && false || true",
+            1,
+        )
+        top_level_or_errors = _draft_contract_errors(top_level_or_mutant)
+        self.assertTrue(
+            any("job-level draft gate not structurally enforced" in error for error in top_level_or_errors),
+            top_level_or_errors,
         )
 
         event_mutant = workflow.replace(
