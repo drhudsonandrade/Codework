@@ -596,6 +596,30 @@ class CIOptimizationContractTest(unittest.TestCase):
         ):
             self.assertIn(required, caller)
 
+    def test_reusable_four_plane_audit_keeps_only_unique_evidence_work(self):
+        audit = _read("genoma-audit.yml")
+        job = _job_block(audit, "audit")
+        self.assertNotIn("Repository and supply-chain contracts", job)
+        self.assertNotIn("Unit tests for v0.8 architecture", job)
+        self.assertNotIn("python3 -m unittest", job)
+        self.assertIn("python3 scripts/genoma_audit.py --allow-template-sealed-only --output audit.json", job)
+        self.assertIn("python3 scripts/verify_template_store.py --allow-sealed-only", job)
+        self.assertIn("name: genoma-v0.8-audit-${{ github.sha }}", job)
+        self.assertIn("retention-days: 365", job)
+        self.assertIn("if: always()", job)
+
+    def test_reusable_four_plane_audit_keeps_only_unique_evidence_work(self):
+        audit = _read("genoma-audit.yml")
+        job = _job_block(audit, "audit")
+        self.assertNotIn("Repository and supply-chain contracts", job)
+        self.assertNotIn("Unit tests for v0.8 architecture", job)
+        self.assertNotIn("python3 -m unittest", job)
+        self.assertIn("python3 scripts/genoma_audit.py --allow-template-sealed-only --output audit.json", job)
+        self.assertIn("python3 scripts/verify_template_store.py --allow-sealed-only", job)
+        self.assertIn("name: genoma-v0.8-audit-${{ github.sha }}", job)
+        self.assertIn("retention-days: 365", job)
+        self.assertIn("if: always()", job)
+
     def test_policy_required_checks_use_job_level_scope_gates(self):
         workflow = _read("genoma-policy-engine.yml")
         header = workflow.split("permissions:", 1)[0]
