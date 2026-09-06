@@ -652,7 +652,15 @@ class CIOptimizationContractTest(unittest.TestCase):
         bypass_mutations = (
             scaffold.replace("needs.static.result == 'success'", "(needs.static.result == 'success' || true)", 1),
             scaffold.replace("needs.changes.result == 'success'", "(needs.changes.result == 'success' || true)", 1),
-            scaffold.replace("needs.changes.outputs.validation_required == 'true'", "(needs.changes.outputs.validation_required == 'true' || true)", 1),
+            scaffold.replace(
+                caller,
+                caller.replace(
+                    "needs.changes.outputs.validation_required == 'true'",
+                    "(needs.changes.outputs.validation_required == 'true' || true)",
+                    1,
+                ),
+                1,
+            ),
             scaffold.replace(caller, caller.replace(DRAFT_GATE, f"({DRAFT_GATE}) || true", 1), 1),
         )
         for mutated in bypass_mutations:
