@@ -399,6 +399,30 @@ def _subprocess_references(source: str) -> list[str]:
     return findings
 
 
+def _four_plane_audit_orchestration_errors(scaffold: str, audit: str) -> list[str]:
+    errors: list[str] = []
+    caller = _job_block(scaffold, "four-plane-audit")
+    for token in (
+        "needs: [changes, static]",
+        "uses: ./.github/workflows/genoma-audit.yml",
+        DRAFT_GATE,
+        "needs.changes.result == 'success'",
+        "needs.changes.outputs.validation_required == 'true'",
+        "needs.static.result == 'success'",
+    ):
+        if token not in caller:
+            errors.append(f"four-plane-audit caller missing: {token}")
+    header = audit.split("permissions:", 1)[0]
+    if "on:\n  workflow_call:\n" not in header:
+        errors.append("genoma-audit must expose workflow_call")
+    for forbidden in ("pull_request:", "push:", "workflow_dispatch:"):
+        if forbidden in header:
+            errors.append(f"genoma-audit direct trigger forbidden: {forbidden}")
+    if "concurrency:" in audit:
+        errors.append("reusable genoma-audit must not own concurrency")
+    return errors
+
+
 class CIOptimizationContractTest(unittest.TestCase):
     def _assert_job_gate(self, workflow: str, job_name: str, output_name: str) -> None:
         job = _job_block(workflow, job_name)
@@ -579,34 +603,23 @@ class CIOptimizationContractTest(unittest.TestCase):
     def test_four_plane_audit_is_reusable_and_gated_by_required_static(self):
         scaffold = _read("scaffold-validation.yml")
         audit = _read("genoma-audit.yml")
-        audit_header = audit.split("permissions:", 1)[0]
-        self.assertIn("on:\n  workflow_call:\n", audit_header)
-        for forbidden in ("pull_request:", "push:", "workflow_dispatch:"):
-            self.assertNotIn(forbidden, audit_header)
+        self.assertEqual([], _four_plane_audit_orchestration_errors(scaffold, audit))
 
-        caller = _job_block(scaffold, "four-plane-audit")
-        self.assertIn("needs: [changes, static]", caller)
-        self.assertIn("uses: ./.github/workflows/genoma-audit.yml", caller)
-        for required in (
-            "always() &&",
-            DRAFT_GATE,
-            "needs.changes.result == 'success'",
-            "needs.changes.outputs.validation_required == 'true'",
-            "needs.static.result == 'success'",
-        ):
-            self.assertIn(required, caller)
-
-    def test_reusable_four_plane_audit_keeps_only_unique_evidence_work(self):
+    def test_four_plane_audit_orchestration_rejects_weakened_static_boundary(self):
+        scaffold = _read("scaffold-validation.yml")
         audit = _read("genoma-audit.yml")
-        job = _job_block(audit, "audit")
-        self.assertNotIn("Repository and supply-chain contracts", job)
-        self.assertNotIn("Unit tests for v0.8 architecture", job)
-        self.assertNotIn("python3 -m unittest", job)
-        self.assertIn("python3 scripts/genoma_audit.py --allow-template-sealed-only --output audit.json", job)
-        self.assertIn("python3 scripts/verify_template_store.py --allow-sealed-only", job)
-        self.assertIn("name: genoma-v0.8-audit-${{ github.sha }}", job)
-        self.assertIn("retention-days: 365", job)
-        self.assertIn("if: always()", job)
+        caller = _job_block(scaffold, "four-plane-audit")
+        weakened_draft_caller = caller.replace(DRAFT_GATE, "true", 1)
+        mutations = (
+            scaffold.replace("needs: [changes, static]", "needs: changes", 1),
+            scaffold.replace(caller, weakened_draft_caller, 1),
+            scaffold.replace("needs.static.result == 'success'", "needs.static.result != 'failure'", 1),
+            scaffold.replace("needs.changes.result == 'success'", "needs.changes.result != 'failure'", 1),
+        )
+        for mutated in mutations:
+            self.assertTrue(_four_plane_audit_orchestration_errors(mutated, audit))
+        direct_trigger = audit.replace("on:\n  workflow_call:\n", "on:\n  workflow_call:\n  pull_request:\n", 1)
+        self.assertTrue(_four_plane_audit_orchestration_errors(scaffold, direct_trigger))
 
     def test_reusable_four_plane_audit_keeps_only_unique_evidence_work(self):
         audit = _read("genoma-audit.yml")
