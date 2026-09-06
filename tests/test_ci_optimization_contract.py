@@ -399,19 +399,49 @@ def _subprocess_references(source: str) -> list[str]:
     return findings
 
 
+def _job_if_expression(workflow: str, job_name: str) -> str:
+    job = _job_block(workflow, job_name)
+    lines = job.splitlines()
+    for index, line in enumerate(lines):
+        if _indent(line) != 4 or not line.strip().startswith("if:"):
+            continue
+        raw = line.strip().split(":", 1)[1].strip()
+        if raw not in {">", ">-", "|", "|-"}:
+            return " ".join(raw.replace("${{", "").replace("}}", "").split())
+        parts: list[str] = []
+        cursor = index + 1
+        while cursor < len(lines) and (not lines[cursor].strip() or _indent(lines[cursor]) > 4):
+            if lines[cursor].strip():
+                parts.append(lines[cursor].strip())
+            cursor += 1
+        return " ".join(parts)
+    raise AssertionError(f"job {job_name!r} has no job-level if condition")
+
+
 def _four_plane_audit_orchestration_errors(scaffold: str, audit: str) -> list[str]:
     errors: list[str] = []
     caller = _job_block(scaffold, "four-plane-audit")
     for token in (
         "needs: [changes, static]",
         "uses: ./.github/workflows/genoma-audit.yml",
-        DRAFT_GATE,
-        "needs.changes.result == 'success'",
-        "needs.changes.outputs.validation_required == 'true'",
-        "needs.static.result == 'success'",
     ):
         if token not in caller:
             errors.append(f"four-plane-audit caller missing: {token}")
+
+    condition = _job_if_expression(scaffold, "four-plane-audit")
+    if _has_top_level_or(condition):
+        errors.append("four-plane-audit caller has top-level OR bypass")
+    terms = {_strip_wrapping_parentheses(term) for term in _top_level_and_terms(condition)}
+    required_terms = {
+        "always()",
+        _strip_wrapping_parentheses(DRAFT_GATE),
+        "needs.changes.result == 'success'",
+        "needs.changes.outputs.validation_required == 'true'",
+        "needs.static.result == 'success'",
+    }
+    for term in required_terms - terms:
+        errors.append(f"four-plane-audit caller missing exact condition term: {term}")
+
     header = audit.split("permissions:", 1)[0]
     if "on:\n  workflow_call:\n" not in header:
         errors.append("genoma-audit must expose workflow_call")
@@ -614,9 +644,18 @@ class CIOptimizationContractTest(unittest.TestCase):
             scaffold.replace("needs: [changes, static]", "needs: changes", 1),
             scaffold.replace(caller, weakened_draft_caller, 1),
             scaffold.replace("needs.static.result == 'success'", "needs.static.result != 'failure'", 1),
+            scaffold.replace("needs.static.result == 'success'", "needs.static.result == 'success' || true", 1),
             scaffold.replace("needs.changes.result == 'success'", "needs.changes.result != 'failure'", 1),
         )
         for mutated in mutations:
+            self.assertTrue(_four_plane_audit_orchestration_errors(mutated, audit))
+        bypass_mutations = (
+            scaffold.replace("needs.static.result == 'success'", "(needs.static.result == 'success' || true)", 1),
+            scaffold.replace("needs.changes.result == 'success'", "(needs.changes.result == 'success' || true)", 1),
+            scaffold.replace("needs.changes.outputs.validation_required == 'true'", "(needs.changes.outputs.validation_required == 'true' || true)", 1),
+            scaffold.replace(caller, caller.replace(DRAFT_GATE, f"({DRAFT_GATE}) || true", 1), 1),
+        )
+        for mutated in bypass_mutations:
             self.assertTrue(_four_plane_audit_orchestration_errors(mutated, audit))
         direct_trigger = audit.replace("on:\n  workflow_call:\n", "on:\n  workflow_call:\n  pull_request:\n", 1)
         self.assertTrue(_four_plane_audit_orchestration_errors(scaffold, direct_trigger))
