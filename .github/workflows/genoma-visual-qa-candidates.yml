@@ -5,22 +5,28 @@ on:
     branches: [main]
     paths:
       - 'reporting/**'
+      - 'normative/**'
       - 'template_store/**'
       - 'scripts/build_report_coordinate_pack.py'
       - 'scripts/install_report_templates.py'
       - 'scripts/verify_template_store.py'
-      - 'tests/**'
+      - 'tests/test_editorial_renderers.py'
+      - 'tests/test_template_v3_contract.py'
+      - 'tests/ruleset_test_support.py'
       - 'docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_2026-08-16.json'
       - '.github/workflows/genoma-visual-qa-candidates.yml'
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'reporting/**'
+      - 'normative/**'
       - 'template_store/**'
       - 'scripts/build_report_coordinate_pack.py'
       - 'scripts/install_report_templates.py'
       - 'scripts/verify_template_store.py'
-      - 'tests/**'
+      - 'tests/test_editorial_renderers.py'
+      - 'tests/test_template_v3_contract.py'
+      - 'tests/ruleset_test_support.py'
       - 'docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_2026-08-16.json'
       - '.github/workflows/genoma-visual-qa-candidates.yml'
   workflow_dispatch:
