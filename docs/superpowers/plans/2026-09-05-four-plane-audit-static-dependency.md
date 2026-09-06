@@ -90,7 +90,7 @@ permissions:
   contents: read
 ```
 
-Remove the audit workflow's `concurrency:` block and its `changes` job. Keep the existing `audit` job body intact for this task so the structural change is isolated from deduplication.
+Remove the audit workflow's `concurrency:` block and its `changes` job. Because the reusable workflow no longer owns the classifier, also remove from the `audit` job only the legacy classifier coupling: `needs: changes`, the job-level `if:` expression that references `needs.changes`, and the `Require successful scope classification` step. Keep every other audit job step intact for this task so orchestration is isolated from deduplication.
 Add this caller job to `scaffold-validation.yml` after `static` and before `container-canary`:
 
 ```yaml
