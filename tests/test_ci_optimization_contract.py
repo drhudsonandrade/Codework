@@ -87,7 +87,6 @@ def _load_classifier() -> ModuleType:
 
 CONCURRENCY_WORKFLOWS = (
     "fallow.yml",
-    "genoma-audit.yml",
     "genoma-ngs-runtime-gate.yml",
     "genoma-policy-engine.yml",
     "genoma-snp-array.yml",
@@ -577,23 +576,25 @@ class CIOptimizationContractTest(unittest.TestCase):
             ):
                 self.assertIn(preserved, event_block)
 
-    def test_four_plane_audit_skips_only_safe_markdown_modifications(self):
-        workflow = _read("genoma-audit.yml")
-        header = workflow.split("permissions:", 1)[0]
-        pull_request = header.split("  pull_request:\n", 1)[1].split("  push:\n", 1)[0]
-        push = header.split("  push:\n", 1)[1].split("  workflow_dispatch:\n", 1)[0]
-        self.assertNotIn("paths-ignore:", pull_request)
-        self.assertNotIn("paths-ignore:", push)
-        changes = _job_block(workflow, "changes")
-        self.assertIn("audit_required:", changes)
-        self.assertIn('changed_paths="$RUNNER_TEMP/audit-changed-paths.zlist"', changes)
-        self.assertIn('deleted_paths="$RUNNER_TEMP/audit-deleted-paths.zlist"', changes)
-        self.assertIn('git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$changed_paths"', changes)
-        self.assertIn('git diff --no-renames --diff-filter=D --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$deleted_paths"', changes)
-        self.assertIn('bash scripts/ci_changed_paths.sh "$BASE_SHA" "$HEAD_SHA" "$changed_paths" "$deleted_paths"', changes)
-        self.assertIn('scripts/ci_change_classifier.py markdown --changed "$changed_paths" --deleted "$deleted_paths"', changes)
-        self.assertIn('scripts/ci_changed_paths.sh|scripts/ci_change_classifier.py|.github/workflows/genoma-audit.yml', changes)
-        self._assert_job_gate(workflow, "audit", "audit_required")
+    def test_four_plane_audit_is_reusable_and_gated_by_required_static(self):
+        scaffold = _read("scaffold-validation.yml")
+        audit = _read("genoma-audit.yml")
+        audit_header = audit.split("permissions:", 1)[0]
+        self.assertIn("on:\n  workflow_call:\n", audit_header)
+        for forbidden in ("pull_request:", "push:", "workflow_dispatch:"):
+            self.assertNotIn(forbidden, audit_header)
+
+        caller = _job_block(scaffold, "four-plane-audit")
+        self.assertIn("needs: [changes, static]", caller)
+        self.assertIn("uses: ./.github/workflows/genoma-audit.yml", caller)
+        for required in (
+            "always() &&",
+            DRAFT_GATE,
+            "needs.changes.result == 'success'",
+            "needs.changes.outputs.validation_required == 'true'",
+            "needs.static.result == 'success'",
+        ):
+            self.assertIn(required, caller)
 
     def test_policy_required_checks_use_job_level_scope_gates(self):
         workflow = _read("genoma-policy-engine.yml")
