@@ -583,7 +583,19 @@ class WorkflowContractTest(unittest.TestCase):
                 with self.subTest(workflow=filename, job=job_name):
                     steps = _job_steps(workflow, job_name)
                     checkout_indexes = [i for i, step in enumerate(steps) if "uses: actions/checkout@" in step]
-                    validation_indexes = [i for i, step in enumerate(steps) if _step_runs_validate_repo(step)]
+                    indirect_static_suite = (filename, job_name) == ("scaffold-validation.yml", "static")
+                    validation_indexes = [
+                        i
+                        for i, step in enumerate(steps)
+                        if _step_runs_validate_repo(step)
+                        or (
+                            indirect_static_suite
+                            and any(
+                                "python3 -m unittest discover -s tests -v" in command
+                                for command in _step_run_commands(step)
+                            )
+                        )
+                    ]
                     self.assertEqual(len(checkout_indexes), 1)
                     self.assertTrue(validation_indexes)
                     checkout_index = checkout_indexes[0]
