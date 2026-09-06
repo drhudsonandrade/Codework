@@ -44,7 +44,7 @@ _REPOSITORY_CONTRACT_PASS = CommandOutcome(
 
 
 def _repository_contract_pass_run(cmd, **kwargs):
-    if any("validate_repo.py" in str(part) for part in cmd):
+    if any(Path(str(part)).as_posix() == "scripts/validate_repo.py" for part in cmd):
         return _REPOSITORY_CONTRACT_PASS
     return run(cmd, **kwargs)
 
@@ -83,9 +83,17 @@ class AuditTestOptimizationContractTest(unittest.TestCase):
         with mock.patch.object(module, "run", return_value=delegated) as runner:
             contract = _repository_contract_pass_run([sys.executable, "scripts/validate_repo.py"])
             other = _repository_contract_pass_run([sys.executable, "scripts/verify_supply_chain_lock.py"])
+            lookalike = _repository_contract_pass_run([sys.executable, "scripts/validate_repo.py.bak"])
         self.assertEqual(contract.result, PASS)
         self.assertIs(other, delegated)
-        runner.assert_called_once_with([sys.executable, "scripts/verify_supply_chain_lock.py"])
+        self.assertIs(lookalike, delegated)
+        self.assertEqual(
+            runner.call_args_list,
+            [
+                mock.call([sys.executable, "scripts/verify_supply_chain_lock.py"]),
+                mock.call([sys.executable, "scripts/validate_repo.py.bak"]),
+            ],
+        )
 
 
 class GenomaAuditTest(unittest.TestCase):
