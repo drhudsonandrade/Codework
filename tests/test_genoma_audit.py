@@ -5,6 +5,7 @@ import sys
 import tempfile
 import time
 import unittest
+from copy import deepcopy
 from pathlib import Path
 from unittest import mock
 
@@ -21,6 +22,31 @@ from scripts.genoma_audit import (
     ruleset_check,
     run,
 )
+
+
+class _AuditBaseline:
+    def __init__(self, runner=audit):
+        self._runner = runner
+        self._snapshot = None
+
+    def report(self) -> dict:
+        if self._snapshot is None:
+            self._snapshot = self._runner(allow_template_sealed_only=True)
+        return deepcopy(self._snapshot)
+
+
+_BASELINE_AUDIT = _AuditBaseline()
+_REPOSITORY_CONTRACT_PASS = CommandOutcome(
+    launched=True,
+    returncode=0,
+    evidence="STDOUT\nPASS\trepository_contract\nSTDERR\n",
+)
+
+
+def _repository_contract_pass_run(cmd, **kwargs):
+    if any("validate_repo.py" in str(part) for part in cmd):
+        return _REPOSITORY_CONTRACT_PASS
+    return run(cmd, **kwargs)
 
 
 def _process_is_running(pid: int) -> bool:
@@ -40,14 +66,36 @@ def _process_is_running(pid: int) -> bool:
     return True
 
 
+class AuditTestOptimizationContractTest(unittest.TestCase):
+    def test_baseline_holder_runs_once_and_returns_isolated_copies(self):
+        runner = mock.Mock(return_value={"checks": []})
+        baseline = _AuditBaseline(runner)
+        first = baseline.report()
+        first["checks"].append({"id": "MUTATED"})
+        second = baseline.report()
+        runner.assert_called_once_with(allow_template_sealed_only=True)
+        self.assertEqual(second, {"checks": []})
+        self.assertIsNot(first, second)
+
+    def test_repository_contract_pass_stub_delegates_every_other_command(self):
+        delegated = CommandOutcome(launched=True, returncode=7, evidence="delegated")
+        module = sys.modules[__name__]
+        with mock.patch.object(module, "run", return_value=delegated) as runner:
+            contract = _repository_contract_pass_run([sys.executable, "scripts/validate_repo.py"])
+            other = _repository_contract_pass_run([sys.executable, "scripts/verify_supply_chain_lock.py"])
+        self.assertEqual(contract.result, PASS)
+        self.assertIs(other, delegated)
+        runner.assert_called_once_with([sys.executable, "scripts/verify_supply_chain_lock.py"])
+
+
 class GenomaAuditTest(unittest.TestCase):
     def test_audit_never_grants_post_deployment(self):
-        result = audit(allow_template_sealed_only=True)
+        result = _BASELINE_AUDIT.report()
         self.assertEqual(result["post_deployment_status"], "PENDENTE")
         self.assertIn("Production Witness", result["post_deployment_note"])
 
     def test_all_four_planes_are_explicit(self):
-        result = audit(allow_template_sealed_only=True)
+        result = _BASELINE_AUDIT.report()
         self.assertEqual(set(result["four_planes"]), {"policy_control", "scientific_data", "evidence", "audit"})
         ids = {x["id"] for x in result["checks"]}
         self.assertIn("PYTHON_RUNTIME", ids)
@@ -204,7 +252,9 @@ class RulesetProvenanceTest(unittest.TestCase):
             {"operational_status": EXECUTED, "result": FAIL, "status": None, "version": None,
              "effective_date": None, "canonical_filename": None, "sha256": None, "identity_source": None},
         )
-        with mock.patch("scripts.genoma_audit.ruleset_check", return_value=failing):
+        with mock.patch("scripts.genoma_audit.ruleset_check", return_value=failing), mock.patch(
+            "scripts.genoma_audit.run", side_effect=_repository_contract_pass_run
+        ):
             report = audit(allow_template_sealed_only=True)
         self.assertEqual(report["ruleset"]["normative_gate"], "BLOCKED")
         self.assertIn("RULESET_SEALED_IDENTITY", report["blocking_failures"])
@@ -236,7 +286,7 @@ class RulesetProvenanceTest(unittest.TestCase):
 
 class ReportContractTest(unittest.TestCase):
     def test_every_check_carries_both_axes_independently(self):
-        report = audit(allow_template_sealed_only=True)
+        report = _BASELINE_AUDIT.report()
         for check in report["checks"]:
             self.assertIn(check["operational_status"], {EXECUTED, UNAVAILABLE}, check["id"])
             self.assertIn(check["result"], {PASS, FAIL, "ERROR"}, check["id"])
@@ -248,18 +298,20 @@ class ReportContractTest(unittest.TestCase):
             self.assertNotIn("state", check, check["id"])
 
     def test_report_declares_the_two_axis_schema(self):
-        report = audit(allow_template_sealed_only=True)
+        report = _BASELINE_AUDIT.report()
         self.assertEqual(report["schema"], "genoma-v0.8-four-plane-audit-v2")
         self.assertIn(report["operational_status"], {EXECUTED, UNAVAILABLE})
         self.assertIn(report["result"], {PASS, FAIL, "ERROR"})
 
     def test_blocking_failures_are_derived_from_results_not_from_availability(self):
-        report = audit(allow_template_sealed_only=True)
+        report = _BASELINE_AUDIT.report()
         expected = [c["id"] for c in report["checks"] if c["blocking"] and c["result"] != PASS]
         self.assertEqual(report["blocking_failures"], expected)
 
     def test_grch38_unavailable_gate_is_fail_closed(self):
-        with mock.patch("scripts.genoma_audit._grch38_strategy_probe", side_effect=OSError("probe unreadable")):
+        with mock.patch(
+            "scripts.genoma_audit._grch38_strategy_probe", side_effect=OSError("probe unreadable")
+        ), mock.patch("scripts.genoma_audit.run", side_effect=_repository_contract_pass_run):
             report = audit(allow_template_sealed_only=True)
         gate = next(c for c in report["checks"] if c["id"] == "GRCH38_NO_PERMANENT_HIGHMEM_STRATEGY")
         self.assertEqual((gate["operational_status"], gate["result"]), (UNAVAILABLE, "ERROR"))
