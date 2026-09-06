@@ -607,7 +607,11 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertEqual(len(checkout_indexes), 1)
         self.assertEqual(len(core_indexes), 1)
         self.assertLess(checkout_indexes[0], core_indexes[0])
-        self.assertEqual(_with_mapping(steps[checkout_indexes[0]]).get("fetch-depth"), 0)
+        checkout_step = steps[checkout_indexes[0]]
+        checkout_config = _with_mapping(checkout_step)
+        self.assertEqual(checkout_config.get("fetch-depth"), 0)
+        self.assertIs(checkout_config.get("persist-credentials"), False)
+        self.assertEqual(checkout_step.count("persist-credentials: false"), 1)
 
     def _assert_no_retired_gitleaks_workflow(self, workflow: str) -> None:
         self.assertNotIn("gitleaks", workflow.casefold())
