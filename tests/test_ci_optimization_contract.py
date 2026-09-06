@@ -13,6 +13,68 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 CLASSIFIER = ROOT / "scripts" / "ci_change_classifier.py"
 
 
+def _ngs_script_dependency_closure() -> set[str]:
+    script_dir = ROOT / "scripts"
+    seeds: set[str] = set()
+    for source in (
+        _read("genoma-ngs-runtime-gate.yml"),
+        (ROOT / "main.nf").read_text(encoding="utf-8"),
+        (ROOT / "workflows/wgs.nf").read_text(encoding="utf-8"),
+        (ROOT / "workflows/array.nf").read_text(encoding="utf-8"),
+    ):
+        seeds.update(re.findall(r"scripts/[A-Za-z0-9_.-]+\.(?:py|sh)", source))
+    excluded = {"scripts/validate_repo.py", "scripts/verify_supply_chain_lock.py"}
+    closure = set(seeds)
+    queue = list(closure)
+    filename_pattern = re.compile(
+        r"(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]+\.(?:py|sh))(?![A-Za-z0-9_.-])"
+    )
+    python_by_module = {candidate.stem: candidate.name for candidate in script_dir.glob("*.py")}
+
+    while queue:
+        relative = queue.pop()
+        candidate = ROOT / relative
+        if not candidate.is_file():
+            continue
+        source = candidate.read_text(encoding="utf-8")
+        local_references: list[str] = []
+        modules: list[str] = []
+
+        if candidate.suffix == ".sh":
+            local_references.extend(filename_pattern.findall(source))
+        elif candidate.suffix == ".py":
+            tree = ast.parse(source, filename=str(candidate))
+            if relative not in excluded:
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                        local_references.extend(filename_pattern.findall(node.value))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    modules.extend(alias.name for alias in node.names)
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    modules.append(node.module)
+
+        for filename in local_references:
+            dependency = f"scripts/{filename}"
+            if (ROOT / dependency).is_file() and dependency not in excluded and dependency not in closure:
+                closure.add(dependency)
+                queue.append(dependency)
+
+        for module in modules:
+            if module == "scripts" or module.startswith("scripts."):
+                package_init = "scripts/__init__.py"
+                if package_init not in closure:
+                    closure.add(package_init)
+                    queue.append(package_init)
+            short = module.removeprefix("scripts.").split(".")[0]
+            filename = python_by_module.get(short)
+            dependency = f"scripts/{filename}" if filename else ""
+            if dependency and dependency not in excluded and dependency not in closure:
+                closure.add(dependency)
+                queue.append(dependency)
+
+    return closure - excluded
+
 def _load_classifier() -> ModuleType:
     if not CLASSIFIER.is_file():
         raise AssertionError("CI change classifier is missing")
@@ -42,6 +104,39 @@ DRAFT_READY_EVENT = "ready_for_review"
 REQUIRED_PR_TYPES = ("opened", "synchronize", "reopened", "ready_for_review")
 DRAFT_READY_TYPES_LINE = "types: [opened, synchronize, reopened, ready_for_review]"
 DRAFT_GATE = "github.event_name != 'pull_request' || github.event.pull_request.draft == false"
+
+NGS_TRIGGER_SCRIPT_PATHS = (
+    "scripts/__init__.py",
+    "scripts/annotate_partial_genome.py",
+    "scripts/build_adapter_capabilities.py",
+    "scripts/build_array_case_manifest.py",
+    "scripts/build_bwa_mem2_index.sh",
+    "scripts/build_wgs_curated_manifest.py",
+    "scripts/check_versions.sh",
+    "scripts/code_language_guard.py",
+    "scripts/freshness_gate.py",
+    "scripts/generate_all_reports.py",
+    "scripts/generate_canary.py",
+    "scripts/latest_runtime_resource_gate.py",
+    "scripts/materialize_ruleset.py",
+    "scripts/prepare_latest_candidate.py",
+    "scripts/prepare_report_release.py",
+    "scripts/promote_latest_candidate.py",
+    "scripts/refresh_evidence_sources.py",
+    "scripts/run_canary.sh",
+    "scripts/run_snp_array.py",
+    "scripts/runtime_resource_gate.py",
+    "scripts/runtime_stack.py",
+    "scripts/score_variants.py",
+    "scripts/sealed_ruleset.py",
+    "scripts/validate_bwa_mem2_functional.sh",
+    "scripts/validate_grch38.sh",
+    "scripts/verify_runtime_gate_manifest.py",
+    "scripts/wgs_align_or_stage.sh",
+    "scripts/wgs_consent_gate.py",
+    "scripts/wgs_input_gate.py",
+    "scripts/wgs_materialize_verified_input.py",
+)
 
 
 def _read(name: str) -> str:
@@ -457,6 +552,30 @@ class CIOptimizationContractTest(unittest.TestCase):
         for expected in expected_paths:
             self.assertIn(expected, pull_request)
         self.assertNotIn("'mcp/**'", pull_request)
+
+    def test_ngs_runtime_gate_uses_explicit_ngs_script_paths_instead_of_all_scripts(self):
+        workflow = _read("genoma-ngs-runtime-gate.yml")
+        closure = _ngs_script_dependency_closure()
+        self.assertEqual(set(), closure - set(NGS_TRIGGER_SCRIPT_PATHS))
+        for script_path in NGS_TRIGGER_SCRIPT_PATHS:
+            self.assertTrue((ROOT / script_path).is_file(), script_path)
+
+        header = workflow.split("permissions:", 1)[0]
+        pull_request = header.split("  pull_request:\n", 1)[1].split("  push:\n", 1)[0]
+        push = header.split("  push:\n", 1)[1].split("  workflow_dispatch:\n", 1)[0]
+        for event_block in (pull_request, push):
+            self.assertIn("paths:\n", event_block)
+            self.assertNotIn("'scripts/**'", event_block)
+            self.assertNotIn("'scripts/validate_repo.py'", event_block)
+            self.assertNotIn("'scripts/verify_supply_chain_lock.py'", event_block)
+            for script_path in NGS_TRIGGER_SCRIPT_PATHS:
+                self.assertIn(f"'{script_path}'", event_block)
+            for preserved in (
+                "'environment.yml'", "'Dockerfile'", "'main.nf'", "'nextflow.config'",
+                "'workflows/**'", "'evidence_adapters/**'", "'locks/**'", "'normative/**'",
+                "'.github/workflows/genoma-ngs-runtime-gate.yml'",
+            ):
+                self.assertIn(preserved, event_block)
 
     def test_four_plane_audit_skips_only_safe_markdown_modifications(self):
         workflow = _read("genoma-audit.yml")
