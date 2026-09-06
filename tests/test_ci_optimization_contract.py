@@ -553,6 +553,7 @@ class CIOptimizationContractTest(unittest.TestCase):
         )
         for event_block in (push, pull_request):
             self.assertNotIn("'tests/**'", event_block)
+            self.assertIn("'normative/**'", event_block)
             configured = set(re.findall(r"^\s+- '(tests/[^']+)'$", event_block, re.MULTILINE))
             self.assertEqual(configured, expected)
         job = _job_block(workflow, "render-candidates")

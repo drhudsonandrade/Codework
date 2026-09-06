@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'reporting/**'
+      - 'normative/**'
       - 'template_store/**'
       - 'scripts/build_report_coordinate_pack.py'
       - 'scripts/install_report_templates.py'
@@ -18,6 +19,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'reporting/**'
+      - 'normative/**'
       - 'template_store/**'
       - 'scripts/build_report_coordinate_pack.py'
       - 'scripts/install_report_templates.py'
