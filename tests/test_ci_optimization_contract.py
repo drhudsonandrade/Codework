@@ -43,6 +43,36 @@ REQUIRED_PR_TYPES = ("opened", "synchronize", "reopened", "ready_for_review")
 DRAFT_READY_TYPES_LINE = "types: [opened, synchronize, reopened, ready_for_review]"
 DRAFT_GATE = "github.event_name != 'pull_request' || github.event.pull_request.draft == false"
 
+NGS_TRIGGER_SCRIPT_PATHS = (
+    "scripts/annotate_partial_genome.py",
+    "scripts/build_adapter_capabilities.py",
+    "scripts/build_array_case_manifest.py",
+    "scripts/build_bwa_mem2_index.sh",
+    "scripts/build_wgs_curated_manifest.py",
+    "scripts/check_versions.sh",
+    "scripts/freshness_gate.py",
+    "scripts/generate_all_reports.py",
+    "scripts/generate_canary.py",
+    "scripts/latest_runtime_resource_gate.py",
+    "scripts/materialize_ruleset.py",
+    "scripts/prepare_latest_candidate.py",
+    "scripts/prepare_report_release.py",
+    "scripts/promote_latest_candidate.py",
+    "scripts/refresh_evidence_sources.py",
+    "scripts/run_canary.sh",
+    "scripts/run_snp_array.py",
+    "scripts/runtime_resource_gate.py",
+    "scripts/runtime_stack.py",
+    "scripts/score_variants.py",
+    "scripts/sealed_ruleset.py",
+    "scripts/validate_bwa_mem2_functional.sh",
+    "scripts/validate_grch38.sh",
+    "scripts/verify_runtime_gate_manifest.py",
+    "scripts/wgs_align_or_stage.sh",
+    "scripts/wgs_consent_gate.py",
+    "scripts/wgs_input_gate.py",
+)
+
 
 def _read(name: str) -> str:
     return (WORKFLOWS / name).read_text(encoding="utf-8")
@@ -457,6 +487,38 @@ class CIOptimizationContractTest(unittest.TestCase):
         for expected in expected_paths:
             self.assertIn(expected, pull_request)
         self.assertNotIn("'mcp/**'", pull_request)
+
+    def test_ngs_runtime_gate_uses_explicit_ngs_script_paths_instead_of_all_scripts(self):
+        workflow = _read("genoma-ngs-runtime-gate.yml")
+        referenced = set()
+        for source in (
+            workflow,
+            (ROOT / "main.nf").read_text(encoding="utf-8"),
+            (ROOT / "workflows/wgs.nf").read_text(encoding="utf-8"),
+            (ROOT / "workflows/array.nf").read_text(encoding="utf-8"),
+        ):
+            referenced.update(re.findall(r"scripts/[A-Za-z0-9_.-]+\.(?:py|sh)", source))
+        referenced -= {"scripts/validate_repo.py", "scripts/verify_supply_chain_lock.py"}
+        self.assertTrue(referenced.issubset(set(NGS_TRIGGER_SCRIPT_PATHS)))
+        for script_path in NGS_TRIGGER_SCRIPT_PATHS:
+            self.assertTrue((ROOT / script_path).is_file(), script_path)
+
+        header = workflow.split("permissions:", 1)[0]
+        pull_request = header.split("  pull_request:\n", 1)[1].split("  push:\n", 1)[0]
+        push = header.split("  push:\n", 1)[1].split("  workflow_dispatch:\n", 1)[0]
+        for event_block in (pull_request, push):
+            self.assertIn("paths:\n", event_block)
+            self.assertNotIn("'scripts/**'", event_block)
+            self.assertNotIn("'scripts/validate_repo.py'", event_block)
+            self.assertNotIn("'scripts/verify_supply_chain_lock.py'", event_block)
+            for script_path in NGS_TRIGGER_SCRIPT_PATHS:
+                self.assertIn(f"'{script_path}'", event_block)
+            for preserved in (
+                "'environment.yml'", "'Dockerfile'", "'main.nf'", "'nextflow.config'",
+                "'workflows/**'", "'evidence_adapters/**'", "'locks/**'", "'normative/**'",
+                "'.github/workflows/genoma-ngs-runtime-gate.yml'",
+            ):
+                self.assertIn(preserved, event_block)
 
     def test_four_plane_audit_skips_only_safe_markdown_modifications(self):
         workflow = _read("genoma-audit.yml")
