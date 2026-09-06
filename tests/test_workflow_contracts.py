@@ -5,10 +5,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from scripts import validate_repo
 from tests.workflow_test_utils import job_block as _job_block
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+PRODUCTION_WITNESS_CAPABILITY_GUARD = (
+    "${{ vars.GENOMA_PRODUCTION_WITNESS_ENABLED == 'true' }}"
+)
 
 
 RETIRED_CODACY_IDENTIFIERS = (
@@ -255,6 +260,62 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("push:\n    branches: [main]", header)
         push_block = header.split("push:\n", 1)[1].split("workflow_dispatch:", 1)[0]
         self.assertNotIn("paths:", push_block)
+
+    def test_production_witness_requires_exact_job_level_capability_guard(self):
+        workflow = (ROOT / ".github/workflows/genoma-production-witness.yml").read_text(encoding="utf-8")
+        self.assertEqual(_job_if_condition(workflow, "witness"), PRODUCTION_WITNESS_CAPABILITY_GUARD)
+        self.assertIn("needs: witness", _job_block(workflow, "publish-witness"))
+        for weakened in (
+            "${{ vars.GENOMA_PRODUCTION_WITNESS_ENABLED }}",
+            "${{ vars.GENOMA_PRODUCTION_WITNESS_ENABLED != 'false' }}",
+            "${{ vars.GENOMA_PRODUCTION_WITNESS_ENABLED == 'TRUE' }}",
+        ):
+            mutated = workflow.replace(f"    if: {PRODUCTION_WITNESS_CAPABILITY_GUARD}\n", f"    if: {weakened}\n", 1)
+            self.assertNotEqual(_job_if_condition(mutated, "witness"), PRODUCTION_WITNESS_CAPABILITY_GUARD)
+
+    def test_validate_repo_rejects_missing_or_weakened_production_witness_guard(self):
+        source = (ROOT / ".github/workflows/genoma-production-witness.yml").read_text(encoding="utf-8")
+        mutations = (
+            source.replace(f"    if: {PRODUCTION_WITNESS_CAPABILITY_GUARD}\n", "", 1),
+            source.replace(f"    if: {PRODUCTION_WITNESS_CAPABILITY_GUARD}\n", "    if: ${{ vars.GENOMA_PRODUCTION_WITNESS_ENABLED }}\n", 1),
+        )
+        for mutated in mutations:
+            with self.subTest(mutated=mutated[:80]), tempfile.TemporaryDirectory() as td:
+                root = Path(td)
+                path = root / ".github/workflows/genoma-production-witness.yml"
+                path.parent.mkdir(parents=True)
+                path.write_text(mutated, encoding="utf-8")
+                errors: list[str] = []
+                validate_repo.validate_production_witness_contract(root, errors)
+                self.assertTrue(any("capability guard" in error for error in errors))
+
+    def test_production_ceremony_documents_capability_gate_pending_semantics(self):
+        text = (ROOT / "docs/PRODUCTION_CEREMONY.md").read_text(encoding="utf-8")
+        self.assertIn("GENOMA_PRODUCTION_WITNESS_ENABLED", text)
+        self.assertIn("POST-DEPLOYMENT PENDENTE", text)
+        self.assertIn("does not grant POST-DEPLOYMENT PASS", text)
+        self.assertIn("job is skipped before runner allocation", text)
+
+    def test_production_witness_docs_distinguish_disarm_from_gate_rollback(self):
+        paths = (
+            ROOT / "docs/PRODUCTION_CEREMONY.md",
+            ROOT / "docs/superpowers/specs/2026-09-05-production-witness-capability-gate-design.md",
+            ROOT / "docs/superpowers/plans/2026-09-05-production-witness-capability-gate.md",
+        )
+        for path in paths:
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(path=path.name):
+                self.assertIn("disarm", text.lower())
+                self.assertIn("restore pre-gate execution", text.lower())
+                self.assertIn("exact `true`", text)
+
+    def test_production_witness_design_status_tracks_implementation_stage(self):
+        text = (ROOT / "docs/superpowers/specs/2026-09-05-production-witness-capability-gate-design.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "Status: approved design, implementation plan and implementation complete; pending validation/review",
+            text,
+        )
+        self.assertNotIn("Status: approved design, pending implementation plan", text)
 
     def test_production_witness_publisher_uses_restricted_deploy_key_without_token_write(self):
         workflow = (ROOT / ".github/workflows/genoma-production-witness.yml").read_text(encoding="utf-8")

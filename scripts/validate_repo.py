@@ -20,6 +20,7 @@ from scripts.sealed_ruleset import EXPECTED_NAME, EXPECTED_SHA, SealedRulesetErr
 CANONICAL_RULESET = EXPECTED_NAME
 CANONICAL_RULESET_SHA256 = EXPECTED_SHA
 FALLOW_ACTION_SHA = "45fd28766199acb1f939f6862274a37aad12770b"
+PRODUCTION_WITNESS_CAPABILITY_GUARD = "${{ vars.GENOMA_PRODUCTION_WITNESS_ENABLED == 'true' }}"
 REQUIRED_PATHS = (
     ".fallowrc.json", ".github/workflows/fallow.yml", ".github/workflows/scaffold-validation.yml",
     ".github/workflows/genoma-policy-engine.yml", ".github/workflows/genoma-production-ceremony.yml",
@@ -600,6 +601,27 @@ def validate_language_policy(root: Path, errors: list[str]) -> None:
         errors.append(f"code language policy unavailable: {exc}")
 
 
+def validate_production_witness_contract(root: Path, errors: list[str]) -> None:
+    witness = root / ".github/workflows/genoma-production-witness.yml"
+    if not witness.is_file():
+        return
+    text = witness.read_text(encoding="utf-8")
+    if "--output-dir evidence/live-section-260" in text:
+        errors.append("Production Witness still uses obsolete live smoke --output-dir contract")
+    for token in ("--deployment-id", "--output evidence/live-section-260/summary.json"):
+        if token not in text:
+            errors.append(f"Production Witness missing current live smoke contract: {token}")
+    marker = "\n  witness:\n"
+    publisher_marker = "\n  publish-witness:\n"
+    if marker not in text or publisher_marker not in text:
+        errors.append("Production Witness capability guard is not attached to the witness job boundary")
+        return
+    job = text.split(marker, 1)[1].split(publisher_marker, 1)[0]
+    conditions = [line.removeprefix("    if: ").strip() for line in job.splitlines() if line.startswith("    if: ")]
+    if conditions != [PRODUCTION_WITNESS_CAPABILITY_GUARD]:
+        errors.append("Production Witness capability guard must use the exact job-level repository-variable predicate")
+
+
 def validate(root: Path) -> list[str]:
     """Run every static repository check and return the accumulated errors.
 
@@ -698,14 +720,7 @@ def validate(root: Path) -> list[str]:
             if token not in text:
                 errors.append(f"SNP-array workflow missing fail-closed contract token: {token}")
 
-    witness = root / ".github/workflows/genoma-production-witness.yml"
-    if witness.is_file():
-        text = witness.read_text(encoding="utf-8")
-        if "--output-dir evidence/live-section-260" in text:
-            errors.append("Production Witness still uses obsolete live smoke --output-dir contract")
-        for token in ("--deployment-id", "--output evidence/live-section-260/summary.json"):
-            if token not in text:
-                errors.append(f"Production Witness missing current live smoke contract: {token}")
+    validate_production_witness_contract(root, errors)
 
     ngs_gate = root / ".github/workflows/genoma-ngs-runtime-gate.yml"
     if ngs_gate.is_file():
