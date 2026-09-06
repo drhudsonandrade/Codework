@@ -48,6 +48,11 @@ def _ngs_script_dependency_closure() -> set[str]:
                 elif isinstance(node, ast.ImportFrom) and node.module:
                     modules.append(node.module)
             for module in modules:
+                if module == "scripts" or module.startswith("scripts."):
+                    package_init = "scripts/__init__.py"
+                    if package_init not in excluded and package_init not in closure:
+                        closure.add(package_init)
+                        queue.append(package_init)
                 short = module.removeprefix("scripts.").split(".")[0]
                 filename = python_by_module.get(short)
                 dependency = f"scripts/{filename}" if filename else ""
@@ -88,6 +93,7 @@ DRAFT_READY_TYPES_LINE = "types: [opened, synchronize, reopened, ready_for_revie
 DRAFT_GATE = "github.event_name != 'pull_request' || github.event.pull_request.draft == false"
 
 NGS_TRIGGER_SCRIPT_PATHS = (
+    "scripts/__init__.py",
     "scripts/annotate_partial_genome.py",
     "scripts/build_adapter_capabilities.py",
     "scripts/build_array_case_manifest.py",
