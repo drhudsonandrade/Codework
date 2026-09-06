@@ -500,6 +500,14 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertIn("reporting/requirements.txt", static)
         self.assertIn("python3 -m unittest discover -s tests -v", static)
 
+    def test_static_reuses_repository_contract_from_full_unittest_suite(self):
+        static = _job_block(_read("scaffold-validation.yml"), "static")
+        repo_contract = (ROOT / "tests" / "test_repo_contract.py").read_text(encoding="utf-8")
+        self.assertIn("python3 -m unittest discover -s tests -v", static)
+        self.assertNotIn("python3 scripts/validate_repo.py", static)
+        self.assertIn("def test_contract_accepts_repository_scaffold", repo_contract)
+        self.assertIn("validator.validate(root)", repo_contract)
+
     def test_validation_workflows_cancel_superseded_pr_runs(self):
         for name in CONCURRENCY_WORKFLOWS:
             with self.subTest(workflow=name):
