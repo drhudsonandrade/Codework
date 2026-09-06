@@ -142,6 +142,35 @@ def _read(name: str) -> str:
     return (WORKFLOWS / name).read_text(encoding="utf-8")
 
 
+def _visual_qa_test_dependency_paths() -> set[str]:
+    tests_dir = ROOT / "tests"
+    local_modules = {candidate.stem: candidate for candidate in tests_dir.glob("*.py")}
+    pending = [
+        "tests/test_editorial_renderers.py",
+        "tests/test_template_v3_contract.py",
+    ]
+    closure = set(pending)
+    while pending:
+        relative = pending.pop()
+        tree = ast.parse((ROOT / relative).read_text(encoding="utf-8"), filename=relative)
+        modules: list[str] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                modules.extend(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                modules.append(node.module)
+        for module in modules:
+            short = module.removeprefix("tests.").split(".")[0]
+            candidate = local_modules.get(short)
+            if candidate is None:
+                continue
+            dependency = candidate.relative_to(ROOT).as_posix()
+            if dependency not in closure:
+                closure.add(dependency)
+                pending.append(dependency)
+    return closure
+
+
 def _indent(line: str) -> int:
     return len(line) - len(line.lstrip(" "))
 
@@ -507,6 +536,30 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertNotIn("python3 scripts/validate_repo.py", static)
         self.assertIn("def test_contract_accepts_repository_scaffold", repo_contract)
         self.assertIn("validator.validate(root)", repo_contract)
+
+    def test_visual_qa_uses_exact_test_dependencies_instead_of_all_tests(self):
+        workflow = _read("genoma-visual-qa-candidates.yml")
+        header = workflow.split("permissions:", 1)[0]
+        push = header.split("  push:\n", 1)[1].split("  pull_request:\n", 1)[0]
+        pull_request = header.split("  pull_request:\n", 1)[1].split("  workflow_dispatch:\n", 1)[0]
+        expected = _visual_qa_test_dependency_paths()
+        self.assertEqual(
+            expected,
+            {
+                "tests/test_editorial_renderers.py",
+                "tests/test_template_v3_contract.py",
+                "tests/ruleset_test_support.py",
+            },
+        )
+        for event_block in (push, pull_request):
+            self.assertNotIn("'tests/**'", event_block)
+            configured = set(re.findall(r"^\s+- '(tests/[^']+)'$", event_block, re.MULTILINE))
+            self.assertEqual(configured, expected)
+        job = _job_block(workflow, "render-candidates")
+        self.assertIn(
+            "python3 -m unittest tests.test_editorial_renderers tests.test_template_v3_contract -v",
+            job,
+        )
 
     def test_validation_workflows_cancel_superseded_pr_runs(self):
         for name in CONCURRENCY_WORKFLOWS:
