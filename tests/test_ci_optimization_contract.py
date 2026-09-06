@@ -24,43 +24,56 @@ def _ngs_script_dependency_closure() -> set[str]:
     ):
         seeds.update(re.findall(r"scripts/[A-Za-z0-9_.-]+\.(?:py|sh)", source))
     excluded = {"scripts/validate_repo.py", "scripts/verify_supply_chain_lock.py"}
-    closure = seeds - excluded
+    closure = set(seeds)
     queue = list(closure)
-    filename_pattern = re.compile(r"(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]+\.(?:py|sh))(?![A-Za-z0-9_.-])")
+    filename_pattern = re.compile(
+        r"(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]+\.(?:py|sh))(?![A-Za-z0-9_.-])"
+    )
     python_by_module = {candidate.stem: candidate.name for candidate in script_dir.glob("*.py")}
+
     while queue:
         relative = queue.pop()
         candidate = ROOT / relative
         if not candidate.is_file():
             continue
         source = candidate.read_text(encoding="utf-8")
-        for filename in filename_pattern.findall(source):
-            dependency = f"scripts/{filename}"
-            if (ROOT / dependency).is_file() and dependency not in excluded and dependency not in closure:
-                closure.add(dependency)
-                queue.append(dependency)
-        if candidate.suffix == ".py":
+        local_references: list[str] = []
+        modules: list[str] = []
+
+        if candidate.suffix == ".sh":
+            local_references.extend(filename_pattern.findall(source))
+        elif candidate.suffix == ".py":
             tree = ast.parse(source, filename=str(candidate))
-            modules: list[str] = []
+            if relative not in excluded:
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                        local_references.extend(filename_pattern.findall(node.value))
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
                     modules.extend(alias.name for alias in node.names)
                 elif isinstance(node, ast.ImportFrom) and node.module:
                     modules.append(node.module)
-            for module in modules:
-                if module == "scripts" or module.startswith("scripts."):
-                    package_init = "scripts/__init__.py"
-                    if package_init not in excluded and package_init not in closure:
-                        closure.add(package_init)
-                        queue.append(package_init)
-                short = module.removeprefix("scripts.").split(".")[0]
-                filename = python_by_module.get(short)
-                dependency = f"scripts/{filename}" if filename else ""
-                if dependency and dependency not in excluded and dependency not in closure:
-                    closure.add(dependency)
-                    queue.append(dependency)
-    return closure
 
+        for filename in local_references:
+            dependency = f"scripts/{filename}"
+            if (ROOT / dependency).is_file() and dependency not in excluded and dependency not in closure:
+                closure.add(dependency)
+                queue.append(dependency)
+
+        for module in modules:
+            if module == "scripts" or module.startswith("scripts."):
+                package_init = "scripts/__init__.py"
+                if package_init not in closure:
+                    closure.add(package_init)
+                    queue.append(package_init)
+            short = module.removeprefix("scripts.").split(".")[0]
+            filename = python_by_module.get(short)
+            dependency = f"scripts/{filename}" if filename else ""
+            if dependency and dependency not in excluded and dependency not in closure:
+                closure.add(dependency)
+                queue.append(dependency)
+
+    return closure - excluded
 
 def _load_classifier() -> ModuleType:
     if not CLASSIFIER.is_file():
@@ -100,6 +113,7 @@ NGS_TRIGGER_SCRIPT_PATHS = (
     "scripts/build_bwa_mem2_index.sh",
     "scripts/build_wgs_curated_manifest.py",
     "scripts/check_versions.sh",
+    "scripts/code_language_guard.py",
     "scripts/freshness_gate.py",
     "scripts/generate_all_reports.py",
     "scripts/generate_canary.py",
