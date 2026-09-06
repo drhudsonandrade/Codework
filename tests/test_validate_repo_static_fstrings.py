@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import ast
+import inspect
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -8,6 +11,7 @@ from scripts.validate_repo import (
     SUPERSEDED_IDENTITY_TEST_FIXTURES,
     _missing_path_error,
     validate,
+    validate_superseded_identity_locations,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,13 +35,25 @@ class ValidateRepoStaticFstringTests(unittest.TestCase):
                 errors,
             )
 
+    def test_registered_fixture_check_uses_only_targeted_identity_scanner(self) -> None:
+        source = inspect.getsource(self.test_registered_test_fixtures_do_not_block_the_current_checkout)
+        tree = ast.parse(textwrap.dedent(source))
+        calls = {
+            node.func.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        }
+        self.assertIn("validate_superseded_identity_locations", calls)
+        self.assertNotIn("validate", calls)
+
     def test_registered_test_fixtures_do_not_block_the_current_checkout(self) -> None:
         # Derived from the registry itself so a newly registered fixture — for example
         # tests/test_superseded_identity_scanner.py — is covered without editing a second
         # copy of the list here.
         allowed = SUPERSEDED_IDENTITY_TEST_FIXTURES
         self.assertTrue(allowed, "the fixture registry must not be empty")
-        errors = validate(ROOT)
+        errors: list[str] = []
+        validate_superseded_identity_locations(ROOT, errors)
         blocked_fixture_errors = [
             error
             for error in errors
