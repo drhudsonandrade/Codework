@@ -13,6 +13,50 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 CLASSIFIER = ROOT / "scripts" / "ci_change_classifier.py"
 
 
+def _ngs_script_dependency_closure() -> set[str]:
+    script_dir = ROOT / "scripts"
+    seeds: set[str] = set()
+    for source in (
+        _read("genoma-ngs-runtime-gate.yml"),
+        (ROOT / "main.nf").read_text(encoding="utf-8"),
+        (ROOT / "workflows/wgs.nf").read_text(encoding="utf-8"),
+        (ROOT / "workflows/array.nf").read_text(encoding="utf-8"),
+    ):
+        seeds.update(re.findall(r"scripts/[A-Za-z0-9_.-]+\.(?:py|sh)", source))
+    excluded = {"scripts/validate_repo.py", "scripts/verify_supply_chain_lock.py"}
+    closure = seeds - excluded
+    queue = list(closure)
+    filename_pattern = re.compile(r"(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]+\.(?:py|sh))(?![A-Za-z0-9_.-])")
+    python_by_module = {candidate.stem: candidate.name for candidate in script_dir.glob("*.py")}
+    while queue:
+        relative = queue.pop()
+        candidate = ROOT / relative
+        if not candidate.is_file():
+            continue
+        source = candidate.read_text(encoding="utf-8")
+        for filename in filename_pattern.findall(source):
+            dependency = f"scripts/{filename}"
+            if (ROOT / dependency).is_file() and dependency not in excluded and dependency not in closure:
+                closure.add(dependency)
+                queue.append(dependency)
+        if candidate.suffix == ".py":
+            tree = ast.parse(source, filename=str(candidate))
+            modules: list[str] = []
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    modules.extend(alias.name for alias in node.names)
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    modules.append(node.module)
+            for module in modules:
+                short = module.removeprefix("scripts.").split(".")[0]
+                filename = python_by_module.get(short)
+                dependency = f"scripts/{filename}" if filename else ""
+                if dependency and dependency not in excluded and dependency not in closure:
+                    closure.add(dependency)
+                    queue.append(dependency)
+    return closure
+
+
 def _load_classifier() -> ModuleType:
     if not CLASSIFIER.is_file():
         raise AssertionError("CI change classifier is missing")
@@ -71,6 +115,7 @@ NGS_TRIGGER_SCRIPT_PATHS = (
     "scripts/wgs_align_or_stage.sh",
     "scripts/wgs_consent_gate.py",
     "scripts/wgs_input_gate.py",
+    "scripts/wgs_materialize_verified_input.py",
 )
 
 
@@ -490,16 +535,8 @@ class CIOptimizationContractTest(unittest.TestCase):
 
     def test_ngs_runtime_gate_uses_explicit_ngs_script_paths_instead_of_all_scripts(self):
         workflow = _read("genoma-ngs-runtime-gate.yml")
-        referenced = set()
-        for source in (
-            workflow,
-            (ROOT / "main.nf").read_text(encoding="utf-8"),
-            (ROOT / "workflows/wgs.nf").read_text(encoding="utf-8"),
-            (ROOT / "workflows/array.nf").read_text(encoding="utf-8"),
-        ):
-            referenced.update(re.findall(r"scripts/[A-Za-z0-9_.-]+\.(?:py|sh)", source))
-        referenced -= {"scripts/validate_repo.py", "scripts/verify_supply_chain_lock.py"}
-        self.assertTrue(referenced.issubset(set(NGS_TRIGGER_SCRIPT_PATHS)))
+        closure = _ngs_script_dependency_closure()
+        self.assertEqual(set(), closure - set(NGS_TRIGGER_SCRIPT_PATHS))
         for script_path in NGS_TRIGGER_SCRIPT_PATHS:
             self.assertTrue((ROOT / script_path).is_file(), script_path)
 
