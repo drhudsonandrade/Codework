@@ -17,7 +17,33 @@ from scripts.validate_repo import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _call_terminal_names(tree: ast.AST) -> set[str]:
+    return {
+        node.func.id if isinstance(node.func, ast.Name) else node.func.attr
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, (ast.Name, ast.Attribute))
+    }
+
+
+def _validate_import_aliases(tree: ast.AST) -> set[str]:
+    aliases = {"validate"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "scripts.validate_repo":
+            for imported in node.names:
+                if imported.name == "validate":
+                    aliases.add(imported.asname or imported.name)
+    return aliases
+
+
 class ValidateRepoStaticFstringTests(unittest.TestCase):
+    def test_call_terminal_names_catches_direct_and_attribute_calls(self) -> None:
+        tree = ast.parse("validate(ROOT)\nvalidator.validate(ROOT)\nself.validate(ROOT)\n")
+        self.assertEqual(_call_terminal_names(tree), {"validate"})
+
+    def test_validate_import_aliases_are_forbidden_too(self) -> None:
+        tree = ast.parse("from scripts.validate_repo import validate as full_validate\n")
+        self.assertEqual(_validate_import_aliases(tree), {"validate", "full_validate"})
+
     def test_static_fstring_format_spec_cannot_hide_superseded_identity(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -38,13 +64,11 @@ class ValidateRepoStaticFstringTests(unittest.TestCase):
     def test_registered_fixture_check_uses_only_targeted_identity_scanner(self) -> None:
         source = inspect.getsource(self.test_registered_test_fixtures_do_not_block_the_current_checkout)
         tree = ast.parse(textwrap.dedent(source))
-        calls = {
-            node.func.id
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-        }
+        calls = _call_terminal_names(tree)
+        module_tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+        forbidden = _validate_import_aliases(module_tree)
         self.assertIn("validate_superseded_identity_locations", calls)
-        self.assertNotIn("validate", calls)
+        self.assertTrue(calls.isdisjoint(forbidden), f"global validator call found: {calls & forbidden}")
 
     def test_registered_test_fixtures_do_not_block_the_current_checkout(self) -> None:
         # Derived from the registry itself so a newly registered fixture — for example
