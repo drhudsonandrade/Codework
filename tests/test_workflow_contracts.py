@@ -570,7 +570,6 @@ class WorkflowContractTest(unittest.TestCase):
 
     def test_validate_repo_jobs_fetch_full_history_for_baseline_provenance(self):
         targets = {
-            "genoma-audit.yml": ("audit",),
             "genoma-ngs-runtime-gate.yml": ("preflight", "full-grch38"),
             "genoma-policy-engine.yml": ("policy",),
             "genoma-production-ceremony.yml": ("live-section-260",),
@@ -599,6 +598,20 @@ class WorkflowContractTest(unittest.TestCase):
                     }
                     if (filename, job_name) in hardened:
                         self.assertIs(checkout_config.get("persist-credentials"), False)
+
+    def test_reusable_four_plane_audit_fetches_full_history_before_core(self):
+        workflow = (ROOT / ".github/workflows/genoma-audit.yml").read_text(encoding="utf-8")
+        steps = _job_steps(workflow, "audit")
+        checkout_indexes = [i for i, step in enumerate(steps) if "uses: actions/checkout@" in step]
+        core_indexes = [i for i, step in enumerate(steps) if "python3 scripts/genoma_audit.py --allow-template-sealed-only --output audit.json" in _step_run_commands(step)]
+        self.assertEqual(len(checkout_indexes), 1)
+        self.assertEqual(len(core_indexes), 1)
+        self.assertLess(checkout_indexes[0], core_indexes[0])
+        checkout_step = steps[checkout_indexes[0]]
+        checkout_config = _with_mapping(checkout_step)
+        self.assertEqual(checkout_config.get("fetch-depth"), 0)
+        self.assertIs(checkout_config.get("persist-credentials"), False)
+        self.assertEqual(checkout_step.count("persist-credentials: false"), 1)
 
     def _assert_no_retired_gitleaks_workflow(self, workflow: str) -> None:
         self.assertNotIn("gitleaks", workflow.casefold())

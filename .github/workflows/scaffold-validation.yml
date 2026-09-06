@@ -121,6 +121,17 @@ jobs:
           npm ci --ignore-scripts
           npm test
 
+  four-plane-audit:
+    name: Four-plane audit
+    needs: [changes, static]
+    if: >-
+      always() &&
+      (github.event_name != 'pull_request' || github.event.pull_request.draft == false) &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.validation_required == 'true' &&
+      needs.static.result == 'success'
+    uses: ./.github/workflows/genoma-audit.yml
+
   container-canary:
     needs: changes
     if: >-

@@ -87,7 +87,6 @@ def _load_classifier() -> ModuleType:
 
 CONCURRENCY_WORKFLOWS = (
     "fallow.yml",
-    "genoma-audit.yml",
     "genoma-ngs-runtime-gate.yml",
     "genoma-policy-engine.yml",
     "genoma-snp-array.yml",
@@ -400,6 +399,60 @@ def _subprocess_references(source: str) -> list[str]:
     return findings
 
 
+def _job_if_expression(workflow: str, job_name: str) -> str:
+    job = _job_block(workflow, job_name)
+    lines = job.splitlines()
+    for index, line in enumerate(lines):
+        if _indent(line) != 4 or not line.strip().startswith("if:"):
+            continue
+        raw = line.strip().split(":", 1)[1].strip()
+        if raw not in {">", ">-", "|", "|-"}:
+            return " ".join(raw.replace("${{", "").replace("}}", "").split())
+        parts: list[str] = []
+        cursor = index + 1
+        while cursor < len(lines) and (not lines[cursor].strip() or _indent(lines[cursor]) > 4):
+            if lines[cursor].strip():
+                parts.append(lines[cursor].strip())
+            cursor += 1
+        return " ".join(parts)
+    raise AssertionError(f"job {job_name!r} has no job-level if condition")
+
+
+def _four_plane_audit_orchestration_errors(scaffold: str, audit: str) -> list[str]:
+    errors: list[str] = []
+    caller = _job_block(scaffold, "four-plane-audit")
+    for token in (
+        "needs: [changes, static]",
+        "uses: ./.github/workflows/genoma-audit.yml",
+    ):
+        if token not in caller:
+            errors.append(f"four-plane-audit caller missing: {token}")
+
+    condition = _job_if_expression(scaffold, "four-plane-audit")
+    if _has_top_level_or(condition):
+        errors.append("four-plane-audit caller has top-level OR bypass")
+    terms = {_strip_wrapping_parentheses(term) for term in _top_level_and_terms(condition)}
+    required_terms = {
+        "always()",
+        _strip_wrapping_parentheses(DRAFT_GATE),
+        "needs.changes.result == 'success'",
+        "needs.changes.outputs.validation_required == 'true'",
+        "needs.static.result == 'success'",
+    }
+    for term in required_terms - terms:
+        errors.append(f"four-plane-audit caller missing exact condition term: {term}")
+
+    header = audit.split("permissions:", 1)[0]
+    if "on:\n  workflow_call:\n" not in header:
+        errors.append("genoma-audit must expose workflow_call")
+    for forbidden in ("pull_request:", "push:", "workflow_dispatch:"):
+        if forbidden in header:
+            errors.append(f"genoma-audit direct trigger forbidden: {forbidden}")
+    if "concurrency:" in audit:
+        errors.append("reusable genoma-audit must not own concurrency")
+    return errors
+
+
 class CIOptimizationContractTest(unittest.TestCase):
     def _assert_job_gate(self, workflow: str, job_name: str, output_name: str) -> None:
         job = _job_block(workflow, job_name)
@@ -577,23 +630,55 @@ class CIOptimizationContractTest(unittest.TestCase):
             ):
                 self.assertIn(preserved, event_block)
 
-    def test_four_plane_audit_skips_only_safe_markdown_modifications(self):
-        workflow = _read("genoma-audit.yml")
-        header = workflow.split("permissions:", 1)[0]
-        pull_request = header.split("  pull_request:\n", 1)[1].split("  push:\n", 1)[0]
-        push = header.split("  push:\n", 1)[1].split("  workflow_dispatch:\n", 1)[0]
-        self.assertNotIn("paths-ignore:", pull_request)
-        self.assertNotIn("paths-ignore:", push)
-        changes = _job_block(workflow, "changes")
-        self.assertIn("audit_required:", changes)
-        self.assertIn('changed_paths="$RUNNER_TEMP/audit-changed-paths.zlist"', changes)
-        self.assertIn('deleted_paths="$RUNNER_TEMP/audit-deleted-paths.zlist"', changes)
-        self.assertIn('git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$changed_paths"', changes)
-        self.assertIn('git diff --no-renames --diff-filter=D --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$deleted_paths"', changes)
-        self.assertIn('bash scripts/ci_changed_paths.sh "$BASE_SHA" "$HEAD_SHA" "$changed_paths" "$deleted_paths"', changes)
-        self.assertIn('scripts/ci_change_classifier.py markdown --changed "$changed_paths" --deleted "$deleted_paths"', changes)
-        self.assertIn('scripts/ci_changed_paths.sh|scripts/ci_change_classifier.py|.github/workflows/genoma-audit.yml', changes)
-        self._assert_job_gate(workflow, "audit", "audit_required")
+    def test_four_plane_audit_is_reusable_and_gated_by_required_static(self):
+        scaffold = _read("scaffold-validation.yml")
+        audit = _read("genoma-audit.yml")
+        self.assertEqual([], _four_plane_audit_orchestration_errors(scaffold, audit))
+
+    def test_four_plane_audit_orchestration_rejects_weakened_static_boundary(self):
+        scaffold = _read("scaffold-validation.yml")
+        audit = _read("genoma-audit.yml")
+        caller = _job_block(scaffold, "four-plane-audit")
+        weakened_draft_caller = caller.replace(DRAFT_GATE, "true", 1)
+        mutations = (
+            scaffold.replace("needs: [changes, static]", "needs: changes", 1),
+            scaffold.replace(caller, weakened_draft_caller, 1),
+            scaffold.replace("needs.static.result == 'success'", "needs.static.result != 'failure'", 1),
+            scaffold.replace("needs.static.result == 'success'", "needs.static.result == 'success' || true", 1),
+            scaffold.replace("needs.changes.result == 'success'", "needs.changes.result != 'failure'", 1),
+        )
+        for mutated in mutations:
+            self.assertTrue(_four_plane_audit_orchestration_errors(mutated, audit))
+        bypass_mutations = (
+            scaffold.replace("needs.static.result == 'success'", "(needs.static.result == 'success' || true)", 1),
+            scaffold.replace("needs.changes.result == 'success'", "(needs.changes.result == 'success' || true)", 1),
+            scaffold.replace(
+                caller,
+                caller.replace(
+                    "needs.changes.outputs.validation_required == 'true'",
+                    "(needs.changes.outputs.validation_required == 'true' || true)",
+                    1,
+                ),
+                1,
+            ),
+            scaffold.replace(caller, caller.replace(DRAFT_GATE, f"({DRAFT_GATE}) || true", 1), 1),
+        )
+        for mutated in bypass_mutations:
+            self.assertTrue(_four_plane_audit_orchestration_errors(mutated, audit))
+        direct_trigger = audit.replace("on:\n  workflow_call:\n", "on:\n  workflow_call:\n  pull_request:\n", 1)
+        self.assertTrue(_four_plane_audit_orchestration_errors(scaffold, direct_trigger))
+
+    def test_reusable_four_plane_audit_keeps_only_unique_evidence_work(self):
+        audit = _read("genoma-audit.yml")
+        job = _job_block(audit, "audit")
+        self.assertNotIn("Repository and supply-chain contracts", job)
+        self.assertNotIn("Unit tests for v0.8 architecture", job)
+        self.assertNotIn("python3 -m unittest", job)
+        self.assertIn("python3 scripts/genoma_audit.py --allow-template-sealed-only --output audit.json", job)
+        self.assertIn("python3 scripts/verify_template_store.py --allow-sealed-only", job)
+        self.assertIn("name: genoma-v0.8-audit-${{ github.sha }}", job)
+        self.assertIn("retention-days: 365", job)
+        self.assertIn("if: always()", job)
 
     def test_policy_required_checks_use_job_level_scope_gates(self):
         workflow = _read("genoma-policy-engine.yml")
