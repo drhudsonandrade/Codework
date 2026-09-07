@@ -10,14 +10,15 @@ Reduce GitHub Actions time on main without weakening the canary or publication g
 
 ## Design
 - `container-canary` uses pinned `docker/setup-buildx-action` with the docker-container driver.
-- The canary build uses pinned `docker/build-push-action`, `load: true`, and the local SHA tag used by the existing canary.
-- It reads and writes `type=gha` cache under `codework-genome-scaffold-v1`.
-- Cache export uses `mode=min` and `ignore-error=true`; cache availability is not a correctness gate.
-- `publish-ghcr` restores the same cache but remains the only job with `packages: write`.
+- The canary uses pinned `docker/build-push-action`, `load: true`, and the existing local SHA tag.
+- The canary only restores `type=gha` cache under `codework-genome-scaffold-v1`; it never exports cache.
+- `publish-ghcr` restores that cache and, only after `static` + canary pass, refreshes it with `mode=min` and `ignore-error=true`.
+- `publish-ghcr` remains the only job with `packages: write`; cache availability is not a correctness gate.
 - Publication still waits for both `static` and `container-canary`.
 
 ## Safety invariants
 - No image is pushed before the canary and static jobs pass.
+- PR canary runs do not write the shared cache.
 - The canary still executes `/opt/codework/scripts/run_canary.sh` from the locally loaded image.
 - Immutable GHCR digest recording is unchanged.
 - No new third-party action identity is introduced.

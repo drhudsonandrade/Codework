@@ -159,7 +159,6 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=codework-genome-scaffold-v1
-          cache-to: type=gha,mode=min,scope=codework-genome-scaffold-v1,ignore-error=true
       - name: Run non-sensitive canary
         run: |
           mkdir -p ci-results
@@ -205,6 +204,7 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=codework-genome-scaffold-v1
+          cache-to: type=gha,mode=min,scope=codework-genome-scaffold-v1,ignore-error=true
       - name: Record immutable image reference
         run: |
           printf 'ghcr.io/%s/codework-genome@%s\n' \
