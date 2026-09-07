@@ -33,7 +33,6 @@ from scripts.code_language_guard import (
     BaselineEntry,
     LanguagePolicyError,
     compare_to_baseline,
-    group_findings,
     load_baseline,
     load_policy,
     scan_repository,
@@ -642,15 +641,6 @@ class LanguageBaselineTest(unittest.TestCase):
         delta = compare_to_baseline(current, baseline)
         self.assertEqual(delta.unexpected, current)
         self.assertEqual(delta.stale, baseline)
-
-
-class RepositoryLanguageBaselineTest(unittest.TestCase):
-    def test_repository_matches_tracked_language_baseline(self):
-        policy = load_policy(ROOT)
-        baseline = load_baseline(ROOT)
-        current = group_findings(scan_repository(ROOT, policy))
-        delta = compare_to_baseline(current, baseline)
-        self.assertTrue(delta.clean, delta)
 
 
 class ValidateRepoLanguageIntegrationTest(unittest.TestCase):

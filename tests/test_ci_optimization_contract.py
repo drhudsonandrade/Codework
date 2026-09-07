@@ -820,6 +820,21 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertIn("packages: write", publish)
         self.assertIn("needs: [static, container-canary]", publish)
 
+    def test_language_baseline_does_not_rescan_full_checkout(self):
+        language_tests = (ROOT / "tests" / "test_code_language_guard.py").read_text(encoding="utf-8")
+        repo_contract = (ROOT / "tests" / "test_repo_contract.py").read_text(encoding="utf-8")
+        validator = (ROOT / "scripts" / "validate_repo.py").read_text(encoding="utf-8")
+        tree = ast.parse(language_tests)
+        duplicate_full_scans = [
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name) and node.func.id == "scan_repository"
+            and node.args and isinstance(node.args[0], ast.Name) and node.args[0].id == "ROOT"
+        ]
+        self.assertEqual(duplicate_full_scans, [])
+        self.assertIn("validator.validate(root)", repo_contract)
+        self.assertIn("validate_language_policy(root, errors)", validator)
+
     def test_scaffold_required_checks_use_job_level_markdown_gate(self):
         workflow = _read("scaffold-validation.yml")
         header = workflow.split("permissions:", 1)[0]
