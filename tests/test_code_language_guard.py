@@ -31,6 +31,8 @@ TERM_PROCESS = "processar"
 
 from scripts.code_language_guard import (
     BaselineEntry,
+    LanguageFinding,
+    LanguagePolicy,
     LanguagePolicyError,
     compare_to_baseline,
     load_baseline,
@@ -42,7 +44,7 @@ from scripts.code_language_guard import (
 from scripts import validate_repo
 
 
-def scan_repository(root: Path, policy):
+def _scan_fixture_repository(root: Path, policy: LanguagePolicy) -> tuple[LanguageFinding, ...]:
     if root.resolve() == ROOT:
         raise AssertionError("full repository scan must use canonical repository contract")
     return _scan_repository_impl(root, policy)
@@ -52,7 +54,7 @@ class FixtureScannerBoundaryTest(unittest.TestCase):
     def test_fixture_scanner_refuses_repository_root(self):
         policy = load_policy(ROOT)
         with self.assertRaisesRegex(AssertionError, "full repository scan"):
-            scan_repository(ROOT, policy)
+            _scan_fixture_repository(ROOT, policy)
 
 
 def _write_json(root: Path, relative: str, payload: object) -> None:
@@ -144,19 +146,19 @@ class PythonLanguageScannerTest(unittest.TestCase):
     def test_snake_case_portuguese_identifier_is_reported(self):
         td, root = self._repo({"pkg/mod.py": "def validar_arquivo():\n    return True\n"})
         with td:
-            findings = scan_repository(root, load_policy(root))
+            findings = _scan_fixture_repository(root, load_policy(root))
         self.assertTrue(any(f.kind == "identifier" and f.token == PORTUGUESE_FIXTURE_IDENTIFIER for f in findings), findings)
 
     def test_camel_case_portuguese_identifier_is_reported(self):
         td, root = self._repo({"pkg/mod.py": "class RelatorioBuilder:\n    pass\n"})
         with td:
-            findings = scan_repository(root, load_policy(root))
+            findings = _scan_fixture_repository(root, load_policy(root))
         self.assertTrue(any(f.kind == "identifier" and f.token == PORTUGUESE_FIXTURE_CLASS for f in findings), findings)
 
     def test_accented_comment_is_normalized_and_reported(self):
         td, root = self._repo({"pkg/mod.py": "# verificação\nvalue = 1\n"})
         with td:
-            findings = scan_repository(root, load_policy(root))
+            findings = _scan_fixture_repository(root, load_policy(root))
         self.assertTrue(
             any(f.kind == "comment" and f.token == TERM_VERIFICATION for f in findings),
             findings,
@@ -165,19 +167,19 @@ class PythonLanguageScannerTest(unittest.TestCase):
     def test_docstring_is_scanned(self):
         td, root = self._repo({"pkg/mod.py": 'def build():\n    """Validar a amostra antes da chamada."""\n    return 1\n'})
         with td:
-            findings = scan_repository(root, load_policy(root))
+            findings = _scan_fixture_repository(root, load_policy(root))
         self.assertTrue(any(f.kind == "docstring" for f in findings), findings)
 
     def test_contract_literal_is_removed_before_comment_word_scan(self):
         td, root = self._repo({"pkg/mod.py": "# external status remains NÃO DISPONÍVEL\nvalue = 1\n"})
         with td:
-            findings = scan_repository(root, load_policy(root))
+            findings = _scan_fixture_repository(root, load_policy(root))
         self.assertEqual(findings, ())
 
     def test_repeated_comment_term_preserves_occurrence_count(self):
         td, root = self._repo({"pkg/mod.py": "# validar validar\nvalue = 1\n"})
         with td:
-            findings = scan_repository(root, load_policy(root))
+            findings = _scan_fixture_repository(root, load_policy(root))
         matches = [f for f in findings if f.kind == "comment" and f.token == TERM_VALIDATE]
         self.assertEqual(len(matches), 2, findings)
 
@@ -185,7 +187,7 @@ class PythonLanguageScannerTest(unittest.TestCase):
         source = 'def calcular_total():\n    """calcular resultado"""\n    # calcular agora\n    return 1\n'
         td, root = self._repo({"pkg/mod.py": source})
         with td:
-            findings = scan_repository(root, load_policy(root))
+            findings = _scan_fixture_repository(root, load_policy(root))
         self.assertTrue(any(f.kind == "identifier" and f.token == IDENTIFIER_CALCULATE_TOTAL for f in findings), findings)
         self.assertTrue(any(f.kind == "comment" and f.token == TERM_CALCULATE for f in findings), findings)
         self.assertTrue(any(f.kind == "docstring" and f.token == TERM_CALCULATE for f in findings), findings)
@@ -193,7 +195,7 @@ class PythonLanguageScannerTest(unittest.TestCase):
     def test_portuguese_plural_and_participle_are_normalized(self):
         td, root = self._repo({"pkg/mod.py": "def arquivos_processados():\n    return True\n"})
         with td:
-            findings = scan_repository(root, load_policy(root))
+            findings = _scan_fixture_repository(root, load_policy(root))
         finding = next((
             f for f in findings
             if f.kind == "identifier" and f.token == IDENTIFIER_PROCESSED_FILES
@@ -204,13 +206,13 @@ class PythonLanguageScannerTest(unittest.TestCase):
     def test_acronym_pascal_case_identifier_is_split(self):
         td, root = self._repo({"pkg/mod.py": "class XMLArquivo:\n    pass\n"})
         with td:
-            findings = scan_repository(root, load_policy(root))
+            findings = _scan_fixture_repository(root, load_policy(root))
         self.assertTrue(any(f.kind == "identifier" and f.token == IDENTIFIER_XML_FILE for f in findings), findings)
 
     def test_unicode_camel_case_identifier_is_split(self):
         td, root = self._repo({"pkg/mod.py": "relatórioArquivo = 1\n"})
         with td:
-            findings = scan_repository(root, load_policy(root))
+            findings = _scan_fixture_repository(root, load_policy(root))
         finding = next((
             f for f in findings
             if f.kind == "identifier" and f.token == IDENTIFIER_UNICODE_CAMEL
@@ -221,7 +223,7 @@ class PythonLanguageScannerTest(unittest.TestCase):
     def test_unicode_uppercase_boundary_is_split(self):
         td, root = self._repo({"pkg/mod.py": "arquivoÁrvore = 1\n"})
         with td:
-            findings = scan_repository(root, load_policy(root))
+            findings = _scan_fixture_repository(root, load_policy(root))
         finding = next((
             f for f in findings
             if f.kind == "identifier" and f.token == IDENTIFIER_UNICODE_UPPER
@@ -232,7 +234,7 @@ class PythonLanguageScannerTest(unittest.TestCase):
     def test_contract_literal_word_does_not_exempt_identifier(self):
         td, root = self._repo({"pkg/mod.py": "def disponivel():\n    return True\n"})
         with td:
-            findings = scan_repository(root, load_policy(root))
+            findings = _scan_fixture_repository(root, load_policy(root))
         self.assertTrue(
             any(f.kind == "identifier" and f.token == IDENTIFIER_AVAILABLE for f in findings),
             findings,
@@ -241,19 +243,19 @@ class PythonLanguageScannerTest(unittest.TestCase):
     def test_full_contract_literal_identifier_form_is_preserved(self):
         td, root = self._repo({"pkg/mod.py": "NAO_DISPONIVEL = 1\n"})
         with td:
-            findings = scan_repository(root, load_policy(root))
+            findings = _scan_fixture_repository(root, load_policy(root))
         self.assertEqual(findings, ())
 
     def test_letter_digit_boundary_does_not_hide_term(self):
         td, root = self._repo({"pkg/mod.py": "amostra1 = 1\n"})
         with td:
-            findings = scan_repository(root, load_policy(root))
+            findings = _scan_fixture_repository(root, load_policy(root))
         self.assertTrue(any(f.kind == "identifier" and f.token == IDENTIFIER_SAMPLE_ONE for f in findings), findings)
 
     def test_import_from_source_module_is_scanned(self):
         td, root = self._repo({"pkg/mod.py": "from validacao import build\n"})
         with td:
-            findings = scan_repository(root, load_policy(root))
+            findings = _scan_fixture_repository(root, load_policy(root))
         self.assertTrue(
             any(
                 finding.kind == "identifier"
@@ -267,7 +269,7 @@ class PythonLanguageScannerTest(unittest.TestCase):
         source = "from pacote import validar_arquivo\nfunc(arquivo=True)\n"
         td, root = self._repo({"pkg/mod.py": source})
         with td:
-            findings = scan_repository(root, load_policy(root))
+            findings = _scan_fixture_repository(root, load_policy(root))
         tokens = {f.token for f in findings if f.kind == "identifier"}
         self.assertIn("validar_arquivo", tokens)
         self.assertIn("arquivo", tokens)
@@ -276,7 +278,7 @@ class PythonLanguageScannerTest(unittest.TestCase):
         source = 'match payload:\n    case {"item": arquivo}:\n        pass\n'
         td, root = self._repo({"pkg/mod.py": source})
         with td:
-            findings = scan_repository(root, load_policy(root))
+            findings = _scan_fixture_repository(root, load_policy(root))
         self.assertTrue(any(f.kind == "identifier" and f.token == TERM_ARCHIVE for f in findings), findings)
 
     def test_match_as_and_match_star_bindings_are_scanned_independently(self):
@@ -288,7 +290,7 @@ class PythonLanguageScannerTest(unittest.TestCase):
             with self.subTest(label=label):
                 td, root = self._repo({"pkg/mod.py": source})
                 with td:
-                    findings = scan_repository(root, load_policy(root))
+                    findings = _scan_fixture_repository(root, load_policy(root))
                 self.assertTrue(
                     any(f.kind == "identifier" and f.token == TERM_ARCHIVE for f in findings),
                     findings,
@@ -304,7 +306,7 @@ class PythonLanguageScannerTest(unittest.TestCase):
             with self.subTest(label=label):
                 td, root = self._repo({"pkg/mod.py": source})
                 with td:
-                    findings = scan_repository(root, load_policy(root))
+                    findings = _scan_fixture_repository(root, load_policy(root))
                 self.assertTrue(
                     any(f.kind == "identifier" and f.token == TERM_ARCHIVE for f in findings),
                     findings,
@@ -313,7 +315,7 @@ class PythonLanguageScannerTest(unittest.TestCase):
     def test_python_type_parameter_identifier_is_scanned(self):
         td, root = self._repo({"pkg/mod.py": "def build[arquivo]():\n    return 1\n"})
         with td:
-            findings = scan_repository(root, load_policy(root))
+            findings = _scan_fixture_repository(root, load_policy(root))
         self.assertTrue(
             any(f.kind == "identifier" and f.token == TERM_ARCHIVE for f in findings),
             findings,
@@ -322,12 +324,12 @@ class PythonLanguageScannerTest(unittest.TestCase):
     def test_unparseable_python_fails_closed(self):
         td, root = self._repo({"pkg/mod.py": "def broken(:\n    pass\n"})
         with td, self.assertRaisesRegex(LanguagePolicyError, "unable to parse scanned Python source"):
-            scan_repository(root, load_policy(root))
+            _scan_fixture_repository(root, load_policy(root))
 
     def test_historical_root_is_not_scanned(self):
         td, root = self._repo({"docs/history/v3.3/example.py": "def validar_arquivo():\n    return True\n"})
         with td:
-            findings = scan_repository(root, load_policy(root))
+            findings = _scan_fixture_repository(root, load_policy(root))
         self.assertEqual(findings, ())
 
 

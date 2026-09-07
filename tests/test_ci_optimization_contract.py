@@ -821,17 +821,50 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertIn("needs: [static, container-canary]", publish)
 
     def test_language_baseline_does_not_rescan_full_checkout(self):
-        language_tests = (ROOT / "tests" / "test_code_language_guard.py").read_text(encoding="utf-8")
+        language_tests = (ROOT / "tests" / "test_code_language_guard.py").read_text(
+            encoding="utf-8"
+        )
         repo_contract = (ROOT / "tests" / "test_repo_contract.py").read_text(encoding="utf-8")
         validator = (ROOT / "scripts" / "validate_repo.py").read_text(encoding="utf-8")
         tree = ast.parse(language_tests)
-        scanner_imports = [alias for node in tree.body if isinstance(node, ast.ImportFrom) and node.module == "scripts.code_language_guard" for alias in node.names if alias.name == "scan_repository"]
-        self.assertEqual([(alias.name, alias.asname) for alias in scanner_imports], [("scan_repository", "_scan_repository_impl")])
-        attribute_calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "scan_repository"]
+
+        scanner_imports = []
+        for node in tree.body:
+            if isinstance(node, ast.ImportFrom) and node.module == "scripts.code_language_guard":
+                scanner_imports.extend(alias for alias in node.names if alias.name == "scan_repository")
+        self.assertEqual(
+            [(alias.name, alias.asname) for alias in scanner_imports],
+            [("scan_repository", "_scan_repository_impl")],
+        )
+
+        attribute_calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "scan_repository"
+        ]
         self.assertEqual(attribute_calls, [])
-        wrapper = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "scan_repository")
-        raw_uses = [node for node in ast.walk(tree) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and node.id == "_scan_repository_impl"]
-        wrapper_raw_uses = [node for node in ast.walk(wrapper) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and node.id == "_scan_repository_impl"]
+
+        wrapper = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_scan_fixture_repository"
+        )
+        raw_uses = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Name)
+            and isinstance(node.ctx, ast.Load)
+            and node.id == "_scan_repository_impl"
+        ]
+        wrapper_raw_uses = [
+            node
+            for node in ast.walk(wrapper)
+            if isinstance(node, ast.Name)
+            and isinstance(node.ctx, ast.Load)
+            and node.id == "_scan_repository_impl"
+        ]
         self.assertEqual(len(raw_uses), 1)
         self.assertEqual(len(wrapper_raw_uses), 1)
         self.assertIn("validator.validate(root)", repo_contract)
