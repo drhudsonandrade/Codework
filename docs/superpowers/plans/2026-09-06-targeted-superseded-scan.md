@@ -24,3 +24,6 @@ Ubuntu saving is expected to be smaller than NOAR but still material because the
 
 ## Review hardening
 The anti-regression contract uses an exact allowlist of call terminals for the optimized test. Direct calls, attribute calls, import aliases, and local aliases such as `full_validate = validate` are rejected unless explicitly reviewed and added to the allowlist.
+
+## Exact call-shape guard
+The optimized test must make exactly one direct call `validate_superseded_identity_locations(ROOT, errors)`, with no keyword arguments. The scanner name and `ROOT` cannot be rebound locally, `errors` must be initialized exactly once as an empty list, and local imports are forbidden in that test. The imported scanner symbol is also checked by object identity against `scripts.validate_repo.validate_superseded_identity_locations`.
