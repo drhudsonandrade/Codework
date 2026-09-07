@@ -795,7 +795,7 @@ class CIOptimizationContractTest(unittest.TestCase):
         static = _job_block(_read("scaffold-validation.yml"), "static")
         self.assertIn("bash tests/test_ci_changed_paths.sh", static)
 
-    def test_scaffold_container_build_cache_is_shared_without_widening_permissions(self):
+    def test_scaffold_publish_owns_build_cache_without_widening_permissions(self):
         workflow = _read("scaffold-validation.yml")
         canary = _job_block(workflow, "container-canary")
         publish = _job_block(workflow, "publish-ghcr")
@@ -805,18 +805,18 @@ class CIOptimizationContractTest(unittest.TestCase):
         cache_from = "cache-from: type=gha,scope=codework-genome-scaffold-v1"
         cache_to = "cache-to: type=gha,mode=min,scope=codework-genome-scaffold-v1,ignore-error=true"
 
-        for job in (canary, publish):
-            self.assertIn(buildx, job)
-            self.assertIn("driver: docker-container", job)
-            self.assertIn(builder, job)
-            self.assertIn(cache_from, job)
-
-        self.assertNotIn("docker build --tag", canary)
-        self.assertIn("load: true", canary)
-        self.assertIn("tags: codework-genome:${{ github.sha }}", canary)
+        self.assertIn("docker build --tag codework-genome:${{ github.sha }} .", canary)
+        self.assertNotIn(buildx, canary)
+        self.assertNotIn(builder, canary)
+        self.assertNotIn("cache-from:", canary)
         self.assertNotIn("cache-to:", canary)
-        self.assertIn(cache_to, publish)
         self.assertNotIn("packages: write", canary)
+
+        self.assertIn(buildx, publish)
+        self.assertIn("driver: docker-container", publish)
+        self.assertIn(builder, publish)
+        self.assertIn(cache_from, publish)
+        self.assertIn(cache_to, publish)
         self.assertIn("packages: write", publish)
         self.assertIn("needs: [static, container-canary]", publish)
 

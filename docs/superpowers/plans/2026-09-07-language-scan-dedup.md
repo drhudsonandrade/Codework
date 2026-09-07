@@ -1,21 +1,26 @@
-# PR51 — Deduplicate repository language scan
+# PR51 — Deduplicate language scan and keep cache at publish
 
 ## Goal
-Reduce static CI time without weakening the English-first language policy.
+Reduce static CI time and remove Buildx overhead from the required canary.
 
 ## Scope
 - Remove the redundant full-checkout language baseline test.
-- Add an anti-regression contract in the CI optimization suite.
-- Keep production validator code unchanged.
+- Restore `container-canary` to the proven plain `docker build` path.
+- Keep Buildx/GHA cache exclusively in `publish-ghcr`.
+- Add anti-regression contracts for both properties.
 
-## Safety
+## Language safety
 - `tests/test_repo_contract.py` still executes `validator.validate(root)` on the full checkout.
 - `scripts/validate_repo.py` still invokes `validate_language_policy(root, errors)`.
 - Scanner unit tests, baseline comparison tests, and provenance tests remain unchanged.
-- No workflow, ruleset, lock, or permission changes.
+
+## Container safety
+- Canary remains required and runs the same local SHA-tagged image.
+- Canary has no Buildx/cache and no `packages: write`.
+- Publisher remains gated by `needs: [static, container-canary]`.
+- Publisher alone owns Buildx, GHA cache, GHCR login, and `packages: write`.
 
 ## Evidence
-- Ubuntu baseline for the redundant test: about 12.6 seconds.
-- NOAR isolated baseline: 25.4 seconds wall time.
-- RED: anti-regression contract detected `scan_repository(ROOT, ...)`.
-- GREEN: no duplicate full-checkout scan remains in language tests.
+- Duplicate language scan: ~12.6s on Ubuntu; 25.4s wall on NOAR.
+- Warm-cache canary experiment was rejected: Buildx build alone took 115s.
+- RED→GREEN contracts pin the corrected architecture.
