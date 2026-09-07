@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+import scripts.validate_repo as validate_repo_module
 from scripts.validate_repo import (
     SUPERSEDED_IDENTITY_TEST_FIXTURES,
     _missing_path_error,
     validate,
+    validate_superseded_identity_locations,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,13 +35,44 @@ class ValidateRepoStaticFstringTests(unittest.TestCase):
                 errors,
             )
 
+    def test_registered_fixture_check_uses_only_targeted_identity_scanner(self) -> None:
+        module = sys.modules[__name__]
+        original_scanner = validate_repo_module.validate_superseded_identity_locations
+        forbidden = AssertionError("full repository validator must not run in the targeted fixture test")
+        with (
+            mock.patch.object(module, "validate", side_effect=forbidden) as local_validate,
+            mock.patch.object(validate_repo_module, "validate", side_effect=forbidden) as module_validate,
+            mock.patch.object(
+                module, "validate_superseded_identity_locations", wraps=original_scanner
+            ) as targeted_scanner,
+            mock.patch.object(
+                validate_repo_module,
+                "validate_superseded_identity_locations",
+                wraps=original_scanner,
+            ) as module_scanner,
+            mock.patch.object(self, "validate", side_effect=forbidden, create=True) as self_validate,
+        ):
+            self.test_registered_test_fixtures_do_not_block_the_current_checkout()
+
+        local_validate.assert_not_called()
+        module_validate.assert_not_called()
+        self_validate.assert_not_called()
+        module_scanner.assert_not_called()
+        targeted_scanner.assert_called_once()
+        args, kwargs = targeted_scanner.call_args
+        self.assertEqual(len(args), 2)
+        self.assertEqual(args[0], ROOT)
+        self.assertIsInstance(args[1], list)
+        self.assertEqual(kwargs, {})
+
     def test_registered_test_fixtures_do_not_block_the_current_checkout(self) -> None:
         # Derived from the registry itself so a newly registered fixture — for example
         # tests/test_superseded_identity_scanner.py — is covered without editing a second
         # copy of the list here.
         allowed = SUPERSEDED_IDENTITY_TEST_FIXTURES
         self.assertTrue(allowed, "the fixture registry must not be empty")
-        errors = validate(ROOT)
+        errors: list[str] = []
+        validate_superseded_identity_locations(ROOT, errors)
         blocked_fixture_errors = [
             error
             for error in errors
