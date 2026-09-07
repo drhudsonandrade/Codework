@@ -23,4 +23,4 @@ Reduce static CI time without changing production validation behavior.
 Ubuntu saving is expected to be smaller than NOAR but still material because the global validator is no longer executed twice for the same checkout.
 
 ## Review hardening
-The anti-regression contract also recognizes terminal attribute calls such as `validator.validate(...)` and import aliases such as `validate as full_validate`; both are forbidden inside the optimized fixture test.
+The anti-regression contract uses an exact allowlist of call terminals for the optimized test. Direct calls, attribute calls, import aliases, and local aliases such as `full_validate = validate` are rejected unless explicitly reviewed and added to the allowlist.
