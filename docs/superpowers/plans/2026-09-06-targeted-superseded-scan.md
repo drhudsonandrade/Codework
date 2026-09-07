@@ -4,7 +4,7 @@
 Reduce static CI time without changing production validation behavior.
 
 ## Scope
-- Change only `tests/test_validate_repo_static_fstrings.py`.
+- Change `tests/test_validate_repo_static_fstrings.py` and `docs/superpowers/plans/2026-09-06-targeted-superseded-scan.md`.
 - Keep the full repository contract test unchanged.
 - Replace one redundant `validate(ROOT)` call with the exact scanner that the test is asserting.
 
