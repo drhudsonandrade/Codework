@@ -795,7 +795,7 @@ class CIOptimizationContractTest(unittest.TestCase):
         static = _job_block(_read("scaffold-validation.yml"), "static")
         self.assertIn("bash tests/test_ci_changed_paths.sh", static)
 
-    def test_scaffold_container_build_cache_is_shared_without_widening_permissions(self):
+    def test_scaffold_publish_owns_build_cache_without_widening_permissions(self):
         workflow = _read("scaffold-validation.yml")
         canary = _job_block(workflow, "container-canary")
         publish = _job_block(workflow, "publish-ghcr")
@@ -805,20 +805,36 @@ class CIOptimizationContractTest(unittest.TestCase):
         cache_from = "cache-from: type=gha,scope=codework-genome-scaffold-v1"
         cache_to = "cache-to: type=gha,mode=min,scope=codework-genome-scaffold-v1,ignore-error=true"
 
-        for job in (canary, publish):
-            self.assertIn(buildx, job)
-            self.assertIn("driver: docker-container", job)
-            self.assertIn(builder, job)
-            self.assertIn(cache_from, job)
-
-        self.assertNotIn("docker build --tag", canary)
-        self.assertIn("load: true", canary)
-        self.assertIn("tags: codework-genome:${{ github.sha }}", canary)
+        self.assertIn("docker build --tag codework-genome:${{ github.sha }} .", canary)
+        self.assertNotIn(buildx, canary)
+        self.assertNotIn(builder, canary)
+        self.assertNotIn("cache-from:", canary)
         self.assertNotIn("cache-to:", canary)
-        self.assertIn(cache_to, publish)
         self.assertNotIn("packages: write", canary)
+
+        self.assertIn(buildx, publish)
+        self.assertIn("driver: docker-container", publish)
+        self.assertIn(builder, publish)
+        self.assertIn(cache_from, publish)
+        self.assertIn(cache_to, publish)
         self.assertIn("packages: write", publish)
         self.assertIn("needs: [static, container-canary]", publish)
+
+    def test_language_baseline_does_not_rescan_full_checkout(self):
+        language_tests = (ROOT / "tests" / "test_code_language_guard.py").read_text(
+            encoding="utf-8"
+        )
+        repo_contract = (ROOT / "tests" / "test_repo_contract.py").read_text(encoding="utf-8")
+        validator = (ROOT / "scripts" / "validate_repo.py").read_text(encoding="utf-8")
+
+        self.assertEqual(len(re.findall(r"\bscan_repository\b", language_tests)), 1)
+        self.assertIn("scan_repository as _scan_repository_impl", language_tests)
+        self.assertEqual(language_tests.count("_scan_repository_impl"), 2)
+        self.assertIn("def _scan_fixture_repository(", language_tests)
+        self.assertIn("if root.resolve() == ROOT:", language_tests)
+        self.assertIn("return _scan_repository_impl(root, policy)", language_tests)
+        self.assertIn("validator.validate(root)", repo_contract)
+        self.assertIn("validate_language_policy(root, errors)", validator)
 
     def test_scaffold_required_checks_use_job_level_markdown_gate(self):
         workflow = _read("scaffold-validation.yml")
