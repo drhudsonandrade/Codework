@@ -1,5 +1,6 @@
 import ast
 import importlib.util
+import json
 import re
 import unittest
 from pathlib import Path
@@ -793,6 +794,31 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertIn('git diff --no-renames --diff-filter=D --name-only -z "$base_sha" "$head_sha" --', helper_text)
         static = _job_block(_read("scaffold-validation.yml"), "static")
         self.assertIn("bash tests/test_ci_changed_paths.sh", static)
+
+    def test_scaffold_container_build_cache_is_shared_without_widening_permissions(self):
+        workflow = _read("scaffold-validation.yml")
+        canary = _job_block(workflow, "container-canary")
+        publish = _job_block(workflow, "publish-ghcr")
+        lock = json.loads((ROOT / "locks" / "actions-lock.json").read_text(encoding="utf-8"))
+        buildx = "docker/setup-buildx-action@" + lock["actions"]["docker/setup-buildx-action"]["sha"]
+        builder = "docker/build-push-action@" + lock["actions"]["docker/build-push-action"]["sha"]
+        cache_from = "cache-from: type=gha,scope=codework-genome-scaffold-v1"
+        cache_to = "cache-to: type=gha,mode=min,scope=codework-genome-scaffold-v1,ignore-error=true"
+
+        for job in (canary, publish):
+            self.assertIn(buildx, job)
+            self.assertIn("driver: docker-container", job)
+            self.assertIn(builder, job)
+            self.assertIn(cache_from, job)
+
+        self.assertNotIn("docker build --tag", canary)
+        self.assertIn("load: true", canary)
+        self.assertIn("tags: codework-genome:${{ github.sha }}", canary)
+        self.assertNotIn("cache-to:", canary)
+        self.assertIn(cache_to, publish)
+        self.assertNotIn("packages: write", canary)
+        self.assertIn("packages: write", publish)
+        self.assertIn("needs: [static, container-canary]", publish)
 
     def test_scaffold_required_checks_use_job_level_markdown_gate(self):
         workflow = _read("scaffold-validation.yml")
