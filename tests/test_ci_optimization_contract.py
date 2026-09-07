@@ -826,47 +826,13 @@ class CIOptimizationContractTest(unittest.TestCase):
         )
         repo_contract = (ROOT / "tests" / "test_repo_contract.py").read_text(encoding="utf-8")
         validator = (ROOT / "scripts" / "validate_repo.py").read_text(encoding="utf-8")
-        tree = ast.parse(language_tests)
 
-        scanner_imports = []
-        for node in tree.body:
-            if isinstance(node, ast.ImportFrom) and node.module == "scripts.code_language_guard":
-                scanner_imports.extend(alias for alias in node.names if alias.name == "scan_repository")
-        self.assertEqual(
-            [(alias.name, alias.asname) for alias in scanner_imports],
-            [("scan_repository", "_scan_repository_impl")],
-        )
-
-        attribute_calls = [
-            node
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "scan_repository"
-        ]
-        self.assertEqual(attribute_calls, [])
-
-        wrapper = next(
-            node
-            for node in tree.body
-            if isinstance(node, ast.FunctionDef) and node.name == "_scan_fixture_repository"
-        )
-        raw_uses = [
-            node
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Name)
-            and isinstance(node.ctx, ast.Load)
-            and node.id == "_scan_repository_impl"
-        ]
-        wrapper_raw_uses = [
-            node
-            for node in ast.walk(wrapper)
-            if isinstance(node, ast.Name)
-            and isinstance(node.ctx, ast.Load)
-            and node.id == "_scan_repository_impl"
-        ]
-        self.assertEqual(len(raw_uses), 1)
-        self.assertEqual(len(wrapper_raw_uses), 1)
+        self.assertEqual(len(re.findall(r"\bscan_repository\b", language_tests)), 1)
+        self.assertIn("scan_repository as _scan_repository_impl", language_tests)
+        self.assertEqual(language_tests.count("_scan_repository_impl"), 2)
+        self.assertIn("def _scan_fixture_repository(", language_tests)
+        self.assertIn("if root.resolve() == ROOT:", language_tests)
+        self.assertIn("return _scan_repository_impl(root, policy)", language_tests)
         self.assertIn("validator.validate(root)", repo_contract)
         self.assertIn("validate_language_policy(root, errors)", validator)
 

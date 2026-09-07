@@ -13,7 +13,7 @@ Reduce static CI time and remove Buildx overhead from the required canary.
 - `tests/test_repo_contract.py` still executes `validator.validate(root)` on the full checkout.
 - `scripts/validate_repo.py` still invokes `validate_language_policy(root, errors)`.
 - Fixture language tests use `_scan_fixture_repository`, which wraps a private raw scanner and rejects repository `ROOT` at runtime.
-- The CI contract forbids attribute bypasses and raw scanner use outside that wrapper.
+- The CI contract permits the raw scanner token only in its private import and permits the private implementation name only in that import plus the wrapper call.
 - Scanner unit tests, baseline comparison tests, and provenance tests remain unchanged.
 
 ## Container safety
