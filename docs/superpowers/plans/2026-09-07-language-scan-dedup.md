@@ -12,6 +12,8 @@ Reduce static CI time and remove Buildx overhead from the required canary.
 ## Language safety
 - `tests/test_repo_contract.py` still executes `validator.validate(root)` on the full checkout.
 - `scripts/validate_repo.py` still invokes `validate_language_policy(root, errors)`.
+- Fixture language tests import the raw scanner privately and reject repository `ROOT` at runtime.
+- The CI contract forbids attribute bypasses and raw scanner use outside that wrapper.
 - Scanner unit tests, baseline comparison tests, and provenance tests remain unchanged.
 
 ## Container safety
@@ -23,4 +25,4 @@ Reduce static CI time and remove Buildx overhead from the required canary.
 ## Evidence
 - Duplicate language scan: ~12.6s on Ubuntu; 25.4s wall on NOAR.
 - Warm-cache canary experiment was rejected: Buildx build alone took 115s.
-- RED→GREEN contracts pin the corrected architecture.
+- RED→GREEN contracts pin the corrected architecture and scanner boundary.

@@ -825,13 +825,15 @@ class CIOptimizationContractTest(unittest.TestCase):
         repo_contract = (ROOT / "tests" / "test_repo_contract.py").read_text(encoding="utf-8")
         validator = (ROOT / "scripts" / "validate_repo.py").read_text(encoding="utf-8")
         tree = ast.parse(language_tests)
-        duplicate_full_scans = [
-            node for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name) and node.func.id == "scan_repository"
-            and node.args and isinstance(node.args[0], ast.Name) and node.args[0].id == "ROOT"
-        ]
-        self.assertEqual(duplicate_full_scans, [])
+        scanner_imports = [alias for node in tree.body if isinstance(node, ast.ImportFrom) and node.module == "scripts.code_language_guard" for alias in node.names if alias.name == "scan_repository"]
+        self.assertEqual([(alias.name, alias.asname) for alias in scanner_imports], [("scan_repository", "_scan_repository_impl")])
+        attribute_calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "scan_repository"]
+        self.assertEqual(attribute_calls, [])
+        wrapper = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "scan_repository")
+        raw_uses = [node for node in ast.walk(tree) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and node.id == "_scan_repository_impl"]
+        wrapper_raw_uses = [node for node in ast.walk(wrapper) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and node.id == "_scan_repository_impl"]
+        self.assertEqual(len(raw_uses), 1)
+        self.assertEqual(len(wrapper_raw_uses), 1)
         self.assertIn("validator.validate(root)", repo_contract)
         self.assertIn("validate_language_policy(root, errors)", validator)
 

@@ -35,11 +35,24 @@ from scripts.code_language_guard import (
     compare_to_baseline,
     load_baseline,
     load_policy,
-    scan_repository,
+    scan_repository as _scan_repository_impl,
     _run_git,
 )
 
 from scripts import validate_repo
+
+
+def scan_repository(root: Path, policy):
+    if root.resolve() == ROOT:
+        raise AssertionError("full repository scan must use canonical repository contract")
+    return _scan_repository_impl(root, policy)
+
+
+class FixtureScannerBoundaryTest(unittest.TestCase):
+    def test_fixture_scanner_refuses_repository_root(self):
+        policy = load_policy(ROOT)
+        with self.assertRaisesRegex(AssertionError, "full repository scan"):
+            scan_repository(ROOT, policy)
 
 
 def _write_json(root: Path, relative: str, payload: object) -> None:
