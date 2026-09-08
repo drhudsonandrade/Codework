@@ -723,9 +723,9 @@ class CIOptimizationContractTest(unittest.TestCase):
             "'ubuntu-latest' || 'codework-isolated' }}"
         )
         private_jobs = {
-            "scaffold-validation.yml": ("static", "container-canary"),
+            "scaffold-validation.yml": ("static",),
             "genoma-audit.yml": ("audit",),
-            "genoma-policy-engine.yml": ("policy", "rego", "container"),
+            "genoma-policy-engine.yml": ("policy",),
         }
         for filename, jobs in private_jobs.items():
             workflow = _read(filename)
@@ -735,8 +735,8 @@ class CIOptimizationContractTest(unittest.TestCase):
                 self.assertNotIn("runs-on: ubuntu-latest", block, f"{filename}:{job_name}")
 
         hosted_jobs = {
-            "scaffold-validation.yml": ("changes", "publish-ghcr"),
-            "genoma-policy-engine.yml": ("changes", "publish"),
+            "scaffold-validation.yml": ("changes", "container-canary", "publish-ghcr"),
+            "genoma-policy-engine.yml": ("changes", "rego", "container", "publish"),
         }
         for filename, jobs in hosted_jobs.items():
             workflow = _read(filename)
