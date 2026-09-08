@@ -76,7 +76,7 @@ jobs:
       (needs.changes.result != 'success' ||
        needs.changes.outputs.policy_relevant == 'true')
     name: Canonical policy + 263-rule contract
-    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'codework-isolated' }}
+    runs-on: ${{ ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && github.ref_protected) && 'codework-isolated' || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
       - name: Require successful scope classification
