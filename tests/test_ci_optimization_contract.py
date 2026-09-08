@@ -104,6 +104,11 @@ DRAFT_READY_EVENT = "ready_for_review"
 REQUIRED_PR_TYPES = ("opened", "synchronize", "reopened", "ready_for_review")
 DRAFT_READY_TYPES_LINE = "types: [opened, synchronize, reopened, ready_for_review]"
 DRAFT_GATE = "github.event_name != 'pull_request' || github.event.pull_request.draft == false"
+TRUSTED_RUNNER_LINE = (
+    "runs-on: ${{ ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') "
+    "&& github.ref == 'refs/heads/main' && github.ref_protected) && 'codework-isolated' "
+    "|| 'ubuntu-latest' }}"
+)
 
 NGS_TRIGGER_SCRIPT_PATHS = (
     "scripts/__init__.py",
@@ -141,6 +146,23 @@ NGS_TRIGGER_SCRIPT_PATHS = (
 
 def _read(name: str) -> str:
     return (WORKFLOWS / name).read_text(encoding="utf-8")
+
+
+def _trusted_runner_routing_errors(workflow: str, job_names: tuple[str, ...]) -> list[str]:
+    errors: list[str] = []
+    for job_name in job_names:
+        block = _job_block(workflow, job_name)
+        runner_lines = [
+            line.strip()
+            for line in block.splitlines()
+            if line.strip().startswith("runs-on:")
+        ]
+        if len(runner_lines) != 1:
+            errors.append(f"{job_name}: expected exactly one runs-on line")
+            continue
+        if runner_lines[0] != TRUSTED_RUNNER_LINE:
+            errors.append(f"{job_name}: trusted runner expression drifted")
+    return errors
 
 
 def _visual_qa_test_dependency_paths() -> set[str]:
@@ -732,34 +754,16 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertEqual(selected_runner("workflow_dispatch", "refs/heads/main", True), "codework-isolated")
         self.assertEqual(selected_runner("push", "refs/heads/main", True), "codework-isolated")
         private_jobs = {
-            "scaffold-validation.yml": ("static",),
+            "scaffold-validation.yml": ("static", "container-canary"),
             "genoma-audit.yml": ("audit",),
-            "genoma-policy-engine.yml": ("policy",),
+            "genoma-policy-engine.yml": ("policy", "rego", "container"),
         }
         for filename, jobs in private_jobs.items():
-            workflow = _read(filename)
-            for job_name in jobs:
-                block = _job_block(workflow, job_name)
-                runner_lines = [
-                    line.strip() for line in block.splitlines()
-                    if line.strip().startswith("runs-on:")
-                ]
-                self.assertEqual(1, len(runner_lines), f"{filename}:{job_name}")
-                runner_line = runner_lines[0]
-                for required in (
-                    "github.event_name == 'push'",
-                    "github.event_name == 'workflow_dispatch'",
-                    "github.ref == 'refs/heads/main'",
-                    "github.ref_protected",
-                    "'codework-isolated'",
-                    "'ubuntu-latest'",
-                ):
-                    self.assertIn(required, runner_line, f"{filename}:{job_name}")
-                self.assertNotIn(
-                    "github.event_name == 'pull_request' && 'ubuntu-latest' || 'codework-isolated'",
-                    runner_line,
-                    f"{filename}:{job_name}",
-                )
+            self.assertEqual(
+                [],
+                _trusted_runner_routing_errors(_read(filename), jobs),
+                filename,
+            )
 
         audit = _read("genoma-audit.yml")
         audit_header = audit.split("permissions:", 1)[0]
@@ -769,8 +773,8 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertIn("uses: ./.github/workflows/genoma-audit.yml", _job_block(scaffold, "four-plane-audit"))
 
         hosted_jobs = {
-            "scaffold-validation.yml": ("changes", "container-canary", "publish-ghcr"),
-            "genoma-policy-engine.yml": ("changes", "rego", "container", "publish"),
+            "scaffold-validation.yml": ("changes", "publish-ghcr"),
+            "genoma-policy-engine.yml": ("changes", "publish"),
         }
         for filename, jobs in hosted_jobs.items():
             workflow = _read(filename)
@@ -784,6 +788,20 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertIn('run: TMPDIR="$RUNNER_TEMP" bash tests/test_wgs_align_or_stage.sh', static)
         self.assertIn('run: TMPDIR="$RUNNER_TEMP" bash tests/test_ci_changed_paths.sh', static)
         self.assertIn('TMPDIR="$RUNNER_TEMP" npm test', static)
+
+    def test_trusted_runner_contract_rejects_boolean_bypass_mutation(self):
+        workflow = _read("scaffold-validation.yml")
+        container = _job_block(workflow, "container-canary")
+        bypassed_container = container.replace(
+            "github.ref_protected) && 'codework-isolated'",
+            "github.ref_protected || true) && 'codework-isolated'",
+            1,
+        )
+        self.assertNotEqual(container, bypassed_container)
+        bypassed = workflow.replace(container, bypassed_container, 1)
+        self.assertTrue(
+            _trusted_runner_routing_errors(bypassed, ("container-canary",))
+        )
 
     def test_four_plane_audit_is_reusable_and_gated_by_required_static(self):
         scaffold = _read("scaffold-validation.yml")

@@ -141,7 +141,7 @@ jobs:
       (needs.changes.result != 'success' ||
        needs.changes.outputs.policy_relevant == 'true')
     name: OPA/Rego parity
-    runs-on: ubuntu-latest
+    runs-on: ${{ ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && github.ref_protected) && 'codework-isolated' || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - name: Require successful scope classification
@@ -165,7 +165,7 @@ jobs:
       (needs.changes.result != 'success' ||
        needs.changes.outputs.policy_relevant == 'true')
     name: Real Docker + canonical read-only mount
-    runs-on: ubuntu-latest
+    runs-on: ${{ ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && github.ref_protected) && 'codework-isolated' || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
       - name: Require successful scope classification
