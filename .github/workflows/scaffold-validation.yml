@@ -123,7 +123,7 @@ jobs:
         working-directory: mcp
         run: |
           npm ci --ignore-scripts
-          npm test
+          TMPDIR="$RUNNER_TEMP" npm test
 
   four-plane-audit:
     name: Four-plane audit
