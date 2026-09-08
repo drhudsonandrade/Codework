@@ -132,6 +132,7 @@ class ScriptLoaderTest(unittest.TestCase):
 
 class ClinVarFilterTest(unittest.TestCase):
     """Which ClinVar rows the scanner accepts as targets, and which it refuses."""
+
     def test_a_qualifying_row_is_kept(self):
         """A row that passes every filter is kept, indexed by rsid, and counted for its gene."""
         by_rsid, stats, counts = _scan([_row()])
@@ -157,7 +158,9 @@ class ClinVarFilterTest(unittest.TestCase):
                 self.assertEqual(stats.get("kept", 0), 0)
 
     def test_conflicting_classifications_are_not_read_as_pathogenic(self):
-        """'Conflicting classifications of pathogenicity' contains 'athogenic' and must still be refused."""
+        """'Conflicting classifications of pathogenicity' contains 'athogenic'
+        and must still be refused.
+        """
         # The substring trap: this string contains "athogenic" and asserts the opposite.
         _by_rsid, stats, _counts = _scan(
             [_row(ClinicalSignificance="Conflicting classifications of pathogenicity")]
@@ -177,7 +180,9 @@ class ClinVarFilterTest(unittest.TestCase):
         self.assertEqual(stats["kept"], 1)
 
     def test_the_gene_denominator_counts_the_whole_catalogue_not_the_kept_rows(self):
-        """The per-gene denominator counts the gene's whole pathogenic catalogue, not only the kept rows."""
+        """The per-gene denominator counts the gene's whole pathogenic catalogue,
+        not only the kept rows.
+        """
         # An indel and a one-star variant belong in the denominator — they are part of the
         # gene's pathogenic catalogue even though this registry cannot represent them. A
         # denominator that counted only what was kept would make coverage look complete.
@@ -196,6 +201,7 @@ class ClinVarFilterTest(unittest.TestCase):
 
 class TargetShapeTest(unittest.TestCase):
     """What a built target asserts about the variant behind it."""
+
     def test_one_alternate_yields_an_assessed_allele(self):
         """A single alternate allele becomes the target's assessed allele."""
         by_rsid, _s, _c = _scan([_row()])
@@ -224,7 +230,9 @@ class TargetShapeTest(unittest.TestCase):
         self.assertEqual(stats["ambiguous_position"], 1)
 
     def test_the_target_carries_the_coordinate_so_a_consumer_can_check_it(self):
-        """The target carries its own GRCh38 coordinate and accession, so a consumer can re-check it."""
+        """The target carries its own GRCh38 coordinate and accession,
+        so a consumer can re-check it.
+        """
         by_rsid, _s, _c = _scan([_row()])
         target = EXPAND.build_targets(by_rsid)[0][0]
         self.assertEqual(target["grch38"], {
@@ -239,7 +247,9 @@ class TargetShapeTest(unittest.TestCase):
         self.assertEqual(conditions[0]["xrefs"]["MONDO"], "MONDO:0021001")
 
     def test_misaligned_condition_columns_drop_the_ids_not_the_names(self):
-        """When names and cross-references are misaligned, the ids are dropped and the names kept."""
+        """When names and cross-references are misaligned,
+        the ids are dropped and the names kept.
+        """
         # Names and cross-references are positionally aligned; where they are not, a
         # condition matched to the wrong MONDO id is worse than one with no id.
         by_rsid, _s, _c = _scan(
@@ -257,6 +267,7 @@ class TargetShapeTest(unittest.TestCase):
 
 class GzipManifestTest(unittest.TestCase):
     """Reading a target manifest that is stored compressed."""
+
     def test_a_gzipped_manifest_loads(self):
         """A gzipped manifest loads and yields the same targets as an uncompressed one."""
         manifest = {
@@ -297,6 +308,7 @@ def _write(payload: dict, directory: Path, name: str) -> Path:
 
 class MergeTest(unittest.TestCase):
     """How two target registries combine, and what the merge refuses to decide on its own."""
+
     def _merge(self, *manifests):
         """Merge these manifests through the real script, via temporary files."""
         with tempfile.TemporaryDirectory() as td:
@@ -315,7 +327,9 @@ class MergeTest(unittest.TestCase):
         self.assertEqual(result["totals"]["assessed_allele_conflicts"], 0)
 
     def test_a_disagreement_removes_the_allele_rather_than_choosing(self):
-        """Registries that disagree on the allele lose it: the merge records a conflict, not a winner."""
+        """Registries that disagree on the allele lose it:
+        the merge records a conflict, not a winner.
+        """
         result = self._merge(
             _manifest("A", [{"rsid": "rs1", "scope": "CLINICO", "label": "a",
                              "queries": {"clinvar": {"term": "rs1"}}, "assessed_allele": "T"}]),
@@ -328,7 +342,9 @@ class MergeTest(unittest.TestCase):
         self.assertEqual(result["totals"]["assessed_allele_conflicts"], 1)
 
     def test_reference_conflict_removes_assessed_allele_and_its_evidence(self):
-        """A reference-allele conflict removes the assessed allele and the provenance that supported it."""
+        """A reference-allele conflict removes the assessed allele
+        and the provenance that supported it.
+        """
         first = {
             "rsid": "rs1",
             "scope": "CLINICO",
@@ -417,7 +433,9 @@ class MergeTest(unittest.TestCase):
         self.assertEqual(result["targets"][0]["scope"], "CLINICO")
 
     def test_a_conflict_is_not_undone_by_a_third_registry(self):
-        """A third registry agreeing with one side does not resolve an existing conflict by majority."""
+        """A third registry agreeing with one side does not resolve
+        an existing conflict by majority.
+        """
         result = self._merge(
             _manifest("A", [{"rsid": "rs1", "scope": "CLINICO", "label": "a",
                              "queries": {"clinvar": {"term": "rs1"}}, "assessed_allele": "T"}]),
@@ -431,8 +449,11 @@ class MergeTest(unittest.TestCase):
 
 class TraitScopeTest(unittest.TestCase):
     """How trait scopes are validated against the GWAS catalogue."""
+
     def test_a_declared_term_with_no_significant_association_is_a_hard_error(self):
-        """A declared term with no genome-wide-significant association is an error, not an empty scope."""
+        """A declared term with no genome-wide-significant association
+        is an error, not an empty scope.
+        """
         # The guard that caught two real terms: sweet-taste perception, whose best p-value in
         # the catalogue is 4e-07, and lactose intolerance, which has no mapped association at
         # all. A scope that silently covered neither would claim more than it delivers.
@@ -522,7 +543,9 @@ class TraitScopeTest(unittest.TestCase):
         self.assertEqual(by_rsid["rs4988235"][0]["term_label"], "persistência da lactase")
 
     def test_a_misaligned_row_still_matches_every_term_it_declares(self):
-        """A misaligned row still matches every term it declares, instead of being truncated by zip."""
+        """A misaligned row still matches every term it declares,
+        instead of being truncated by zip.
+        """
         # The other half of the failure: with fewer labels than URIs, zip truncates and the
         # trailing terms are never checked against the declared scope, so their targets
         # silently vanish.
@@ -580,12 +603,15 @@ class ShippedRegistryTest(unittest.TestCase):
             with self.subTest(registry=path.name):
                 manifest = load_target_manifest(path)
                 self.assertTrue(
-                    manifest.get("sources") or manifest.get("description") or manifest.get("merged_from"),
+                    manifest.get("sources") or manifest.get(
+                        "description") or manifest.get("merged_from"),
                     f"{path.name} declares no provenance",
                 )
 
     def test_a_target_with_an_assessed_allele_names_where_it_came_from(self):
-        """A shipped target that carries an assessed allele also names the source that assessed it."""
+        """A shipped target that carries an assessed allele also names
+        the source that assessed it.
+        """
         for path in self._registries():
             manifest = load_target_manifest(path)
             with self.subTest(registry=path.name):
@@ -619,6 +645,7 @@ class ShippedRegistryTest(unittest.TestCase):
 
 class AssessedAlleleApplicationTest(unittest.TestCase):
     """How a re-assessment is applied to a target that already carried an allele."""
+
     def test_refusal_clears_stale_allele_and_provenance(self):
         """A refusal clears the stale allele and every provenance field that supported it."""
         target = {
@@ -691,7 +718,9 @@ class ReviewStarTierTest(unittest.TestCase):
         self.assertEqual(counts["HFE"]["pathogenic_two_star_snv_rsid"], 0)
 
     def test_a_one_star_target_carries_its_star_level(self):
-        """A one-star target carries its own star level, so a stricter consumer can still refuse it."""
+        """A one-star target carries its own star level,
+        so a stricter consumer can still refuse it.
+        """
         by_rsid, _stats, _counts = EXPAND.scan_clinvar(
             _bulk([_row(ReviewStatus="criteria provided, single submitter")]),
             min_review_stars=1,
@@ -767,7 +796,9 @@ class PanelAppRegistryTest(unittest.TestCase):
         self.assertIn("não fornecida", block["panelapp"]["reason"])
 
     def test_the_gencc_overlap_is_flagged_rather_than_counted_twice(self):
-        """A gene established in both GenCC and PanelApp is flagged as overlapping, not counted twice."""
+        """A gene established in both GenCC and PanelApp is flagged as overlapping,
+        not counted twice.
+        """
         gencc = {
             "HFE": [
                 {
@@ -847,7 +878,9 @@ class ClinGenDosageTest(unittest.TestCase):
         self.assertEqual(block["established_by"], ["ClinGen Dosage"])
 
     def test_score_thirty_records_recessive_inheritance_without_establishing(self):
-        """Score 30 records recessive inheritance without establishing: it is a code, not a stronger 3."""
+        """Score 30 records recessive inheritance without establishing:
+        it is a code, not a stronger 3.
+        """
         # The trap: 30 sorts above 3 as a number and reads as "even more evidence". It is not
         # a score at all — it is the curators writing "this gene's phenotype is recessive"
         # instead of scoring dosage, and treating it as establishment would report hundreds
@@ -964,7 +997,9 @@ class GnomadConstraintTest(unittest.TestCase):
         self.assertEqual(table["HFE"]["transcript"], "ENST00000357618")
 
     def test_a_row_that_is_neither_mane_nor_canonical_is_skipped(self):
-        """A transcript that is neither MANE nor canonical is skipped, however extreme its metrics."""
+        """A transcript that is neither MANE nor canonical is skipped,
+        however extreme its metrics.
+        """
         table = EXPAND.read_gnomad_constraint(
             _constraint_file(
                 [{"gene": "HFE", "gene_id": "ENSG1", "transcript": "ENST_ALT",
@@ -1016,7 +1051,9 @@ class ClinvarCitationRetrievalTest(unittest.TestCase):
     """
 
     def test_a_failed_lookup_is_recorded_rather_than_read_as_absence(self):
-        """A failed citation lookup is recorded as a failure, not as 'this variant has no citations'."""
+        """A failed citation lookup is recorded as a failure,
+        not as 'this variant has no citations'.
+        """
         from scripts import curate_assessed_alleles as curate
 
         with patch.object(
@@ -1027,7 +1064,7 @@ class ClinvarCitationRetrievalTest(unittest.TestCase):
         self.assertEqual(result["pmids"], [])
         self.assertIn("falhou", result["reason"])
 
-    def test_a_successful_lookup_reports_executado(self):
+    def test_a_successful_lookup_reports_executed(self):
         """A successful lookup reports EXECUTADO and de-duplicates the returned links."""
         from scripts import curate_assessed_alleles as curate
 
@@ -1042,7 +1079,7 @@ class ClinvarCitationRetrievalTest(unittest.TestCase):
         self.assertEqual(result["pmids"], ["11", "22"])
         self.assertIsNone(result["reason"])
 
-    def test_no_uids_is_executado_not_a_failure(self):
+    def test_no_uids_is_executed_not_a_failure(self):
         """A lookup with no uids is EXECUTADO with an empty result, which is not a failure."""
         from scripts import curate_assessed_alleles as curate
 
@@ -1162,6 +1199,7 @@ class StrictReferenceDecodingTest(unittest.TestCase):
     """Curated reference inputs fail closed rather than replacing malformed UTF-8."""
 
     def test_gwas_associations_reject_invalid_utf8(self):
+        """Refuse an association table containing an invalid UTF-8 byte."""
         directory = Path(tempfile.mkdtemp())
         path = directory / "associations.tsv"
         path.write_bytes(b"SNPS\tDISEASE/TRAIT\nrs1\tbad\xff\n")
@@ -1170,16 +1208,19 @@ class StrictReferenceDecodingTest(unittest.TestCase):
                 handle.read()
 
     def test_gwas_ancestry_rejects_invalid_utf8(self):
+        """Refuse an ancestry table containing an invalid UTF-8 byte."""
         directory = Path(tempfile.mkdtemp())
         path = directory / "ancestries.tsv"
         path.write_bytes(
-            b"STUDY ACCESSION\tBROAD ANCESTRAL CATEGORY\tSTAGE\tNUMBER OF INDIVIDUALS\tINITIAL SAMPLE DESCRIPTION\n"
+            b"STUDY ACCESSION\tBROAD ANCESTRAL CATEGORY\tSTAGE\t"
+            b"NUMBER OF INDIVIDUALS\tINITIAL SAMPLE DESCRIPTION\n"
             b"GCST1\tEuropean\tinitial\t10\tbad\xff\n"
         )
         with self.assertRaises(UnicodeDecodeError):
             TRAITS.read_ancestries(path)
 
     def test_clinvar_bulk_rejects_invalid_utf8(self):
+        """Refuse an invalid UTF-8 byte in a compressed bulk variant table."""
         directory = Path(tempfile.mkdtemp())
         path = directory / "variant_summary.txt.gz"
         raw = ("\t".join(COLUMNS) + "\n").encode("utf-8") + b"bad\xff\n"
@@ -1188,6 +1229,7 @@ class StrictReferenceDecodingTest(unittest.TestCase):
             EXPAND.scan_clinvar(path)
 
     def test_clingen_dosage_rejects_invalid_utf8(self):
+        """Refuse a dosage table containing an invalid UTF-8 byte."""
         directory = Path(tempfile.mkdtemp())
         path = directory / "dosage.tsv"
         path.write_bytes(DOSAGE_HEADER.encode("utf-8") + b"\nHFE\t1\tbad\xff\n")

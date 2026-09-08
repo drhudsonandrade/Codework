@@ -74,11 +74,17 @@ def load_policy(root: Path) -> LanguagePolicy:
         raise LanguagePolicyError("language policy scan_suffixes must contain only .py")
 
     raw_terms = payload.get("technical_terms")
-    if not isinstance(raw_terms, list) or not raw_terms or not all(isinstance(term, str) and term for term in raw_terms):
+    if (
+        not isinstance(raw_terms, list)
+        or not raw_terms
+        or not all(isinstance(term, str) and term for term in raw_terms)
+    ):
         raise LanguagePolicyError("language policy technical_terms must be non-empty strings")
 
     raw_literals = payload.get("contract_literals")
-    if not isinstance(raw_literals, list) or not all(isinstance(item, str) and item for item in raw_literals):
+    if not isinstance(raw_literals, list) or not all(
+        isinstance(item, str) and item for item in raw_literals
+    ):
         raise LanguagePolicyError("invalid language policy contract_literals")
 
     raw_excluded = payload.get("excluded_roots")
@@ -104,7 +110,8 @@ def load_policy(root: Path) -> LanguagePolicy:
 
 
 def load_baseline(root: Path) -> tuple[BaselineEntry, ...]:
-    payload = _read_json(root / "config" / "code_language_legacy_baseline.json", "language baseline")
+    payload = _read_json(
+        root / "config" / "code_language_legacy_baseline.json", "language baseline")
     if not isinstance(payload, dict) or payload.get("schema") != BASELINE_SCHEMA:
         raise LanguagePolicyError("invalid language baseline schema")
     source_commit = payload.get("source_commit")
@@ -152,11 +159,14 @@ def _normalize_word(value: str) -> str:
     return "".join(ch for ch in normalized if not unicodedata.combining(ch)).casefold()
 
 
-PORTUGUESE_VERB_SUFFIXES = frozenset({
-    "ar", "ando", "ado", "ada", "ados", "adas", "amos", "am", "ou", "ei",
-    "ava", "avam", "aria", "ariam", "er", "endo", "ido", "ida", "idos",
-    "idas", "ir", "indo", "iu", "iram",
-})
+PORTUGUESE_VERB_SUFFIXES = {
+    "ar": frozenset({
+        "ar", "ando", "ado", "ada", "ados", "adas", "amos", "am", "ou", "ei",
+        "ava", "avam", "aria", "ariam",
+    }),
+    "er": frozenset({"er", "endo", "ido", "ida", "idos", "idas"}),
+    "ir": frozenset({"ir", "indo", "ido", "ida", "idos", "idas", "iu", "iram"}),
+}
 
 
 def _identifier_words(identifier: str) -> tuple[str, ...]:
@@ -192,10 +202,12 @@ def _canonical_technical_term(word: str, policy: LanguagePolicy) -> str | None:
     if normalized.endswith("s") and normalized[:-1] in terms:
         return normalized[:-1]
     for term in sorted(terms, key=len, reverse=True):
-        if not term.endswith(("ar", "er", "ir")) or len(term) < 5:
+        ending = term[-2:]
+        if ending not in PORTUGUESE_VERB_SUFFIXES or len(term) < 5:
             continue
         stem = term[:-2]
-        if normalized.startswith(stem) and normalized[len(stem):] in PORTUGUESE_VERB_SUFFIXES:
+        suffix = normalized[len(stem):]
+        if normalized.startswith(stem) and suffix in PORTUGUESE_VERB_SUFFIXES[ending]:
             return term
     return None
 
@@ -285,7 +297,11 @@ def _docstrings(tree: ast.AST) -> tuple[tuple[str, int], ...]:
         if not isinstance(node, doc_nodes) or not node.body:
             continue
         first = node.body[0]
-        if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) and isinstance(first.value.value, str):
+        if (
+            isinstance(first, ast.Expr)
+            and isinstance(first.value, ast.Constant)
+            and isinstance(first.value.value, str)
+        ):
             values.append((first.value.value, first.lineno))
     return tuple(values)
 
@@ -319,7 +335,8 @@ def scan_python_file(path: Path, root: Path, policy: LanguagePolicy) -> tuple[La
         if token_info.type != tokenize.COMMENT:
             continue
         for term in _matched_text_terms(token_info.string, policy):
-            findings.append(LanguageFinding(relative, token_info.start[0], "comment", term, (term,)))
+            findings.append(LanguageFinding(
+                relative, token_info.start[0], "comment", term, (term,)))
 
     for docstring, line in _docstrings(tree):
         for term in _matched_text_terms(docstring, policy):
@@ -389,16 +406,20 @@ def validate_code_language(root: Path, errors: list[str]) -> None:
     current = group_findings(scan_repository(root, policy))
     delta = compare_to_baseline(current, baseline)
     errors.extend(
-        f"new Portuguese technical language debt: {entry.path}: {entry.kind}: {entry.token}: {entry.count}"
+        f"new Portuguese technical language debt: {entry.path}: {entry.kind}: "
+        f"{entry.token}: {entry.count}"
         for entry in delta.unexpected
     )
     errors.extend(
-        f"resolved language baseline entry must be removed: {entry.path}: {entry.kind}: {entry.token}: {entry.count}"
+        f"resolved language baseline entry must be removed: {entry.path}: {entry.kind}: "
+        f"{entry.token}: {entry.count}"
         for entry in delta.stale
     )
 
 
-def _run_git(root: Path, *args: str, allow_nonzero: bool = False) -> subprocess.CompletedProcess[bytes]:
+def _run_git(
+    root: Path, *args: str, allow_nonzero: bool = False
+) -> subprocess.CompletedProcess[bytes]:
     try:
         if sys.platform == "win32":
             result = subprocess.run(  # nosec B603 -- approved absolute Git path, argv list, no shell.
@@ -413,7 +434,8 @@ def _run_git(root: Path, *args: str, allow_nonzero: bool = False) -> subprocess.
                 capture_output=True,
             )
     except OSError as exc:
-        raise LanguagePolicyError("unable to execute trusted git for language baseline provenance") from exc
+        raise LanguagePolicyError(
+            "unable to execute trusted git for language baseline provenance") from exc
     if result.returncode != 0 and not allow_nonzero:
         detail = result.stderr.decode("utf-8", errors="replace").strip()
         raise LanguagePolicyError(f"git baseline provenance check failed: {detail or args[0]}")
@@ -453,19 +475,26 @@ def _validate_source_commit(root: Path, source_commit: str) -> None:
         raise LanguagePolicyError("language baseline source_commit is not a commit")
     if trusted_base is not None:
         trusted_kind = _run_git(root, "cat-file", "-t", trusted_base, allow_nonzero=True)
-        if trusted_kind.returncode != 0 or trusted_kind.stdout.decode("utf-8", errors="replace").strip() != "commit":
+        if (
+            trusted_kind.returncode != 0
+            or trusted_kind.stdout.decode("utf-8", errors="replace").strip() != "commit"
+        ):
             raise LanguagePolicyError("trusted pull request base commit is unavailable")
         trusted_ancestor = _run_git(
             root, "merge-base", "--is-ancestor", source_commit, trusted_base, allow_nonzero=True
         )
         if trusted_ancestor.returncode != 0:
-            raise LanguagePolicyError("language baseline source_commit is not an ancestor of trusted pull request base")
-    ancestor = _run_git(root, "merge-base", "--is-ancestor", source_commit, "HEAD", allow_nonzero=True)
+            raise LanguagePolicyError(
+                "language baseline source_commit is not an ancestor of trusted pull request base")
+    ancestor = _run_git(root, "merge-base", "--is-ancestor",
+                        source_commit, "HEAD", allow_nonzero=True)
     if ancestor.returncode != 0:
         raise LanguagePolicyError("language baseline source_commit is not an ancestor of HEAD")
 
 
-def _scan_source_commit(root: Path, source_commit: str, policy: LanguagePolicy) -> tuple[BaselineEntry, ...]:
+def _scan_source_commit(
+    root: Path, source_commit: str, policy: LanguagePolicy
+) -> tuple[BaselineEntry, ...]:
     _validate_source_commit(root, source_commit)
     archive = _run_git(root, "archive", "--format=tar", source_commit).stdout
     with TemporaryDirectory() as td:
@@ -478,11 +507,13 @@ def _scan_source_commit(root: Path, source_commit: str, policy: LanguagePolicy) 
                     relative = _relative_path(member.name, "archived source")
                     extracted = bundle.extractfile(member)
                     if extracted is None:
-                        raise LanguagePolicyError(f"unable to read archived Python source: {relative}")
+                        raise LanguagePolicyError(
+                            f"unable to read archived Python source: {relative}")
                     try:
                         source = extracted.read().decode("utf-8")
                     except UnicodeError as exc:
-                        raise LanguagePolicyError(f"unable to read archived Python source: {relative}") from exc
+                        raise LanguagePolicyError(
+                            f"unable to read archived Python source: {relative}") from exc
                     target = snapshot / relative
                     try:
                         target.parent.mkdir(parents=True, exist_ok=True)
@@ -492,11 +523,14 @@ def _scan_source_commit(root: Path, source_commit: str, policy: LanguagePolicy) 
                             f"unable to materialize archived Python source: {relative}: {exc}"
                         ) from exc
         except tarfile.TarError as exc:
-            raise LanguagePolicyError("unable to inspect language baseline source_commit archive") from exc
+            raise LanguagePolicyError(
+                "unable to inspect language baseline source_commit archive") from exc
         return group_findings(scan_repository(snapshot, policy))
 
 
-def _write_baseline_payload(root: Path, source_commit: str, entries: tuple[BaselineEntry, ...]) -> None:
+def _write_baseline_payload(
+    root: Path, source_commit: str, entries: tuple[BaselineEntry, ...]
+) -> None:
     payload = {
         "schema": BASELINE_SCHEMA,
         "source_commit": source_commit,
@@ -515,7 +549,8 @@ def _entry_counts(entries: tuple[BaselineEntry, ...]) -> dict[tuple[str, str, st
 
 
 def _baseline_source_commit(root: Path) -> str:
-    payload = _read_json(root / "config" / "code_language_legacy_baseline.json", "language baseline")
+    payload = _read_json(
+        root / "config" / "code_language_legacy_baseline.json", "language baseline")
     if not isinstance(payload, dict) or payload.get("schema") != BASELINE_SCHEMA:
         raise LanguagePolicyError("invalid language baseline schema")
     source_commit = payload.get("source_commit")
@@ -553,7 +588,8 @@ def _validate_policy_monotonicity(root: Path, policy: LanguagePolicy) -> None:
     removed = sorted(base_policy.technical_terms - policy.technical_terms)
     if removed:
         raise LanguagePolicyError(
-            "language policy technical_terms may not remove trusted pull request base terms: " + ", ".join(removed)
+            "language policy technical_terms may not remove trusted pull request base terms: "
+            + ", ".join(removed)
         )
     base_excluded = {entry.path for entry in base_policy.excluded_roots}
     added_excluded = sorted({entry.path for entry in policy.excluded_roots} - base_excluded)
@@ -574,7 +610,8 @@ def _require_entries_supported(
         key = (entry.path, entry.kind, entry.token)
         if key not in supported_counts or entry.count > supported_counts[key]:
             raise LanguagePolicyError(
-                f"language baseline entry is not supported by {label}: {entry.path}: {entry.kind}: {entry.token}"
+                f"language baseline entry is not supported by {label}: {entry.path}: "
+                f"{entry.kind}: {entry.token}"
             )
 
 
@@ -587,7 +624,8 @@ def _validate_baseline_provenance(
     _require_entries_supported(baseline, source_entries, "source_commit")
     trusted_base = _trusted_pull_request_base()
     if trusted_base is not None:
-        trusted_entries = source_entries if trusted_base == source_commit else _scan_source_commit(root, trusted_base, policy)
+        trusted_entries = source_entries if trusted_base == source_commit else _scan_source_commit(
+            root, trusted_base, policy)
         _require_entries_supported(baseline, trusted_entries, "trusted pull request base")
 
 
@@ -605,7 +643,8 @@ def _bootstrap_baseline(root: Path, source_commit: str) -> None:
     entries = _scan_source_commit(root, source_commit, policy)
     trusted_base = _trusted_pull_request_base()
     if trusted_base is not None and trusted_base != source_commit:
-        _require_entries_supported(entries, _scan_source_commit(root, trusted_base, policy), "trusted pull request base")
+        _require_entries_supported(entries, _scan_source_commit(
+            root, trusted_base, policy), "trusted pull request base")
     _write_baseline_payload(root, source_commit, entries)
 
 
@@ -620,12 +659,19 @@ def _write_baseline(root: Path, source_commit: str) -> None:
     for entry in current:
         key = (entry.path, entry.kind, entry.token)
         if key not in existing_counts or entry.count > existing_counts[key]:
-            raise LanguagePolicyError(f"new language debt cannot be added to baseline: {entry.path}: {entry.kind}: {entry.token}")
+            raise LanguagePolicyError(
+                f"new language debt cannot be added to baseline: {entry.path}: "
+                f"{entry.kind}: {entry.token}"
+            )
         if key not in source_counts or entry.count > source_counts[key]:
-            raise LanguagePolicyError(f"language baseline entry is not supported by source_commit: {entry.path}: {entry.kind}: {entry.token}")
+            raise LanguagePolicyError(
+                f"language baseline entry is not supported by source_commit: {entry.path}: "
+                f"{entry.kind}: {entry.token}"
+            )
     trusted_base = _trusted_pull_request_base()
     if trusted_base is not None and trusted_base != source_commit:
-        _require_entries_supported(current, _scan_source_commit(root, trusted_base, policy), "trusted pull request base")
+        _require_entries_supported(current, _scan_source_commit(
+            root, trusted_base, policy), "trusted pull request base")
     _write_baseline_payload(root, source_commit, current)
 
 
@@ -643,7 +689,8 @@ def _check(root: Path) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Check English-first technical code language policy.")
+    parser = argparse.ArgumentParser(
+        description="Check English-first technical code language policy.")
     modes = parser.add_mutually_exclusive_group(required=True)
     modes.add_argument("--check", action="store_true")
     modes.add_argument("--write-baseline", action="store_true")

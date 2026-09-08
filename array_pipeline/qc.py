@@ -11,7 +11,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, TextIO
+from typing import IO, Any, TextIO
 
 import normative
 from array_pipeline import assembly
@@ -112,18 +112,27 @@ def _orientation(row: dict[str, str], schema: str, qc: dict[str, Any]) -> tuple[
         # harmonizer flagged as conflicting or ambiguous as "cross-platform consensus" would
         # resolve the conflict by assertion, which sections 4 and 7 forbid.
         if status in UNRESOLVED_OVERLAP_STATUSES:
-            return "NÃO DISPONÍVEL", f"unresolved cross-platform record ({status}); not auto-resolved"
+            return (
+                "NÃO DISPONÍVEL",
+                f"unresolved cross-platform record ({status}); not auto-resolved",
+            )
         # An allowlist, so a status this module has never seen is refused rather than
         # assumed clean. A real harmonized export emitted ten distinct STATUS values and one
         # of them was unknown here.
         if status not in INTERPRETABLE_OVERLAP_STATUSES:
-            return "NÃO DISPONÍVEL", f"unrecognised harmonizer status ({status}); not assumed interpretable"
+            return (
+                "NÃO DISPONÍVEL",
+                f"unrecognised harmonizer status ({status}); not assumed interpretable",
+            )
         if sources == "GM":
             # Agreement proves both vendors used the same strand convention, not which one:
             # if both reported the reverse strand an AG call would read TC in both files and
             # they would agree perfectly while both were flipped.
             if forward:
-                return "VERIFICADO", "cross-platform consensus with documented forward-strand provenance"
+                return (
+                    "VERIFICADO",
+                    "cross-platform consensus with documented forward-strand provenance",
+                )
             return (
                 "INFERIDO",
                 "cross-platform consensus establishes mutual consistency between vendors, "
@@ -137,6 +146,7 @@ def _orientation(row: dict[str, str], schema: str, qc: dict[str, Any]) -> tuple[
     if forward:
         return "VERIFICADO", str(strand_evidence)
     return "NÃO DISPONÍVEL", "source-specific orientation evidence unavailable"
+
 
 BASELINE_RSIDS = [
     "rs1799807", "rs1803274", "rs17580", "rs28929474", "rs738409",
@@ -242,6 +252,7 @@ class SourceInfo:
     member inside a zip and a plain CSV of identical content are not the same input, and the
     QC record has to name which one was read.
     """
+
     kind: str
     member_name: str | None
     metadata: dict[str, str]
@@ -363,6 +374,7 @@ def _text_stream(path: Path) -> tuple[TextIO, SourceInfo]:
     cannot tell a repaired file from an intact one, so the repair is not offered — the
     refusal names the file and the byte instead.
     """
+    raw: gzip.GzipFile | IO[bytes]
     lower = path.name.lower()
     if lower.endswith(".gz"):
         raw = gzip.open(path, "rb")
@@ -409,7 +421,9 @@ def _text_stream(path: Path) -> tuple[TextIO, SourceInfo]:
             zf.close()
             raise
         return text, SourceInfo("zip", members[0].filename, {})
-    return path.open("rt", encoding="utf-8-sig", errors="strict", newline=""), SourceInfo("plain", None, {})
+    return path.open("rt", encoding="utf-8-sig", errors="strict", newline=""), SourceInfo(
+        "plain", None, {}
+    )
 
 
 def _read_header_and_metadata(fh: TextIO) -> tuple[list[str], dict[str, str]]:
@@ -600,7 +614,11 @@ def _verified_provenance(
     if not isinstance(payload.get("justification"), str) or not payload["justification"].strip():
         return False
     refs = payload.get("evidence_refs")
-    if not isinstance(refs, list) or not refs or any(not isinstance(x, str) or not x.strip() for x in refs):
+    if (
+        not isinstance(refs, list)
+        or not refs
+        or any(not isinstance(x, str) or not x.strip() for x in refs)
+    ):
         return False
     trace = payload.get("trace")
     if not isinstance(trace, dict):
@@ -618,7 +636,9 @@ def _verified_provenance(
     if not isinstance(hashes, list) or input_sha.lower() not in {str(x).lower() for x in hashes}:
         return False
     tools = trace.get("tool_versions")
-    if not isinstance(tools, dict) or any(not isinstance(k, str) or not isinstance(v, str) for k, v in tools.items()):
+    if not isinstance(tools, dict) or any(
+        not isinstance(k, str) or not isinstance(v, str) for k, v in tools.items()
+    ):
         return False
     if kind is not None:
         declared = _normalised_assertion(kind, expected_value)
@@ -825,34 +845,55 @@ def inspect_array(
                         # strand provenance can raise it to VERIFICADO.
                         if normalized_strand in FORWARD_STRANDS and strand_evidence_verified:
                             orientation_status = "VERIFICADO"
-                            orientation_basis = "cross-platform consensus with documented forward-strand provenance"
+                            orientation_basis = (
+                                "cross-platform consensus with documented forward-strand provenance"
+                            )
                         else:
                             orientation_status = "INFERIDO"
                             orientation_basis = (
                                 "cross-platform consensus establishes mutual consistency between "
                                 "vendors, not absolute strand orientation"
                             )
-                    elif marker_sources == "M" and normalized_strand in FORWARD_STRANDS and strand_evidence_verified:
+                    elif (
+                        marker_sources == "M"
+                        and normalized_strand in FORWARD_STRANDS
+                        and strand_evidence_verified
+                    ):
                         orientation_status = "VERIFICADO"
                         orientation_basis = "MyHeritage forward-strand source metadata"
                     elif marker_sources == "G":
                         orientation_status = "INFERIDO"
-                        orientation_basis = "Genera-only marker; orientation inferred from harmonization context, not independently verified"
+                        orientation_basis = (
+                            "Genera-only marker; orientation inferred from harmonization "
+                            "context, not independently verified"
+                        )
                     else:
                         orientation_status = "NÃO DISPONÍVEL"
                         orientation_basis = "source-specific orientation not independently verified"
                 else:
-                    orientation_status = "VERIFICADO" if normalized_strand in FORWARD_STRANDS and strand_evidence_verified else "NÃO DISPONÍVEL"
-                    orientation_basis = strand_evidence or "source-specific orientation evidence absent"
+                    orientation_status = (
+                        "VERIFICADO"
+                        if normalized_strand in FORWARD_STRANDS and strand_evidence_verified
+                        else "NÃO DISPONÍVEL"
+                    )
+                    orientation_basis = (
+                        strand_evidence or "source-specific orientation evidence absent"
+                    )
                 marker_hits[rsid] = {
                     "rsid": rsid,
                     "chromosome": chrom,
                     "position": int(pos) if pos.isdigit() else pos,
                     "genotype": _canonical_gt(gt),
                     "status": row.get("STATUS") if schema.startswith("harmonized") else "observed",
-                    "sources": row.get("SOURCES") if schema.startswith("harmonized") else "single_source",
-                    "genera_result": _canonical_gt(row.get("GENERA_RESULT")) if schema.startswith("harmonized") else None,
-                    "myheritage_result": _canonical_gt(row.get("MYHERITAGE_RESULT")) if schema.startswith("harmonized") else None,
+                    "sources": row.get("SOURCES")
+                    if schema.startswith("harmonized")
+                    else "single_source",
+                    "genera_result": _canonical_gt(row.get("GENERA_RESULT"))
+                    if schema.startswith("harmonized")
+                    else None,
+                    "myheritage_result": _canonical_gt(row.get("MYHERITAGE_RESULT"))
+                    if schema.startswith("harmonized")
+                    else None,
                     "orientation_operational_status": orientation_status,
                     "orientation_basis": orientation_basis,
                 }
@@ -905,7 +946,11 @@ def inspect_array(
             _structural(f"duplicate RSID rows={duplicate_rsids}", blocking=True)
         else:
             structure_notes.append(
-                f"raw source contains duplicate RSID rows={duplicate_rsids}; retained as vendor provenance and must be disambiguated during harmonization"
+                (
+                    f"raw source contains duplicate RSID rows={duplicate_rsids}; "
+                    f"retained as vendor provenance and must be disambiguated "
+                    f"during harmonization"
+                )
             )
     if invalid_positions:
         _structural(f"invalid positions={invalid_positions}", blocking=True)
@@ -932,7 +977,12 @@ def inspect_array(
     if build not in {"GRCh37", "GRCh38"}:
         build_reasons.append("reference build not explicitly verified")
     elif not build_evidence_verified:
-        build_reasons.append("reference build provenance is not a structured VERIFICADO/SATISFIED attestation bound to input SHA-256")
+        build_reasons.append(
+            (
+                "reference build provenance is not a structured "
+                "VERIFICADO/SATISFIED attestation bound to input SHA-256"
+            )
+        )
     if normalized_strand in REVERSE_STRANDS:
         # Distinguished from "not verified" on purpose: this is not a missing answer, it is
         # the wrong one, determined. Every registry this project compares against is written
@@ -947,7 +997,12 @@ def inspect_array(
     elif normalized_strand not in FORWARD_STRANDS:
         build_reasons.append("strand convention not explicitly verified")
     elif not strand_evidence_verified:
-        build_reasons.append("strand provenance is not a structured VERIFICADO/SATISFIED attestation bound to input SHA-256")
+        build_reasons.append(
+            (
+                "strand provenance is not a structured VERIFICADO/SATISFIED "
+                "attestation bound to input SHA-256"
+            )
+        )
     elif strand_marker_failure:
         # The contradiction check below is the only automated control against an attestation
         # that is well-formed, correctly bound and simply wrong about the orientation. With
@@ -990,7 +1045,9 @@ def inspect_array(
 
     call_reasons: list[str] = []
     if call_rate < min_call_rate:
-        call_reasons.append(f"call_rate {call_rate:.6f} < operational threshold {min_call_rate:.6f}")
+        call_reasons.append(
+            f"call_rate {call_rate:.6f} < operational threshold {min_call_rate:.6f}"
+        )
     if invalid_called_genotypes:
         call_reasons.append(f"invalid called consensus genotypes={invalid_called_genotypes}")
     call_state = "PASS" if not call_reasons else "FAIL"
@@ -1001,7 +1058,10 @@ def inspect_array(
         cross_state = "PASS"
         if overlap_conflict_rate is not None and overlap_conflict_rate > max_overlap_conflict_rate:
             cross_reasons.append(
-                f"overlap conflict rate {overlap_conflict_rate:.6f} > operational threshold {max_overlap_conflict_rate:.6f}"
+                (
+                    f"overlap conflict rate {overlap_conflict_rate:.6f} > operational threshold "
+                    f"{max_overlap_conflict_rate:.6f}"
+                )
             )
             cross_state = "FAIL"
     # Unresolved records are reported in their own field, never as gate `reasons`: a gate
@@ -1020,7 +1080,9 @@ def inspect_array(
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     return {
         "schema": "genoma-snp-array-qc-v1",
-        "operational_status": "VERIFICADO" if ready_for_limited_interpretation else "NÃO DISPONÍVEL",
+        "operational_status": "VERIFICADO"
+        if ready_for_limited_interpretation
+        else "NÃO DISPONÍVEL",
         "evaluated_at": now,
         "ruleset": normative.attested_ruleset_block(),
         "case_id": case_id,
@@ -1102,22 +1164,44 @@ def inspect_array(
                 cross_reasons,
                 max_conflict_rate=max_overlap_conflict_rate,
                 unresolved_records=unresolved_records,
-                unresolved_record_policy="excluded from interpretation; conflicts are never auto-resolved",
+                unresolved_record_policy=(
+                    "excluded from interpretation; "
+                    "conflicts are never auto-resolved"
+                ),
             ),
             "LIMITED_INTERPRETATION_GATE": _gate(
                 "PASS" if ready_for_limited_interpretation else "BLOCKED",
-                [] if ready_for_limited_interpretation else ["one or more prerequisite gates are not PASS"],
-                scope="SNP-array loci only; no WGS-only classes, no diagnostic exclusion, no phase/CNV/SV inference",
+                []
+                if ready_for_limited_interpretation
+                else ["one or more prerequisite gates are not PASS"],
+                scope=(
+                    "SNP-array loci only; no WGS-only classes, no diagnostic exclusion, "
+                    "no phase/CNV/SV inference"
+                ),
             ),
         },
-        "baseline_marker_observations": [marker_hits[x] for x in BASELINE_RSIDS if x in marker_hits],
+        "baseline_marker_observations": [
+            marker_hits[x] for x in BASELINE_RSIDS if x in marker_hits
+        ],
         "baseline_markers_not_present": [x for x in BASELINE_RSIDS if x not in marker_hits],
         "limitations": [
-            "SNP-array data interrogate only assayed loci and cannot establish genome-wide absence of variants.",
+            (
+                "SNP-array data interrogate only assayed loci and cannot establish "
+                "genome-wide absence of variants."
+            ),
             "No DP/GQ/allele-balance/read-level evidence exists for array genotype calls.",
-            "CNV, SV, repeat expansions, HLA, CYP2D6 structural alleles, mosaicism and deep intronic variation are not resolved by this QC module.",
-            "Operational call/conflict thresholds are project QC gates, not clinical assay validation claims.",
-            "Clinically actionable observations require current evidence review and appropriate confirmation before changing conduct.",
+            (
+                "CNV, SV, repeat expansions, HLA, CYP2D6 structural alleles, mosaicism "
+                "and deep intronic variation are not resolved by this QC module."
+            ),
+            (
+                "Operational call/conflict thresholds are project QC gates, "
+                "not clinical assay validation claims."
+            ),
+            (
+                "Clinically actionable observations require current evidence review "
+                "and appropriate confirmation before changing conduct."
+            ),
         ],
     }
 
@@ -1126,7 +1210,9 @@ def write_outputs(result: dict[str, Any], outdir: Path) -> dict[str, str]:
     """Write the QC artifacts deterministically and return their filesystem paths."""
     outdir.mkdir(parents=True, exist_ok=True)
     qc = outdir / "array-qc.json"
-    qc.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    qc.write_text(
+        json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     markers = outdir / "baseline-marker-observations.tsv"
     cols = [
         "rsid", "chromosome", "position", "genotype", "status", "sources",

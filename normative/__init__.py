@@ -2,7 +2,7 @@
 
 Every plane (policy control, scientific data, evidence, audit) and every gate that
 emits a `ruleset` block must take its identity from here instead of restating the
-version, date or hash inline. Ruleset v3.4 REGRA DE UNICIDADE allows exactly one
+version, date or hash inline. Ruleset v3.4's uniqueness rule allows exactly one
 source marked VIGENTE; duplicating the identity as literals across dozens of modules
 is how a repository silently keeps attesting to a superseded version.
 
@@ -30,8 +30,8 @@ IDENTITY_STRING = f"{VERSION}/{STATUS}/{EFFECTIVE_DATE}"
 COMPANION_MANIFEST_RELATIVE = "manifests/COMPANION_SOURCES.sha256"
 
 # Companion documents distributed alongside the norm. They are integrity-pinned so a
-# swapped copy is detectable, and explicitly NOT normative: the prompt-fonte states that
-# in a conflict the vigent norm prevails and generation must stop. Nothing here may be
+# swapped copy is detectable and explicitly NOT normative: the companion prompt states that
+# in a conflict the active norm prevails and generation must stop. Nothing here may be
 # consulted in place of the ruleset, and no gate may take its identity from this table.
 COMPANION_SOURCES = {
     "PROMPT_FONTE_GERACAO_RELATORIOS_GENOMICOS_v1.2.txt": {
@@ -56,7 +56,6 @@ REQUIRED_HEADER_LINES = (
 
 def ruleset_block(*, include_sha256: bool = True) -> dict[str, Any]:
     """The `ruleset` block embedded in gate artifacts and report payloads."""
-
     block: dict[str, Any] = {
         "status": STATUS,
         "version": VERSION,
@@ -119,10 +118,20 @@ def verify_companion(filename: str, path: Any) -> dict[str, Any]:
 
     spec = COMPANION_SOURCES.get(filename)
     if spec is None:
-        return {"file": filename, "status": "NÃO DISPONÍVEL", "reason": "not a registered companion source", "normative": False}
+        return {
+            "file": filename,
+            "status": "NÃO DISPONÍVEL",
+            "reason": "not a registered companion source",
+            "normative": False,
+        }
     candidate = Path(path)
     if not candidate.is_file():
-        return {"file": filename, "status": "NÃO DISPONÍVEL", "reason": "file not present", "normative": False}
+        return {
+            "file": filename,
+            "status": "NÃO DISPONÍVEL",
+            "reason": "file not present",
+            "normative": False,
+        }
     digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
     if digest != spec["sha256"]:
         return {
@@ -146,7 +155,6 @@ def verify_companion(filename: str, path: Any) -> dict[str, Any]:
 
 def rule_id(section: int) -> str:
     """Stable machine-addressable identity for a top-level normative section."""
-
     if not 0 <= section <= LAST_SECTION:
         raise ValueError(f"section out of normative range 0..{LAST_SECTION}: {section}")
     return f"GENOMA-{VERSION.upper()}-S{section:03d}"

@@ -1,12 +1,12 @@
 """What produced these genotypes, in the words the reports print.
 
-Every builder had the assay written into its prose as a constant: "Genotipagem em array não
-produz DP/GQ/balanço alélico", "Call rate do array", "posições que este array ensaiou",
-"locus não presente no arquivo do array". True of a SNP-array export, and false the moment the
+Every builder had the assay written into its prose as a constant: "Array genotyping does not
+produce DP/GQ/allelic balance", "Array call rate", "positions assayed by this array", and
+"locus not present in the array file". True of a SNP-array export, and false the moment the
 same stack reads a table projected from a WGS VCF — which it now does.
 
-Two of those sentences were not merely imprecise. "Genotipagem em array não produz DP, GQ nem
-balanço alélico; não há profundidade de leitura a reportar" tells a clinician there is no
+Two of those sentences were not merely imprecise. "Array genotyping does not produce DP, GQ or
+allelic balance; there is no per-locus read depth to report" tells a clinician there is no
 depth behind a call, and the projected table carries DP and GQ on every row. A report that
 understates the evidence it holds is as wrong as one that overstates it, and this one did it
 while explaining its own methods.
@@ -93,7 +93,10 @@ PROJECTION_GENOME_WIDE = (
 #: Keyed by the class names `variant_class_coverage_explicit` checks for.
 ARRAY_CLASS_REASONS = {
     "indel": "genotipagem em array chama SNPs em posições fixas; indels não são ensaiados",
-    "mtDNA": "os marcadores mitocondriais do chip não sustentam heteroplasmia nem haplogrupo terminal",
+    "mtDNA": (
+        "os marcadores mitocondriais do chip não sustentam heteroplasmia nem "
+        "haplogrupo terminal"
+    ),
     "KIR": "tipagem de KIR exige pipeline especializado sobre sequenciamento",
     "noncoding": "o array cobre marcadores catalogados, não regiões regulatórias",
     "mosaicism": "genotipagem em array reporta genótipos discretos, sem fração alélica",
@@ -107,7 +110,10 @@ PROJECTION_CLASS_REASONS = {
         "o VCF de origem pode conter indels e a tabela projetada expressa apenas SNV diploide; "
         "cada indel é registrado como no-call com o motivo, nunca omitido"
     ),
-    "mtDNA": "a projeção cobre os alvos mitocondriais catalogados, sem profundidade ao longo do mtDNA",
+    "mtDNA": (
+        "a projeção cobre os alvos mitocondriais catalogados, sem profundidade ao "
+        "longo do mtDNA"
+    ),
     "KIR": "tipagem de KIR exige caller especializado sobre leituras alinhadas",
     "noncoding": "a projeção retém apenas os alvos do registro curado, não regiões regulatórias",
     "mosaicism": "a projeção não lê o campo AD e portanto não estima fração alélica",

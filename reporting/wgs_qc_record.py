@@ -2,14 +2,14 @@
 
 Two sections of the ruleset are unconditional obligations that a VCF cannot answer by itself:
 
-* **§6** — "AUDITORIA OBRIGATÓRIA QUANDO O WGS FOR ENVIADO / Antes de interpretar doenças,
-  realizar QC completo", followed by a list that includes sequencing platform, read length,
+* **§6** — requires a complete QC audit before disease interpretation, followed by a list
+  that includes sequencing platform, read length,
   mean depth, coverage distribution, %≥10×/20×/30×, exon coverage, Ti/Tv, heterozygosity,
   SNV/indel/CNV/SV counts, chromosomal sex, mtDNA and contamination. A projected VCF carries
   per-call DP and GQ at the interrogated targets and nothing else on that list.
-* **§114** — "Registrar sempre se o DNA veio de: sangue; saliva; swab bucal; outro tecido.
-  Isso é obrigatório para interpretar mosaicismo, CHIP, heteroplasmia, contaminação e
-  variantes somáticas incidentais." A VCF does not name the biological material.
+* **§114** — requires recording whether the DNA came from blood, saliva, a buccal swab or
+  another tissue because that context is required for mosaicism, CHIP, heteroplasmy,
+  contamination and incidental somatic variants. A VCF does not name the biological material.
 
 Neither is qualified by "quando possível", so neither can be discharged the way §0 and §254
 discharge an absent capability. The honest state of a VCF-only run is that §6 is applicable
@@ -162,7 +162,10 @@ def validate_record(
             problems.append(f"{key}: obrigatório e deve ser texto não vazio")
 
     declared_sha = str(record.get("vcf_sha256") or "").strip().lower()
-    if declared_sha and (len(declared_sha) != 64 or not all(c in "0123456789abcdef" for c in declared_sha)):
+    if declared_sha and (
+        len(declared_sha) != 64
+        or not all(c in "0123456789abcdef" for c in declared_sha)
+    ):
         problems.append("vcf_sha256: não é um SHA-256 hexadecimal de 64 caracteres")
     if vcf_sha256 is not None and declared_sha and declared_sha != str(vcf_sha256).lower():
         # The whole point: a QC report is about one file's sample.
@@ -280,8 +283,8 @@ def audit_summary(record: dict[str, Any]) -> dict[str, Any]:
     """What the manifest and the report print about the section-6 audit.
 
     Counts what was measured and what was declared unavailable, so a reader sees the shape of
-    the audit without reading the record — and so a record where most of §6 is `NÃO
-    DISPONÍVEL` cannot look like a complete one.
+    the audit without reading the record — and so a record where most of §6 carries the external
+    `NÃO DISPONÍVEL` status cannot look like a complete one.
     """
     problems = validate_record(record)
     metrics = record.get("metrics") if isinstance(record.get("metrics"), dict) else {}
