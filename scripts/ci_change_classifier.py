@@ -30,8 +30,10 @@ CONTAINER_FORCE_EXACT = {
     ".github/workflows/scaffold-validation.yml",
     "scripts/ci_change_classifier.py",
 }
+CONTAINER_IGNORED_EXACT = {
+    ".github/workflows/fallow.yml",
+}
 CONTAINER_IGNORED_PREFIXES = (
-    ".github/",
     "docs/",
     "tests/",
 )
@@ -61,7 +63,11 @@ def container_required(changed_paths: Iterable[str]) -> bool:
         path = _normalize(raw_path)
         if path in CONTAINER_FORCE_EXACT:
             return True
-        if path.endswith(".md") or path.startswith(CONTAINER_IGNORED_PREFIXES):
+        if (
+            path in CONTAINER_IGNORED_EXACT
+            or path.endswith(".md")
+            or path.startswith(CONTAINER_IGNORED_PREFIXES)
+        ):
             continue
         return True
     return False

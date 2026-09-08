@@ -648,6 +648,7 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertFalse(classifier.container_required(["tests/test_ci_optimization_contract.py"]))
         self.assertFalse(classifier.container_required(["docs/superpowers/plans/change.md"]))
         self.assertFalse(classifier.container_required([".github/workflows/fallow.yml"]))
+        self.assertTrue(classifier.container_required([".github/workflows/new-runtime.yml"]))
         self.assertFalse(classifier.container_required(["README.md", "docs/architecture.md"]))
         self.assertTrue(classifier.container_required(["Dockerfile"]))
         self.assertTrue(classifier.container_required(["environment.yml"]))
