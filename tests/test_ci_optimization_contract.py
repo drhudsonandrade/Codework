@@ -643,6 +643,29 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertTrue(classifier.validation_required(["notes.md", "src/code.py"], []))
         self.assertTrue(classifier.validation_required(["src/code.py", "notes.md"], ["src/code.py"]))
 
+    def test_container_classifier_skips_only_dockerignored_or_documentation_only_paths(self):
+        classifier = _load_classifier()
+        self.assertFalse(classifier.container_required(["tests/test_ci_optimization_contract.py"]))
+        self.assertFalse(classifier.container_required(["docs/superpowers/plans/change.md"]))
+        self.assertFalse(classifier.container_required([".github/workflows/fallow.yml"]))
+        self.assertFalse(classifier.container_required(["README.md", "docs/architecture.md"]))
+        self.assertTrue(classifier.container_required(["Dockerfile"]))
+        self.assertTrue(classifier.container_required(["environment.yml"]))
+        self.assertTrue(classifier.container_required(["mcp/src/server.ts"]))
+        self.assertTrue(classifier.container_required(["scripts/run_canary.sh"]))
+        self.assertTrue(classifier.container_required(["tests/unit.py", "main.nf"]))
+        self.assertTrue(classifier.container_required([".github/workflows/scaffold-validation.yml"]))
+
+    def test_scaffold_canary_uses_container_specific_path_gate(self):
+        workflow = _read("scaffold-validation.yml")
+        changes = _job_block(workflow, "changes")
+        self.assertIn("container_required:", changes)
+        self.assertIn('scripts/ci_change_classifier.py container --changed "$changed_paths"', changes)
+        self._assert_job_gate(workflow, "static", "validation_required")
+        self._assert_job_gate(workflow, "container-canary", "container_required")
+        publish = _job_block(workflow, "publish-ghcr")
+        self.assertIn("needs: [static, container-canary]", publish)
+
     def test_classifier_is_process_free_and_path_list_driven(self):
         source = CLASSIFIER.read_text(encoding="utf-8")
         self.assertEqual([], _subprocess_references(source))
@@ -855,8 +878,7 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertIn('CURRENT_SHA: ${{ github.sha }}', changes)
         self.assertIn('bash scripts/ci_changed_paths.sh "$BASE_SHA" "$HEAD_SHA" "$changed_paths" "$deleted_paths"', changes)
 
-        for job_name in ("static", "container-canary"):
-            self._assert_job_gate(workflow, job_name, "validation_required")
+        self._assert_job_gate(workflow, "static", "validation_required")
 
         self.assertIn("  static:\n", workflow)
         self.assertIn("  container-canary:\n", workflow)
