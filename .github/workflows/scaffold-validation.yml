@@ -111,6 +111,7 @@ jobs:
         run: python3 -m pip install --disable-pip-version-check -r reporting/requirements.txt
       - name: Validate shell and Python
         run: |
+          export TMPDIR="$RUNNER_TEMP"
           bash -n scripts/*.sh tests/test_wgs_align_or_stage.sh tests/test_ci_changed_paths.sh
           python3 -m compileall -q policy_engine/genoma_policy scripts evidence_adapters
           python3 -m unittest discover -s tests -v
