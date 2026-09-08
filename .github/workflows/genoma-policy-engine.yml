@@ -37,6 +37,8 @@ jobs:
     timeout-minutes: 5
     outputs:
       policy_relevant: ${{ steps.scope.outputs.policy_relevant }}
+      rego_required: ${{ steps.scope.outputs.rego_required }}
+      policy_container_required: ${{ steps.scope.outputs.policy_container_required }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -53,6 +55,8 @@ jobs:
           set -euo pipefail
           if [ "$EVENT_NAME" != "pull_request" ]; then
             echo "policy_relevant=true" >> "$GITHUB_OUTPUT"
+            echo "rego_required=true" >> "$GITHUB_OUTPUT"
+            echo "policy_container_required=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           changed_paths="$RUNNER_TEMP/policy-changed-paths.zlist"
@@ -61,12 +65,18 @@ jobs:
             case "$changed_path" in
               scripts/ci_change_classifier.py|.github/workflows/genoma-policy-engine.yml)
                 echo "policy_relevant=true" >> "$GITHUB_OUTPUT"
+                echo "rego_required=true" >> "$GITHUB_OUTPUT"
+                echo "policy_container_required=true" >> "$GITHUB_OUTPUT"
                 exit 0
                 ;;
             esac
           done < "$changed_paths"
           policy_relevant=$(python3 scripts/ci_change_classifier.py policy --changed "$changed_paths")
+          rego_required=$(python3 scripts/ci_change_classifier.py rego --changed "$changed_paths")
+          policy_container_required=$(python3 scripts/ci_change_classifier.py policy-container --changed "$changed_paths")
           echo "policy_relevant=$policy_relevant" >> "$GITHUB_OUTPUT"
+          echo "rego_required=$rego_required" >> "$GITHUB_OUTPUT"
+          echo "policy_container_required=$policy_container_required" >> "$GITHUB_OUTPUT"
 
   policy:
     needs: changes
@@ -139,7 +149,7 @@ jobs:
       always() &&
       (github.event_name != 'pull_request' || github.event.pull_request.draft == false) &&
       (needs.changes.result != 'success' ||
-       needs.changes.outputs.policy_relevant == 'true')
+       needs.changes.outputs.rego_required == 'true')
     name: OPA/Rego parity
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -163,7 +173,7 @@ jobs:
       always() &&
       (github.event_name != 'pull_request' || github.event.pull_request.draft == false) &&
       (needs.changes.result != 'success' ||
-       needs.changes.outputs.policy_relevant == 'true')
+       needs.changes.outputs.policy_container_required == 'true')
     name: Real Docker + canonical read-only mount
     runs-on: ubuntu-latest
     timeout-minutes: 15
