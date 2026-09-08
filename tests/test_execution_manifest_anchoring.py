@@ -29,6 +29,7 @@ def _payload(**kwargs):
 
 class ExecutionManifestAnchoringTest(unittest.TestCase):
     """Every execution-manifest value must be anchored in the provenance block."""
+
     def _compiled(self):
         """A compiled payload whose execution manifest is a mapping."""
         payload = _payload()

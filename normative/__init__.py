@@ -56,7 +56,6 @@ REQUIRED_HEADER_LINES = (
 
 def ruleset_block(*, include_sha256: bool = True) -> dict[str, Any]:
     """The `ruleset` block embedded in gate artifacts and report payloads."""
-
     block: dict[str, Any] = {
         "status": STATUS,
         "version": VERSION,
@@ -156,7 +155,6 @@ def verify_companion(filename: str, path: Any) -> dict[str, Any]:
 
 def rule_id(section: int) -> str:
     """Stable machine-addressable identity for a top-level normative section."""
-
     if not 0 <= section <= LAST_SECTION:
         raise ValueError(f"section out of normative range 0..{LAST_SECTION}: {section}")
     return f"GENOMA-{VERSION.upper()}-S{section:03d}"

@@ -11,7 +11,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, TextIO
+from typing import IO, Any, TextIO
 
 import normative
 from array_pipeline import assembly
@@ -363,6 +363,7 @@ def _text_stream(path: Path) -> tuple[TextIO, SourceInfo]:
     cannot tell a repaired file from an intact one, so the repair is not offered — the
     refusal names the file and the byte instead.
     """
+    raw: gzip.GzipFile | IO[bytes]
     lower = path.name.lower()
     if lower.endswith(".gz"):
         raw = gzip.open(path, "rb")

@@ -77,7 +77,8 @@ NOTES = {
 def _class_of_address(text: str) -> str:
     """Classify one literal address. Loopback is tested first: in `ipaddress`, 127.0.0.1 is
     `is_private` as well as `is_loopback`, and collapsing the two would let the local
-    container be recorded as a private-network deployment."""
+    container be recorded as a private-network deployment.
+    """
     address = ipaddress.ip_address(text)
     if address.is_loopback:
         return LOOPBACK
@@ -115,7 +116,8 @@ def aggregate(addresses: list[str]) -> str:
 
 def _authority(scheme: str, host: str, port: int) -> str:
     """Scheme, host and port only: any userinfo in the supplied URL is a credential and is
-    dropped rather than written into an artifact that gets published as evidence."""
+    dropped rather than written into an artifact that gets published as evidence.
+    """
     shown = f"[{host}]" if ":" in host else host
     return f"{scheme}://{shown}:{port}"
 

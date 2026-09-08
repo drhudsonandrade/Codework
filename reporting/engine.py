@@ -57,7 +57,8 @@ def _assert_serializable_provenance(rendered: dict[str, Any]) -> None:
         raise ReportReleaseError(
             f"rendered mode was mutated after rendering: {metadata_mode!r} != {render_mode!r}"
         )
-    data = rendered.get("data") if isinstance(rendered.get("data"), dict) else {}
+    raw_data = rendered.get("data")
+    data = raw_data if isinstance(raw_data, dict) else {}
     report_id = str(metadata.get("report_id") or "")
     model = load_catalog().get(report_id)
     if model is None:

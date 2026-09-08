@@ -139,6 +139,7 @@ CLEAN_ROWS = (
 
 class PassportScopeTest(unittest.TestCase):
     """What the pharmacogenomic passport is allowed to contain."""
+
     def test_only_pharmacogenomic_targets_enter_the_passport(self):
         """Only pharmacogenomic targets enter the passport; a ClinVar-only locus does not."""
         with tempfile.TemporaryDirectory() as td:
@@ -412,6 +413,7 @@ class DiplotypeRefusalTest(unittest.TestCase):
 
 class RegistryValidationTest(unittest.TestCase):
     """What the allele registry must declare before it is trusted."""
+
     def test_a_registry_without_a_cited_source_is_refused(self):
         """A registry that cites no source is refused."""
         bad = json.loads(json.dumps(REGISTRY))
@@ -490,6 +492,7 @@ class RegistryValidationTest(unittest.TestCase):
 
 class AnesthesiaCardTest(unittest.TestCase):
     """What the anaesthesia card says, and what it refuses to say."""
+
     def test_the_card_is_unavailable_without_a_declared_relevance_list(self):
         """Without a declared relevance list the card is NÃO DISPONÍVEL, with no observations."""
         with tempfile.TemporaryDirectory() as td:
@@ -743,6 +746,7 @@ _DEFAULT_REPORT_REGISTRY = object()
 
 class ReportIntegrationTest(unittest.TestCase):
     """The passport as the pharmacogenomic report consumes it."""
+
     def _payload(
         self,
         root: Path,

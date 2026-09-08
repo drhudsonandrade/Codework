@@ -11,11 +11,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+if str(Path(__file__).resolve().parents[1]) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.sealed_ruleset import SealedRulesetError, verify_transport
+
+ROOT = Path(__file__).resolve().parents[1]
 
 SEALED_DIR = ROOT / "normative" / "sealed"
 COMMAND_TIMEOUT_SECONDS = 180
@@ -33,6 +34,7 @@ ERROR = "ERROR"
 
 
 def _decode_tail(value: bytes | str | None, *, limit: int = OUTPUT_TAIL_BYTES) -> str:
+    """Decode the bounded tail of subprocess output, replacing incomplete UTF-8 bytes."""
     if value is None:
         return ""
     raw = value.encode("utf-8", errors="replace") if isinstance(value, str) else value
@@ -40,10 +42,12 @@ def _decode_tail(value: bytes | str | None, *, limit: int = OUTPUT_TAIL_BYTES) -
 
 
 def _command_evidence(stdout: bytes | str | None, stderr: bytes | str | None) -> str:
+    """Label and combine bounded stdout and stderr for the audit record."""
     return "STDOUT\n" + _decode_tail(stdout) + "\nSTDERR\n" + _decode_tail(stderr)
 
 
 def _signal_process_tree(process: subprocess.Popen[bytes], sig: signal.Signals) -> None:
+    """Signal the running process group on POSIX or the direct process elsewhere."""
     if process.poll() is not None:
         return
     try:
@@ -61,6 +65,7 @@ def _finish_timed_out_process(
     process: subprocess.Popen[bytes],
     timeout_exc: subprocess.TimeoutExpired,
 ) -> tuple[bytes | str | None, bytes | str | None]:
+    """Terminate a timed-out process, escalate if necessary, and recover its output."""
     stdout = timeout_exc.stdout
     stderr = timeout_exc.stderr
     _signal_process_tree(process, signal.SIGTERM)
@@ -111,6 +116,7 @@ class CommandOutcome:
 
 
 def run(cmd: list[str], *, timeout_seconds: float = COMMAND_TIMEOUT_SECONDS) -> CommandOutcome:
+    """Run an audit command with a timeout and distinguish launch failure from execution failure."""
     try:
         process = subprocess.Popen(
             cmd,
@@ -151,6 +157,7 @@ def run(cmd: list[str], *, timeout_seconds: float = COMMAND_TIMEOUT_SECONDS) -> 
 
 
 def _python_runtime_evidence() -> tuple[bool, str]:
+    """Describe the active Python executable and whether it exists as a file."""
     executable = Path(sys.executable) if sys.executable else Path()
     payload = {
         "python_executable": sys.executable,
@@ -174,6 +181,7 @@ def _check(
     exception_type: str | None = None,
     exception_message: str | None = None,
 ) -> dict:
+    """Build an audit check while keeping operational status and result independent."""
     payload = {
         "id": name,
         "operational_status": operational_status,
@@ -298,11 +306,13 @@ def ruleset_check(sealed_dir: Path = SEALED_DIR) -> tuple[dict, dict]:
 
 
 def _plane(checks: list[dict], ids: set[str]) -> str:
+    """Require a nonempty selection of passing checks before marking a plane as passing."""
     selected = [c for c in checks if c["id"] in ids]
     return "PASS" if selected and all(c["result"] == PASS for c in selected) else "BLOCKED"
 
 
 def _array_data_plane_probe() -> tuple[bool, str]:
+    """Check that the required array implementation and workflow files exist."""
     required_array = [
         ROOT / "workflows/array.nf",
         ROOT / "array_pipeline/qc.py",
@@ -319,6 +329,7 @@ def _array_data_plane_probe() -> tuple[bool, str]:
 
 
 def _evidence_plane_probe() -> tuple[bool, str]:
+    """Check that the adapter source declares every required evidence provider."""
     adapters = (ROOT / "evidence_adapters/__init__.py").read_text(encoding="utf-8")
     evidence_sources = ["clinvar", "clingen", "cpic", "clinpgx", "gnomad", "pgs_catalog"]
     missing = [x for x in evidence_sources if f'"{x}"' not in adapters]
@@ -329,6 +340,7 @@ def _evidence_plane_probe() -> tuple[bool, str]:
 
 
 def _grch38_strategy_probe() -> tuple[bool, str]:
+    """Check that the reference strategy document and bundle verifier exist."""
     prebuilt = ROOT / "scripts/verify_prebuilt_bwa_mem2_bundle.py"
     strategy = ROOT / "docs/GRCH38_COMPUTE_STRATEGY.md"
     return prebuilt.is_file() and strategy.is_file(), (
@@ -337,6 +349,7 @@ def _grch38_strategy_probe() -> tuple[bool, str]:
 
 
 def _personal_fixtures_probe() -> tuple[bool, str]:
+    """List local file paths matching the configured personal-data name patterns."""
     personal_patterns = ("dados dna", "dna_harmonizado", "myheritage_raw", "genera_raw")
     tracked_like = []
     for p in ROOT.rglob("*"):
@@ -348,6 +361,7 @@ def _personal_fixtures_probe() -> tuple[bool, str]:
 
 
 def audit(*, allow_template_sealed_only: bool = False) -> dict:
+    """Collect checks and plane results without granting post-deployment approval."""
     checks: list[dict] = []
 
     checks.append(inspection_check("PYTHON_RUNTIME", _python_runtime_evidence))
@@ -435,13 +449,16 @@ def audit(*, allow_template_sealed_only: bool = False) -> dict:
 
 
 def main() -> int:
+    """Write and print the audit result, returning a nonzero code for a blocking outcome."""
     p = argparse.ArgumentParser()
     p.add_argument("--output", default="audit.json")
     p.add_argument("--allow-template-sealed-only", action="store_true")
     args = p.parse_args()
     payload = audit(allow_template_sealed_only=args.allow_template_sealed_only)
-    Path(args.output).write_text(json.dumps(payload, ensure_ascii=False,
-         indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    Path(args.output).write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
     # Exit status follows the blocking result axis; availability is reported independently.
     return 0 if payload["result"] == PASS else 2

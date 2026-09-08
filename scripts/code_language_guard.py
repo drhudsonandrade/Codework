@@ -588,8 +588,8 @@ def _validate_policy_monotonicity(root: Path, policy: LanguagePolicy) -> None:
     removed = sorted(base_policy.technical_terms - policy.technical_terms)
     if removed:
         raise LanguagePolicyError(
-            "language policy technical_terms may not remove trusted pull request base terms: " + \
-                ", ".join(removed)
+            "language policy technical_terms may not remove trusted pull request base terms: "
+            + ", ".join(removed)
         )
     base_excluded = {entry.path for entry in base_policy.excluded_roots}
     added_excluded = sorted({entry.path for entry in policy.excluded_roots} - base_excluded)

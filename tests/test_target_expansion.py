@@ -132,6 +132,7 @@ class ScriptLoaderTest(unittest.TestCase):
 
 class ClinVarFilterTest(unittest.TestCase):
     """Which ClinVar rows the scanner accepts as targets, and which it refuses."""
+
     def test_a_qualifying_row_is_kept(self):
         """A row that passes every filter is kept, indexed by rsid, and counted for its gene."""
         by_rsid, stats, counts = _scan([_row()])
@@ -200,6 +201,7 @@ class ClinVarFilterTest(unittest.TestCase):
 
 class TargetShapeTest(unittest.TestCase):
     """What a built target asserts about the variant behind it."""
+
     def test_one_alternate_yields_an_assessed_allele(self):
         """A single alternate allele becomes the target's assessed allele."""
         by_rsid, _s, _c = _scan([_row()])
@@ -265,6 +267,7 @@ class TargetShapeTest(unittest.TestCase):
 
 class GzipManifestTest(unittest.TestCase):
     """Reading a target manifest that is stored compressed."""
+
     def test_a_gzipped_manifest_loads(self):
         """A gzipped manifest loads and yields the same targets as an uncompressed one."""
         manifest = {
@@ -305,6 +308,7 @@ def _write(payload: dict, directory: Path, name: str) -> Path:
 
 class MergeTest(unittest.TestCase):
     """How two target registries combine, and what the merge refuses to decide on its own."""
+
     def _merge(self, *manifests):
         """Merge these manifests through the real script, via temporary files."""
         with tempfile.TemporaryDirectory() as td:
@@ -445,6 +449,7 @@ class MergeTest(unittest.TestCase):
 
 class TraitScopeTest(unittest.TestCase):
     """How trait scopes are validated against the GWAS catalogue."""
+
     def test_a_declared_term_with_no_significant_association_is_a_hard_error(self):
         """A declared term with no genome-wide-significant association
         is an error, not an empty scope.
@@ -640,6 +645,7 @@ class ShippedRegistryTest(unittest.TestCase):
 
 class AssessedAlleleApplicationTest(unittest.TestCase):
     """How a re-assessment is applied to a target that already carried an allele."""
+
     def test_refusal_clears_stale_allele_and_provenance(self):
         """A refusal clears the stale allele and every provenance field that supported it."""
         target = {
@@ -1193,6 +1199,7 @@ class StrictReferenceDecodingTest(unittest.TestCase):
     """Curated reference inputs fail closed rather than replacing malformed UTF-8."""
 
     def test_gwas_associations_reject_invalid_utf8(self):
+        """Refuse an association table containing an invalid UTF-8 byte."""
         directory = Path(tempfile.mkdtemp())
         path = directory / "associations.tsv"
         path.write_bytes(b"SNPS\tDISEASE/TRAIT\nrs1\tbad\xff\n")
@@ -1201,6 +1208,7 @@ class StrictReferenceDecodingTest(unittest.TestCase):
                 handle.read()
 
     def test_gwas_ancestry_rejects_invalid_utf8(self):
+        """Refuse an ancestry table containing an invalid UTF-8 byte."""
         directory = Path(tempfile.mkdtemp())
         path = directory / "ancestries.tsv"
         path.write_bytes(
@@ -1212,6 +1220,7 @@ class StrictReferenceDecodingTest(unittest.TestCase):
             TRAITS.read_ancestries(path)
 
     def test_clinvar_bulk_rejects_invalid_utf8(self):
+        """Refuse an invalid UTF-8 byte in a compressed bulk variant table."""
         directory = Path(tempfile.mkdtemp())
         path = directory / "variant_summary.txt.gz"
         raw = ("\t".join(COLUMNS) + "\n").encode("utf-8") + b"bad\xff\n"
@@ -1220,6 +1229,7 @@ class StrictReferenceDecodingTest(unittest.TestCase):
             EXPAND.scan_clinvar(path)
 
     def test_clingen_dosage_rejects_invalid_utf8(self):
+        """Refuse a dosage table containing an invalid UTF-8 byte."""
         directory = Path(tempfile.mkdtemp())
         path = directory / "dosage.tsv"
         path.write_bytes(DOSAGE_HEADER.encode("utf-8") + b"\nHFE\t1\tbad\xff\n")

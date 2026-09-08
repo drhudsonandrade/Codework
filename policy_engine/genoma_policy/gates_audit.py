@@ -28,7 +28,13 @@ class AuditGates:
             by_section[number] = item
         missing = [n for n in range(len(self.ruleset.sections)) if n not in by_section]
         if missing: reasons.append(f"{len(missing)} rules not considered; first missing: {missing[:10]}")
-        evidence_ids = {source.get("id") for source in _get_list(manifest, "sources") if isinstance(source, dict) and isinstance(source.get("id"), str) and source.get("id")}
+        evidence_ids = {
+            source_id
+            for source in _get_list(manifest, "sources")
+            if isinstance(source, dict)
+            and isinstance(source_id := source.get("id"), str)
+            and source_id
+        }
         for number, item in by_section.items():
             if number < 0 or number >= len(self.ruleset.sections): reasons.append(f"unknown section attestation {number}"); continue
             reasons.extend(validate_section_attestation(item, self.ruleset.sections[number], evidence_ids))

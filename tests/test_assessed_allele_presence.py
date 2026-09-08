@@ -69,6 +69,7 @@ TARGETS = {
 
 class AssessedBasesTest(unittest.TestCase):
     """Which bases a target counts as assessed."""
+
     def test_a_single_declared_allele_is_the_whole_set(self):
         """A single declared allele is the whole assessed set."""
         self.assertEqual(assessed_bases({"assessed_allele": "A"}), {"A"})
@@ -96,6 +97,7 @@ class AssessedBasesTest(unittest.TestCase):
 
 class MultiAllelicClassificationTest(unittest.TestCase):
     """How a multi-allelic locus is classified against the genotype actually read."""
+
     def _matrix(self, rows: str):
         """The completeness matrix entries produced by these array rows."""
         with tempfile.TemporaryDirectory() as td:
@@ -241,6 +243,7 @@ class InterpretationRefusesUntestedLociTest(unittest.TestCase):
 
 class ShippedRegistryTest(unittest.TestCase):
     """The shipped registry, measured rather than assumed."""
+
     def test_most_multi_allelic_targets_can_now_be_answered(self):
         """Measured, not assumed: the fix has to actually reach the shipped registry."""
         with gzip.open(
