@@ -43,9 +43,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+if str(Path(__file__).resolve().parents[1]) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from array_pipeline.qc import (
     MAX_UNCOMPRESSED_BYTES,
@@ -55,6 +54,8 @@ from array_pipeline.qc import (
 )
 from array_pipeline.targets import load_target_manifest, sha256_json
 from scripts.merge_target_manifests import SCOPE_RANK
+
+ROOT = Path(__file__).resolve().parents[1]
 
 DEFAULT_SCOPES = ROOT / "config/trait_scopes.json"
 DEFAULT_TARGETS_OUT = ROOT / "config/targets_gwas_traits.json"
@@ -115,7 +116,9 @@ def _open_associations(path: Path) -> io.TextIOWrapper:
 def read_ancestries(path: Path) -> dict[str, dict[str, Any]]:
     """Discovery-cohort ancestry per study accession, from the release's ancestry table."""
     out: dict[str, dict[str, Any]] = defaultdict(
-        lambda: {"initial": defaultdict(int), "replication": defaultdict(int), "descriptions": set()}
+        lambda: {
+            "initial": defaultdict(int), "replication": defaultdict(int), "descriptions": set()
+        }
     )
     with path.open("r", encoding="utf-8", errors="strict") as fh:
         for row in csv.DictReader(fh, delimiter="\t"):
@@ -280,8 +283,8 @@ def build(
     for rsid, records in by_rsid.items():
         for record in records:
             by_term[record["term_id"]].append((record["pvalue"], rsid))
-    # `.values()`: o termo já foi usado para agrupar, e o corte por termo abaixo não
-    # precisa do rótulo. Iterar sobre pares e descartar a chave diz que ela importa.
+    # `.values()`: the term already grouped the entries; the per-term cutoff below
+    # does not need its label. Iterating over pairs and discarding the key implies it matters.
     for entries in by_term.values():
         for _pvalue, rsid in sorted(set(entries))[:per_term]:
             keep.add(rsid)
@@ -383,7 +386,9 @@ def build(
                         "range": record["confidence_interval"] or None,
                         "risk_frequency": record["risk_allele_frequency"] or None,
                     },
-                    "ancestry": {"status": UNAVAILABLE, "reason": "estudo sem tabela de ancestralidade"},
+                    "ancestry": {
+                        "status": UNAVAILABLE, "reason": "estudo sem tabela de ancestralidade"
+                    },
                 },
             )
             entry["associations"] += 1
@@ -407,7 +412,11 @@ def build(
                 "rsid": rsid,
                 "gene": target["gene"],
                 "grch38": target["grch38"],
-                "clinvar": {"status": UNAVAILABLE, "records": [], "reason": "rota de traços; não consultado"},
+                "clinvar": {
+                    "status": UNAVAILABLE,
+                    "records": [],
+                    "reason": "rota de traços; não consultado",
+                },
                 "gwas": {
                     "status": "VERIFICADO",
                     "associations_considered": len(records),
@@ -422,10 +431,16 @@ def build(
 
     generated = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     sources = [
-        f"EBI GWAS Catalog release, {GWAS_RELEASE}/gwas-catalog-associations_ontology-annotated-full.zip, "
-        f"lido em {generated}. Coordenadas em GRCh38. Apenas associações de SNP único com "
-        f"p <= {threshold}.",
-        f"EBI GWAS Catalog ancestries, {GWAS_RELEASE}/gwas-catalog-download-ancestries-v1.0.3.1.txt",
+        (
+            f"EBI GWAS Catalog release, {GWAS_RELEASE}/"
+            "gwas-catalog-associations_ontology-annotated-full.zip, "
+            f"lido em {generated}. Coordenadas em GRCh38. Apenas associações de SNP único com "
+            f"p <= {threshold}."
+        ),
+        (
+            f"EBI GWAS Catalog ancestries, {GWAS_RELEASE}/"
+            "gwas-catalog-download-ancestries-v1.0.3.1.txt"
+        ),
         f"Escopo declarado pelo operador em config/trait_scopes.json ({config['version']})",
     ]
 
