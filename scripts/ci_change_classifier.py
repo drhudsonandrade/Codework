@@ -26,6 +26,26 @@ POLICY_PREFIXES = (
     ".github/governance/",
 )
 
+REGO_FORCE_EXACT = {
+    ".github/workflows/genoma-policy-engine.yml",
+    "scripts/ci_change_classifier.py",
+}
+REGO_PREFIXES = (
+    "policy_engine/policy/rego/",
+)
+
+POLICY_CONTAINER_EXACT = {
+    ".github/workflows/genoma-policy-engine.yml",
+    "manifests/RULESET_V3.4.sha256",
+    "scripts/ci_change_classifier.py",
+    "scripts/materialize_ruleset.py",
+    "scripts/sealed_ruleset.py",
+}
+POLICY_CONTAINER_PREFIXES = (
+    "normative/",
+    "policy_engine/",
+)
+
 CONTAINER_FORCE_EXACT = {
     ".github/workflows/scaffold-validation.yml",
     "scripts/ci_change_classifier.py",
@@ -48,6 +68,24 @@ def policy_relevant(paths: Iterable[str]) -> bool:
     for raw_path in paths:
         path = _normalize(raw_path)
         if path in POLICY_EXACT or path.startswith(POLICY_PREFIXES):
+            return True
+    return False
+
+
+def rego_required(paths: Iterable[str]) -> bool:
+    """Return whether OPA/Rego parity can be affected by these paths."""
+    for raw_path in paths:
+        path = _normalize(raw_path)
+        if path in REGO_FORCE_EXACT or path.startswith(REGO_PREFIXES):
+            return True
+    return False
+
+
+def policy_container_required(paths: Iterable[str]) -> bool:
+    """Return whether the policy container build/runtime can be affected."""
+    for raw_path in paths:
+        path = _normalize(raw_path)
+        if path in POLICY_CONTAINER_EXACT or path.startswith(POLICY_CONTAINER_PREFIXES):
             return True
     return False
 
@@ -84,7 +122,7 @@ def _read_nul_paths(path: Path) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("policy", "markdown", "container"))
+    parser.add_argument("mode", choices=("policy", "rego", "policy-container", "markdown", "container"))
     parser.add_argument("--changed", type=Path, required=True)
     parser.add_argument("--deleted", type=Path)
     args = parser.parse_args()
@@ -92,6 +130,10 @@ def main() -> int:
     changed = _read_nul_paths(args.changed)
     if args.mode == "policy":
         result = policy_relevant(changed)
+    elif args.mode == "rego":
+        result = rego_required(changed)
+    elif args.mode == "policy-container":
+        result = policy_container_required(changed)
     elif args.mode == "container":
         result = container_required(changed)
     else:

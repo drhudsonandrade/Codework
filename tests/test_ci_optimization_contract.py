@@ -656,6 +656,35 @@ class CIOptimizationContractTest(unittest.TestCase):
         )
         self.assertFalse(classifier.policy_relevant(["docs/architecture.md"]))
 
+    def test_policy_component_classifiers_scope_rego_and_container_independently(self):
+        classifier = _load_classifier()
+        self.assertTrue(classifier.rego_required(["policy_engine/policy/rego/genoma.rego"]))
+        self.assertFalse(classifier.rego_required(["policy_engine/genoma_policy/service.py"]))
+        self.assertFalse(classifier.rego_required(["scripts/validate_repo.py"]))
+
+        self.assertTrue(classifier.policy_container_required(["policy_engine/genoma_policy/service.py"]))
+        self.assertTrue(classifier.policy_container_required(["policy_engine/policy/rego/genoma.rego"]))
+        self.assertTrue(classifier.policy_container_required(["manifests/RULESET_V3.4.sha256"]))
+        self.assertTrue(classifier.policy_container_required(["normative/sealed/ruleset.txt"]))
+        self.assertTrue(classifier.policy_container_required(["scripts/materialize_ruleset.py"]))
+        self.assertTrue(classifier.policy_container_required(["scripts/sealed_ruleset.py"]))
+        self.assertFalse(classifier.policy_container_required(["scripts/validate_repo.py"]))
+        self.assertFalse(classifier.policy_container_required(["locks/runtime-lock.json"]))
+        self.assertFalse(classifier.policy_container_required(["adapters/example.py"]))
+
+    def test_policy_workflow_uses_component_specific_pr_gates(self):
+        workflow = _read("genoma-policy-engine.yml")
+        changes = _job_block(workflow, "changes")
+        self.assertIn("rego_required:", changes)
+        self.assertIn("policy_container_required:", changes)
+        self.assertIn('scripts/ci_change_classifier.py rego --changed "$changed_paths"', changes)
+        self.assertIn('scripts/ci_change_classifier.py policy-container --changed "$changed_paths"', changes)
+        self._assert_job_gate(workflow, "policy", "policy_relevant")
+        self._assert_job_gate(workflow, "rego", "rego_required")
+        self._assert_job_gate(workflow, "container", "policy_container_required")
+        self.assertIn('echo "rego_required=true" >> "$GITHUB_OUTPUT"', changes)
+        self.assertIn('echo "policy_container_required=true" >> "$GITHUB_OUTPUT"', changes)
+
     def test_markdown_classifier_behavior_on_modifications_deletions_and_renames(self):
         classifier = _load_classifier()
         self.assertFalse(classifier.validation_required(["docs/architecture.md"], []))
@@ -879,8 +908,9 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertIn("'scripts/ci_change_classifier.py'", push)
         self.assertIn("'.github/governance/**'", push)
 
-        for job_name in ("policy", "rego", "container"):
-            self._assert_job_gate(workflow, job_name, "policy_relevant")
+        self._assert_job_gate(workflow, "policy", "policy_relevant")
+        self._assert_job_gate(workflow, "rego", "rego_required")
+        self._assert_job_gate(workflow, "container", "policy_container_required")
 
         self.assertNotIn("\n  secrets:\n", workflow)
         self.assertNotIn("Gitleaks secret scan", workflow)
