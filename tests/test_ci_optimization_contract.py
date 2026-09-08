@@ -945,6 +945,19 @@ class CIOptimizationContractTest(unittest.TestCase):
         static = _job_block(_read("scaffold-validation.yml"), "static")
         self.assertIn("bash tests/test_ci_changed_paths.sh", static)
 
+    def test_high_volume_artifact_retention_is_bounded(self):
+        """Keep disposable artifacts at 30 days while audit evidence stays long-lived."""
+        scaffold = _read("scaffold-validation.yml")
+        canary = _job_block(scaffold, "container-canary")
+        self.assertIn("retention-days: 30", canary)
+
+        ngs = _read("genoma-ngs-runtime-gate.yml")
+        preflight = _job_block(ngs, "preflight")
+        self.assertIn("retention-days: 30", preflight)
+
+        audit = _read("genoma-audit.yml")
+        self.assertIn("retention-days: 365", _job_block(audit, "audit"))
+
     def test_scaffold_publish_owns_build_cache_without_widening_permissions(self):
         workflow = _read("scaffold-validation.yml")
         canary = _job_block(workflow, "container-canary")
