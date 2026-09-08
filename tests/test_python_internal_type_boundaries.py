@@ -67,11 +67,13 @@ class PythonInternalTypeBoundaryTest(unittest.TestCase):
                     "_render_mode": "FINAL",
                     "data": invalid,
                 }
-                with patch.object(
-                    engine, "_publication_blockers", return_value=["fixture-refusal"]
-                ) as check:
-                    with self.assertRaisesRegex(engine.ReportReleaseError, "fixture-refusal"):
-                        engine._assert_serializable_provenance(rendered)
+                with (
+                    patch.object(
+                        engine, "_publication_blockers", return_value=["fixture-refusal"]
+                    ) as check,
+                    self.assertRaisesRegex(engine.ReportReleaseError, "fixture-refusal"),
+                ):
+                    engine._assert_serializable_provenance(rendered)
                 check.assert_called_once_with({}, "01")
 
     def test_final_write_boundary_passes_the_original_mapping_to_the_gate(self):
@@ -82,11 +84,13 @@ class PythonInternalTypeBoundaryTest(unittest.TestCase):
             "_render_mode": "FINAL",
             "data": data,
         }
-        with patch.object(
-            engine, "_publication_blockers", return_value=["fixture-refusal"]
-        ) as check:
-            with self.assertRaisesRegex(engine.ReportReleaseError, "fixture-refusal"):
-                engine._assert_serializable_provenance(rendered)
+        with (
+            patch.object(
+                engine, "_publication_blockers", return_value=["fixture-refusal"]
+            ) as check,
+            self.assertRaisesRegex(engine.ReportReleaseError, "fixture-refusal"),
+        ):
+            engine._assert_serializable_provenance(rendered)
         self.assertIs(check.call_args.args[0], data)
         self.assertEqual(data, {"marker": "fixture"})
 

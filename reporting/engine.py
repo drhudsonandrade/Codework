@@ -119,7 +119,9 @@ def _publication_blockers(data: dict[str, Any], report_id: str) -> list[str]:
         if ruleset.get(key) != expected:
             blockers.append(f"ruleset:{key}")
 
-    publication = data.get("publication_gate") if isinstance(data.get("publication_gate"), dict) else {}
+    publication = (
+        data.get("publication_gate") if isinstance(data.get("publication_gate"), dict) else {}
+    )
     for key in (
         "passed",
         "consent_verified",
@@ -131,7 +133,9 @@ def _publication_blockers(data: dict[str, Any], report_id: str) -> list[str]:
         if publication.get(key) is not True:
             blockers.append(f"publication_gate:{key}")
 
-    policy = data.get("policy_evaluation") if isinstance(data.get("policy_evaluation"), dict) else {}
+    policy = (
+        data.get("policy_evaluation") if isinstance(data.get("policy_evaluation"), dict) else {}
+    )
     if policy.get("ready_for_requested_operation") is not True:
         blockers.append("policy_evaluation:ready_for_requested_operation")
     planes = policy.get("planes") if isinstance(policy.get("planes"), dict) else {}
@@ -191,7 +195,10 @@ def _model_markdown(report_id: str, model: dict[str, Any]) -> str:
         [
             "## Contrato de segurança",
             "",
-            "Preencher somente com dados rastreáveis. Não inventar resultado, execução, fonte, confirmação ou valor ausente.",
+            (
+                "Preencher somente com dados rastreáveis. Não inventar resultado, "
+                "execução, fonte, confirmação ou valor ausente."
+            ),
             "",
         ]
     )
@@ -265,7 +272,9 @@ def _final_markdown(report_id: str, model: dict[str, Any], data: dict[str, Any])
             "## Execution Manifest",
             "",
             "```json",
-            json.dumps(data.get("execution_manifest", {}), ensure_ascii=False, indent=2, sort_keys=True),
+            json.dumps(
+                data.get("execution_manifest", {}), ensure_ascii=False, indent=2, sort_keys=True
+            ),
             "```",
             "",
             "## Fontes",
@@ -316,8 +325,17 @@ def _to_html(markdown: str, title: str) -> str:
             body.append(f"<p>• {html.escape(raw[2:])}</p>")
         elif raw.strip():
             body.append(f"<p>{html.escape(raw)}</p>")
-    css = "body{font-family:system-ui,-apple-system,sans-serif;max-width:980px;margin:40px auto;padding:0 24px;line-height:1.5}h1,h2{page-break-after:avoid}pre{white-space:pre-wrap;background:#f4f4f4;padding:16px}"
-    return f"<!doctype html><html lang='pt-BR'><head><meta charset='utf-8'><title>{html.escape(title)}</title><style>{css}</style></head><body>{''.join(body)}</body></html>"
+    css = (
+        "body{font-family:system-ui,-apple-system,sans-serif;"
+        "max-width:980px;margin:40px auto;padding:0 24px;line-height:1.5}"
+        "h1,h2{page-break-after:avoid}pre{white-space:pre-wrap;"
+        "background:#f4f4f4;padding:16px}"
+    )
+    return (
+        f"<!doctype html><html lang='pt-BR'><head><meta charset='utf-8'>"
+        f"<title>{html.escape(title)}</title><style>{css}</style>"
+        f"</head><body>{''.join(body)}</body></html>"
+    )
 
 
 def render_document(report_id: str, data: dict[str, Any], *, mode: str = "MODEL") -> dict[str, Any]:
@@ -377,7 +395,9 @@ def render_document(report_id: str, data: dict[str, Any], *, mode: str = "MODEL"
     }
 
 
-def write_bundle(rendered: dict[str, Any], output_dir: Path, *, stem: str | None = None) -> dict[str, Path]:
+def write_bundle(
+    rendered: dict[str, Any], output_dir: Path, *, stem: str | None = None
+) -> dict[str, Path]:
     """Write the JSON, Markdown and HTML of one render, and return where each landed.
 
     All three share a stem so a reader can tell they describe the same document, and the JSON

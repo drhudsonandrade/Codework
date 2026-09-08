@@ -146,16 +146,20 @@ def _classify(
     if duplicate:
         return (
             NAO_REPORTAVEL,
-            f"o arquivo traz linhas duplicadas com genótipos divergentes para este rsid "
-            f"({duplicate}); "
-            "escolher uma delas seria arbitrar um conflito",
+            (
+                f"o arquivo traz linhas duplicadas com genótipos divergentes para este rsid "
+                f"({duplicate}); "
+                "escolher uma delas seria arbitrar um conflito"
+            ),
         )
 
     if status in UNRESOLVED_OVERLAP_STATUSES:
         return (
             NAO_REPORTAVEL,
-            f"registro cross-platform não resolvido ({status}); conflitos nunca são "
-            "resolvidos por arbitragem",
+            (
+                f"registro cross-platform não resolvido ({status}); conflitos nunca são "
+                "resolvidos por arbitragem"
+            ),
         )
 
     if not _is_valid_consensus(raw_gt):
@@ -180,8 +184,10 @@ def _classify(
     if not assessed:
         return (
             OBSERVADO,
-            "genótipo chamado; ausência não pode ser afirmada porque o registro não "
-            "declara o alelo avaliado",
+            (
+                "genótipo chamado; ausência não pode ser afirmada porque o registro não "
+                "declara o alelo avaliado"
+            ),
         )
     non_snp = sorted(
         allele for allele in assessed
@@ -203,8 +209,7 @@ def _classify(
     if present:
         return (
             OBSERVADO,
-            f"genótipo chamado {genotype} contém o alelo avaliado "
-            f"{', '.join(present)}",
+            (f"genótipo chamado {genotype} contém o alelo avaliado {', '.join(present)}"),
         )
     return (
         NAO_DETECTADO,
@@ -417,8 +422,7 @@ def build_completeness_matrix(
                 "class": item,
                 "status": "NÃO DISPONÍVEL",
                 "basis": (
-                    "classe de variação não resolvida por genotipagem em array, em "
-                    "nenhum locus"
+                    "classe de variação não resolvida por genotipagem em array, em nenhum locus"
                 ),
             }
             for item in UNSUPPORTED_ARRAY_CLAIMS
@@ -435,8 +439,10 @@ def build_completeness_matrix(
             f"A matriz descreve {assay.coverage_subject}; não estabelece significado clínico "
             "de nenhum locus.",
             assay.genome_wide_note,
-            "NÃO DETECTADO depende de o registro declarar o alelo avaliado; sem isso o "
-            "locus permanece OBSERVADO.",
+            (
+                "NÃO DETECTADO depende de o registro declarar o alelo avaliado; sem isso o "
+                "locus permanece OBSERVADO."
+            ),
             "Pontos cegos estruturais são limites da plataforma, não achados desta amostra.",
         ],
     }

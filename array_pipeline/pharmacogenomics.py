@@ -747,9 +747,12 @@ def build_pharmacogenomic_passport(
                 "derivável do genótipo."
             ),
             "Achados acionáveis exigem confirmação por método ortogonal antes de mudar conduta.",
-            "Diplótipo condicional não é diplótipo estabelecido: vale sob a suposição declarada "
-            "de que nenhum alelo não interrogado está presente, e o risco residual dessa "
-            "suposição está quantificado por grupo biogeográfico.",
+            (
+                "Diplótipo condicional não é diplótipo estabelecido: vale sob a suposição "
+                "declarada de que nenhum alelo não interrogado está presente, "
+                "e o risco residual dessa "
+                "suposição está quantificado por grupo biogeográfico."
+            ),
             # This used to say "Residual risk without an upper bound (...) prevents a conditional
             # phenotype." — which the engine contradicts. `conditional_phenotype`
             # requires the residual to be *computable*, not *bounded*: boundedness is
