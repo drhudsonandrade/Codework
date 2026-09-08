@@ -96,6 +96,8 @@ class ScientificStreamCompatibilityTest(unittest.TestCase):
                     with _open_associations(path) as stream:
                         self.assertEqual(stream.read(), text)
                     self.assertTrue(stream.closed)
+                    if path.suffix == ".zip":
+                        self.assertIsNone(getattr(stream, "_genoma_zipfile").fp)
 
 
 if __name__ == "__main__":

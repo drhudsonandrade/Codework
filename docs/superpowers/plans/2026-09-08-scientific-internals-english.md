@@ -51,14 +51,159 @@ Files: create `docs/SCIENTIFIC_CODE_LANGUAGE_INVENTORY.md`; update only the curr
 - [x] Record environmental limits honestly: Nextflow is not on this executor's PATH; Docker socket access is denied. Do not claim a local Nextflow/container canary or any real DNA analysis.
 - [ ] Deliver a final checkpoint and leave human approval/manual merge outstanding.
 
-## Local implementation evidence
+## Reproducible validation evidence
 
-The pre-commit tree passed 954 root tests (one skipped), 102 focused tests,
-14 direct isolated test executions, the existing WGS shell regression,
-the source-equivalence check and 72 protected-file byte comparisons.
-Release checkboxes remain open here; final exact-SHA validation and external
-review are recorded in the PR instead of rewriting this plan after every check.
+The completed local checks below refer to the published implementation commit
+`dcf49e582f6aed2d7601a35f3769664cb6c57976` (tree
+`bde8260f7aa15843c003c4b3a532a14243114384`), not to a future merge or deployment.
+Its exact-HEAD run recorded **955 root tests, OK (one skipped)**, the WGS
+synthetic boundary regression PASS, source AST equivalence and 72 protected-file
+byte comparisons. The earlier pre-commit 954-test run preceded the stream test;
+it is historical evidence, not the final validation count.
+
+From a full-history checkout of that commit, with Python 3.12 and the repository's
+existing test dependencies installed, the commands are:
+
+```bash
+ROOT="$(git rev-parse --show-toplevel)"
+python3 -m unittest discover -s tests -v
+python3 -m unittest tests.test_scientific_code_language -v
+PYTHON="$(command -v python3)"
+(cd /tmp; "$PYTHON" -I "$ROOT/tests/test_assessed_allele_presence.py" -v)
+bash tests/test_wgs_align_or_stage.sh
+python3 scripts/code_language_guard.py --check
+python3 scripts/validate_repo.py
+python3 scripts/verify_supply_chain_lock.py
+for script in scripts/*.sh; do bash -n "$script"; done
+python3 -m compileall -q array_pipeline scripts policy_engine/genoma_policy reporting tests
+```
+
+Expected results at the named commit: 955 root tests (one skipped), five new
+checks, 14 direct isolated assessed-allele tests and
+`WGS alignment boundary regressions: PASS`. The 14-test isolated invocation and
+the earlier 102-test focused invocation are recorded in `local-validation.log`;
+all their tested existing source files are unchanged between that run and the
+published implementation SHA. These counts are not additive independent suites.
+
+### Local evidence locators and digests
+
+Host: `drhudson` (Ubuntu). The retained evidence directory is:
+
+`/srv/remote-desktop-commander-workspace/codework-audit/scientific-english-stage3/`
+
+These local filesystem locators are **not public download URLs**. SHA-256 values
+bind the retained files; the commands and portable comparison below let another
+checkout reproduce the checks without access to this host. CI results are linked
+from [PR #59 checks](https://github.com/drhudsonandrade/Codework/pull/59/checks).
+
+| File beneath that directory | SHA-256 | Recorded scope |
+| --- | --- | --- |
+| `final-validation.log` | `5b67ae33ae1b48a7320a6ce7dbd3005ba1a488df892d84a36a35dfa7b4a2565d` | Exact `dcf49e5` validation, 955 tests and compatibility checks |
+| `compatibility.json` | `1b4c6e2474d07200ddca650c249b408208d02341d055ed85f3928d235d01729f` | Three normalized AST comparisons and the 72 file digests |
+| `verify_compatibility.py` | `9d19c21517fe98cebe133902b4802270a73ecc594c4e91cd2a2c71489b3848cc` | Original host-bound comparison procedure |
+| `local-validation.log` | `06407fd169123fbc334a385706f5141b1554f64c84d6592ba20bb6ddb6f99d2a` | Earlier 954-test tree, 102 focused tests, 14 isolated tests and WGS regression |
+| `validation-afeb19d.log` | `28f6c278c1ef35907210428abac623d1c6a7569b15712dff79061db33f3acc6b` | Earlier published local commit `afeb19d`, before stream typing/test addition |
 
 The later local static pass reproduced one ZIP/gzip assignment-type error in
-`_open_associations`. Its explicit local union annotation is covered by a
-plain/gzip/ZIP preservation test; no scientific rule or runtime output changes.
+`_open_associations`. The explicit local union annotation removed that diagnostic;
+the plain/gzip/ZIP preservation test passed before and after the annotation.
+The review follow-up additionally checks the underlying ZIP archive descriptor,
+not only `stream.closed`; final follow-up evidence is recorded on the PR's new
+exact SHA. Unchecked release items above remain pending until that evidence exists.
+
+### Portable AST and protected-byte comparison
+
+Run this read-only comparison from the repository root with full Git history.
+It compares the named base and validated commit directly. It permits only the
+three explicit private test renames, actual leading docstrings, the documented
+bootstrap placement and the local stream annotation. Runtime literal values and
+all remaining executable AST nodes must match. The protected bytes are compared
+independently, without any normalization.
+
+```bash
+python3 - <<'PY_COMPARE'
+"""Check stage-three source equivalence against the exact merged base."""
+import ast
+import hashlib
+import json
+import subprocess
+from pathlib import Path
+
+ROOT = Path.cwd()
+VALIDATED = 'dcf49e582f6aed2d7601a35f3769664cb6c57976'
+BASE = 'b46e2fae877d0f42896007bb681314861f366d62'
+RENAMES = {
+    'test_a_genotype_carrying_one_of_the_alternates_is_observado':
+        'test_a_genotype_carrying_one_of_the_alternates_is_observed',
+    'test_a_locus_naming_no_base_stays_observado_and_says_so':
+        'test_a_locus_naming_no_base_stays_observed_and_says_so',
+    'test_observado_without_any_assessed_base_is_never_a_finding':
+        'test_observed_without_any_assessed_base_is_never_a_finding',
+}
+PATHS = (
+    'scripts/build_trait_targets.py',
+    'tests/test_assessed_allele_presence.py',
+    'tests/test_completeness_regressions.py',
+)
+
+def git(*args):
+    return subprocess.check_output(['/usr/bin/git', '-C', str(ROOT), *args])
+
+class StripDocs(ast.NodeTransformer):
+    def visit_Module(self, node):
+        return self.clean(node)
+    def visit_ClassDef(self, node):
+        return self.clean(node)
+    def visit_FunctionDef(self, node):
+        node.name = RENAMES.get(node.name, node.name)
+        return self.clean(node)
+    def clean(self, node):
+        self.generic_visit(node)
+        if node.body and isinstance(node.body[0], ast.Expr):
+            value = node.body[0].value
+            if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                node.body = node.body[1:]
+        return node
+
+results = []
+for relative in PATHS:
+    before = git('show', f'{BASE}:{relative}').decode('utf-8')
+    after = git('show', f'{VALIDATED}:{relative}').decode('utf-8')
+    if relative != 'tests/test_completeness_regressions.py':
+        old = ('ROOT = Path(__file__).resolve().parents[1]\n'
+               'if str(ROOT) not in sys.path:\n    sys.path.insert(0, str(ROOT))')
+        new = ('if str(Path(__file__).resolve().parents[1]) not in sys.path:\n'
+               '    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))')
+        assert before.count(old) == 1, relative
+        before = before.replace(old, new, 1)
+        marker = 'DEFAULT_SCOPES = ROOT /' if relative.startswith('scripts/') else 'HEADER = ('
+        assert before.count(marker) == 1, relative
+        before = before.replace(marker, 'ROOT = Path(__file__).resolve().parents[1]\n\n' + marker, 1)
+    if relative == 'scripts/build_trait_targets.py':
+        before = before.replace('from typing import Any\n', 'from typing import Any, IO\n', 1)
+        before = before.replace('    if path.suffix == ".zip":',
+                                '    raw: IO[bytes] | gzip.GzipFile\n    if path.suffix == ".zip":', 1)
+    original = StripDocs().visit(ast.parse(before))
+    current = StripDocs().visit(ast.parse(after))
+    assert ast.dump(original) == ast.dump(current), relative
+    results.append({'path': relative, 'executable_ast_equivalent': True})
+    print('EXECUTABLE_AST_EQ', relative)
+
+protected = git('ls-files', 'main.nf', 'workflows', 'nextflow.config', 'array_pipeline',
+                'scripts/*.sh', 'scripts/wgs_*.py', 'scripts/*runtime*gate*.py',
+                'normative', 'manifests', 'config', 'environment.yml', 'Dockerfile').decode().splitlines()
+identities = []
+for relative in protected:
+    before = git('show', f'{BASE}:{relative}')
+    after = git('show', f'{VALIDATED}:{relative}')
+    assert before == after, relative
+    identities.append({'path': relative, 'sha256': hashlib.sha256(after).hexdigest()})
+print('UNCHANGED_PROTECTED_FILES', len(identities))
+output = {'base': BASE, 'source_comparisons': results, 'unchanged': identities}
+serialized = (json.dumps(output, indent=2) + '\n').encode('utf-8')
+digest = hashlib.sha256(serialized).hexdigest()
+assert len(identities) == 72
+assert digest == '1b4c6e2474d07200ddca650c249b408208d02341d055ed85f3928d235d01729f'
+print('COMPATIBILITY_PASS', digest)
+PY_COMPARE
+```
