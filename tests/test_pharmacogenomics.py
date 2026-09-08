@@ -270,7 +270,7 @@ class DiplotypeRefusalTest(unittest.TestCase):
         registry["genes"]["CYP2C19"]["reference_allele"] = "CYP2C19*1"
         return registry
 
-    def test_a_diplotype_on_a_complete_unambiguous_panel_is_inferido_never_executado(self):
+    def test_a_diplotype_on_a_complete_unambiguous_panel_is_inferred_never_executed(self):
         """A diplotype on a complete unambiguous panel is INFERIDO, never EXECUTADO."""
         with tempfile.TemporaryDirectory() as td:
             _matrix, passport, _root = _artifacts(
@@ -1172,7 +1172,7 @@ class OneAlleleIsNotTwoTest(unittest.TestCase):
     Zygosity was `len(set(genotype)) == 1`, which is also true of a one-character call — a
     half-read, or a hemizygous position. That turned one observed allele into two and put
     `*2/*2` into a diplotype on evidence for a single `*2`, with the finding's own basis
-    reading "todas as posições definidoras foram interrogadas e carregam o alelo definidor".
+    reading "all defining positions were interrogated and carry the defining allele".
     """
 
     SPEC = {

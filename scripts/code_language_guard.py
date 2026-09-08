@@ -152,11 +152,14 @@ def _normalize_word(value: str) -> str:
     return "".join(ch for ch in normalized if not unicodedata.combining(ch)).casefold()
 
 
-PORTUGUESE_VERB_SUFFIXES = frozenset({
-    "ar", "ando", "ado", "ada", "ados", "adas", "amos", "am", "ou", "ei",
-    "ava", "avam", "aria", "ariam", "er", "endo", "ido", "ida", "idos",
-    "idas", "ir", "indo", "iu", "iram",
-})
+PORTUGUESE_VERB_SUFFIXES = {
+    "ar": frozenset({
+        "ar", "ando", "ado", "ada", "ados", "adas", "amos", "am", "ou", "ei",
+        "ava", "avam", "aria", "ariam",
+    }),
+    "er": frozenset({"er", "endo", "ido", "ida", "idos", "idas"}),
+    "ir": frozenset({"ir", "indo", "ido", "ida", "idos", "idas", "iu", "iram"}),
+}
 
 
 def _identifier_words(identifier: str) -> tuple[str, ...]:
@@ -192,10 +195,11 @@ def _canonical_technical_term(word: str, policy: LanguagePolicy) -> str | None:
     if normalized.endswith("s") and normalized[:-1] in terms:
         return normalized[:-1]
     for term in sorted(terms, key=len, reverse=True):
-        if not term.endswith(("ar", "er", "ir")) or len(term) < 5:
+        ending = term[-2:]
+        if ending not in PORTUGUESE_VERB_SUFFIXES or len(term) < 5:
             continue
         stem = term[:-2]
-        if normalized.startswith(stem) and normalized[len(stem):] in PORTUGUESE_VERB_SUFFIXES:
+        if normalized.startswith(stem) and normalized[len(stem):] in PORTUGUESE_VERB_SUFFIXES[ending]:
             return term
     return None
 

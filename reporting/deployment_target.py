@@ -2,8 +2,8 @@
 
 Section 260 of the ruleset asks for the fifteen cases to be run *live* — the clause is held
 in this repository as `scripts/bootstrap_attestation.py::BOOTSTRAP_CLAUSES`
-["post_deployment_requires_live_15_of_15_zero_critical"]: "executar ao vivo os 15 casos da
-seção 260, exigindo 15/15 sem falha crítica". The ceremony workflow satisfied it by starting
+["post_deployment_requires_live_15_of_15_zero_critical"]: run the fifteen section-260 cases
+live, requiring 15/15 with zero critical failures. The ceremony workflow satisfied it by starting
 a container on the GitHub runner and pointing the smoke at ``127.0.0.1:8787``
 (`.github/workflows/genoma-production-ceremony.yml`, the ``docker run -p 127.0.0.1:8787:8787``
 step and the ``--base-url http://127.0.0.1:8787`` the smoke is invoked with; the same pair

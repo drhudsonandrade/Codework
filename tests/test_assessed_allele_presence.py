@@ -22,7 +22,7 @@ alternate base *is* a single variant, so the genotype answers presence for each 
 independently, and such a locus is NÃO DETECTADO once the whole set is compared.
 
 Two defences, tested separately, because either alone leaves a hole: the classifier tests the
-full set, and the interpreter refuses to grade a locus where nothing could be tested.
+full set, and the classification logic refuses to grade a locus where nothing could be tested.
 """
 from __future__ import annotations
 

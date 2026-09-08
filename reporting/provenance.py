@@ -379,7 +379,7 @@ def witness_verdict(
     return {
         "status": "PASS",
         # The fixture gets its own sentence rather than the live one with fixture numbers
-        # substituted in: "bootstrap verificado ao vivo, 0 falhas críticas" is a false
+        # substituted in: "bootstrap verified live, 0 critical failures" is a false
         # statement about a witness that contacted nothing, and it would have been written
         # into the anchor's basis — the field a reader consults to learn what happened.
         "basis": (

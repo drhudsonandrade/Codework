@@ -1,7 +1,7 @@
 """The execution manifest is printed, so it has to be anchored like everything else printed.
 
 `PayloadCompiler.compile` serialised `execution_manifest` straight into the payload as
-`dict(execution_manifest or {})`. `template_fill` prints it — LOGS_WORKFLOW_VERSOES reads it
+`dict(execution_manifest or {})`. `template_fill` prints it — the workflow-log field reads it
 for workflow logs and tool versions — but `provenance_blockers` had no anchor to compare it
 against, so editing a tool version, rewriting a log locator, or deleting a key after
 compilation produced no blocker and the document went on presenting the result as the record

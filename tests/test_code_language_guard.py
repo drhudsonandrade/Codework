@@ -176,6 +176,16 @@ class PythonLanguageScannerTest(unittest.TestCase):
             findings = _scan_fixture_repository(root, load_policy(root))
         self.assertEqual(findings, ())
 
+    def test_english_runtime_noun_does_not_match_an_ar_verb_stem(self):
+        td, root = self._repo({"pkg/mod.py": '"""A missing interpreter is unavailable."""\n'})
+        policy_path = root / "config/code_language_policy.json"
+        payload = json.loads(policy_path.read_text(encoding="utf-8"))
+        payload["technical_terms"].append("interpretar")
+        _write_json(root, "config/code_language_policy.json", payload)
+        with td:
+            findings = _scan_fixture_repository(root, load_policy(root))
+        self.assertEqual(findings, ())
+
     def test_repeated_comment_term_preserves_occurrence_count(self):
         td, root = self._repo({"pkg/mod.py": "# validar validar\nvalue = 1\n"})
         with td:
@@ -638,6 +648,10 @@ class BaselineWriteSafetyTest(unittest.TestCase):
 
 
 class LanguageBaselineTest(unittest.TestCase):
+    def test_active_python_legacy_baseline_is_empty_after_internal_migration(self):
+        python_entries = tuple(entry for entry in load_baseline(ROOT) if entry.path.endswith(".py"))
+        self.assertEqual(python_entries, ())
+
     def test_new_finding_is_unexpected(self):
         current = (BaselineEntry("pkg/a.py", "identifier", "validar_arquivo", 1),)
         delta = compare_to_baseline(current, ())

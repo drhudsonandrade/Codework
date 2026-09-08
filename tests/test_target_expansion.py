@@ -1027,7 +1027,7 @@ class ClinvarCitationRetrievalTest(unittest.TestCase):
         self.assertEqual(result["pmids"], [])
         self.assertIn("falhou", result["reason"])
 
-    def test_a_successful_lookup_reports_executado(self):
+    def test_a_successful_lookup_reports_executed(self):
         """A successful lookup reports EXECUTADO and de-duplicates the returned links."""
         from scripts import curate_assessed_alleles as curate
 
@@ -1042,7 +1042,7 @@ class ClinvarCitationRetrievalTest(unittest.TestCase):
         self.assertEqual(result["pmids"], ["11", "22"])
         self.assertIsNone(result["reason"])
 
-    def test_no_uids_is_executado_not_a_failure(self):
+    def test_no_uids_is_executed_not_a_failure(self):
         """A lookup with no uids is EXECUTADO with an empty result, which is not a failure."""
         from scripts import curate_assessed_alleles as curate
 

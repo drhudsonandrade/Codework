@@ -56,9 +56,9 @@ VCF_CURATION_PATH = ROOT / "config/section_attestations_wgs_vcf.json"
 #: this itself, in `applies_to_schemas`, and `curation_for_schema` refuses outside it.
 #:
 #: This is not hypothetical tidiness. When the VCF projection landed, the array lane's manifest
-#: builder attached these 263 judgements to a WGS run without noticing: §3 said "o arquivo
-#: analisado é o banco harmonizado, Nível 2 da hierarquia. Nenhum WGS foi enviado", §7 and §55
-#: were attested NOT_APPLICABLE because "nenhum WGS existe nesta execução", and §8 —
+#: builder attached these 263 judgements to a WGS run without noticing: §3 said the analyzed
+#: file was the harmonized database at hierarchy level 2 and that no WGS had been provided;
+#: §7 and §55 were attested NOT_APPLICABLE because no WGS existed in that run; and §8 —
 #: normalisation of sequencing calls — was dismissed as inapplicable to an array export. Six
 #: judgements were outright false about the run they were certifying, and RULE_COVERAGE_GATE
 #: would have passed on them. Judgements made about one operation certifying another is the

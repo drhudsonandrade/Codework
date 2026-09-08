@@ -2,7 +2,7 @@
 
 Every plane (policy control, scientific data, evidence, audit) and every gate that
 emits a `ruleset` block must take its identity from here instead of restating the
-version, date or hash inline. Ruleset v3.4 REGRA DE UNICIDADE allows exactly one
+version, date or hash inline. Ruleset v3.4's uniqueness rule allows exactly one
 source marked VIGENTE; duplicating the identity as literals across dozens of modules
 is how a repository silently keeps attesting to a superseded version.
 
@@ -30,8 +30,8 @@ IDENTITY_STRING = f"{VERSION}/{STATUS}/{EFFECTIVE_DATE}"
 COMPANION_MANIFEST_RELATIVE = "manifests/COMPANION_SOURCES.sha256"
 
 # Companion documents distributed alongside the norm. They are integrity-pinned so a
-# swapped copy is detectable, and explicitly NOT normative: the prompt-fonte states that
-# in a conflict the vigent norm prevails and generation must stop. Nothing here may be
+# swapped copy is detectable and explicitly NOT normative: the companion prompt states that
+# in a conflict the active norm prevails and generation must stop. Nothing here may be
 # consulted in place of the ruleset, and no gate may take its identity from this table.
 COMPANION_SOURCES = {
     "PROMPT_FONTE_GERACAO_RELATORIOS_GENOMICOS_v1.2.txt": {

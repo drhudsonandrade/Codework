@@ -724,8 +724,8 @@ def build_pharmacogenomic_passport(
             "Diplótipo condicional não é diplótipo estabelecido: vale sob a suposição declarada "
             "de que nenhum alelo não interrogado está presente, e o risco residual dessa "
             "suposição está quantificado por grupo biogeográfico.",
-            # This used to read "Risco residual sem limite superior (...) impede a emissão de
-            # fenótipo condicional." — which the engine contradicts. `conditional_phenotype`
+            # This used to say "Residual risk without an upper bound (...) prevents a conditional
+            # phenotype." — which the engine contradicts. `conditional_phenotype`
             # requires the residual to be *computable*, not *bounded*: boundedness is
             # deliberately not required, because a handful of CPIC alleles carry no published
             # frequency in any population and demanding it would block every gene. So the

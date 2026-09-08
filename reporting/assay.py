@@ -1,12 +1,12 @@
 """What produced these genotypes, in the words the reports print.
 
-Every builder had the assay written into its prose as a constant: "Genotipagem em array não
-produz DP/GQ/balanço alélico", "Call rate do array", "posições que este array ensaiou",
-"locus não presente no arquivo do array". True of a SNP-array export, and false the moment the
+Every builder had the assay written into its prose as a constant: "Array genotyping does not
+produce DP/GQ/allelic balance", "Array call rate", "positions assayed by this array", and
+"locus not present in the array file". True of a SNP-array export, and false the moment the
 same stack reads a table projected from a WGS VCF — which it now does.
 
-Two of those sentences were not merely imprecise. "Genotipagem em array não produz DP, GQ nem
-balanço alélico; não há profundidade de leitura a reportar" tells a clinician there is no
+Two of those sentences were not merely imprecise. "Array genotyping does not produce DP, GQ or
+allelic balance; there is no per-locus read depth to report" tells a clinician there is no
 depth behind a call, and the projected table carries DP and GQ on every row. A report that
 understates the evidence it holds is as wrong as one that overstates it, and this one did it
 while explaining its own methods.

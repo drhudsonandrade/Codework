@@ -28,7 +28,7 @@ class EvidenceAdapterTest(unittest.TestCase):
             {"clinvar", "clingen", "cpic", "clinpgx", "gnomad", "pgs_catalog"},
         )
 
-    def test_query_snapshot_is_verificado_only_with_retrieval_trace(self):
+    def test_query_snapshot_is_verified_only_with_retrieval_trace(self):
         from evidence_adapters import get_adapter
 
         transport = FakeTransport({"result": [{"id": "fixture"}]})

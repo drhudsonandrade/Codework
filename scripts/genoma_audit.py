@@ -84,7 +84,7 @@ class CommandOutcome:
 
     ``launched`` records whether the operating system actually started the process.
     A process that started and exited non-zero is EXECUTADO/FAIL: it ran, it failed.
-    Only a process that could never start (missing interpreter, permission denied,
+    Only a process that could never start (missing executable, permission denied,
     resource exhaustion) is NÃO DISPONÍVEL/ERROR.
     """
 
