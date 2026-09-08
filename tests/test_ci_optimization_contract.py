@@ -754,9 +754,9 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertEqual(selected_runner("workflow_dispatch", "refs/heads/main", True), "codework-isolated")
         self.assertEqual(selected_runner("push", "refs/heads/main", True), "codework-isolated")
         private_jobs = {
-            "scaffold-validation.yml": ("static", "container-canary"),
+            "scaffold-validation.yml": ("static",),
             "genoma-audit.yml": ("audit",),
-            "genoma-policy-engine.yml": ("policy", "rego", "container"),
+            "genoma-policy-engine.yml": ("policy",),
         }
         for filename, jobs in private_jobs.items():
             self.assertEqual(
@@ -773,8 +773,8 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertIn("uses: ./.github/workflows/genoma-audit.yml", _job_block(scaffold, "four-plane-audit"))
 
         hosted_jobs = {
-            "scaffold-validation.yml": ("changes", "publish-ghcr"),
-            "genoma-policy-engine.yml": ("changes", "publish"),
+            "scaffold-validation.yml": ("changes", "container-canary", "publish-ghcr"),
+            "genoma-policy-engine.yml": ("changes", "rego", "container", "publish"),
         }
         for filename, jobs in hosted_jobs.items():
             workflow = _read(filename)
@@ -789,19 +789,29 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertIn('run: TMPDIR="$RUNNER_TEMP" bash tests/test_ci_changed_paths.sh', static)
         self.assertIn('TMPDIR="$RUNNER_TEMP" npm test', static)
 
+    def test_capability_bound_jobs_stay_on_github_hosted_runners(self):
+        hosted = {
+            "scaffold-validation.yml": ("container-canary",),
+            "genoma-policy-engine.yml": ("rego", "container"),
+        }
+        for filename, jobs in hosted.items():
+            workflow = _read(filename)
+            for job_name in jobs:
+                block = _job_block(workflow, job_name)
+                self.assertIn("runs-on: ubuntu-latest", block, f"{filename}:{job_name}")
+                self.assertNotIn("codework-isolated", block, f"{filename}:{job_name}")
+
     def test_trusted_runner_contract_rejects_boolean_bypass_mutation(self):
         workflow = _read("scaffold-validation.yml")
-        container = _job_block(workflow, "container-canary")
-        bypassed_container = container.replace(
+        static = _job_block(workflow, "static")
+        bypassed_static = static.replace(
             "github.ref_protected) && 'codework-isolated'",
             "github.ref_protected || true) && 'codework-isolated'",
             1,
         )
-        self.assertNotEqual(container, bypassed_container)
-        bypassed = workflow.replace(container, bypassed_container, 1)
-        self.assertTrue(
-            _trusted_runner_routing_errors(bypassed, ("container-canary",))
-        )
+        self.assertNotEqual(static, bypassed_static)
+        bypassed = workflow.replace(static, bypassed_static, 1)
+        self.assertTrue(_trusted_runner_routing_errors(bypassed, ("static",)))
 
     def test_four_plane_audit_is_reusable_and_gated_by_required_static(self):
         scaffold = _read("scaffold-validation.yml")
