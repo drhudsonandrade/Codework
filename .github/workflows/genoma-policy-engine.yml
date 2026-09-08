@@ -76,7 +76,7 @@ jobs:
       (needs.changes.result != 'success' ||
        needs.changes.outputs.policy_relevant == 'true')
     name: Canonical policy + 263-rule contract
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'codework-isolated' }}
     timeout-minutes: 15
     steps:
       - name: Require successful scope classification
@@ -141,7 +141,7 @@ jobs:
       (needs.changes.result != 'success' ||
        needs.changes.outputs.policy_relevant == 'true')
     name: OPA/Rego parity
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'codework-isolated' }}
     timeout-minutes: 10
     steps:
       - name: Require successful scope classification
@@ -165,7 +165,7 @@ jobs:
       (needs.changes.result != 'success' ||
        needs.changes.outputs.policy_relevant == 'true')
     name: Real Docker + canonical read-only mount
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'codework-isolated' }}
     timeout-minutes: 15
     steps:
       - name: Require successful scope classification
