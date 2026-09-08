@@ -749,6 +749,7 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertIn('export TMPDIR="$RUNNER_TEMP"', static)
         self.assertIn('run: TMPDIR="$RUNNER_TEMP" bash tests/test_wgs_align_or_stage.sh', static)
         self.assertIn('run: TMPDIR="$RUNNER_TEMP" bash tests/test_ci_changed_paths.sh', static)
+        self.assertIn('TMPDIR="$RUNNER_TEMP" npm test', static)
 
     def test_four_plane_audit_is_reusable_and_gated_by_required_static(self):
         scaffold = _read("scaffold-validation.yml")
