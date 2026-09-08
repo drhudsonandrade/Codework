@@ -22,6 +22,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       validation_required: ${{ steps.scope.outputs.validation_required }}
+      container_required: ${{ steps.scope.outputs.container_required }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -49,6 +50,7 @@ jobs:
               ;;
             *)
               echo "validation_required=true" >> "$GITHUB_OUTPUT"
+              echo "container_required=true" >> "$GITHUB_OUTPUT"
               exit 0
               ;;
           esac
@@ -63,13 +65,16 @@ jobs:
               case "$changed_path" in
                 scripts/ci_changed_paths.sh|scripts/ci_change_classifier.py|.github/workflows/scaffold-validation.yml)
                   echo "validation_required=true" >> "$GITHUB_OUTPUT"
+                  echo "container_required=true" >> "$GITHUB_OUTPUT"
                   exit 0
                   ;;
               esac
             done < "$changed_paths"
           fi
           validation_required=$(python3 scripts/ci_change_classifier.py markdown --changed "$changed_paths" --deleted "$deleted_paths")
+          container_required=$(python3 scripts/ci_change_classifier.py container --changed "$changed_paths")
           echo "validation_required=$validation_required" >> "$GITHUB_OUTPUT"
+          echo "container_required=$container_required" >> "$GITHUB_OUTPUT"
 
   static:
     needs: changes
@@ -136,7 +141,7 @@ jobs:
       always() &&
       (github.event_name != 'pull_request' || github.event.pull_request.draft == false) &&
       (needs.changes.result != 'success' ||
-       needs.changes.outputs.validation_required == 'true')
+       needs.changes.outputs.container_required == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:

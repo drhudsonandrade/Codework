@@ -26,6 +26,18 @@ POLICY_PREFIXES = (
     ".github/governance/",
 )
 
+CONTAINER_FORCE_EXACT = {
+    ".github/workflows/scaffold-validation.yml",
+    "scripts/ci_change_classifier.py",
+}
+CONTAINER_IGNORED_EXACT = {
+    ".github/workflows/fallow.yml",
+}
+CONTAINER_IGNORED_PREFIXES = (
+    "docs/",
+    "tests/",
+)
+
 
 def _normalize(path: str) -> str:
     normalized = path.replace("\\", "/")
@@ -46,6 +58,21 @@ def validation_required(changed_paths: Iterable[str], deleted_paths: Iterable[st
     return any(not _normalize(path).endswith(".md") for path in changed_paths)
 
 
+def container_required(changed_paths: Iterable[str]) -> bool:
+    for raw_path in changed_paths:
+        path = _normalize(raw_path)
+        if path in CONTAINER_FORCE_EXACT:
+            return True
+        if (
+            path in CONTAINER_IGNORED_EXACT
+            or path.endswith(".md")
+            or path.startswith(CONTAINER_IGNORED_PREFIXES)
+        ):
+            continue
+        return True
+    return False
+
+
 def _read_nul_paths(path: Path) -> list[str]:
     payload = path.read_bytes()
     if not payload:
@@ -57,7 +84,7 @@ def _read_nul_paths(path: Path) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("policy", "markdown"))
+    parser.add_argument("mode", choices=("policy", "markdown", "container"))
     parser.add_argument("--changed", type=Path, required=True)
     parser.add_argument("--deleted", type=Path)
     args = parser.parse_args()
@@ -65,6 +92,8 @@ def main() -> int:
     changed = _read_nul_paths(args.changed)
     if args.mode == "policy":
         result = policy_relevant(changed)
+    elif args.mode == "container":
+        result = container_required(changed)
     else:
         if args.deleted is None:
             parser.error("--deleted is required for markdown mode")
