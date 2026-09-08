@@ -19,6 +19,7 @@ from array_pipeline.completeness import (
 
 class CompletenessRegressionTest(unittest.TestCase):
     """How the completeness matrix classifies genotypes and reconciles duplicate rows."""
+
     def _entry_for_rows(self, rows):
         """Build the one-target matrix entry for synthetic array rows."""
         with tempfile.TemporaryDirectory() as td:

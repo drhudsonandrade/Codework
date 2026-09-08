@@ -97,7 +97,10 @@ class ScientificStreamCompatibilityTest(unittest.TestCase):
                         self.assertEqual(stream.read(), text)
                     self.assertTrue(stream.closed)
                     if path.suffix == ".zip":
-                        self.assertIsNone(getattr(stream, "_genoma_zipfile").fp)
+                        owner = getattr(stream, "_genoma_zipfile", None)
+                        if not isinstance(owner, zipfile.ZipFile):
+                            self.fail("ZIP stream must retain its owning archive")
+                        self.assertIsNone(owner.fp)
 
 
 if __name__ == "__main__":

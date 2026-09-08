@@ -111,6 +111,42 @@ The review follow-up additionally checks the underlying ZIP archive descriptor,
 not only `stream.closed`; final follow-up evidence is recorded on the PR's new
 exact SHA. Unchecked release items above remain pending until that evidence exists.
 
+### Review-follow-up validation locator
+
+The ZIP-descriptor assertion was tested on exact commit
+`55057022f964e48f4f5934c52d132900936ca758`, tree
+`b933146abbf2afb8886a4a56b7117a64d3dddeb6`.
+
+Retained complete log on `drhudson`:
+`/srv/remote-desktop-commander-workspace/codework-audit/scientific-english-stage3/review-final-validation.log`
+
+SHA-256: `946177be7f9577ad46d83867864fab2e6edead10cac5845c239961481b6d30bf`.
+
+Commands actually executed there include `python -m unittest discover -s tests -v`
+(**955 tests, OK, one skipped**), the isolated assessed-allele invocation above
+(**14 tests, OK**), and `bash tests/test_wgs_align_or_stage.sh` (**PASS**).
+The root suite includes the strengthened ZIP archive-descriptor assertion.
+To reproduce only that assertion, run from the root of the named checkout:
+
+```bash
+git rev-parse HEAD
+python3 -m unittest tests.test_scientific_code_language.ScientificStreamCompatibilityTest -v
+```
+
+Expected result: one container-preservation test passes, including the ZIP-owner
+closure assertion. The negative mutation evidence is retained at
+`/srv/remote-desktop-commander-workspace/codework-audit/scientific-english-stage3/zip-close-mutation.log`
+with SHA-256 `2d1bcb604b44805d1e7e072e33263360a1ae2862bbd0529f1f6ba807ea748a02`.
+It records failure when only the text wrapper is closed and success with the
+real implementation. This is distinct from the historical AST comparison below,
+which is intentionally pinned to the original implementation revision.
+
+These are completed historical execution records, not a claim about an untested
+future commit. The same test commands apply to later corrective SHAs; the final
+PR verification comment binds each latest execution to its actual HEAD, full
+retained log path and SHA-256 without requiring a self-referential commit hash
+inside this versioned plan. Pending release items remain pending until verified.
+
 ### Portable AST and protected-byte comparison
 
 Run this read-only comparison from the repository root with full Git history.
