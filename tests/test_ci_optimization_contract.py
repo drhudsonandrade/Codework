@@ -740,10 +740,12 @@ class CIOptimizationContractTest(unittest.TestCase):
             workflow = _read(filename)
             for job_name in jobs:
                 block = _job_block(workflow, job_name)
-                runner_line = next(
+                runner_lines = [
                     line.strip() for line in block.splitlines()
                     if line.strip().startswith("runs-on:")
-                )
+                ]
+                self.assertEqual(1, len(runner_lines), f"{filename}:{job_name}")
+                runner_line = runner_lines[0]
                 for required in (
                     "github.event_name == 'push'",
                     "github.event_name == 'workflow_dispatch'",
