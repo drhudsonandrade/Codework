@@ -718,10 +718,19 @@ class CIOptimizationContractTest(unittest.TestCase):
                 self.assertIn(preserved, event_block)
 
     def test_trusted_heavy_checks_use_private_codework_runners_without_moving_write_jobs(self):
-        trusted_runner = (
-            "runs-on: ${{ github.event_name == 'pull_request' && "
-            "'ubuntu-latest' || 'codework-isolated' }}"
-        )
+        def selected_runner(event_name: str, ref: str, ref_protected: bool) -> str:
+            trusted = (
+                event_name in {"push", "workflow_dispatch"}
+                and ref == "refs/heads/main"
+                and ref_protected
+            )
+            return "codework-isolated" if trusted else "ubuntu-latest"
+
+        self.assertEqual(selected_runner("pull_request", "refs/pull/53/merge", False), "ubuntu-latest")
+        self.assertEqual(selected_runner("workflow_dispatch", "refs/heads/feature", False), "ubuntu-latest")
+        self.assertEqual(selected_runner("workflow_dispatch", "refs/heads/main", False), "ubuntu-latest")
+        self.assertEqual(selected_runner("workflow_dispatch", "refs/heads/main", True), "codework-isolated")
+        self.assertEqual(selected_runner("push", "refs/heads/main", True), "codework-isolated")
         private_jobs = {
             "scaffold-validation.yml": ("static",),
             "genoma-audit.yml": ("audit",),
@@ -731,8 +740,31 @@ class CIOptimizationContractTest(unittest.TestCase):
             workflow = _read(filename)
             for job_name in jobs:
                 block = _job_block(workflow, job_name)
-                self.assertIn(trusted_runner, block, f"{filename}:{job_name}")
-                self.assertNotIn("runs-on: ubuntu-latest", block, f"{filename}:{job_name}")
+                runner_line = next(
+                    line.strip() for line in block.splitlines()
+                    if line.strip().startswith("runs-on:")
+                )
+                for required in (
+                    "github.event_name == 'push'",
+                    "github.event_name == 'workflow_dispatch'",
+                    "github.ref == 'refs/heads/main'",
+                    "github.ref_protected",
+                    "'codework-isolated'",
+                    "'ubuntu-latest'",
+                ):
+                    self.assertIn(required, runner_line, f"{filename}:{job_name}")
+                self.assertNotIn(
+                    "github.event_name == 'pull_request' && 'ubuntu-latest' || 'codework-isolated'",
+                    runner_line,
+                    f"{filename}:{job_name}",
+                )
+
+        audit = _read("genoma-audit.yml")
+        audit_header = audit.split("permissions:", 1)[0]
+        self.assertIn("on:\n  workflow_call:\n", audit_header)
+        self.assertNotIn("workflow_dispatch:", audit_header)
+        scaffold = _read("scaffold-validation.yml")
+        self.assertIn("uses: ./.github/workflows/genoma-audit.yml", _job_block(scaffold, "four-plane-audit"))
 
         hosted_jobs = {
             "scaffold-validation.yml": ("changes", "container-canary", "publish-ghcr"),
