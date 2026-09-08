@@ -151,7 +151,7 @@ jobs:
         with:
           name: genoma-ngs-runtime-preflight-${{ github.sha }}
           path: results/
-          retention-days: 90
+          retention-days: 30
           if-no-files-found: error
 
   full-grch38:
