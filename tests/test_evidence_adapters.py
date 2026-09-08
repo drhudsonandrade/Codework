@@ -41,7 +41,8 @@ class EvidenceAdapterTest(unittest.TestCase):
         self.assertEqual(len(snapshot["retrieval_evidence"]["result_digest"]), 64)
         self.assertEqual(snapshot["retrieval_evidence"]["etag"], '"fixture-etag"')
         self.assertEqual(snapshot["query"], {"score_id": "PGS000001"})
-        expected = hashlib.sha256(json.dumps({"result": [{"id": "fixture"}]}, sort_keys=True).encode("utf-8")).hexdigest()
+        expected = hashlib.sha256(json.dumps(
+            {"result": [{"id": "fixture"}]}, sort_keys=True).encode("utf-8")).hexdigest()
         self.assertEqual(snapshot["retrieval_evidence"]["result_digest"], expected)
 
     def test_adapter_never_marks_failed_or_unreachable_source_as_verified(self):
@@ -115,7 +116,8 @@ class EvidenceAdapterTest(unittest.TestCase):
 
         transport = FakeTransport({"unexpected": True})
         adapter = get_adapter("clinvar", transport=transport)
-        insecure = urllib.request.Request("http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi")
+        insecure = urllib.request.Request(
+            "http://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi")
         with patch.object(adapter, "_request", return_value=insecure):
             snapshot = adapter.query({}, checked_at="2026-08-16T14:00:00Z")
         self.assertEqual(snapshot["status"], "NÃO DISPONÍVEL")
@@ -161,7 +163,8 @@ class EvidenceAdapterTest(unittest.TestCase):
         from evidence_adapters import get_adapter
 
         adapter = get_adapter("clinpgx", transport=FakeTransport([]))
-        snapshot = adapter.query({"path": "data/gene", "limit": 1}, checked_at="2026-08-16T14:00:00Z")
+        snapshot = adapter.query({"path": "data/gene", "limit": 1},
+                                 checked_at="2026-08-16T14:00:00Z")
         self.assertNotIn("limit", parse_qs(urlparse(snapshot["locator"]).query))
 
 

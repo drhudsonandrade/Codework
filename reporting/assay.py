@@ -93,7 +93,10 @@ PROJECTION_GENOME_WIDE = (
 #: Keyed by the class names `variant_class_coverage_explicit` checks for.
 ARRAY_CLASS_REASONS = {
     "indel": "genotipagem em array chama SNPs em posições fixas; indels não são ensaiados",
-    "mtDNA": "os marcadores mitocondriais do chip não sustentam heteroplasmia nem haplogrupo terminal",
+    "mtDNA": (
+        "os marcadores mitocondriais do chip não sustentam heteroplasmia nem "
+        "haplogrupo terminal"
+    ),
     "KIR": "tipagem de KIR exige pipeline especializado sobre sequenciamento",
     "noncoding": "o array cobre marcadores catalogados, não regiões regulatórias",
     "mosaicism": "genotipagem em array reporta genótipos discretos, sem fração alélica",
@@ -107,7 +110,10 @@ PROJECTION_CLASS_REASONS = {
         "o VCF de origem pode conter indels e a tabela projetada expressa apenas SNV diploide; "
         "cada indel é registrado como no-call com o motivo, nunca omitido"
     ),
-    "mtDNA": "a projeção cobre os alvos mitocondriais catalogados, sem profundidade ao longo do mtDNA",
+    "mtDNA": (
+        "a projeção cobre os alvos mitocondriais catalogados, sem profundidade ao "
+        "longo do mtDNA"
+    ),
     "KIR": "tipagem de KIR exige caller especializado sobre leituras alinhadas",
     "noncoding": "a projeção retém apenas os alvos do registro curado, não regiões regulatórias",
     "mosaicism": "a projeção não lê o campo AD e portanto não estima fração alélica",

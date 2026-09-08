@@ -162,7 +162,10 @@ def validate_record(
             problems.append(f"{key}: obrigatório e deve ser texto não vazio")
 
     declared_sha = str(record.get("vcf_sha256") or "").strip().lower()
-    if declared_sha and (len(declared_sha) != 64 or not all(c in "0123456789abcdef" for c in declared_sha)):
+    if declared_sha and (
+        len(declared_sha) != 64
+        or not all(c in "0123456789abcdef" for c in declared_sha)
+    ):
         problems.append("vcf_sha256: não é um SHA-256 hexadecimal de 64 caracteres")
     if vcf_sha256 is not None and declared_sha and declared_sha != str(vcf_sha256).lower():
         # The whole point: a QC report is about one file's sample.

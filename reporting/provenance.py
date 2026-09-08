@@ -504,7 +504,12 @@ class Artifact:
         payload = json.loads(raw.decode("utf-8"))
         if not isinstance(payload, dict):
             raise ProvenanceError(f"artifact {name!r} must be a JSON object")
-        return cls(name=name, payload=payload, sha256=hashlib.sha256(raw).hexdigest(), path=str(path))
+        return cls(
+            name=name,
+            payload=payload,
+            sha256=hashlib.sha256(raw).hexdigest(),
+            path=str(path),
+        )
 
     @classmethod
     def from_payload(cls, name: str, payload: dict[str, Any]) -> "Artifact":
@@ -718,7 +723,8 @@ class PayloadCompiler:
             )
         existing = self._artifacts.get(artifact.name)
         if existing is not None and existing.sha256 != artifact.sha256:
-            raise ProvenanceError(f"artifact {artifact.name!r} registered twice with different content")
+            raise ProvenanceError(
+                f"artifact {artifact.name!r} registered twice with different content")
         self._artifacts[artifact.name] = artifact
         return artifact
 
@@ -795,7 +801,8 @@ class PayloadCompiler:
         it produces can never claim an executed measurement.
         """
         if kind in DERIVED_KINDS:
-            raise ProvenanceError("derived values must go through derive(), which reads the artifact")
+            raise ProvenanceError(
+                "derived values must go through derive(), which reads the artifact")
         rendered = render_value(value)
         anchor = Anchor(
             kind=kind,
@@ -852,7 +859,8 @@ class PayloadCompiler:
 
     def section_stated(self, title: str, text: Any, *, kind: str, basis: str, status: str) -> Any:
         """Record free text for a section, anchored as stated rather than measured."""
-        value = self.state(_anchor_name_for_section(title), text, kind=kind, basis=basis, status=status)
+        value = self.state(_anchor_name_for_section(title), text,
+                           kind=kind, basis=basis, status=status)
         self._sections[title] = value
         return value
 
@@ -1098,7 +1106,8 @@ class PayloadCompiler:
                 },
             }
         if verified is None:
-            raise ProvenanceError("verified policy evaluation unexpectedly missing after successful validation")
+            raise ProvenanceError(
+                "verified policy evaluation unexpectedly missing after successful validation")
         planes = verified.get("planes") if isinstance(verified.get("planes"), dict) else {}
         return {
             "ready_for_requested_operation": verified.get("ready_for_requested_operation") is True,
@@ -1425,7 +1434,15 @@ class FindingBuilder:
         self._fields[key] = value
         return self
 
-    def stated(self, key: str, value: Any, *, kind: str, basis: str, status: str) -> "FindingBuilder":
+    def stated(
+        self,
+        key: str,
+        value: Any,
+        *,
+        kind: str,
+        basis: str,
+        status: str,
+    ) -> "FindingBuilder":
         """Set one finding field to a stated value, which can never claim a measurement."""
         if key not in FINDING_FIELDS:
             raise ProvenanceError(f"unknown finding field: {key!r}")
@@ -1636,7 +1653,15 @@ def provenance_blockers(data: dict[str, Any]) -> list[str]:
         if not isinstance(anchor, dict):
             blockers.append(f"provenance:unanchored:{name}")
             return
-        for key in ("kind", "artifact", "artifact_sha256", "locator", "observed_value", "operational_status", "basis"):
+        for key in (
+            "kind",
+            "artifact",
+            "artifact_sha256",
+            "locator",
+            "observed_value",
+            "operational_status",
+            "basis",
+        ):
             if not isinstance(anchor.get(key), str) or not anchor[key].strip():
                 blockers.append(f"provenance:malformed:{name}:{key}")
                 return

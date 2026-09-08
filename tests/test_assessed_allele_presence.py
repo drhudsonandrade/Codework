@@ -46,7 +46,10 @@ from array_pipeline.completeness import (
 from array_pipeline.qc import inspect_array
 from tests.attestations import provenance_for
 
-HEADER = "RSID,CHROMOSOME,POSITION,CONSENSUS_RESULT,STATUS,GENERA_RESULT,MYHERITAGE_RESULT,SOURCES\n"
+HEADER = (
+    "RSID,CHROMOSOME,POSITION,CONSENSUS_RESULT,STATUS,GENERA_RESULT,"
+    "MYHERITAGE_RESULT,SOURCES\n"
+)
 
 #: rs1 declares one alternate; rs2 declares several; rs3 declares none at all.
 TARGETS = {
@@ -71,7 +74,9 @@ class AssessedBasesTest(unittest.TestCase):
         self.assertEqual(assessed_bases({"assessed_allele": "A"}), {"A"})
 
     def test_the_multi_allelic_list_is_read_when_no_single_allele_is_named(self):
-        """The multi-allelic list is read when no single allele is named, and normalised to upper case."""
+        """The multi-allelic list is read when no single allele is named,
+        and normalised to upper case.
+        """
         self.assertEqual(
             assessed_bases({"clinvar_alternate_alleles": ["A", "g"]}), {"A", "G"}
         )
@@ -175,7 +180,10 @@ class InterpretationRefusesUntestedLociTest(unittest.TestCase):
         result = self._interpret({
             "classification": "OBSERVADO", "genotype": "TT", "scope": "CLINICO",
             "assessed_alleles": [], "assessed_allele": None,
-            "basis": "genótipo chamado; ausência não pode ser afirmada porque o registro não declara o alelo avaliado",
+            "basis": (
+                "genótipo chamado; ausência não pode ser afirmada porque o registro não "
+                "declara o alelo avaliado"
+            ),
         })
         self.assertEqual(result["kind"], SEM_INTERPRETACAO)
         self.assertIn("nem presença nem ausência", result["basis"])
@@ -239,7 +247,8 @@ class ShippedRegistryTest(unittest.TestCase):
             ROOT / "config/targets_merged_panel_1star.json.gz", "rt", encoding="utf-8"
         ) as handle:
             targets = json.load(handle)["targets"]
-        multi = [t for t in targets if not t.get("assessed_allele") and t.get("clinvar_alternate_alleles")]
+        multi = [t for t in targets if not t.get(
+            "assessed_allele") and t.get("clinvar_alternate_alleles")]
         blank = [t for t in targets if not assessed_bases(t)]
         self.assertGreater(len(multi), 5_000)
         for target in multi:

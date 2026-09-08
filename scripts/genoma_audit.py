@@ -143,7 +143,11 @@ def run(cmd: list[str], *, timeout_seconds: float = COMMAND_TIMEOUT_SECONDS) -> 
             exception_type=type(exc).__name__,
             exception_message=f"timed out after {timeout_seconds}s",
         )
-    return CommandOutcome(launched=True, returncode=process.returncode, evidence=_command_evidence(stdout, stderr))
+    return CommandOutcome(
+        launched=True,
+        returncode=process.returncode,
+        evidence=_command_evidence(stdout, stderr),
+    )
 
 
 def _python_runtime_evidence() -> tuple[bool, str]:
@@ -154,7 +158,10 @@ def _python_runtime_evidence() -> tuple[bool, str]:
         "python_base_prefix": sys.base_prefix,
         "virtualenv_active": bool(os.environ.get("VIRTUAL_ENV")) or sys.prefix != sys.base_prefix,
     }
-    return bool(sys.executable) and executable.is_file(), json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    return (
+        bool(sys.executable) and executable.is_file(),
+        json.dumps(payload, ensure_ascii=False, sort_keys=True),
+    )
 
 
 def _check(
@@ -181,7 +188,13 @@ def _check(
     return payload
 
 
-def command_check(name: str, outcome: CommandOutcome, *, blocking: bool = True, assertion: bool | None = None) -> dict:
+def command_check(
+    name: str,
+    outcome: CommandOutcome,
+    *,
+    blocking: bool = True,
+    assertion: bool | None = None,
+) -> dict:
     """Build a check from a subprocess outcome.
 
     ``assertion`` lets a caller add a content requirement on top of the exit code:
@@ -342,8 +355,10 @@ def audit(*, allow_template_sealed_only: bool = False) -> dict:
     ruleset_gate, ruleset_block = ruleset_check()
     checks.append(ruleset_gate)
 
-    checks.append(command_check("REPOSITORY_CONTRACT", run([sys.executable, "scripts/validate_repo.py"])))
-    checks.append(command_check("SUPPLY_CHAIN_LOCK", run([sys.executable, "scripts/verify_supply_chain_lock.py"])))
+    checks.append(command_check("REPOSITORY_CONTRACT", run(
+        [sys.executable, "scripts/validate_repo.py"])))
+    checks.append(command_check("SUPPLY_CHAIN_LOCK", run(
+        [sys.executable, "scripts/verify_supply_chain_lock.py"])))
 
     cmd = [sys.executable, "scripts/verify_template_store.py"]
     if allow_template_sealed_only:
@@ -373,7 +388,15 @@ def audit(*, allow_template_sealed_only: bool = False) -> dict:
     checks.append(inspection_check("NO_PERSONAL_GENOTYPE_FIXTURES", _personal_fixtures_probe))
 
     planes = {
-        "policy_control": _plane(checks, {"PYTHON_RUNTIME", "RULESET_SEALED_IDENTITY", "REPOSITORY_CONTRACT", "SUPPLY_CHAIN_LOCK"}),
+        "policy_control": _plane(
+            checks,
+            {
+                "PYTHON_RUNTIME",
+                "RULESET_SEALED_IDENTITY",
+                "REPOSITORY_CONTRACT",
+                "SUPPLY_CHAIN_LOCK",
+            },
+        ),
         "scientific_data": _plane(checks, {"SCIENTIFIC_DATA_PLANE_ARRAY"}),
         "evidence": _plane(checks, {"EVIDENCE_ANNOTATION_PLANE"}),
         "audit": "PASS" if all(c["result"] == PASS for c in checks if c["blocking"]) else "BLOCKED",
@@ -388,7 +411,9 @@ def audit(*, allow_template_sealed_only: bool = False) -> dict:
     # or unverifiable ruleset blocks the audit instead of being reported as VIGENTE.
     ruleset_block = dict(ruleset_block)
     ruleset_block["normative_gate"] = (
-        "PASS" if ruleset_gate["result"] == PASS and "REPOSITORY_CONTRACT" not in blocking_failures else "BLOCKED"
+        "PASS"
+        if ruleset_gate["result"] == PASS and "REPOSITORY_CONTRACT" not in blocking_failures
+        else "BLOCKED"
     )
 
     return {
@@ -402,7 +427,10 @@ def audit(*, allow_template_sealed_only: bool = False) -> dict:
         "blocking_failures": blocking_failures,
         "unavailable_checks": unavailable,
         "post_deployment_status": "PENDENTE",
-        "post_deployment_note": "This audit never grants POST-DEPLOYMENT PASS. Only the independent live Production Witness on the exact merged main SHA may do so.",
+        "post_deployment_note": (
+            "This audit never grants POST-DEPLOYMENT PASS. Only the independent live "
+            "Production Witness on the exact merged main SHA may do so."
+        ),
     }
 
 
@@ -412,7 +440,8 @@ def main() -> int:
     p.add_argument("--allow-template-sealed-only", action="store_true")
     args = p.parse_args()
     payload = audit(allow_template_sealed_only=args.allow_template_sealed_only)
-    Path(args.output).write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    Path(args.output).write_text(json.dumps(payload, ensure_ascii=False,
+         indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
     # Exit status follows the blocking result axis; availability is reported independently.
     return 0 if payload["result"] == PASS else 2

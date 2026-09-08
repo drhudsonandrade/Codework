@@ -119,10 +119,20 @@ def verify_companion(filename: str, path: Any) -> dict[str, Any]:
 
     spec = COMPANION_SOURCES.get(filename)
     if spec is None:
-        return {"file": filename, "status": "NÃO DISPONÍVEL", "reason": "not a registered companion source", "normative": False}
+        return {
+            "file": filename,
+            "status": "NÃO DISPONÍVEL",
+            "reason": "not a registered companion source",
+            "normative": False,
+        }
     candidate = Path(path)
     if not candidate.is_file():
-        return {"file": filename, "status": "NÃO DISPONÍVEL", "reason": "file not present", "normative": False}
+        return {
+            "file": filename,
+            "status": "NÃO DISPONÍVEL",
+            "reason": "file not present",
+            "normative": False,
+        }
     digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
     if digest != spec["sha256"]:
         return {

@@ -33,7 +33,10 @@ from array_pipeline.pharmacogenomics import (
 )
 from array_pipeline.qc import inspect_array
 
-HEADER = "RSID,CHROMOSOME,POSITION,CONSENSUS_RESULT,STATUS,GENERA_RESULT,MYHERITAGE_RESULT,SOURCES\n"
+HEADER = (
+    "RSID,CHROMOSOME,POSITION,CONSENSUS_RESULT,STATUS,GENERA_RESULT,"
+    "MYHERITAGE_RESULT,SOURCES\n"
+)
 
 TARGETS = {
     "schema": "genoma-partial-genome-targets-v1",
@@ -172,7 +175,9 @@ class PassportScopeTest(unittest.TestCase):
         self.assertEqual(passport["qc_reservations"], matrix["qc_reservations"])
 
     def test_the_passport_cannot_outrank_the_matrix_that_fed_it(self):
-        """The passport cannot claim a stronger status than the completeness matrix it was built from."""
+        """The passport cannot claim a stronger status than the completeness matrix
+        it was built from.
+        """
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             array = root / "array.csv.gz"
@@ -287,7 +292,8 @@ class DiplotypeRefusalTest(unittest.TestCase):
             "rs4244285,10,96541616,AG,consensus,AG,AG,GM\n",
         )
         with tempfile.TemporaryDirectory() as td:
-            _matrix, passport, _root = _artifacts(Path(td), rows, registry=self._complete_registry())
+            _matrix, passport, _root = _artifacts(
+                Path(td), rows, registry=self._complete_registry())
         cyp = next(g for g in passport["genes"] if g["gene"] == "CYP2C19")
         self.assertEqual(cyp["diplotype"]["status"], "INFERIDO")
         value = cyp["diplotype"]["value"]
@@ -303,7 +309,8 @@ class DiplotypeRefusalTest(unittest.TestCase):
             "rs4244285,10,96541616,AA,consensus,AA,AA,GM\n",
         )
         with tempfile.TemporaryDirectory() as td:
-            _matrix, passport, _root = _artifacts(Path(td), rows, registry=self._complete_registry())
+            _matrix, passport, _root = _artifacts(
+                Path(td), rows, registry=self._complete_registry())
         cyp = next(g for g in passport["genes"] if g["gene"] == "CYP2C19")
         self.assertEqual(cyp["diplotype"]["value"], "CYP2C19*2/CYP2C19*2")
         finding = next(f for f in cyp["allele_findings"] if f["allele"] == "CYP2C19*2")
@@ -318,7 +325,8 @@ class DiplotypeRefusalTest(unittest.TestCase):
             "rs4986893,10,96540410,AA,consensus,AA,AA,GM\n",
         )
         with tempfile.TemporaryDirectory() as td:
-            _matrix, passport, _root = _artifacts(Path(td), rows, registry=self._complete_registry())
+            _matrix, passport, _root = _artifacts(
+                Path(td), rows, registry=self._complete_registry())
         cyp = next(g for g in passport["genes"] if g["gene"] == "CYP2C19")
         self.assertEqual(cyp["diplotype"]["status"], "NÃO DISPONÍVEL")
         self.assertTrue(any("composto" in r for r in cyp["diplotype"]["reasons"]))
@@ -377,8 +385,14 @@ class DiplotypeRefusalTest(unittest.TestCase):
                           "actor_type": "SOFTWARE", "actor_id": "t", "method": "m", "run_id": "r",
                           "input_sha256": [sha], "output_sha256": [], "tool_versions": {"t": "1"}},
             })
-            qc = inspect_array(array, case_id="SYN-PGX", build="GRCh37", strand="forward",
-                               build_evidence=evidence("GRCh37"), strand_evidence=evidence("forward"))
+            qc = inspect_array(
+                array,
+                case_id="SYN-PGX",
+                build="GRCh37",
+                strand="forward",
+                build_evidence=evidence("GRCh37"),
+                strand_evidence=evidence("forward"),
+            )
             (root / "qc.json").write_text(json.dumps(qc), encoding="utf-8")
             targets_path = root / "targets.json"
             targets_path.write_text(json.dumps(targets), encoding="utf-8")
@@ -449,7 +463,9 @@ class RegistryValidationTest(unittest.TestCase):
             self.assertIn("BCHE", load_pgx_registry(path)["genes"])
 
     def test_the_shipped_registry_carries_only_single_character_alleles(self):
-        """The shipped registry carries only single-character alleles, which is what the caller assumes."""
+        """The shipped registry carries only single-character alleles,
+        which is what the caller assumes.
+        """
         registry = json.loads(
             (ROOT / "config/pgx_allele_definitions.json").read_text(encoding="utf-8")
         )
@@ -528,7 +544,9 @@ class AnesthesiaScopeTest(unittest.TestCase):
         return passport
 
     def test_a_clean_bche_read_is_not_a_verified_anaesthesia_card(self):
-        """A clean BCHE read is not a verified anaesthesia card: the loci read, the card still refuses."""
+        """A clean BCHE read is not a verified anaesthesia card:
+        the loci read, the card still refuses.
+        """
         passport = self._card(self.REAL_REGISTRY)
         card = passport["anesthesia_card"]
         # The BCHE loci really were read: this is not a refusal for lack of data.
@@ -663,7 +681,10 @@ class ConditionalLayerReachesTheReportTest(unittest.TestCase):
 
         matrix_path, passport, _ = _artifacts(root, CLEAN_ROWS, registry=self.REAL_REGISTRY)
         passport_path = write_passport(passport, root / "passport.json")
-        return build_payload(passport_path, matrix_path, policy_evaluation_file(root))["sections"], passport
+        return (
+            build_payload(passport_path, matrix_path, policy_evaluation_file(root))["sections"],
+            passport,
+        )
 
     def test_a_conditional_phenotype_in_the_passport_appears_in_the_report(self):
         """A conditional phenotype in the passport reaches the report."""
@@ -730,7 +751,9 @@ class ReportIntegrationTest(unittest.TestCase):
         *,
         prepare_release: bool = True,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        """Build the report payload from these rows, optionally without the release prerequisites."""
+        """Build the report payload from these rows, optionally without
+        the release prerequisites.
+        """
         from scripts.build_pharmacogenomic_report import build_payload
 
         effective_registry = REGISTRY if registry is _DEFAULT_REPORT_REGISTRY else registry
@@ -849,7 +872,9 @@ class ReportIntegrationTest(unittest.TestCase):
         self.assertNotIn("AG", text)
 
     def test_the_sections_match_the_catalogue_for_report_06(self):
-        """The sections the builder emits are exactly the ones the catalogue declares for report 06."""
+        """The sections the builder emits are exactly the ones the catalogue
+        declares for report 06.
+        """
         from reporting.engine import load_catalog
         from scripts.build_pharmacogenomic_report import SECTIONS
 
@@ -950,7 +975,11 @@ class CpicRegistryTest(unittest.TestCase):
 
     def test_structural_alleles_are_excluded_and_listed(self):
         """An array cannot genotype a duplication; excluding it silently would hide that."""
-        excluded = {a for s in self.registry["genes"].values() for a in s["structural_alleles_excluded"]}
+        excluded = {
+            a
+            for s in self.registry["genes"].values()
+            for a in s["structural_alleles_excluded"]
+        }
         self.assertTrue(excluded, "CPIC marks some alleles structural; none were recorded")
         for gene, spec in self.registry["genes"].items():
             for allele in spec["structural_alleles_excluded"]:
@@ -979,7 +1008,9 @@ class CpicRegistryTest(unittest.TestCase):
         self.assertIn("não fornece tabela", result["reason"])
 
     def test_a_diplotype_absent_from_the_table_yields_no_nearest_match(self):
-        """A diplotype absent from the phenotype table yields no phenotype, never a nearest match."""
+        """A diplotype absent from the phenotype table yields no phenotype,
+        never a nearest match.
+        """
         from array_pipeline.pharmacogenomics import _phenotype_for
 
         spec = self.registry["genes"]["CYP2C19"]
@@ -1029,7 +1060,8 @@ class PanelMatrixTest(unittest.TestCase):
 
             other = root / "other"
             other.mkdir()
-            other_matrix, _p, _r = _artifacts(other, CLEAN_ROWS.replace("rs6025,1,169519049,GG", "rs6025,1,169519049,AG"))
+            other_matrix, _p, _r = _artifacts(other, CLEAN_ROWS.replace(
+                "rs6025,1,169519049,GG", "rs6025,1,169519049,AG"))
             with self.assertRaises(ValueError) as raised:
                 build_pharmacogenomic_passport(
                     matrix_path,
@@ -1040,12 +1072,21 @@ class PanelMatrixTest(unittest.TestCase):
         self.assertIn("different inputs", str(raised.exception))
 
     def test_a_panel_matrix_raises_the_measured_defining_position_coverage(self):
-        """A panel matrix raises the measured coverage of defining positions the target list omits."""
+        """A panel matrix raises the measured coverage of defining positions
+        the target list omits.
+        """
         # rs1234567 defines an allele the curated target list never mentions. Without the
         # panel matrix it can only read as NÃO TESTADO; with it, the array is actually asked.
         registry = json.loads(json.dumps(REGISTRY))
         registry["genes"]["CYP2C19"]["alleles"]["CYP2C19*17"] = {
-            "defining": [{"rsid": "rs1234567", "allele": "T", "position": 1, "chromosome": "chr10"}],
+            "defining": [
+                {
+                    "rsid": "rs1234567",
+                    "allele": "T",
+                    "position": 1,
+                    "chromosome": "chr10",
+                }
+            ],
             "cpic_clinical_function": "Increased function",
             "cpic_frequency": {"European": 0.21},
         }
@@ -1102,7 +1143,10 @@ class NoCallIsNotHomozygousTest(unittest.TestCase):
         "complete_panel": True,
         "reference_allele": "*1",
         "alleles": {
-            "*2": {"cpic_clinical_function": "No function", "defining": [{"rsid": "rs1", "allele": "T"}]}
+            "*2": {
+                "cpic_clinical_function": "No function",
+                "defining": [{"rsid": "rs1", "allele": "T"}],
+            }
         },
     }
 
@@ -1145,7 +1189,9 @@ class NoCallIsNotHomozygousTest(unittest.TestCase):
         self.assertEqual(result["value"], "*1/*1")
 
     def test_a_no_call_no_longer_masks_phase_ambiguity(self):
-        """Two heterozygous positions raise phase ambiguity whether or not a no-call sits between them."""
+        """Two heterozygous positions raise phase ambiguity
+        whether or not a no-call sits between them.
+        """
         # Two heterozygous positions must raise phase ambiguity whether or not an uncalled
         # position sits between them.
         result = self._diplotype([

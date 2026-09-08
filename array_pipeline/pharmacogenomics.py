@@ -91,7 +91,8 @@ def load_pgx_registry(path: Path) -> dict[str, Any]:
                 raise PgxRegistryError(f"{gene} {allele}: defining positions are required")
             for item in defining:
                 if not isinstance(item, dict) or not item.get("rsid") or not item.get("allele"):
-                    raise PgxRegistryError(f"{gene} {allele}: each defining position needs rsid and allele")
+                    raise PgxRegistryError(
+                        f"{gene} {allele}: each defining position needs rsid and allele")
                 base = str(item["allele"]).strip().upper()
                 if base not in DEFINING_ALLELE_ALPHABET:
                     # `_allele_findings` decides presence by asking whether the defining
@@ -130,7 +131,8 @@ def _evidence_for(rsid: str, annotation: dict[str, Any] | None) -> list[dict[str
     """Verified external retrievals linked to this locus, if evidence was collected."""
     if not annotation:
         return []
-    retrievals = {r["id"]: r for r in annotation.get("evidence_retrievals", []) if isinstance(r, dict)}
+    retrievals = {r["id"]: r for r in annotation.get(
+        "evidence_retrievals", []) if isinstance(r, dict)}
     out = []
     for link in annotation.get("target_evidence_links", []):
         if str(link.get("target_id", "")).lower() != rsid:
@@ -224,7 +226,10 @@ def _allele_findings(
             basis = (
                 "todas as posições definidoras foram interrogadas e carregam o alelo definidor"
                 if detected
-                else "todas as posições definidoras foram interrogadas; ao menos uma não carrega o alelo definidor"
+                else (
+                    "todas as posições definidoras foram interrogadas; ao menos uma não "
+                    "carrega o alelo definidor"
+                )
             )
         else:
             status = UNAVAILABLE
@@ -296,7 +301,8 @@ def _diplotype_for(
     reasons: list[str] = []
     if gene.upper() in STRUCTURALLY_UNRESOLVED_GENES:
         reasons.append(
-            "variação clinicamente relevante deste gene é estrutural (híbridos, duplicações, deleções) "
+            "variação clinicamente relevante deste gene é estrutural (híbridos, "
+            "duplicações, deleções) "
             "e não é resolvida por genotipagem em array"
         )
     if spec is None:
@@ -351,7 +357,8 @@ def _diplotype_for(
             "zigosidade não legível em "
             f"{', '.join(sorted(f['allele'] for f in unreadable_zygosity))}: "
             + "; ".join(
-                sorted({str(f.get("zygosity_basis") or "base não registrada") for f in unreadable_zygosity})
+                sorted({str(f.get("zygosity_basis") or "base não registrada")
+                       for f in unreadable_zygosity})
             )
         )
     if len(detected_findings) > 1:
@@ -438,7 +445,11 @@ def _diplotype_for(
     }
 
 
-def _phenotype_for(gene: str, spec: dict[str, Any] | None, diplotype: dict[str, Any]) -> dict[str, Any]:
+def _phenotype_for(
+    gene: str,
+    spec: dict[str, Any] | None,
+    diplotype: dict[str, Any],
+) -> dict[str, Any]:
     """Translate an established diplotype through the registry's cited guideline table.
 
     The label is looked up, never composed. A diplotype the table does not list yields
@@ -472,7 +483,8 @@ def _phenotype_for(gene: str, spec: dict[str, Any] | None, diplotype: dict[str, 
                 "source": (spec or {}).get("phenotype_map_source", UNAVAILABLE),
                 "reason": (
                     "traduzido pela tabela diplótipo→fenótipo do registro citado; INFERIDO "
-                    "porque o diplótipo de origem é inferido de genótipos, não de haplótipos observados"
+                    "porque o diplótipo de origem é inferido de genótipos, não de "
+                    "haplótipos observados"
                 ),
             }
     return {
@@ -641,7 +653,10 @@ def build_pharmacogenomic_passport(
                 "sha256": sha256_json(registry),
             }
             if registry
-            else {"status": UNAVAILABLE, "reason": "nenhum registro curado de definições de alelos foi fornecido"}
+            else {
+                "status": UNAVAILABLE,
+                "reason": "nenhum registro curado de definições de alelos foi fornecido",
+            }
         ),
         "evidence_linked": annotation is not None,
         "totals": {
@@ -649,7 +664,9 @@ def build_pharmacogenomic_passport(
             "loci": total,
             "interrogated_loci": interrogated,
             "interrogated_fraction": (interrogated / total) if total else 0.0,
-            "genes_with_diplotype": sum(1 for g in gene_records if g["diplotype"]["status"] != UNAVAILABLE),
+            "genes_with_diplotype": sum(
+                1 for g in gene_records if g["diplotype"]["status"] != UNAVAILABLE
+            ),
             # Counted, not asserted. Hardcoding 0 here would have stayed "true" only for as
             # long as nothing emitted a phenotype, and would have gone quietly wrong the
             # moment something did — the vacuous-constant pattern this project keeps finding.
@@ -715,11 +732,20 @@ def build_pharmacogenomic_passport(
             "e avaliação de fenoconversão (interações, função hepática/renal, idade, comorbidade)."
         ),
         "limitations": [
-            "Genotipagem em array interroga apenas as posições ensaiadas; alelos não cobertos permanecem indistinguíveis do haplótipo de referência.",
+            (
+                "Genotipagem em array interroga apenas as posições ensaiadas; alelos não "
+                "cobertos permanecem indistinguíveis do haplótipo de referência."
+            ),
             "Diplótipo exige painel completo e fase; array não fornece evidência de fase.",
-            "Fenótipo farmacogenético não é emitido sem diplótipo estabelecido e diretriz versionada.",
+            (
+                "Fenótipo farmacogenético não é emitido sem diplótipo estabelecido e "
+                "diretriz versionada."
+            ),
             "CYP2D6 não é diplotipado: sua variação clinicamente relevante é estrutural.",
-            "Fenoconversão por interação medicamentosa e por estado clínico não é derivável do genótipo.",
+            (
+                "Fenoconversão por interação medicamentosa e por estado clínico não é "
+                "derivável do genótipo."
+            ),
             "Achados acionáveis exigem confirmação por método ortogonal antes de mudar conduta.",
             "Diplótipo condicional não é diplótipo estabelecido: vale sob a suposição declarada "
             "de que nenhum alelo não interrogado está presente, e o risco residual dessa "
@@ -747,7 +773,10 @@ def build_pharmacogenomic_passport(
     return payload
 
 
-def _anesthesia_card(gene_records: list[dict[str, Any]], registry: dict[str, Any] | None) -> dict[str, Any]:
+def _anesthesia_card(
+    gene_records: list[dict[str, Any]],
+    registry: dict[str, Any] | None,
+) -> dict[str, Any]:
     """The emergency-facing card: observations only, never a clearance or a diagnosis.
 
     Which genes belong on the card is a clinical judgement, so it is read from the curated
@@ -774,7 +803,10 @@ def _anesthesia_card(gene_records: list[dict[str, Any]], registry: dict[str, Any
     if not registry:
         return {
             "status": UNAVAILABLE,
-            "reason": "registro curado não fornecido; a relevância anestésica não foi declarada por fonte citável",
+            "reason": (
+                "registro curado não fornecido; a relevância anestésica não foi declarada "
+                "por fonte citável"
+            ),
             "genes": [],
             "observations": [],
             "not_interrogated": [],
@@ -796,7 +828,10 @@ def _anesthesia_card(gene_records: list[dict[str, Any]], registry: dict[str, Any
                     "classification": locus["classification"],
                     "genotype": locus["genotype"],
                     "interpretable": locus["interpretable"],
-                    "note": (registry["genes"][record["gene"]] or {}).get("anesthesia_note") or UNAVAILABLE,
+                    "note": (
+                        (registry["genes"][record["gene"]] or {}).get("anesthesia_note")
+                        or UNAVAILABLE
+                    ),
                 }
             )
 
@@ -824,7 +859,8 @@ def _anesthesia_card(gene_records: list[dict[str, Any]], registry: dict[str, Any
                         f"{scope.get('guideline_name') or UNAVAILABLE} "
                         f"(nível {entry.get('cpic_level') or UNAVAILABLE}) para {drugs}; o "
                         "registro traz definições, mas nenhum locus interpretável deste gene "
-                        "teve chamada utilizável. Ausência de achado aqui não é ausência de risco — "
+                        "teve chamada utilizável. Ausência de achado aqui não é ausência "
+                        "de risco — "
                         "é ausência de medição utilizável."
                     )
                     if gene in defined

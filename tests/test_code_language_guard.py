@@ -110,7 +110,14 @@ class LanguagePolicyLoadingTest(unittest.TestCase):
             _write_json(root, "config/code_language_legacy_baseline.json", {
                 "schema": "genoma-code-language-legacy-baseline-v1",
                 "source_commit": "0" * 40,
-                "entries": [{"path": "../escape.py", "kind": "comment", "token": TERM_ARCHIVE, "count": 1}],
+                "entries": [
+                    {
+                        "path": "../escape.py",
+                        "kind": "comment",
+                        "token": TERM_ARCHIVE,
+                        "count": 1,
+                    }
+                ],
             })
             with self.assertRaisesRegex(LanguagePolicyError, "invalid baseline entry path"):
                 load_baseline(root)
@@ -154,13 +161,15 @@ class PythonLanguageScannerTest(unittest.TestCase):
         td, root = self._repo({"pkg/mod.py": "def validar_arquivo():\n    return True\n"})
         with td:
             findings = _scan_fixture_repository(root, load_policy(root))
-        self.assertTrue(any(f.kind == "identifier" and f.token == PORTUGUESE_FIXTURE_IDENTIFIER for f in findings), findings)
+        self.assertTrue(any(f.kind == "identifier" and f.token ==
+                        PORTUGUESE_FIXTURE_IDENTIFIER for f in findings), findings)
 
     def test_camel_case_portuguese_identifier_is_reported(self):
         td, root = self._repo({"pkg/mod.py": "class RelatorioBuilder:\n    pass\n"})
         with td:
             findings = _scan_fixture_repository(root, load_policy(root))
-        self.assertTrue(any(f.kind == "identifier" and f.token == PORTUGUESE_FIXTURE_CLASS for f in findings), findings)
+        self.assertTrue(any(f.kind == "identifier" and f.token ==
+                        PORTUGUESE_FIXTURE_CLASS for f in findings), findings)
 
     def test_accented_comment_is_normalized_and_reported(self):
         td, root = self._repo({"pkg/mod.py": "# verificação\nvalue = 1\n"})
@@ -172,13 +181,22 @@ class PythonLanguageScannerTest(unittest.TestCase):
         )
 
     def test_docstring_is_scanned(self):
-        td, root = self._repo({"pkg/mod.py": 'def build():\n    """Validar a amostra antes da chamada."""\n    return 1\n'})
+        td, root = self._repo(
+            {
+                "pkg/mod.py": (
+                    'def build():\n'
+                    '    """Validar a amostra antes da chamada."""\n'
+                    '    return 1\n'
+                )
+            }
+        )
         with td:
             findings = _scan_fixture_repository(root, load_policy(root))
         self.assertTrue(any(f.kind == "docstring" for f in findings), findings)
 
     def test_contract_literal_is_removed_before_comment_word_scan(self):
-        td, root = self._repo({"pkg/mod.py": "# external status remains NÃO DISPONÍVEL\nvalue = 1\n"})
+        td, root = self._repo(
+            {"pkg/mod.py": "# external status remains NÃO DISPONÍVEL\nvalue = 1\n"})
         with td:
             findings = _scan_fixture_repository(root, load_policy(root))
         self.assertEqual(findings, ())
@@ -191,13 +209,21 @@ class PythonLanguageScannerTest(unittest.TestCase):
         self.assertEqual(len(matches), 2, findings)
 
     def test_configured_portuguese_lemma_is_reported_across_scanned_surfaces(self):
-        source = 'def calcular_total():\n    """calcular resultado"""\n    # calcular agora\n    return 1\n'
+        source = (
+            'def calcular_total():\n'
+            '    """calcular resultado"""\n'
+            '    # calcular agora\n'
+            '    return 1\n'
+        )
         td, root = self._repo({"pkg/mod.py": source})
         with td:
             findings = _scan_fixture_repository(root, load_policy(root))
-        self.assertTrue(any(f.kind == "identifier" and f.token == IDENTIFIER_CALCULATE_TOTAL for f in findings), findings)
-        self.assertTrue(any(f.kind == "comment" and f.token == TERM_CALCULATE for f in findings), findings)
-        self.assertTrue(any(f.kind == "docstring" and f.token == TERM_CALCULATE for f in findings), findings)
+        self.assertTrue(any(f.kind == "identifier" and f.token ==
+                        IDENTIFIER_CALCULATE_TOTAL for f in findings), findings)
+        self.assertTrue(any(f.kind == "comment" and f.token ==
+                        TERM_CALCULATE for f in findings), findings)
+        self.assertTrue(any(f.kind == "docstring" and f.token ==
+                        TERM_CALCULATE for f in findings), findings)
 
     def test_portuguese_plural_and_participle_are_normalized(self):
         td, root = self._repo({"pkg/mod.py": "def arquivos_processados():\n    return True\n"})
@@ -214,7 +240,8 @@ class PythonLanguageScannerTest(unittest.TestCase):
         td, root = self._repo({"pkg/mod.py": "class XMLArquivo:\n    pass\n"})
         with td:
             findings = _scan_fixture_repository(root, load_policy(root))
-        self.assertTrue(any(f.kind == "identifier" and f.token == IDENTIFIER_XML_FILE for f in findings), findings)
+        self.assertTrue(any(f.kind == "identifier" and f.token ==
+                        IDENTIFIER_XML_FILE for f in findings), findings)
 
     def test_unicode_camel_case_identifier_is_split(self):
         td, root = self._repo({"pkg/mod.py": "relatórioArquivo = 1\n"})
@@ -257,7 +284,8 @@ class PythonLanguageScannerTest(unittest.TestCase):
         td, root = self._repo({"pkg/mod.py": "amostra1 = 1\n"})
         with td:
             findings = _scan_fixture_repository(root, load_policy(root))
-        self.assertTrue(any(f.kind == "identifier" and f.token == IDENTIFIER_SAMPLE_ONE for f in findings), findings)
+        self.assertTrue(any(f.kind == "identifier" and f.token ==
+                        IDENTIFIER_SAMPLE_ONE for f in findings), findings)
 
     def test_import_from_source_module_is_scanned(self):
         td, root = self._repo({"pkg/mod.py": "from validacao import build\n"})
@@ -286,7 +314,8 @@ class PythonLanguageScannerTest(unittest.TestCase):
         td, root = self._repo({"pkg/mod.py": source})
         with td:
             findings = _scan_fixture_repository(root, load_policy(root))
-        self.assertTrue(any(f.kind == "identifier" and f.token == TERM_ARCHIVE for f in findings), findings)
+        self.assertTrue(any(f.kind == "identifier" and f.token ==
+                        TERM_ARCHIVE for f in findings), findings)
 
     def test_match_as_and_match_star_bindings_are_scanned_independently(self):
         cases = {
@@ -330,11 +359,14 @@ class PythonLanguageScannerTest(unittest.TestCase):
 
     def test_unparseable_python_fails_closed(self):
         td, root = self._repo({"pkg/mod.py": "def broken(:\n    pass\n"})
-        with td, self.assertRaisesRegex(LanguagePolicyError, "unable to parse scanned Python source"):
+        with td, self.assertRaisesRegex(
+            LanguagePolicyError, "unable to parse scanned Python source"
+        ):
             _scan_fixture_repository(root, load_policy(root))
 
     def test_historical_root_is_not_scanned(self):
-        td, root = self._repo({"docs/history/v3.3/example.py": "def validar_arquivo():\n    return True\n"})
+        td, root = self._repo(
+            {"docs/history/v3.3/example.py": "def validar_arquivo():\n    return True\n"})
         with td:
             findings = _scan_fixture_repository(root, load_policy(root))
         self.assertEqual(findings, ())
@@ -414,7 +446,14 @@ class BaselineWriteSafetyTest(unittest.TestCase):
         _write_json(root, "config/code_language_legacy_baseline.json", {
             "schema": "genoma-code-language-legacy-baseline-v1",
             "source_commit": base,
-            "entries": [{"path": "pkg/base.py", "kind": "comment", "token": TERM_VALIDATE, "count": 1}],
+            "entries": [
+                {
+                    "path": "pkg/base.py",
+                    "kind": "comment",
+                    "token": TERM_VALIDATE,
+                    "count": 1,
+                }
+            ],
         })
         return td, root, base
 
@@ -445,7 +484,8 @@ class BaselineWriteSafetyTest(unittest.TestCase):
         from scripts import code_language_guard as guard
         td, root, _ = self._repo()
         with td:
-            payload = json.loads((root / "config/code_language_legacy_baseline.json").read_text(encoding="utf-8"))
+            payload = json.loads(
+                (root / "config/code_language_legacy_baseline.json").read_text(encoding="utf-8"))
             payload["source_commit"] = "0" * 40
             _write_json(root, "config/code_language_legacy_baseline.json", payload)
             with self.assertRaisesRegex(LanguagePolicyError, "source_commit"):
@@ -472,7 +512,8 @@ class BaselineWriteSafetyTest(unittest.TestCase):
         from scripts import code_language_guard as guard
         td, root, _ = self._repo()
         with td:
-            payload = json.loads((root / "config/code_language_legacy_baseline.json").read_text(encoding="utf-8"))
+            payload = json.loads(
+                (root / "config/code_language_legacy_baseline.json").read_text(encoding="utf-8"))
             payload["source_commit"] = "0" * 40
             _write_json(root, "config/code_language_legacy_baseline.json", payload)
             with self.assertRaisesRegex(LanguagePolicyError, "source_commit"):
@@ -489,7 +530,8 @@ class BaselineWriteSafetyTest(unittest.TestCase):
             _write_json(root, "event.json", {"pull_request": {"base": {"sha": base}}})
             with mock.patch.dict(
                 os.environ,
-                {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(root / "event.json")},
+                {"GITHUB_EVENT_NAME": "pull_request",
+                    "GITHUB_EVENT_PATH": str(root / "event.json")},
                 clear=False,
             ), self.assertRaisesRegex(LanguagePolicyError, "technical_terms"):
                 guard._check(root)
@@ -513,7 +555,8 @@ class BaselineWriteSafetyTest(unittest.TestCase):
             _write_json(root, "event.json", {"pull_request": {"base": {"sha": trusted_base}}})
             with mock.patch.dict(
                 os.environ,
-                {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(root / "event.json")},
+                {"GITHUB_EVENT_NAME": "pull_request",
+                    "GITHUB_EVENT_PATH": str(root / "event.json")},
                 clear=False,
             ), self.assertRaisesRegex(LanguagePolicyError, "excluded_roots"):
                 guard._check(root)
@@ -543,7 +586,8 @@ class BaselineWriteSafetyTest(unittest.TestCase):
             _write_json(root, "event.json", {"pull_request": {"base": {"sha": base}}})
             with mock.patch.dict(
                 os.environ,
-                {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(root / "event.json")},
+                {"GITHUB_EVENT_NAME": "pull_request",
+                    "GITHUB_EVENT_PATH": str(root / "event.json")},
                 clear=False,
             ), self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
                 guard._bootstrap_baseline(root, later)
@@ -558,7 +602,8 @@ class BaselineWriteSafetyTest(unittest.TestCase):
             _write_json(root, "event.json", {"pull_request": {"base": {"sha": base}}})
             with mock.patch.dict(
                 os.environ,
-                {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(root / "event.json")},
+                {"GITHUB_EVENT_NAME": "pull_request",
+                    "GITHUB_EVENT_PATH": str(root / "event.json")},
                 clear=False,
             ), self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
                 guard._write_baseline(root, later)
@@ -575,7 +620,8 @@ class BaselineWriteSafetyTest(unittest.TestCase):
             _write_json(root, "event.json", {"pull_request": {"base": {"sha": trusted_base}}})
             with mock.patch.dict(
                 os.environ,
-                {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(root / "event.json")},
+                {"GITHUB_EVENT_NAME": "pull_request",
+                    "GITHUB_EVENT_PATH": str(root / "event.json")},
                 clear=False,
             ):
                 self.assertEqual(guard._check(root), 0)
@@ -592,7 +638,8 @@ class BaselineWriteSafetyTest(unittest.TestCase):
             _write_json(root, "event.json", {"pull_request": {"base": {"sha": trusted_base}}})
             with mock.patch.dict(
                 os.environ,
-                {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(root / "event.json")},
+                {"GITHUB_EVENT_NAME": "pull_request",
+                    "GITHUB_EVENT_PATH": str(root / "event.json")},
                 clear=False,
             ), self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
                 guard._bootstrap_baseline(root, source_commit)
@@ -609,7 +656,8 @@ class BaselineWriteSafetyTest(unittest.TestCase):
             _write_json(root, "event.json", {"pull_request": {"base": {"sha": trusted_base}}})
             with mock.patch.dict(
                 os.environ,
-                {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(root / "event.json")},
+                {"GITHUB_EVENT_NAME": "pull_request",
+                    "GITHUB_EVENT_PATH": str(root / "event.json")},
                 clear=False,
             ), self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
                 guard._write_baseline(root, source_commit)
@@ -626,7 +674,8 @@ class BaselineWriteSafetyTest(unittest.TestCase):
             _write_json(root, "event.json", {"pull_request": {"base": {"sha": trusted_base}}})
             with mock.patch.dict(
                 os.environ,
-                {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_EVENT_PATH": str(root / "event.json")},
+                {"GITHUB_EVENT_NAME": "pull_request",
+                    "GITHUB_EVENT_PATH": str(root / "event.json")},
                 clear=False,
             ), self.assertRaisesRegex(LanguagePolicyError, "trusted pull request base"):
                 guard._check(root)
