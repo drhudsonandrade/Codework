@@ -199,7 +199,8 @@ def _canonical_technical_term(word: str, policy: LanguagePolicy) -> str | None:
         if ending not in PORTUGUESE_VERB_SUFFIXES or len(term) < 5:
             continue
         stem = term[:-2]
-        if normalized.startswith(stem) and normalized[len(stem):] in PORTUGUESE_VERB_SUFFIXES[ending]:
+        suffix = normalized[len(stem):]
+        if normalized.startswith(stem) and suffix in PORTUGUESE_VERB_SUFFIXES[ending]:
             return term
     return None
 

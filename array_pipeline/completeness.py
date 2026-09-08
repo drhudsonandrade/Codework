@@ -3,7 +3,8 @@
 The catalogue has declared report 09 since v3.0 and the approved template is sealed in the
 store, but nothing computed its content. That gap matters more than a missing document:
 report 09 is the one that keeps a *silent* result from reading as a *negative* one. Without
-it, "rs6025 does not appear in the report" is indistinguishable from "rs6025 was tested and is absent", which is the single most consequential false negative an array can produce.
+it, "rs6025 does not appear in the report" is indistinguishable from "rs6025 was tested and is
+absent", which is the single most consequential false negative an array can produce.
 
 Every target in the registry lands in exactly one class:
 

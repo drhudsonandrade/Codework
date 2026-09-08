@@ -120,28 +120,35 @@ class LanguagePolicyLoadingTest(unittest.TestCase):
         self.assertTrue({"calcular", "processar", "arquivo"} <= policy.technical_terms)
 
 
+def _scanner_repo(files: dict[str, str]) -> tuple[TemporaryDirectory, Path]:
+    """Build a temporary repository with the scanner policy and supplied sources."""
+    td = TemporaryDirectory()
+    root = Path(td.name)
+    policy = {
+        "schema": "genoma-code-language-policy-v1",
+        "scan_suffixes": [".py"],
+        "technical_terms": [
+            "arquivo", "amostra", "calcular", "disponivel", "processar",
+            "relatorio", "validacao", "validar", "verificacao",
+        ],
+        "contract_literals": ["VERIFICADO", "NÃO DISPONÍVEL"],
+        "excluded_roots": [
+            {"path": "docs/history", "reason": "historical evidence"},
+            {"path": "normative/sealed", "reason": "sealed transport"},
+        ],
+    }
+    _write_json(root, "config/code_language_policy.json", policy)
+    for relative, source in files.items():
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(source, encoding="utf-8")
+    return td, root
+
 
 class PythonLanguageScannerTest(unittest.TestCase):
     @staticmethod
     def _repo(files: dict[str, str]) -> tuple[TemporaryDirectory, Path]:
-        td = TemporaryDirectory()
-        root = Path(td.name)
-        policy = {
-            "schema": "genoma-code-language-policy-v1",
-            "scan_suffixes": [".py"],
-            "technical_terms": ["arquivo", "amostra", "calcular", "disponivel", "processar", "relatorio", "validacao", "validar", "verificacao"],
-            "contract_literals": ["VERIFICADO", "NÃO DISPONÍVEL"],
-            "excluded_roots": [
-                {"path": "docs/history", "reason": "historical evidence"},
-                {"path": "normative/sealed", "reason": "sealed transport"},
-            ],
-        }
-        _write_json(root, "config/code_language_policy.json", policy)
-        for relative, source in files.items():
-            target = root / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(source, encoding="utf-8")
-        return td, root
+        return _scanner_repo(files)
 
     def test_snake_case_portuguese_identifier_is_reported(self):
         td, root = self._repo({"pkg/mod.py": "def validar_arquivo():\n    return True\n"})
@@ -334,10 +341,11 @@ class PythonLanguageScannerTest(unittest.TestCase):
 
 
 class PythonLanguageScannerFalsePositiveTest(unittest.TestCase):
+    """Cover English tokens that resemble Portuguese verb stems."""
+
     def test_english_runtime_noun_does_not_match_an_ar_verb_stem(self):
-        td, root = PythonLanguageScannerTest._repo(
-            {"pkg/mod.py": '"""A missing interpreter is unavailable."""\n'}
-        )
+        """An English runtime noun must not inherit an -ar conjugation rule."""
+        td, root = _scanner_repo({"pkg/mod.py": '"""A missing interpreter is unavailable."""\n'})
         policy_path = root / "config/code_language_policy.json"
         payload = json.loads(policy_path.read_text(encoding="utf-8"))
         payload["technical_terms"].append("interpretar")
@@ -653,6 +661,7 @@ class BaselineWriteSafetyTest(unittest.TestCase):
 
 class LanguageBaselineTest(unittest.TestCase):
     def test_active_python_legacy_baseline_is_empty_after_internal_migration(self):
+        """The migrated active Python baseline must stay empty."""
         python_entries = tuple(entry for entry in load_baseline(ROOT) if entry.path.endswith(".py"))
         self.assertEqual(python_entries, ())
 
