@@ -732,9 +732,9 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertEqual(selected_runner("workflow_dispatch", "refs/heads/main", True), "codework-isolated")
         self.assertEqual(selected_runner("push", "refs/heads/main", True), "codework-isolated")
         private_jobs = {
-            "scaffold-validation.yml": ("static",),
+            "scaffold-validation.yml": ("static", "container-canary"),
             "genoma-audit.yml": ("audit",),
-            "genoma-policy-engine.yml": ("policy",),
+            "genoma-policy-engine.yml": ("policy", "rego", "container"),
         }
         for filename, jobs in private_jobs.items():
             workflow = _read(filename)
@@ -769,8 +769,8 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertIn("uses: ./.github/workflows/genoma-audit.yml", _job_block(scaffold, "four-plane-audit"))
 
         hosted_jobs = {
-            "scaffold-validation.yml": ("changes", "container-canary", "publish-ghcr"),
-            "genoma-policy-engine.yml": ("changes", "rego", "container", "publish"),
+            "scaffold-validation.yml": ("changes", "publish-ghcr"),
+            "genoma-policy-engine.yml": ("changes", "publish"),
         }
         for filename, jobs in hosted_jobs.items():
             workflow = _read(filename)
