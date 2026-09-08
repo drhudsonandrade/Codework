@@ -41,7 +41,7 @@ import zipfile
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, IO
 
 if str(Path(__file__).resolve().parents[1]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -75,6 +75,7 @@ def _open_associations(path: Path) -> io.TextIOWrapper:
     The catalog publishes both shapes, so the container is detected rather than assumed and a
     download does not have to be unpacked by hand before a build.
     """
+    raw: IO[bytes] | gzip.GzipFile
     if path.suffix == ".zip":
         archive = zipfile.ZipFile(path)
         names = [name for name in archive.namelist() if name.endswith(".tsv")]

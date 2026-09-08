@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import ast
+import gzip
 import unittest
+import zipfile
 from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from scripts.build_trait_targets import _open_associations
 from scripts.code_language_guard import LanguagePolicy, load_policy, scan_python_file
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -71,6 +74,28 @@ class ScientificCodeLanguageTest(unittest.TestCase):
             )
             findings = scan_python_file(path, root, _scientific_policy())
         self.assertEqual(findings, ())
+
+
+class ScientificStreamCompatibilityTest(unittest.TestCase):
+    """Keep the association loader's container behavior during type-only maintenance."""
+
+    def test_plain_gzip_and_zip_associations_preserve_text_and_close(self):
+        """Every supported container exposes the same text and releases its stream."""
+        text = "SNPS\tDISEASE/TRAIT\nrs1\tsynthetic fixture\n"
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            plain = root / "associations.tsv"
+            compressed = root / "associations.tsv.gz"
+            archive_path = root / "associations.zip"
+            plain.write_text(text, encoding="utf-8")
+            compressed.write_bytes(gzip.compress(text.encode("utf-8")))
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr("associations.tsv", text)
+            for path in (plain, compressed, archive_path):
+                with self.subTest(container=path.name):
+                    with _open_associations(path) as stream:
+                        self.assertEqual(stream.read(), text)
+                    self.assertTrue(stream.closed)
 
 
 if __name__ == "__main__":

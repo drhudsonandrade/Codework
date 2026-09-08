@@ -35,9 +35,9 @@ Portuguese developer-tooling messages in `scripts/codex/setup-coderabbit.sh` bel
 
 Observed RED: three failing subtests identified the two untranslated prose locations and the three old test names. After translation the four-test suite is GREEN. Existing scientific tests remain the behavioral oracle; the new lexical test is not clinical or scientific validation.
 
-Analyzer hygiene is restricted to touched files: five overlong statements, the existing script/test path bootstrap placement and a missing method separator. Runtime string values are preserved. The import bootstrap follows the already-used audit-script pattern and is checked by direct isolated execution from outside the checkout.
+Analyzer hygiene is restricted to touched files: five overlong statements, the existing script/test path bootstrap placement and a missing method separator. Runtime string values are preserved. The import bootstrap follows the already-used audit-script pattern and is checked by direct isolated execution from outside the checkout. Local mypy also exposed a pre-existing ZIP/gzip variable-type conflict in this touched loader; an explicit `IO[bytes] | gzip.GzipFile` local annotation resolves it without changing executable behavior. A separate preservation test reads and closes plain, gzip and ZIP fixtures before and after this annotation.
 
-An executable-AST comparison permits only docstring removal, the three explicit test renames and the documented equivalent path bootstrap normalization. All remaining executable nodes must match the base. Git blob identities separately establish that scientific workflow/shell/configuration, reference and normative surfaces were not changed.
+An executable-AST comparison permits only docstring removal, the three explicit test renames and the documented equivalent path bootstrap normalization and the explicit local stream annotation. All remaining executable nodes must match the base. Git blob identities separately establish that scientific workflow/shell/configuration, reference and normative surfaces were not changed.
 
 ## Limits and evidence
 

@@ -58,3 +58,7 @@ The pre-commit tree passed 954 root tests (one skipped), 102 focused tests,
 the source-equivalence check and 72 protected-file byte comparisons.
 Release checkboxes remain open here; final exact-SHA validation and external
 review are recorded in the PR instead of rewriting this plan after every check.
+
+The later local static pass reproduced one ZIP/gzip assignment-type error in
+`_open_associations`. Its explicit local union annotation is covered by a
+plain/gzip/ZIP preservation test; no scientific rule or runtime output changes.
