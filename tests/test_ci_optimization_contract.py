@@ -717,6 +717,34 @@ class CIOptimizationContractTest(unittest.TestCase):
             ):
                 self.assertIn(preserved, event_block)
 
+    def test_trusted_heavy_checks_use_private_codework_runners_without_moving_write_jobs(self):
+        trusted_runner = (
+            "runs-on: ${{ github.event_name == 'pull_request' && "
+            "'ubuntu-latest' || 'codework-isolated' }}"
+        )
+        private_jobs = {
+            "scaffold-validation.yml": ("static", "container-canary"),
+            "genoma-audit.yml": ("audit",),
+            "genoma-policy-engine.yml": ("policy", "rego", "container"),
+        }
+        for filename, jobs in private_jobs.items():
+            workflow = _read(filename)
+            for job_name in jobs:
+                block = _job_block(workflow, job_name)
+                self.assertIn(trusted_runner, block, f"{filename}:{job_name}")
+                self.assertNotIn("runs-on: ubuntu-latest", block, f"{filename}:{job_name}")
+
+        hosted_jobs = {
+            "scaffold-validation.yml": ("changes", "publish-ghcr"),
+            "genoma-policy-engine.yml": ("changes", "publish"),
+        }
+        for filename, jobs in hosted_jobs.items():
+            workflow = _read(filename)
+            for job_name in jobs:
+                block = _job_block(workflow, job_name)
+                self.assertIn("runs-on: ubuntu-latest", block, f"{filename}:{job_name}")
+                self.assertNotIn("codework-isolated", block, f"{filename}:{job_name}")
+
     def test_four_plane_audit_is_reusable_and_gated_by_required_static(self):
         scaffold = _read("scaffold-validation.yml")
         audit = _read("genoma-audit.yml")
