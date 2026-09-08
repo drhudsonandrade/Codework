@@ -83,7 +83,7 @@ jobs:
       (github.event_name != 'pull_request' || github.event.pull_request.draft == false) &&
       (needs.changes.result != 'success' ||
        needs.changes.outputs.validation_required == 'true')
-    runs-on: ubuntu-latest
+    runs-on: ${{ ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && github.ref_protected) && 'codework-isolated' || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - name: Require successful scope classification
@@ -111,18 +111,19 @@ jobs:
         run: python3 -m pip install --disable-pip-version-check -r reporting/requirements.txt
       - name: Validate shell and Python
         run: |
+          export TMPDIR="$RUNNER_TEMP"
           bash -n scripts/*.sh tests/test_wgs_align_or_stage.sh tests/test_ci_changed_paths.sh
           python3 -m compileall -q policy_engine/genoma_policy scripts evidence_adapters
           python3 -m unittest discover -s tests -v
       - name: Exercise WGS alignment trust boundary
-        run: bash tests/test_wgs_align_or_stage.sh
+        run: TMPDIR="$RUNNER_TEMP" bash tests/test_wgs_align_or_stage.sh
       - name: Exercise CI changed-path push contract
-        run: bash tests/test_ci_changed_paths.sh
+        run: TMPDIR="$RUNNER_TEMP" bash tests/test_ci_changed_paths.sh
       - name: Build and test MCP
         working-directory: mcp
         run: |
           npm ci --ignore-scripts
-          npm test
+          TMPDIR="$RUNNER_TEMP" npm test
 
   four-plane-audit:
     name: Four-plane audit
