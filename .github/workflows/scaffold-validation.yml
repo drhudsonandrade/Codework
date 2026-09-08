@@ -116,9 +116,9 @@ jobs:
           python3 -m compileall -q policy_engine/genoma_policy scripts evidence_adapters
           python3 -m unittest discover -s tests -v
       - name: Exercise WGS alignment trust boundary
-        run: bash tests/test_wgs_align_or_stage.sh
+        run: TMPDIR="$RUNNER_TEMP" bash tests/test_wgs_align_or_stage.sh
       - name: Exercise CI changed-path push contract
-        run: bash tests/test_ci_changed_paths.sh
+        run: TMPDIR="$RUNNER_TEMP" bash tests/test_ci_changed_paths.sh
       - name: Build and test MCP
         working-directory: mcp
         run: |
