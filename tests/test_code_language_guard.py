@@ -176,16 +176,6 @@ class PythonLanguageScannerTest(unittest.TestCase):
             findings = _scan_fixture_repository(root, load_policy(root))
         self.assertEqual(findings, ())
 
-    def test_english_runtime_noun_does_not_match_an_ar_verb_stem(self):
-        td, root = self._repo({"pkg/mod.py": '"""A missing interpreter is unavailable."""\n'})
-        policy_path = root / "config/code_language_policy.json"
-        payload = json.loads(policy_path.read_text(encoding="utf-8"))
-        payload["technical_terms"].append("interpretar")
-        _write_json(root, "config/code_language_policy.json", payload)
-        with td:
-            findings = _scan_fixture_repository(root, load_policy(root))
-        self.assertEqual(findings, ())
-
     def test_repeated_comment_term_preserves_occurrence_count(self):
         td, root = self._repo({"pkg/mod.py": "# validar validar\nvalue = 1\n"})
         with td:
@@ -338,6 +328,20 @@ class PythonLanguageScannerTest(unittest.TestCase):
 
     def test_historical_root_is_not_scanned(self):
         td, root = self._repo({"docs/history/v3.3/example.py": "def validar_arquivo():\n    return True\n"})
+        with td:
+            findings = _scan_fixture_repository(root, load_policy(root))
+        self.assertEqual(findings, ())
+
+
+class PythonLanguageScannerFalsePositiveTest(unittest.TestCase):
+    def test_english_runtime_noun_does_not_match_an_ar_verb_stem(self):
+        td, root = PythonLanguageScannerTest._repo(
+            {"pkg/mod.py": '"""A missing interpreter is unavailable."""\n'}
+        )
+        policy_path = root / "config/code_language_policy.json"
+        payload = json.loads(policy_path.read_text(encoding="utf-8"))
+        payload["technical_terms"].append("interpretar")
+        _write_json(root, "config/code_language_policy.json", payload)
         with td:
             findings = _scan_fixture_repository(root, load_policy(root))
         self.assertEqual(findings, ())
