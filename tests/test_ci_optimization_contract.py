@@ -745,6 +745,9 @@ class CIOptimizationContractTest(unittest.TestCase):
                 self.assertIn("runs-on: ubuntu-latest", block, f"{filename}:{job_name}")
                 self.assertNotIn("codework-isolated", block, f"{filename}:{job_name}")
 
+        static = _job_block(_read("scaffold-validation.yml"), "static")
+        self.assertIn('export TMPDIR="$RUNNER_TEMP"', static)
+
     def test_four_plane_audit_is_reusable_and_gated_by_required_static(self):
         scaffold = _read("scaffold-validation.yml")
         audit = _read("genoma-audit.yml")
