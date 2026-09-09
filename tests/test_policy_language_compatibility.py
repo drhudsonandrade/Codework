@@ -118,7 +118,7 @@ class PolicyLanguageCompatibilityTest(unittest.TestCase):
     def test_english_names_are_not_new_wire_values(self):
         """Implementation aliases must not silently broaden accepted payloads."""
         for field, (enum_type, cases) in zip(
-            ("status", "nature", "domain"), ENUM_CASES
+            ("status", "nature", "domain"), ENUM_CASES, strict=True
         ):
             for english, _, _ in cases:
                 with self.subTest(field=field, value=english):

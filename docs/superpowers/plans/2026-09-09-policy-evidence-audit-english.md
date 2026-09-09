@@ -29,6 +29,17 @@ No duplicate implementation, new state, schema or compatibility wrapper is neede
 - Prior executor workspace was inaccessible to the `hudson` account. Work uses a
   separate full-history GitHub clone and worktree; old evidence is not overwritten.
 
+## Evidence scope of completed checkboxes
+
+Completed implementation checkboxes below refer to the initial implementation
+commit `270580ec85129f2e9a89ef8c2950d6309aa30cd9`, tree
+`a7999bca24cab207c0aaf0ee399c81d9e18133b7`, or to explicitly labeled historical
+RED/mutation worktree runs. They do not certify a later correction commit.
+The [exact-HEAD evidence record](https://github.com/drhudsonandrade/Codework/pull/60#issuecomment-5596016415)
+binds subsequent validation to the actual tested commit, tree, commands and log
+digests. Until the record matches the delivered HEAD, its validation is PENDING.
+Review completion and merge are separate from local validation.
+
 ## Task 1: Add regression evidence before changing implementation
 
 **Create:** `tests/test_policy_language_compatibility.py`.
@@ -109,7 +120,8 @@ CURIOSITY = CURIOSIDADE
   `scripts/verify_supply_chain_lock.py`, compileall and shell syntax checks.
 - [x] Mutation checks must reject a changed alias target and a translated wire
   value. Restore exact bytes after each local mutation and rerun the valid tests.
-- [ ] Bind final validation to committed SHA/tree and retain logs outside Git.
+- [x] Bind initial implementation validation to the recorded commit/tree below;
+  keep correction validation PENDING until the linked evidence record matches it.
 - [ ] Commit on the feature branch and push one locally validated block. Create a
   Draft PR, then mark Ready only after exact-HEAD checks. Recheck actual CI and
   reviewer output. Any corrective push returns to Draft first.
@@ -318,33 +330,90 @@ sha256sum "$GENOMA_RULESET_PATH"
 (cd policy_engine && python -m genoma_policy ruleset-check)
 ```
 
-## Local validation notes
+## Historical exact-HEAD validation: initial implementation
 
-The initial merged-base root suite passed 955 tests with one intentional skip.
-The new suite initially failed 38 assertion/subtests for absent English access
-and old private names; three characterization tests already passed. All nine
-passed after implementation. A wrong alias target was rejected with four
-assertion failures; translating the verified wire value was rejected with 24.
-Original model bytes were restored in `finally` before successful revalidation.
-The final wire mutation checks the exact value before attempting value lookup,
-so corruption is reported as an assertion failure rather than a secondary
-lookup exception. No assertion or accepted payload was removed.
+**Tested commit:** `270580ec85129f2e9a89ef8c2950d6309aa30cd9`
+**Tested Git tree:** `a7999bca24cab207c0aaf0ee399c81d9e18133b7`
+**Base:** `fe916c5f567380b5756dcdeab2df6af6767f296b`
+**Execution log SHA-256:** `066e9d0e4dd375079e9518dc90833cb9c63825b9c88b4d875793eaf645f1bc2a`
 
-Canonical policy validation ran 47 tests successfully using mode-444 materialized
-ruleset bytes; ruleset-check verified v3.4/VIGENTE/17-08-2026, the canonical SHA
-and all 263 sections. These synthetic executions do not claim deployment.
+These commands were executed after the initial commit, with a clean worktree.
+The exact reproduction commands and canonical environment setup appear above.
 
-Local mypy 1.18.2 on the three production files reproduced one pre-existing
-`union-attr` diagnostic in `evaluation_binding` on both the merged base and the
-refactor. That expression is unchanged. Zero new diagnostics were observed; this
-is not a whole-repository typing-clean claim. No type suppression was added.
+| Command or check | Observed result on the tested commit |
+| --- | --- |
+| `python -m unittest tests.test_policy_language_compatibility -v` | 9 tests, OK, 0.007 s |
+| `PYTHONPATH=tests:. python -m unittest discover -s tests -q` | 964 tests, OK, one skip, 73.798 s |
+| `cd policy_engine && python -m unittest discover -s tests -q` | 47 tests, OK, 1.241 s |
+| `cd policy_engine && python -m genoma_policy ruleset-check` | PASS; canonical v3.4 identity and 263 sections |
+| `python scripts/code_language_guard.py --check` | Exit 0 |
+| `python scripts/validate_repo.py` | Exit 0 |
+| `python scripts/verify_supply_chain_lock.py` | Exit 0 |
+| `python -m compileall -q policy_engine/genoma_policy policy_engine/tests scripts evidence_adapters tests` | Exit 0 |
+| `bash -n` on every `scripts/*.sh` | Exit 0 |
+| pycodestyle 2.14.0, maximum line length 119, six changed Python files | Exit 0 |
+| pydocstyle 6.3.0, pep257 convention, same six files | Exit 0 |
+| Executable-equivalence procedure above | Five existing AST matches; 385 protected files byte-identical |
+| Working-tree and base-to-HEAD `git diff --check` | Exit 0 |
+
+The nine compatibility tests are included in the root suite, not added to 964.
+The canonical test input was a disposable mode-444 materialization whose SHA-256
+was `ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580`.
+The header read `VIGENTE`, `v3.4`, `17/08/2026`; all 263 sections were verified.
+Only that temporary materialization was removed. No deployment status is granted.
+
+Remote executions of the same initial implementation are independently linked:
+[canonical policy workflow](https://github.com/drhudsonandrade/Codework/actions/runs/34311670771)
+and [scaffold workflow](https://github.com/drhudsonandrade/Codework/actions/runs/34311670863).
+Consult their actual job outcomes; scope-skipped jobs are not executions.
+
+## Historical RED, mutation and diagnostic evidence
+
+The merged-base root suite on `fe916c5f567380b5756dcdeab2df6af6767f296b`
+ran 955 tests with one skip and no failures. The pre-implementation RED execution
+used that base plus the newly written test overlay, not a committed test revision.
+It produced 38 assertion/subtest failures for absent English access and old names;
+three independent legacy-characterization tests already passed.
+
+The mutation runs intentionally changed an uncommitted model copy: a wrong alias
+target produced four assertion failures, and a translated verified wire value
+produced 24. Original bytes were restored in `finally`, then the positive suite
+was rerun. These are explicitly mutation-worktree runs, not clean-commit PASS
+claims. The wire test checks exact value before value lookup so corruption is an
+assertion failure rather than a secondary lookup exception.
+
+| Historical artifact | SHA-256 |
+| --- | --- |
+| `red.log` | `bde556d5deecea5ba16d0f64ee41dde35c611e30d4976f8e4f1fd281ec85ab48` |
+| `wrong-alias-target-final.log` | `59ac2c1ef6a9d2da59ce05ce09ed1720bf9d00c3cb8536d65eab043a87eebea7` |
+| `translated-wire-value-final.log` | `013203ac42f9192878e44a58c5319e997b92b48587a1d67fd86a9eb05942c287` |
+
+Mypy 1.18.2 on the three production files reproduced one existing `union-attr`
+diagnostic in unchanged `evaluation_binding` on the merged base and the initial
+implementation. Zero new diagnostics were observed; this is not a typing-clean
+claim. No suppression or unrelated production fix was added.
+
+## Review correction and delivered-HEAD evidence
+
+CodeRabbit review `5149852490` requested an explicit inventory procedure link,
+commit/tree-bound validation evidence, and strict pairing of fields with enum
+cases. The inventory now names this plan and the exact unittest command. The
+wire-rejection loop now uses `zip(..., strict=True)`; all original assertions
+and normative input values remain intact. No production logic changes belong to
+this correction.
+
+A commit cannot embed its own final SHA without changing that SHA. Therefore
+**correction validation remains PENDING in this static note** until the
+[exact-HEAD evidence record](https://github.com/drhudsonandrade/Codework/pull/60#issuecomment-5596016415)
+identifies the delivered commit and its Git tree, with commands, actual results
+and artifact digests. This is a real existing evidence link, not a placeholder.
+A reviewer must compare its tested SHA to the PR HEAD. Neither this historical
+note nor a prior CI success certifies a different commit. External review and
+manual merge remain independent requirements even after local validation.
 
 Retained local evidence root:
 `/home/hudson/DeskRemoteWorkspace/codework-audit/policy-english-stage4/`.
-Files include `baseline-root.log`, `red.log`, `green-after-hygiene.log`,
-`wrong-alias-target-final.log`, `translated-wire-value-final.log`,
-`policy-suite.log`, `ruleset-check.json`, `compatibility.json`,
-`mypy-baseline.log`, `mypy.log`, `environment.txt`, and dependency setup logs.
-These are local locators, not public download links. Final committed-SHA results
-and log digests are recorded in the PR to avoid self-referential commit evidence.
-Earlier local attempts remain retained; only final named results support release.
+Initial logs remain preserved. Correction logs use distinct filenames rather
+than overwriting the initial exact-HEAD proof. Local paths are not public
+artifact URLs; the committed procedures and linked evidence record provide the
+review path. No automatic approval or post-deployment PASS is implied.

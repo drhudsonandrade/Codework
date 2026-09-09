@@ -90,10 +90,28 @@ payload digests, and checks real attestation refusal when evidence is missing or
 the state cannot satisfy a rule. It also compares public/internal evaluation
 serialization and checks the three test-name replacements.
 
-Before implementation, the suite produced 38 assertion/subtest failures for
-missing aliases and old test names; the three baseline-characterization tests
-already passed. After the migration, all nine tests passed. These test counts are
-not additive to the root suite that includes them.
+Reproduction procedure:
+[`docs/superpowers/plans/2026-09-09-policy-evidence-audit-english.md`](superpowers/plans/2026-09-09-policy-evidence-audit-english.md),
+using `python -m unittest tests.test_policy_language_compatibility -v`.
+The historical pre-implementation RED run used the merged base plus the new test
+overlay and produced 38 assertion/subtest failures for missing aliases and old
+names; three baseline-characterization tests already passed. Its retained log
+SHA-256 is `bde556d5deecea5ba16d0f64ee41dde35c611e30d4976f8e4f1fd281ec85ab48`.
+This RED run is not described as a nonexistent committed revision.
+
+The positive exact-HEAD execution ran on commit
+`270580ec85129f2e9a89ef8c2950d6309aa30cd9`, tree
+`a7999bca24cab207c0aaf0ee399c81d9e18133b7`: all nine tests passed, with no
+additional count beyond the root suite that includes them. The combined log
+SHA-256 is `066e9d0e4dd375079e9518dc90833cb9c63825b9c88b4d875793eaf645f1bc2a`.
+Commands, results, digests and subsequent correction validation are bound in the
+[exact-HEAD evidence record](https://github.com/drhudsonandrade/Codework/pull/60#issuecomment-5596016415).
+For any later HEAD, validation is PENDING until that linked record names the
+matching commit and tree with actual results. Historical PASS is not inherited.
+
+The wire-rejection test uses `zip(..., strict=True)` so adding or removing an
+enum cannot silently reduce field coverage. The original normative value tests
+and all nine existing regression methods are retained.
 
 Documentation/style hygiene is limited to the five touched existing Python
 files: add missing English docstrings and reflow long statements without changing
