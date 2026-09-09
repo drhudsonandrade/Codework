@@ -9,10 +9,15 @@ report text is not translated into English.
 
 A bounded inventory examined 33 Python files in `reporting/`, the report/template
 scripts and associated tests. No candidate Portuguese implementation identifier
-was found by the recorded token vocabulary. The 54 accented prose candidates
+was found by the recorded token vocabulary. The 45 accented prose candidates
 quote normative values, report names, historical examples or fixture data inside
 otherwise English documentation. They are retained, not mechanically translated.
-This lexical inventory is not a proof about every possible natural-language term.
+Reproduce the current count with
+`python scripts/verify_reporting_language_migration.py --inventory` from a
+full-history checkout. The result records base `0a643128f3ac3e99a51428644c3012a2d638ab8b`,
+all 33 paths, the precise vocabulary/pattern and every match. The reproduced
+45-line count replaces the earlier exploratory counts of 54 and 53; those are not
+used as current execution evidence. This bounded scan is not a language proof.
 
 ## Ownership boundary
 
@@ -38,7 +43,7 @@ existing owners. In particular, no caller-supplied locale field changes output.
 | Category | Decision |
 | --- | --- |
 | A: private implementation | Existing English identifiers remain; fixed display expressions reference English-named pt-BR constants. Missing docstrings and touched-file formatting are normalized. |
-| B: public/cross-module | Existing renderer function names, signatures, default values and explicit exports remain. An unused `os` import in the programmatic module is removed; repository search found no consumer of that incidental module attribute. |
+| B: public/cross-module | Existing renderer function names, signatures, default values and explicit exports remain. An unused `os` import in the programmatic module is removed; the direct-form query recorded in the implementation plan found no matching in-repository consumer; aliases, dynamic and external uses were not established by that query. |
 | C: serialized contracts | JSON keys, metadata schema, normative labels, file names, Markdown/HTML bytes and artifact digests retain their baseline representation. No locale metadata field is added. |
 | D: user-facing text | Fixed pt-BR strings receive an explicit presentation owner; report-specific catalog, payload and template text is not rewritten. |
 | E: immutable/canonical | Ruleset, sealed transport, reference manifests, coordinate packs, templates and historical artifacts are untouched. |
@@ -51,10 +56,11 @@ outside the implementation diff. The locale module is not a publication capabili
 ## Regression and reproduction
 
 Run `PYTHONPATH=tests:. python -m unittest tests.test_reporting_language_compatibility -v`.
-The nine tests check the presentation owner, exact literal values, all eleven
+The original nine tests check the presentation owner, exact literal values, all eleven
 MODEL/FINAL text bundles, absent-value formatting, reserved headings, unchanged
 language selection behavior, and publication/authorization refusals.
-The nine tests are part of the root suite, not an additional independent total.
+Two additional tests pin the reference files and preserve the design dictionary/types.
+All eleven tests are part of the root suite, not an additional independent total.
 
 The golden fixture contains 22 public bundle cases (11 report IDs times two modes)
 and one explicitly private formatting-only case. Each public case records exact
@@ -75,9 +81,13 @@ All inputs explicitly describe synthetic layout QA, never patient measurements.
 
 The [implementation plan](superpowers/plans/2026-09-09-reporting-english-locale.md)
 contains exact commands plus the full executable AST/blob and binary-output probes.
-The AST comparison reverses only the documented presentation extraction, strips
-docstrings and ignores the removed unused `os` import. Any other executable change
-fails. It also compares every out-of-scope tracked file to the fixed base.
+The independent verifier reads the capture harness and golden fixture through
+immutable commit `c87b336a292f6c9f2fb490a51d2853b74ab72749` and pinned digests.
+The candidate must preserve both reference files bytewise. It checks newly added
+and deleted tracked paths as well as protected baseline bytes. The AST proof
+reverses only the documented extraction, docstrings, unused top-level `os` import,
+and exact `_DesignTokens` declaration/`DESIGN` annotation. The TypedDict adds
+private type metadata, not runtime conversions or a different dictionary.
 
 Representative PDF/DOCX comparisons use reports 01 and 10 (multi-page and single-
 page layouts). The probe compares page text, page dimensions, raster pixels and
@@ -104,7 +114,9 @@ developer documentation, and the residual compatibility audit.
 
 The repository validator previously searched the renderer source for the inline
 result caption. It now checks the exact literal in its locale owner and the
-renderer import/reference relationship without executing either source file.
+renderer import/reference relationship without executing source files. Every
+`pt_br` attribute read in both renderer sources must have a declared locale
+constant; undefined noncritical labels and engine-only reads are rejected.
 The locale file is a required repository path. The prior colors, font, writer,
 canonical and scientific checks remain enabled. This adaptation is covered by
 `tests/test_reporting_presentation_gate.py`, including negative fixtures and an

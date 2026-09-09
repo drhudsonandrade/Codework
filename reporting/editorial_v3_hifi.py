@@ -4,13 +4,32 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from reporting import locale_pt_br as pt_br
 
 from reporting.engine import EXPECTED_RULESET
 
-DESIGN = {
+
+class _DesignTokens(TypedDict):
+    """Describe existing color strings and numeric geometry without converting values."""
+
+    navy: str
+    teal: str
+    amber: str
+    cream: str
+    light_gray: str
+    border: str
+    text: str
+    slate: str
+    pale_blue: str
+    white: str
+    a4_mm: tuple[int, int]
+    cover_left_mm: float
+    content_width_mm: float
+
+
+DESIGN: _DesignTokens = {
     "navy": "0B1F33",
     "teal": "0F766E",
     "amber": "A16207",

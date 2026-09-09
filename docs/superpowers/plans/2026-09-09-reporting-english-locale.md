@@ -83,13 +83,15 @@ The full repository gate exposed a source-location dependency: it required
 now belongs to `locale_pt_br.py`, so a comment containing that phrase would be a
 false fix. `scripts/validate_repo.py` instead requires the locale file and checks
 its unique literal-string declarations with AST parsing, never importing it.
+It also collects every `pt_br.<name>` read in both renderer sources and rejects
+undefined names, including noncritical labels and Markdown/HTML-engine reads.
 It preserves the exact result caption and `pt-BR` tag, checks the renderer absolute-import
 binding, and requires references to the caption in both `_pdf` and `_docx`.
 The existing color/font/writer markers and every other repository gate remain.
 This is a static presentation contract, not a general Python data-flow proof.
 
 Additional intentional files: `scripts/validate_repo.py` and
-`tests/test_reporting_presentation_gate.py`. The latter contains six tests for
+`tests/test_reporting_presentation_gate.py`. The latter now contains eight tests for
 acceptance, missing/changed/duplicate/computed literals, incorrect imports,
 missing use, nonexecution of source, required-path registration, and dispatch
 through the full repository validator. Five test methods failed before the
@@ -132,133 +134,67 @@ Historical RED and mutation logs describe worktree tests, not fictitious committ
 revisions. Golden output expectations were captured with the reporting source
 unchanged from the fixed base; test clock correction preceded implementation.
 
-## Portable source and protected-asset comparison
+## Independent source, reference and protected-asset comparison
 
-From a full-history checkout of the commit being reviewed, execute the following
-standard-library-only procedure. It expects the documented literal extraction,
-not arbitrary normalization of new logic. A later unrelated main is not the same
-comparison target. The expected scope is two existing source ASTs and 390
-out-of-scope tracked files; validate the actual count rather than assuming it.
+The proof is implemented in `scripts/verify_reporting_language_migration.py`.
+Run it from a full-history checkout of the candidate SHA:
 
 ```bash
-python - <<'PY'
-"""Reproduce stage-five source and protected-byte equivalence from a full-history clone."""
-import ast
-import hashlib
-import json
-import subprocess
-from pathlib import Path
-
-ROOT = Path.cwd()
-BASE = "0a643128f3ac3e99a51428644c3012a2d638ab8b"
-MIGRATED = ("reporting/engine.py", "reporting/editorial_v3_hifi.py")
-EXPECTED_CHANGES = set(MIGRATED) | {
-    "reporting/locale_pt_br.py",
-    "scripts/validate_repo.py",
-    "tests/test_reporting_presentation_gate.py",
-    "tests/reporting_language_fixtures.py",
-    "tests/test_reporting_language_compatibility.py",
-    "tests/fixtures/reporting_language_baseline.json",
-    "docs/REPORTING_CODE_LANGUAGE_INVENTORY.md",
-    "docs/superpowers/plans/2026-09-09-reporting-english-locale.md",
-    "docs/superpowers/specs/2026-09-03-english-codebase-refactor-design.md",
-}
-record = json.loads((ROOT / "tests/fixtures/reporting_language_baseline.json").read_text(encoding="utf-8"))
-assert record["base_sha"] == BASE
-texts = record["presentation_text"]
-locale_tree = ast.parse((ROOT / "reporting/locale_pt_br.py").read_text(encoding="utf-8"))
-actual = {statement.targets[0].id: ast.literal_eval(statement.value)
-          for statement in locale_tree.body if isinstance(statement, ast.Assign)}
-assert actual == texts, "presentation values differ from the recorded original values"
-
-
-class RestorePresentation(ast.NodeTransformer):
-    """Reverse only the documented extraction, docstrings and unused os import."""
-
-    def visit_ImportFrom(self, node):
-        if node.module == "reporting" and [(item.name, item.asname) for item in node.names] == [
-            ("locale_pt_br", "pt_br")
-        ]:
-            return None
-        return node
-
-    def visit_Import(self, node):
-        if [(item.name, item.asname) for item in node.names] == [("os", None)]:
-            return None
-        return node
-
-    def visit_Attribute(self, node):
-        if isinstance(node.value, ast.Name) and node.value.id == "pt_br":
-            assert node.attr in texts, node.attr
-            return ast.copy_location(ast.Constant(texts[node.attr]), node)
-        return self.generic_visit(node)
-
-    def visit_JoinedStr(self, node):
-        self.generic_visit(node)
-        merged = []
-        for item in node.values:
-            if (isinstance(item, ast.FormattedValue) and item.conversion == -1
-                    and item.format_spec is None and isinstance(item.value, ast.Constant)
-                    and isinstance(item.value.value, str)):
-                item = item.value
-            if (merged and isinstance(item, ast.Constant)
-                    and isinstance(merged[-1], ast.Constant)):
-                merged[-1].value += item.value
-            else:
-                merged.append(item)
-        node.values = merged
-        return node
-
-    def _without_docstring(self, node):
-        self.generic_visit(node)
-        if (node.body and isinstance(node.body[0], ast.Expr)
-                and isinstance(node.body[0].value, ast.Constant)
-                and isinstance(node.body[0].value.value, str)):
-            node.body.pop(0)
-        return node
-
-    visit_Module = _without_docstring
-    visit_FunctionDef = _without_docstring
-    visit_ClassDef = _without_docstring
-
-
-matched = []
-for relative in MIGRATED:
-    original = subprocess.check_output(["git", "show", f"{BASE}:{relative}"])
-    candidate = (ROOT / relative).read_bytes()
-    before = RestorePresentation().visit(ast.parse(original))
-    after = RestorePresentation().visit(ast.parse(candidate))
-    assert ast.dump(before) == ast.dump(after), f"executable AST differs: {relative}"
-    matched.append(relative)
-
-protected = []
-files = subprocess.check_output(["git", "ls-tree", "-rz", "--name-only", BASE]).split(b"\0")
-for name in files:
-    if not name:
-        continue
-    relative = name.decode("utf-8")
-    if relative in EXPECTED_CHANGES:
-        continue
-    original = subprocess.check_output(["git", "show", f"{BASE}:{relative}"])
-    assert original == (ROOT / relative).read_bytes(), f"out-of-scope bytes differ: {relative}"
-    protected.append({"path": relative, "sha256": hashlib.sha256(original).hexdigest()})
-result = {"base": BASE, "ast_matches": matched, "protected_files": protected}
-digest = hashlib.sha256(json.dumps(result, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-print(json.dumps({"base": BASE, "ast_matches": len(matched), "protected_files": len(protected),
-                  "comparison_sha256": digest}, indent=2))
-PY
+python scripts/verify_reporting_language_migration.py
+python -m unittest tests.test_reporting_migration_verifier -v
 ```
 
-The comparison record digest observed during implementation is
-`cd81d90e1d03d2d645ce286973d3673779a04a9393a644f7334d37a46e6aaa92`.
-This digest identifies the fixed base and protected byte list; a candidate must
-still execute the comparisons. It is not proof that an untested later SHA passed.
+The full-history proof requires both fixed Git objects to be present and fails
+rather than substituting a missing reference. The verifier reads bytes from the immutable first publication
+`c87b336a292f6c9f2fb490a51d2853b74ab72749`, not from the current candidate:
+
+| Reference path | Required SHA-256 |
+| --- | --- |
+| `tests/fixtures/reporting_language_baseline.json` | `9cc84c09512dc0c0bea15ef4dc4da1fa41efb387eda61fc4eb727146fe66c2c8` |
+| `tests/reporting_language_fixtures.py` | `58316c45089f8354cc8ce7007237fa27544185b7f0b550147591ad0eb7318fd0` |
+
+Those files were captured using the unchanged base reporting source and first
+published in that implementation commit. The reference commit is **not** falsely
+presented as a pre-implementation commit. The runtime source baseline remains
+`0a643128f3ac3e99a51428644c3012a2d638ab8b`. The verifier checks both historical
+reference digests and candidate equality to those bytes. Changing a candidate
+capture harness together with its expectations does not redefine the reference.
+
+The verifier checks additions and deletions across the base and candidate tracked
+path sets before comparing every out-of-scope baseline file bytewise. An unexpected
+new tracked path is a failure, not an omission from a baseline-only loop.
+Two renderer ASTs must match after reversing only the exact locale extraction,
+docstrings, unused top-level `os` import, and the documented design type declaration.
+The new private `_DesignTokens` TypedDict and the annotation on `DESIGN` describe
+the original ten string colors, integer A4 tuple and two float measurements; their
+precise fields are verified before normalization. No other class, annotation,
+value conversion or executable statement is normalized away.
+
+The expected scope remains two renderer AST matches and 390 unchanged baseline
+files. The validator and new proof utility are explicit tested modifications, not
+claimed unchanged assets. The proof uses AST parsing and local Git reads and does
+not import the historical renderers or access the network.
+
+## Reproducible bounded lexical inventory
+
+```bash
+python scripts/verify_reporting_language_migration.py --inventory
+```
+
+The command names the fixed base, exact 33 paths, finite identifier vocabulary,
+accent pattern and individual matches. Its rerun found no identifier candidate
+under that vocabulary and 45 accented comment/docstring lines. This supersedes
+the earlier exploratory counts of 54 and 53 for documented quantitative claims; the old
+local exploratory JSON remains historical and is not the current measurement.
+These lines are reviewed quotations of normative/display/test text in otherwise
+English prose. Neither the fixed vocabulary nor this count proves the language
+of every possible identifier or string outside this bounded inventory.
 
 ## Portable output replay against the actual base
 
 Use the repository's pinned reporting dependencies in the selected Python
-interpreter. This replays the same test fixture helper against the original
-production source as well as the candidate; it does not regenerate golden
+interpreter. The pinned historical capture harness is replayed against the original
+production source and the candidate (whose harness must have identical bytes); it does not regenerate golden
 expectations from modified production code.
 
 ```bash
@@ -268,7 +204,9 @@ base=0a643128f3ac3e99a51428644c3012a2d638ab8b
 work=$(mktemp -d)
 mkdir "$work/base"
 git archive "$base" | tar -x -C "$work/base"
-cp tests/reporting_language_fixtures.py "$work/base/tests/"
+python scripts/verify_reporting_language_migration.py
+reference=c87b336a292f6c9f2fb490a51d2853b74ab72749
+git show "$reference:tests/reporting_language_fixtures.py" > "$work/base/tests/reporting_language_fixtures.py"
 for checkout in "$work/base" "$repo"; do
   (cd "$checkout" && PYTHONPATH=tests:. python - <<'PY'
 import json
@@ -365,7 +303,7 @@ for source in scripts/*.sh; do bash -n "$source"; done
 git diff --check
 ```
 
-Style checks apply to the six renderer/locale and fixture/test sources using pycodestyle with
+Style checks apply to the eight renderer/locale, fixture/test and migration-verifier sources using pycodestyle with
 100 columns, pydocstyle pep257 and Ruff E/F/B905 targeting Python 3.11. This stage changes no style
 configuration. Additional Pylint/mypy results must distinguish pre-existing
 production diagnostics from new issues; neither baseline equivalence nor a
@@ -403,3 +341,63 @@ Python-version pin or dependency file was changed.
 ```bash
 python -m ruff check --target-version py311 --select E,F,B905 --line-length 100 reporting/engine.py reporting/editorial_v3_hifi.py reporting/locale_pt_br.py tests/reporting_language_fixtures.py tests/test_reporting_language_compatibility.py tests/test_reporting_presentation_gate.py
 ```
+
+## Review correction boundaries
+
+The four initial CodeRabbit requests are implemented for validation by a command-linked baseline
+inventory, an independently pinned reference, a bidirectional tracked-path check,
+and detection of missing locale attributes in both renderers. Regression tests
+exercise corrupted references, added/deleted out-of-scope paths and precise AST
+normalization. The full Git proof runs separately through the committed command;
+unit tests do not require a full-history CI checkout. Negative missing-caption tests exercise both the helper and full gate.
+
+The DeepSource typing corrections do not convert values: `DESIGN` remains the
+same plain dictionary with exactly the original values, described by a private
+TypedDict. The locale-declaration loop and renderer AST walk use distinct local
+names so a statement-only inferred type is not incorrectly reused for all AST
+nodes. Both raw runtime values and final artifact/text comparisons are tested.
+
+The initial published commit `c87b336a292f6c9f2fb490a51d2853b74ab72749`, tree
+`a9d9d532f960ceffe39c28a2071e54b40b7bdabc`, remains historical: its 979-test
+execution log has SHA-256
+`0378fb0385e3408f1181e7ce464b8dc31e4f9e6f5d46de7650ae8db7a6d2424c`.
+It cannot certify the correction. Correction validation remains PENDING until the
+linked exact-HEAD record names the matching commit/tree, command outcomes and
+new retained log digests. No reviewer approval or merge follows from this note.
+
+### Exact comparison digest and reference trust boundary
+
+`verify_reporting_language_migration.py` rejects a proof whose canonical JSON
+record does not match the expected comparison SHA-256
+`cd81d90e1d03d2d645ce286973d3673779a04a9393a644f7334d37a46e6aaa92`.
+The digest is checked, not merely printed. A unit test exercises acceptance and
+rejection by the same binding helper without comparing a future repository HEAD
+to this stage-specific scope. The complete CLI proof remains mandatory when
+validating this stage's delivered SHA.
+
+The two reference digests above are independently reviewable against the first
+published Git commit. They establish reproducibility, not a malicious-maintainer
+trust guarantee: changing the verifier, its pins and its tests together still
+requires human review. Full Git history containing both fixed commits is a
+prerequisite; missing reference objects fail rather than downloading or replacing
+them automatically. Do not rewrite/squash away the referenced commit history
+when retaining this historical proof.
+
+For the removed incidental `os` module attribute, this literal source query was
+executed on the fixed base:
+
+```bash
+git grep -nE 'editorial_v3_hifi\.os|from reporting\.editorial_v3_hifi import .*\bos\b' \
+  0a643128f3ac3e99a51428644c3012a2d638ab8b -- '*.py'
+```
+
+It returned exit 1 (no matches), not a Git execution error. This checks only the
+named direct forms. Aliased, dynamic and external consumers were not established
+by that query; no claim of their absence follows. The renderer's explicit public
+functions and signatures are unchanged.
+
+The correction also checks the absolute `pt_br` import and rejects rebinding in
+both renderers. Four negative engine-import cases failed before the shared
+per-renderer binding check and passed afterward. The source is never imported by
+that static gate. Logs are retained as `engine-import-red.log` and
+`engine-import-green.log` in the correction-resumption evidence directory.

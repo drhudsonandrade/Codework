@@ -627,6 +627,7 @@ def validate_report_presentation(root: Path, errors: list[str]) -> None:
     """Check the relocated display marker without executing repository source code."""
     try:
         locale_tree = ast.parse((root / "reporting/locale_pt_br.py").read_text(encoding="utf-8"))
+        engine_tree = ast.parse((root / "reporting/engine.py").read_text(encoding="utf-8"))
         renderer_tree = ast.parse(
             (root / "reporting/editorial_v3_hifi.py").read_text(encoding="utf-8")
         )
@@ -635,49 +636,70 @@ def validate_report_presentation(root: Path, errors: list[str]) -> None:
         return
 
     labels: dict[str, str] = {}
-    for index, node in enumerate(locale_tree.body):
+    for index, statement in enumerate(locale_tree.body):
         if (
             index == 0
-            and isinstance(node, ast.Expr)
-            and isinstance(node.value, ast.Constant)
-            and isinstance(node.value.value, str)
+            and isinstance(statement, ast.Expr)
+            and isinstance(statement.value, ast.Constant)
+            and isinstance(statement.value.value, str)
         ):
             continue
         if (
-            not isinstance(node, ast.Assign)
-            or len(node.targets) != 1
-            or not isinstance(node.targets[0], ast.Name)
-            or not isinstance(node.value, ast.Constant)
-            or not isinstance(node.value.value, str)
-            or node.targets[0].id in labels
+            not isinstance(statement, ast.Assign)
+            or len(statement.targets) != 1
+            or not isinstance(statement.targets[0], ast.Name)
+            or not isinstance(statement.value, ast.Constant)
+            or not isinstance(statement.value.value, str)
+            or statement.targets[0].id in labels
         ):
             errors.append("reporting presentation labels must be unique literal string assignments")
             return
-        labels[node.targets[0].id] = node.value.value
+        labels[statement.targets[0].id] = statement.value.value
     for name, expected in (("GENOMIC_RESULT", "RESULTADO GENÔMICO"), ("LANGUAGE_TAG", "pt-BR")):
         if labels.get(name) != expected:
             errors.append(f"reporting presentation contract mismatch: {name}")
 
-    imports = []
-    shadowed = False
-    for node in ast.walk(renderer_tree):
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            for alias in node.names:
-                if (alias.asname or alias.name) == "pt_br":
-                    imports.append((
-                        getattr(node, "module", None), alias.name, alias.asname,
-                        getattr(node, "level", 0),
-                    ))
-        if (
-            isinstance(node, ast.Name)
-            and node.id == "pt_br"
-            and isinstance(node.ctx, (ast.Store, ast.Del))
-        ):
-            shadowed = True
-        if isinstance(node, ast.arg) and node.arg == "pt_br":
-            shadowed = True
-    if imports != [("reporting", "locale_pt_br", "pt_br", 0)] or shadowed:
-        errors.append("reporting renderer must bind pt_br only to reporting.locale_pt_br")
+    for relative, tree in (
+        ("reporting/engine.py", engine_tree),
+        ("reporting/editorial_v3_hifi.py", renderer_tree),
+    ):
+        referenced = {
+            item.attr
+            for item in ast.walk(tree)
+            if isinstance(item, ast.Attribute)
+            and isinstance(item.value, ast.Name)
+            and item.value.id == "pt_br"
+            and isinstance(item.ctx, ast.Load)
+        }
+        for name in sorted(referenced - labels.keys()):
+            errors.append(f"reporting presentation attribute missing: {relative}: {name}")
+
+        imports = []
+        shadowed = False
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                for alias in node.names:
+                    if (alias.asname or alias.name) == "pt_br":
+                        imports.append(
+                            (
+                                getattr(node, "module", None),
+                                alias.name,
+                                alias.asname,
+                                getattr(node, "level", 0),
+                            )
+                        )
+            if (
+                isinstance(node, ast.Name)
+                and node.id == "pt_br"
+                and isinstance(node.ctx, (ast.Store, ast.Del))
+            ):
+                shadowed = True
+            if isinstance(node, ast.arg) and node.arg == "pt_br":
+                shadowed = True
+        if imports != [("reporting", "locale_pt_br", "pt_br", 0)] or shadowed:
+            errors.append(
+                f"reporting renderer {relative} must bind pt_br only to reporting.locale_pt_br"
+            )
     for name in ("_pdf", "_docx"):
         functions = [
             node

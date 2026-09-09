@@ -9,6 +9,10 @@ from pathlib import Path
 from scripts import validate_repo
 
 LOCALE = 'GENOMIC_RESULT = "RESULTADO GENÔMICO"\nLANGUAGE_TAG = "pt-BR"\n'
+ENGINE = (
+    "from reporting import locale_pt_br as pt_br\n"
+    "def _model_markdown():\n    return pt_br.LANGUAGE_TAG\n"
+)
 RENDERER = (
     "from reporting import locale_pt_br as pt_br\n"
     "def _pdf():\n    return pt_br.GENOMIC_RESULT\n"
@@ -19,7 +23,7 @@ RENDERER = (
 class ReportingPresentationGateTest(unittest.TestCase):
     """Exercise the real static gate with positive and corrupted file fixtures."""
 
-    def _validate(self, locale=LOCALE, renderer=RENDERER, *, full_gate=False):
+    def _validate(self, locale=LOCALE, renderer=RENDERER, *, engine=ENGINE, full_gate=False):
         """Write only temporary source fixtures and invoke the real locale gate."""
         self.assertTrue(hasattr(validate_repo, "validate_report_presentation"))
         with tempfile.TemporaryDirectory() as directory:
@@ -29,6 +33,7 @@ class ReportingPresentationGateTest(unittest.TestCase):
             if locale is not None:
                 (folder / "locale_pt_br.py").write_text(locale, encoding="utf-8")
             (folder / "editorial_v3_hifi.py").write_text(renderer, encoding="utf-8")
+            (folder / "engine.py").write_text(engine, encoding="utf-8")
             errors = []
             if full_gate:
                 errors = validate_repo.validate(root)
@@ -81,6 +86,40 @@ class ReportingPresentationGateTest(unittest.TestCase):
     def test_repository_gate_requires_the_locale_file(self):
         """The dependency is part of the official required-path contract."""
         self.assertIn("reporting/locale_pt_br.py", validate_repo.REQUIRED_PATHS)
+
+    def test_every_used_locale_attribute_is_defined_in_both_renderers(self):
+        """Undefined display names in either source cannot pass the static gate."""
+        suffix = "\ndef missing_caption():\n    return pt_br.MISSING_CAPTION\n"
+        for relative, options in (
+            ("reporting/engine.py", {"engine": ENGINE + suffix}),
+            ("reporting/editorial_v3_hifi.py", {"renderer": RENDERER + suffix}),
+        ):
+            with self.subTest(source=relative):
+                self.assertIn(
+                    f"reporting presentation attribute missing: {relative}: MISSING_CAPTION",
+                    self._validate(**options),
+                )
+
+    def test_full_gate_rejects_an_undefined_engine_presentation_name(self):
+        """The full repository gate checks more than the two fixed marker constants."""
+        errors = self._validate(
+            engine=ENGINE + "\ndef missing_caption():\n    return pt_br.NOT_DEFINED\n",
+            full_gate=True,
+        )
+        self.assertIn(
+            "reporting presentation attribute missing: reporting/engine.py: NOT_DEFINED", errors
+        )
+
+    def test_engine_locale_binding_cannot_be_missing_relative_or_shadowed(self):
+        """Both renderers must resolve the checked display names from the same locale."""
+        for source in (
+            ENGINE.replace("from reporting import", "from unrelated import"),
+            ENGINE.replace("from reporting import", "from .reporting import"),
+            ENGINE.replace("from reporting import locale_pt_br as pt_br", "# missing import"),
+            ENGINE + "\npt_br = object()\n",
+        ):
+            with self.subTest(engine=source):
+                self.assertTrue(self._validate(engine=source))
 
 
 if __name__ == "__main__":

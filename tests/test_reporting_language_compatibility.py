@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import importlib
 import importlib.util
 import inspect
@@ -11,6 +12,7 @@ import unittest
 from copy import deepcopy
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import get_type_hints
 
 from reporting import editorial_v3, editorial_v3_hifi, engine, provenance
 from tests.reporting_language_fixtures import (
@@ -140,6 +142,51 @@ class ReportingLanguageCompatibilityTest(unittest.TestCase):
             with self.assertRaises(editorial_v3.UnapprovedRendererError):
                 editorial_v3.write_editorial_bundle(render_fixture("01", "FINAL"), output)
             self.assertFalse(output.exists())
+
+    def test_reference_fixture_and_capture_harness_remain_pinned(self):
+        """Candidate expectations cannot silently replace the captured reference bytes."""
+        pins = {
+            "tests/fixtures/reporting_language_baseline.json": (
+                "9cc84c09512dc0c0bea15ef4dc4da1fa41efb387eda61fc4eb727146fe66c2c8"
+            ),
+            "tests/reporting_language_fixtures.py": (
+                "58316c45089f8354cc8ce7007237fa27544185b7f0b550147591ad0eb7318fd0"
+            ),
+        }
+        for relative, expected in pins.items():
+            with self.subTest(path=relative):
+                self.assertEqual(
+                    hashlib.sha256((ROOT / relative).read_bytes()).hexdigest(), expected
+                )
+
+    def test_design_tokens_retain_precise_types_and_plain_dictionary_values(self):
+        """Typing the mixed design dictionary must not coerce values or change the layout."""
+        expected = {
+            "navy": "0B1F33",
+            "teal": "0F766E",
+            "amber": "A16207",
+            "cream": "FFFAEB",
+            "light_gray": "F2F4F7",
+            "border": "D0D5DD",
+            "text": "17212B",
+            "slate": "667085",
+            "pale_blue": "D7E3EF",
+            "white": "FFFFFF",
+            "a4_mm": (210, 297),
+            "cover_left_mm": 18.0,
+            "content_width_mm": 174.0,
+        }
+        self.assertIs(type(editorial_v3_hifi.DESIGN), dict)
+        self.assertEqual(editorial_v3_hifi.DESIGN, expected)
+        annotations = get_type_hints(editorial_v3_hifi)
+        self.assertIn("DESIGN", annotations)
+        fields = {
+            name: str
+            for name in expected
+            if name not in ("a4_mm", "cover_left_mm", "content_width_mm")
+        }
+        fields.update(a4_mm=tuple[int, int], cover_left_mm=float, content_width_mm=float)
+        self.assertEqual(get_type_hints(annotations["DESIGN"]), fields)
 
 
 if __name__ == "__main__":
