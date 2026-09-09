@@ -514,3 +514,262 @@ presentation-gate cases, 13 qualifier cases, seven resolver cases and 66 provena
 payload cases, including refusals and exception outcomes. These are synthetic,
 finite comparisons, not an exhaustive proof. The 23 existing target-binding and
 provenance regression tests are also run; no real DNS or patient input is needed.
+
+## Auditable behavioral comparison record
+
+The finite behavioral counts above refer to this **historical executed comparison**:
+base `61963e3f40174238da33f1cf61eae14b233a80a1` (tree `8e72c815c6abd8809f42e6ca573dd9e0ab8d03ff`),
+candidate `051685845bafe15b84a8671c3218f963f40168f7` (tree `3d0dda9c36c016bdf869a4409907315f874b6698`). The Git identities
+bind all transitive repository context, not only the listed files. A later HEAD
+must be tested independently and recorded in the primary exact-HEAD PR comment;
+it does not inherit this result. The spacing-only follow-up preserves the Python
+AST but still receives its own full exact-commit validation.
+
+Executed command (Python 3.12.3, no live DNS, synthetic inputs only):
+
+```bash
+/srv/remote-desktop-commander-workspace/codework-audit/.venv-python-english/bin/python /srv/remote-desktop-commander-workspace/codework-audit/reporting-english-stage5/deepsource-followup-20260909T153345Z/compare_behavior.py /srv/remote-desktop-commander-workspace/codework-audit/Codework/.worktrees/refactor-reporting-english-locale /srv/remote-desktop-commander-workspace/codework-audit/reporting-english-stage5/deepsource-followup-20260909T153345Z
+```
+
+| Evidence | Exact retained locator | SHA-256 |
+| --- | --- | --- |
+| Executed comparison script | `/srv/remote-desktop-commander-workspace/codework-audit/reporting-english-stage5/deepsource-followup-20260909T153345Z/compare_behavior.py` | `63e6a9c6894abb57e40f88094df2a11118ced4b47b70def3ecb2f82a8fd607d9` |
+| Exact-commit full execution log, including that command | `/srv/remote-desktop-commander-workspace/codework-audit/reporting-english-stage5/deepsource-followup-20260909T153345Z/validation-051685845bafe15b84a8671c3218f963f40168f7.log` | `6d28479f940904efe83be0af938e243452d09e878a7de094b4a4ef2379fa2cbf` |
+| Comparison result JSON | `/srv/remote-desktop-commander-workspace/codework-audit/reporting-english-stage5/deepsource-followup-20260909T153345Z/behavioral-comparison.json` | `e5722eceeb1bd6be5c3532df4d7205223a54a99444ad2e400b2c19ca8eeadedf` |
+
+These remote filesystem paths are retention locators, not public download links.
+The complete script and direct-input digests are also versioned below so a
+full-history clone can reproduce the comparison without access to that VM.
+The original input source was retained under `/srv/remote-desktop-commander-workspace/codework-audit/reporting-english-stage5/deepsource-followup-20260909T153345Z/before/`; its digests
+are checked below against Git objects, not treated as trusted because it exists.
+The helper intentionally sets each loaded module's `__file__` to the pinned
+candidate context to resolve the same unchanged repository registry. It executes
+the historical bytes from `before/`, not the candidate substitute. The original
+failed setup log remains historical and is not used as the successful result.
+
+### Direct-input digest manifest
+
+<!-- reporting-behavior-inputs:start -->
+```json
+[
+  {
+    "commit": "61963e3f40174238da33f1cf61eae14b233a80a1",
+    "path": "scripts/validate_repo.py",
+    "sha256": "1b45123d016a5a523755d2a3dd32ae84dcc62ed22ddf2e941c4d40fd5cf85289"
+  },
+  {
+    "commit": "61963e3f40174238da33f1cf61eae14b233a80a1",
+    "path": "reporting/deployment_target.py",
+    "sha256": "f2c2e916d68994c6c74b74d216f2496d6edc6e5ec90eb88e2865497153e843e1"
+  },
+  {
+    "commit": "61963e3f40174238da33f1cf61eae14b233a80a1",
+    "path": "reporting/provenance.py",
+    "sha256": "53c45e2b0dbdbe1a38f8b98802f4e32ee5ab60e6ad3ba33d56fb7d782ba6edb0"
+  },
+  {
+    "commit": "051685845bafe15b84a8671c3218f963f40168f7",
+    "path": "scripts/validate_repo.py",
+    "sha256": "dfdb5e1510d1b7439f00dcb289f3186a69b8e7b677fd3423497c45ee2a3a4332"
+  },
+  {
+    "commit": "051685845bafe15b84a8671c3218f963f40168f7",
+    "path": "reporting/deployment_target.py",
+    "sha256": "ad1ae2fa45c1aed3ff2a937b8be54a9fce06ed7f33a72e74459ec01163a3fa39"
+  },
+  {
+    "commit": "051685845bafe15b84a8671c3218f963f40168f7",
+    "path": "reporting/provenance.py",
+    "sha256": "3a5bc0048a05f49177b2bbe6b8ee90487ed6bef7bba5a33430c47a3f9efa8e54"
+  },
+  {
+    "commit": "051685845bafe15b84a8671c3218f963f40168f7",
+    "path": "tests/test_reporting_presentation_gate.py",
+    "sha256": "bcb64394763662209964b863a6c9259acffcae987ab2c79a9bef922f44417037"
+  },
+  {
+    "commit": "051685845bafe15b84a8671c3218f963f40168f7",
+    "path": "tests/reporting_language_fixtures.py",
+    "sha256": "58316c45089f8354cc8ce7007237fa27544185b7f0b550147591ad0eb7318fd0"
+  }
+]
+```
+<!-- reporting-behavior-inputs:end -->
+
+### Portable historical reproduction
+
+Use the repository's pinned reporting dependencies in the same Python runtime.
+This command validates script/input digests, extracts the fixed candidate and
+historical base sources, runs the exact historical probe and checks its output
+hash. The resulting counts do not assert exhaustive equivalence.
+
+```bash
+set -euo pipefail
+repo=$(git rev-parse --show-toplevel)
+work=$(mktemp -d)
+base=61963e3f40174238da33f1cf61eae14b233a80a1
+candidate=051685845bafe15b84a8671c3218f963f40168f7
+mkdir "$work/candidate" "$work/evidence"
+git archive "$candidate" | tar -x -C "$work/candidate"
+python - "$repo" "$work" <<'PY'
+import hashlib
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+repo, work = map(Path, sys.argv[1:])
+plan = (repo / "docs/superpowers/plans/2026-09-09-reporting-english-locale.md").read_text()
+section = plan.split("\n<!-- reporting-behavior-probe:start -->\n", 1)[1]
+section = section.split("<!-- reporting-behavior-probe:end -->", 1)[0]
+script = section.partition("```python\n")[2].rsplit("```", 1)[0]
+expected = "63e6a9c6894abb57e40f88094df2a11118ced4b47b70def3ecb2f82a8fd607d9"
+if hashlib.sha256(script.encode()).hexdigest() != expected:
+    raise RuntimeError("Historical behavioral probe digest mismatch")
+(work / "compare_behavior.py").write_text(script)
+section = plan.split("\n<!-- reporting-behavior-inputs:start -->\n", 1)[1]
+section = section.split("<!-- reporting-behavior-inputs:end -->", 1)[0]
+records = json.loads(section.partition("```json\n")[2].rsplit("```", 1)[0])
+for row in records:
+    raw = subprocess.check_output(["git", "-C", str(repo), "show", row["commit"] + ":" + row["path"]])
+    if hashlib.sha256(raw).hexdigest() != row["sha256"]:
+        raise RuntimeError("Historical input digest mismatch: " + row["path"])
+    if row["commit"] == "61963e3f40174238da33f1cf61eae14b233a80a1":
+        target = work / "evidence/before" / row["path"]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(raw)
+    elif (work / "candidate" / row["path"]).read_bytes() != raw:
+        raise RuntimeError("Candidate archive differs from its pinned Git object")
+PY
+python "$work/compare_behavior.py" "$work/candidate" "$work/evidence" > "$work/replay.log" 2>&1
+cat "$work/replay.log"
+python - "$work/evidence/behavioral-comparison.json" <<'PY'
+import hashlib
+import sys
+from pathlib import Path
+raw = Path(sys.argv[1]).read_bytes()
+expected = "e5722eceeb1bd6be5c3532df4d7205223a54a99444ad2e400b2c19ca8eeadedf"
+if hashlib.sha256(raw).hexdigest() != expected:
+    raise RuntimeError("Historical behavioral output digest mismatch")
+print("HISTORICAL_BEHAVIOR_REPLAY_PASS")
+PY
+printf 'Retained reproduction directory: %s\n' "$work"
+```
+
+### Exact executed probe source
+
+<!-- reporting-behavior-probe:start -->
+```python
+"""Compare the existing and decomposed gate and type-only functions on synthetic inputs."""
+import copy
+import importlib.util
+import itertools
+import json
+import socket
+import sys
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
+
+root, evidence = map(Path, sys.argv[1:])
+sys.path.insert(0, str(root))
+
+
+def load(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    module.__file__ = str(root / path.parent.name / path.name)
+    spec.loader.exec_module(module)
+    return module
+
+
+old_gate = load("scripts._fp_original_gate", evidence / "before/scripts/validate_repo.py")
+new_gate = load("scripts._fp_candidate_gate", root / "scripts/validate_repo.py")
+from tests.test_reporting_presentation_gate import ENGINE, RENDERER, LOCALE
+
+locales = [LOCALE, None, LOCALE.replace("pt-BR", "en-US"), LOCALE + "raise RuntimeError()\n",
+           LOCALE + 'GENOMIC_RESULT="duplicate"\n', LOCALE + "BROKEN=[\n",
+           LOCALE.replace('"pt-BR"', "None"), '"""Description."""\n' + LOCALE]
+engines = [ENGINE, "", ENGINE.replace("from reporting", "from .reporting"),
+           ENGINE.replace("from reporting", "from unrelated"), ENGINE + "\npt_br=1\n",
+           ENGINE + "\ndef extra(pt_br): return pt_br.UNKNOWN\n",
+           ENGINE + "\ndef extra(): return pt_br.MISSING\n", ENGINE + "\ndel pt_br\n"]
+renderers = [RENDERER, "", RENDERER.replace("from reporting", "from .reporting"),
+             RENDERER.replace("return pt_br.GENOMIC_RESULT", "return 'missing'", 1),
+             RENDERER + "\npt_br=1\n", RENDERER + "\ndef _pdf(): return pt_br.GENOMIC_RESULT\n",
+             RENDERER + "\ndef extra(pt_br): return pt_br.UNKNOWN\n", RENDERER + "\nBROKEN=[\n"]
+records = []
+with tempfile.TemporaryDirectory() as temporary:
+    folder = Path(temporary)
+    (folder / "reporting").mkdir()
+    for index, (locale, engine, renderer) in enumerate(itertools.product(locales, engines, renderers)):
+        target = folder / "reporting/locale_pt_br.py"
+        if locale is None:
+            target.unlink(missing_ok=True)
+        else:
+            target.write_text(locale, encoding="utf-8")
+        (folder / "reporting/engine.py").write_text(engine, encoding="utf-8")
+        (folder / "reporting/editorial_v3_hifi.py").write_text(renderer, encoding="utf-8")
+        before, after = ["pre-existing-error"], ["pre-existing-error"]
+        old_gate.validate_report_presentation(folder, before)
+        new_gate.validate_report_presentation(folder, after)
+        if before != after:
+            raise AssertionError((index, before, after))
+        records.append({"case": index, "errors_equal": True, "error_count": len(before)})
+
+old_target = load("reporting._fp_original_target", evidence / "before/reporting/deployment_target.py")
+new_target = load("reporting._fp_candidate_target", root / "reporting/deployment_target.py")
+old_provenance = load("reporting._fp_original_provenance", evidence / "before/reporting/provenance.py")
+new_provenance = load("reporting._fp_candidate_provenance", root / "reporting/provenance.py")
+from tests.reporting_language_fixtures import render_fixture
+
+
+def outcome(function, value):
+    try:
+        return {"return": function(copy.deepcopy(value))}
+    except Exception as exc:
+        return {"exception": type(exc).__name__, "message": str(exc)}
+
+
+def same(first, second, value):
+    before, after = outcome(first, value), outcome(second, value)
+    if before != after:
+        raise AssertionError((value, before, after))
+    return before
+
+
+qualifier_cases = []
+for network_class in [None, "", "loopback", "private-network", "public-host", "unresolved", "unknown", 5, [], {}]:
+    value = {"network_class": network_class, "authority": "https://example.invalid:443"}
+    qualifier_cases.append(same(old_target.qualifier, new_target.qualifier, value))
+for value in [None, {}, "unexpected"]:
+    qualifier_cases.append(same(old_target.qualifier, new_target.qualifier, value))
+resolver_cases = []
+for addresses in [[], ["127.0.0.1"], ["::1", "127.0.0.1", "::1"], [7]]:
+    infos = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (address, 443)) for address in addresses]
+    with patch.object(socket, "getaddrinfo", return_value=infos):
+        first = old_target._resolve("synthetic.invalid", 443)
+        second = new_target._resolve("synthetic.invalid", 443)
+    if first != second:
+        raise AssertionError((first, second))
+    resolver_cases.append(first)
+for error in [socket.gaierror, UnicodeError, OSError]:
+    with patch.object(socket, "getaddrinfo", side_effect=error("synthetic resolver error")):
+        if old_target._resolve("synthetic.invalid", 443) != new_target._resolve("synthetic.invalid", 443):
+            raise AssertionError(error)
+    resolver_cases.append(error.__name__)
+provenance_cases = []
+for report_id in [f"{index:02}" for index in range(1, 12)]:
+    data = render_fixture(report_id, "FINAL")["data"]
+    provenance_cases.append(same(old_provenance.provenance_blockers, new_provenance.provenance_blockers, data))
+    for findings in [None, [], [None], [{}], [{"id": "synthetic", "status": "UNKNOWN"}]]:
+        mutated = copy.deepcopy(data)
+        mutated["findings"] = findings
+        provenance_cases.append(same(old_provenance.provenance_blockers, new_provenance.provenance_blockers, mutated))
+result = {"presentation_cases": len(records), "qualifier_cases": len(qualifier_cases),
+          "resolver_cases": len(resolver_cases), "provenance_cases": len(provenance_cases), "result": "PASS"}
+(evidence / "behavioral-comparison.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+print(json.dumps(result))
+```
+<!-- reporting-behavior-probe:end -->

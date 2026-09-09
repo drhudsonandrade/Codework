@@ -736,6 +736,8 @@ def validate_report_presentation(root: Path, errors: list[str]) -> None:
     ):
         _validate_presentation_binding(relative, tree, labels, errors)
     _validate_result_caption(renderer_tree, errors)
+
+
 def validate(root: Path) -> list[str]:
     """Run every static repository check and return the accumulated errors.
 
