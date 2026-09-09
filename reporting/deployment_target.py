@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import ipaddress
 import socket
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlsplit
 
 #: The smoke reached the machine it ran on: a local process or a container on the runner.
@@ -98,7 +98,7 @@ def _resolve(host: str, port: int) -> list[str]:
         infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
     except (socket.gaierror, UnicodeError, OSError):
         return []
-    return sorted({info[4][0] for info in infos})
+    return sorted({cast(str, info[4][0]) for info in infos})
 
 
 def aggregate(addresses: list[str]) -> str:
@@ -239,7 +239,7 @@ def describe(target: Any) -> str:
 #: Short enough to sit on the report's identity header, where a reader meets the PASS. The
 #: header used to print the bare word, so the strongest claim the project makes carried no
 #: hint of whether a laboratory's server or a CI container had been certified.
-SHORT = {
+SHORT: dict[str | None, str] = {
     LOOPBACK: "verificado contra serviço local ou contêiner efêmero, não um host implantado",
     PRIVATE: "verificado contra host em rede privada",
     PUBLIC: "verificado contra host implantado em endereço público",

@@ -44,7 +44,8 @@ REQUIRED_PATHS = (
     "scripts/build_array_case_manifest.py", "scripts/verify_prebuilt_bwa_mem2_bundle.py",
     "scripts/verify_supply_chain_lock.py", "scripts/generate_report.py", "scripts/generate_all_reports.py",
     "reporting/__init__.py", "reporting/catalog.json", "reporting/engine.py", "reporting/editorial_v3.py",
-    "reporting/editorial_v3_hifi.py", "reporting/requirements.txt", "reporting/reference_v3_manifest.json",
+    "reporting/editorial_v3_hifi.py", "reporting/locale_pt_br.py",
+    "reporting/requirements.txt", "reporting/reference_v3_manifest.json",
     "template_store/v3.0/MANIFEST.json", "locks/actions-lock.json", "locks/runtime-lock.json",
     "evidence_adapters/__init__.py", "policy_engine/pyproject.toml", "policy_engine/genoma_policy/engine.py",
     "policy_engine/genoma_policy/attestation.py", "policy_engine/genoma_policy/ledger.py",
@@ -622,6 +623,121 @@ def validate_production_witness_contract(root: Path, errors: list[str]) -> None:
         errors.append("Production Witness capability guard must use the exact job-level repository-variable predicate")
 
 
+def _presentation_labels(locale_tree: ast.Module, errors: list[str]) -> dict[str, str] | None:
+    """Read unique literal strings without importing the presentation module."""
+    labels: dict[str, str] = {}
+    for index, statement in enumerate(locale_tree.body):
+        if (
+            index == 0
+            and isinstance(statement, ast.Expr)
+            and isinstance(statement.value, ast.Constant)
+            and isinstance(statement.value.value, str)
+        ):
+            continue
+        if (
+            not isinstance(statement, ast.Assign)
+            or len(statement.targets) != 1
+            or not isinstance(statement.targets[0], ast.Name)
+            or not isinstance(statement.value, ast.Constant)
+            or not isinstance(statement.value.value, str)
+            or statement.targets[0].id in labels
+        ):
+            errors.append("reporting presentation labels must be unique literal string assignments")
+            return None
+        labels[statement.targets[0].id] = statement.value.value
+    return labels
+
+
+def _presentation_reads(tree: ast.AST) -> set[str]:
+    """Collect loaded names from the statically bound locale, including nested code."""
+    return {
+        item.attr
+        for item in ast.walk(tree)
+        if isinstance(item, ast.Attribute)
+        and isinstance(item.value, ast.Name)
+        and item.value.id == "pt_br"
+        and isinstance(item.ctx, ast.Load)
+    }
+
+
+def _presentation_imports(tree: ast.AST) -> list[tuple[str | None, str, str | None, int]]:
+    """Describe every import that claims the pt_br binding without executing it."""
+    imports = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                if (alias.asname or alias.name) == "pt_br":
+                    imports.append(
+                        (
+                            getattr(node, "module", None),
+                            alias.name,
+                            alias.asname,
+                            getattr(node, "level", 0),
+                        )
+                    )
+    return imports
+
+
+def _presentation_shadowed(node: ast.AST) -> bool:
+    """Recognize the same assignment, deletion and argument shadows as the original gate."""
+    return (
+        isinstance(node, ast.Name)
+        and node.id == "pt_br"
+        and isinstance(node.ctx, (ast.Store, ast.Del))
+    ) or (isinstance(node, ast.arg) and node.arg == "pt_br")
+
+
+def _validate_presentation_binding(
+    relative: str, tree: ast.Module, labels: dict[str, str], errors: list[str]
+) -> None:
+    """Check missing constants before the import binding, preserving diagnostic order."""
+    for name in sorted(_presentation_reads(tree) - labels.keys()):
+        errors.append(f"reporting presentation attribute missing: {relative}: {name}")
+    if _presentation_imports(tree) != [("reporting", "locale_pt_br", "pt_br", 0)] or any(
+        _presentation_shadowed(node) for node in ast.walk(tree)
+    ):
+        errors.append(
+            f"reporting renderer {relative} must bind pt_br only to reporting.locale_pt_br"
+        )
+
+
+def _validate_result_caption(renderer_tree: ast.Module, errors: list[str]) -> None:
+    """Keep the PDF and DOCX result-caption checks independent of literal ownership."""
+    for name in ("_pdf", "_docx"):
+        functions = [
+            node
+            for node in renderer_tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == name
+        ]
+        if len(functions) != 1 or "GENOMIC_RESULT" not in _presentation_reads(functions[0]):
+            errors.append(f"editorial v3 renderer {name} must use pt_br.GENOMIC_RESULT")
+
+
+def validate_report_presentation(root: Path, errors: list[str]) -> None:
+    """Validate source, literal ownership, both bindings and both required result captions."""
+    try:
+        locale_tree = ast.parse((root / "reporting/locale_pt_br.py").read_text(encoding="utf-8"))
+        engine_tree = ast.parse((root / "reporting/engine.py").read_text(encoding="utf-8"))
+        renderer_tree = ast.parse(
+            (root / "reporting/editorial_v3_hifi.py").read_text(encoding="utf-8")
+        )
+    except (OSError, UnicodeError, SyntaxError) as exc:
+        errors.append(f"reporting presentation source invalid: {type(exc).__name__}: {exc}")
+        return
+    labels = _presentation_labels(locale_tree, errors)
+    if labels is None:
+        return
+    for name, expected in (("GENOMIC_RESULT", "RESULTADO GENÔMICO"), ("LANGUAGE_TAG", "pt-BR")):
+        if labels.get(name) != expected:
+            errors.append(f"reporting presentation contract mismatch: {name}")
+    for relative, tree in (
+        ("reporting/engine.py", engine_tree),
+        ("reporting/editorial_v3_hifi.py", renderer_tree),
+    ):
+        _validate_presentation_binding(relative, tree, labels, errors)
+    _validate_result_caption(renderer_tree, errors)
+
+
 def validate(root: Path) -> list[str]:
     """Run every static repository check and return the accumulated errors.
 
@@ -750,9 +866,13 @@ def validate(root: Path) -> list[str]:
     renderer = root / "reporting/editorial_v3_hifi.py"
     if renderer.is_file():
         text = renderer.read_text(encoding="utf-8")
-        for token in ("0B1F33", "0F766E", "A16207", "F2F4F7", "RESULTADO GENÔMICO", "write_editorial_bundle", "DejaVu Sans"):
+        for token in (
+            "0B1F33", "0F766E", "A16207", "F2F4F7", "write_editorial_bundle", "DejaVu Sans"
+        ):
             if token not in text:
                 errors.append(f"editorial v3 high-fidelity renderer contract missing: {token}")
+
+    validate_report_presentation(root, errors)
 
     catalog = root / "reporting/catalog.json"
     if catalog.is_file():
