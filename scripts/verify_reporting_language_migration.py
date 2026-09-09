@@ -153,7 +153,8 @@ class RestorePresentation(ast.NodeTransformer):
         """Use text read from the pinned reference, never the candidate golden."""
         self.texts = texts
 
-    def visit_ImportFrom(self, node):
+    @staticmethod
+    def visit_ImportFrom(node):
         """Remove the documented locale import and the precise typing-only import."""
         aliases = [(item.name, item.asname) for item in node.names]
         if node.module == "reporting" and aliases == [("locale_pt_br", "pt_br")]:

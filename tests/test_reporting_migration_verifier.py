@@ -84,9 +84,11 @@ class ReportingMigrationVerifierTest(unittest.TestCase):
             self.assertEqual(verifier.comparison_digest(proof), expected)
             with self.assertRaisesRegex(ValueError, "comparison digest mismatch"):
                 verifier.comparison_digest({**proof, "unexpected": True})
-        with patch.object(verifier, "EXPECTED_COMPARISON_SHA256", "0" * 64):
-            with self.assertRaisesRegex(ValueError, "comparison digest mismatch"):
-                verifier.comparison_digest(proof)
+        with (
+            patch.object(verifier, "EXPECTED_COMPARISON_SHA256", "0" * 64),
+            self.assertRaisesRegex(ValueError, "comparison digest mismatch"),
+        ):
+            verifier.comparison_digest(proof)
 
     def test_inventory_has_a_fixed_source_and_reproducible_vocabulary(self):
         """Inventory claims name the base, paths, finite tokens and individual matches."""
@@ -110,10 +112,12 @@ class ReportingMigrationVerifierTest(unittest.TestCase):
         verifier = self._verifier()
         expected = {"base": "0a643128f3ac3e99a51428644c3012a2d638ab8b"}
         output = io.StringIO()
-        with patch.object(sys, "argv", ["verify-reporting", "--root", str(ROOT), "--inventory"]):
-            with patch.object(verifier, "lexical_inventory", return_value=expected) as inventory:
-                with redirect_stdout(output):
-                    self.assertEqual(verifier.main(), 0)
+        with (
+            patch.object(sys, "argv", ["verify-reporting", "--root", str(ROOT), "--inventory"]),
+            patch.object(verifier, "lexical_inventory", return_value=expected) as inventory,
+            redirect_stdout(output),
+        ):
+            self.assertEqual(verifier.main(), 0)
         inventory.assert_called_once_with(ROOT.resolve())
         self.assertEqual(json.loads(output.getvalue()), expected)
 

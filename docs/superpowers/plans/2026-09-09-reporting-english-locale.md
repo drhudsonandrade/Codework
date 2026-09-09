@@ -91,7 +91,7 @@ The existing color/font/writer markers and every other repository gate remain.
 This is a static presentation contract, not a general Python data-flow proof.
 
 Additional intentional files: `scripts/validate_repo.py` and
-`tests/test_reporting_presentation_gate.py`. The latter now contains eight tests for
+`tests/test_reporting_presentation_gate.py`. The current suite contains nine test methods for
 acceptance, missing/changed/duplicate/computed literals, incorrect imports,
 missing use, nonexecution of source, required-path registration, and dispatch
 through the full repository validator. Five test methods failed before the
@@ -304,7 +304,7 @@ git diff --check
 ```
 
 Style checks apply to the eight renderer/locale, fixture/test and migration-verifier sources using pycodestyle with
-100 columns, pydocstyle pep257 and Ruff E/F/B905 targeting Python 3.11. This stage changes no style
+100 columns, pydocstyle pep257 and Ruff E/F/B905/SIM117 targeting Python 3.11. This stage changes no style
 configuration. Additional Pylint/mypy results must distinguish pre-existing
 production diagnostics from new issues; neither baseline equivalence nor a
 scoped check implies whole-repository typing cleanliness. Tests deliberately
@@ -318,7 +318,7 @@ statuses and service quota notices are not completed reviews.
 The static import check also requires absolute import level zero. A negative fixture
 using `from .reporting import locale_pt_br as pt_br` passed the earlier check
 unexpectedly; after adding the import-level comparison it is rejected. That fixture
-remains in the existing six-method presentation-gate suite. No renderer output or
+was added during the historical six-method stage; the current suite contains nine methods. No renderer output or
 scientific control changes in this correction. The RED and GREEN logs are retained
 as `absolute-import-red.log` and `absolute-import-green.log` in the evidence root;
 final commit-bound results belong in the linked exact-HEAD record.
@@ -339,7 +339,22 @@ check, not a claim that the whole suite ran on a Python 3.11 interpreter. No
 Python-version pin or dependency file was changed.
 
 ```bash
-python -m ruff check --target-version py311 --select E,F,B905 --line-length 100 reporting/engine.py reporting/editorial_v3_hifi.py reporting/locale_pt_br.py tests/reporting_language_fixtures.py tests/test_reporting_language_compatibility.py tests/test_reporting_presentation_gate.py
+files=(
+  reporting/engine.py
+  reporting/editorial_v3_hifi.py
+  reporting/locale_pt_br.py
+  tests/reporting_language_fixtures.py
+  tests/test_reporting_language_compatibility.py
+  tests/test_reporting_presentation_gate.py
+  scripts/verify_reporting_language_migration.py
+  tests/test_reporting_migration_verifier.py
+)
+python -m pycodestyle --max-line-length=100 "${files[@]}"
+python -m pydocstyle --convention=pep257 "${files[@]}"
+python -m ruff check --target-version py311 --select E,F,B905,SIM117 \
+  --line-length 100 "${files[@]}"
+python -m pylint --load-plugins=pylint.extensions.no_self_use \
+  --disable=all --enable=no-self-use scripts/verify_reporting_language_migration.py
 ```
 
 ## Review correction boundaries
@@ -400,4 +415,43 @@ The correction also checks the absolute `pt_br` import and rejects rebinding in
 both renderers. Four negative engine-import cases failed before the shared
 per-renderer binding check and passed afterward. The source is never imported by
 that static gate. Logs are retained as `engine-import-red.log` and
-`engine-import-green.log` in the correction-resumption evidence directory.
+`engine-import-green.log` at the exact retained locations and digests listed below.
+
+## Reconciled test scope and historical log locators
+
+The current targeted suite contains **27 tests**: 11 reporting-language tests,
+9 presentation-gate tests, and 7 migration-verifier tests. They are included
+in the root suite, not an additional independent total. The six-method and
+eight-method counts described earlier snapshots; neither is the current count.
+Run all three test modules together to reproduce the current targeted count:
+
+```bash
+python -m unittest tests.test_reporting_language_compatibility \
+  tests.test_reporting_presentation_gate tests.test_reporting_migration_verifier -v
+```
+
+Current presentation-gate methods:
+
+- `test_owned_marker_used_by_both_renderers_is_accepted`
+- `test_missing_or_changed_locale_contract_is_rejected`
+- `test_comments_wrong_imports_and_missing_renderer_use_are_rejected`
+- `test_repository_validation_never_executes_the_locale_source`
+- `test_full_repository_validator_dispatches_the_presentation_check`
+- `test_repository_gate_requires_the_locale_file`
+- `test_every_used_locale_attribute_is_defined_in_both_renderers`
+- `test_full_gate_rejects_an_undefined_engine_presentation_name`
+- `test_engine_locale_binding_cannot_be_missing_relative_or_shadowed`
+
+The following log files were actually read and hashed in the correction
+resumption. They describe pre-commit RED/GREEN worktree tests and must not be
+represented as full exact-HEAD release validation. Paths are local locators on
+`drhudson`, not public download URLs. The [exact-HEAD evidence record](https://github.com/drhudsonandrade/Codework/pull/61#issuecomment-5601896618)
+links these historical results to their later corrected implementation; a later
+commit still requires its own validation log.
+
+| Historical log | Exact retained path | SHA-256 |
+| --- | --- | --- |
+| `absolute-import-red.log` | `/srv/remote-desktop-commander-workspace/codework-audit/reporting-english-stage5/absolute-import-red.log` | `9100ee6fb64215c1f3830ec4c016d31eb124e0c19a5ed0a2a0aa0c6b1c920897` |
+| `absolute-import-green.log` | `/srv/remote-desktop-commander-workspace/codework-audit/reporting-english-stage5/absolute-import-green.log` | `42c6662eb0ddf47fdbec5a6d4389c753ccb81327b5544e9f26f390af2c1bef8b` |
+| `engine-import-red.log` | `/srv/remote-desktop-commander-workspace/codework-audit/reporting-english-stage5/correction-resume-20260909T141824Z/engine-import-red.log` | `713fc3fb3a798ed380b854b4935196d8a7b8ccbab8a6cfe79f21d3e6b261bb31` |
+| `engine-import-green.log` | `/srv/remote-desktop-commander-workspace/codework-audit/reporting-english-stage5/correction-resume-20260909T141824Z/engine-import-green.log` | `ecf1eeb11e9325dfc2374ceabfebe9b0b6166d5e1df0796c1967938510c7f170` |
