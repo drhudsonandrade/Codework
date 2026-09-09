@@ -1,3 +1,4 @@
+"""Exercise canonical policy gates and synthetic safety regressions."""
 from __future__ import annotations
 
 import json
@@ -23,7 +24,10 @@ HISTORICAL_IDENTITY_FIXTURE = REPO_ROOT / "docs" / "history" / "v3.3" / "superse
 
 
 class HistoricalIdentityFixtureMissingError(RuntimeError):
+    """Report an unavailable immutable historical identity fixture."""
+
     def __init__(self, path: Path) -> None:
+        """Include the missing fixture path in the error message."""
         super().__init__(f"superseded identity fixture missing: {path}")
 
 
@@ -33,7 +37,10 @@ HISTORICAL_IDENTITY = json.loads(HISTORICAL_IDENTITY_FIXTURE.read_text(encoding=
 
 
 class RulesetTests(unittest.TestCase):
+    """Protect canonical identity and active-copy uniqueness."""
+
     def test_normative_identity_hash_and_263_sections(self):
+        """Verify normative identity, ordered sections and the external manifest."""
         ruleset = load_ruleset(RULESET)
         self.assertEqual(ruleset.status, "VIGENTE")
         self.assertEqual(ruleset.version, "v3.4")
@@ -43,7 +50,8 @@ class RulesetTests(unittest.TestCase):
         self.assertEqual([section.number for section in ruleset.sections], list(range(263)))
         verify_external_manifest(ruleset, HASH_MANIFEST)
 
-    def test_duplicate_vigente_fails_closed(self):
+    def test_duplicate_active_ruleset_fails_closed(self):
+        """Reject a second active copy of the canonical ruleset."""
         with tempfile.TemporaryDirectory() as td:
             target = Path(td) / RULESET.name
             shutil.copyfile(RULESET, target)
@@ -53,12 +61,16 @@ class RulesetTests(unittest.TestCase):
 
 
 class PolicyEngineTests(unittest.TestCase):
+    """Verify deterministic gates with a synthetic analysis manifest."""
+
     @classmethod
     def setUpClass(cls):
+        """Load the verified canonical ruleset for all policy gate tests."""
         cls.ruleset = load_ruleset(RULESET)
         cls.engine = PolicyEngine(cls.ruleset, external_manifest=HASH_MANIFEST)
 
     def valid_analysis_manifest(self):
+        """Build an attributed synthetic manifest accepted by the policy gates."""
         manifest = scaffold_manifest(self.ruleset, case_id="TEST")
         manifest["session_id"] = "test-session"
         manifest["inputs"] = [
@@ -100,42 +112,50 @@ class PolicyEngineTests(unittest.TestCase):
         return manifest
 
     def _assert_ruleset_gate_rejects(self, manifest):
+        """Require both a failed ruleset gate and a blocked report."""
         report = self.engine.evaluate(manifest)
         gate = next(gate for gate in report.gates if gate.gate == "RULESET_GATE")
         self.assertEqual(gate.state.value, "FAIL")
         self.assertFalse(report.ready)
 
     def test_ruleset_gate_rejects_missing_ruleset_object(self):
+        """Block evaluation when the ruleset declaration is absent."""
         manifest = self.valid_analysis_manifest()
         manifest.pop("ruleset")
         self._assert_ruleset_gate_rejects(manifest)
 
     def test_ruleset_gate_rejects_missing_status(self):
+        """Block evaluation when the ruleset status is absent."""
         manifest = self.valid_analysis_manifest()
         manifest["ruleset"].pop("status")
         self._assert_ruleset_gate_rejects(manifest)
 
-    def test_ruleset_gate_rejects_non_vigente_status(self):
+    def test_ruleset_gate_rejects_inactive_status(self):
+        """Reject a noncanonical status without translating the fixture value."""
         manifest = self.valid_analysis_manifest()
         manifest["ruleset"]["status"] = "PENDENTE"
         self._assert_ruleset_gate_rejects(manifest)
 
     def test_ruleset_gate_rejects_wrong_version(self):
+        """Reject a declared version that differs from the canonical ruleset."""
         manifest = self.valid_analysis_manifest()
         manifest["ruleset"]["version"] = "v3.5"
         self._assert_ruleset_gate_rejects(manifest)
 
     def test_ruleset_gate_rejects_wrong_effective_date(self):
+        """Reject an effective date that differs from the canonical ruleset."""
         manifest = self.valid_analysis_manifest()
         manifest["ruleset"]["effective_date"] = "18/08/2026"
         self._assert_ruleset_gate_rejects(manifest)
 
     def test_ruleset_gate_rejects_wrong_sha256(self):
+        """Reject a ruleset content digest that differs from the canonical bytes."""
         manifest = self.valid_analysis_manifest()
         manifest["ruleset"]["sha256"] = "0" * 64
         self._assert_ruleset_gate_rejects(manifest)
 
     def test_post_deployment_is_nonblocking_pending_by_default(self):
+        """Keep post-deployment pending without blocking ordinary analysis."""
         report = self.engine.evaluate(self.valid_analysis_manifest())
         gate = next(gate for gate in report.gates if gate.gate == "POST_DEPLOYMENT_GATE")
         self.assertEqual(gate.state.value, "PENDING")
@@ -143,6 +163,7 @@ class PolicyEngineTests(unittest.TestCase):
         self.assertTrue(report.ready)
 
     def test_post_deployment_pass_requires_all_five_canonical_criteria(self):
+        """Require every canonical criterion in the synthetic deployment fixture."""
         manifest = self.valid_analysis_manifest()
         manifest["post_deployment"] = {
             "single_active_ruleset": True,
@@ -158,6 +179,7 @@ class PolicyEngineTests(unittest.TestCase):
         self.assertFalse(gate.blocking)
 
     def test_post_deployment_remains_pending_for_superseded_or_wrong_date_identity(self):
+        """Keep deployment pending when the recovered identity is not canonical."""
         base = {
             "single_active_ruleset": True,
             "bootstrap_installed": True,
@@ -179,6 +201,7 @@ class PolicyEngineTests(unittest.TestCase):
                 self.assertFalse(gate.blocking)
 
     def test_vus_cannot_change_conduct_without_confirmation(self):
+        """Reject unsupported conduct-changing use of uncertain classifications."""
         manifest = self.valid_analysis_manifest()
         manifest["claims"] = [
             {
@@ -212,6 +235,7 @@ class PolicyEngineTests(unittest.TestCase):
         self.assertFalse(report.ready)
 
     def test_runtime_gate_is_session_specific(self):
+        """Reject runtime evidence inherited from a different session."""
         manifest = self.valid_analysis_manifest()
         manifest["operation"]["requires_real_calling"] = True
         manifest["runtime_resource_gate"] = {"session_id": "old-session", "checks": {}}
@@ -220,6 +244,7 @@ class PolicyEngineTests(unittest.TestCase):
         self.assertEqual(gate.state.value, "FAIL")
 
     def test_final_audit_requires_all_15_criteria(self):
+        """Require the complete final-audit criterion set before a pass."""
         manifest = self.valid_analysis_manifest()
         manifest["operation"]["output"] = "FINAL_AUDITED_REPORT"
         manifest["final_audit"] = {key: True for key in CRITICAL_FINAL_AUDIT_KEYS[:-1]}
@@ -232,22 +257,26 @@ class PolicyEngineTests(unittest.TestCase):
         self.assertEqual(gate.state.value, "PASS")
 
     def test_report_exposes_four_plane_states(self):
+        """Preserve the four-plane public report structure."""
         report = self.engine.evaluate(self.valid_analysis_manifest()).to_dict()
         self.assertEqual(set(report["planes"]), {"policy_control", "scientific_data", "evidence", "audit"})
         self.assertEqual(report["planes"]["policy_control"]["state"], "PASS")
 
     def test_deterministic_safety_smoke_15_of_15(self):
+        """Check all synthetic safety cases without granting deployment status."""
         result = run_smoke(self.engine)
         self.assertTrue(result["all_pass"])
         self.assertEqual((result["passed"], result["total"]), (15, 15))
         self.assertEqual(result["post_deployment_claim"], "NOT_GRANTED_BY_THIS_SUITE")
 
     def test_smoke_rejects_divergent_ruleset_identity(self):
+        """Reject safety smoke execution against divergent canonical identity."""
         divergent = replace(self.ruleset, sha256="0" * 64)
         with self.assertRaises(RulesetError):
             run_smoke(PolicyEngine(divergent))
 
     def test_smoke_rejects_metadata_matching_ruleset_without_263_sections(self):
+        """Reject incomplete rule sections even when metadata matches."""
         incomplete = replace(self.ruleset, sections=())
         with self.assertRaises(RulesetError):
             run_smoke(PolicyEngine(incomplete))

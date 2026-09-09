@@ -1,3 +1,4 @@
+"""Validate attributable section attestations against canonical rule identities."""
 from __future__ import annotations
 
 import re
@@ -9,11 +10,16 @@ from .models import OperationalStatus, RulesetSection
 ALLOWED_OPERATIONAL = {status.value for status in OperationalStatus}
 ALLOWED_APPLICABILITY = {"APPLICABLE", "NOT_APPLICABLE", "UNRESOLVED"}
 ALLOWED_DECISIONS = {"SATISFIED", "BLOCKED", "NOT_APPLICABLE", "UNRESOLVED"}
-SATISFYING_STATUSES = {"EXECUTADO", "VERIFICADO", "INFERIDO"}
+SATISFYING_STATUSES = {
+    OperationalStatus.EXECUTED.value,
+    OperationalStatus.VERIFIED.value,
+    OperationalStatus.INFERRED.value,
+}
 SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 
 
 def _valid_timestamp(value: Any) -> bool:
+    """Require a nonempty string accepted by the ISO timestamp parser."""
     if not isinstance(value, str) or not value.strip():
         return False
     try:
@@ -24,10 +30,15 @@ def _valid_timestamp(value: Any) -> bool:
 
 
 def _valid_hash_list(value: Any) -> bool:
-    return isinstance(value, list) and bool(value) and all(isinstance(item, str) and SHA256_RE.fullmatch(item) for item in value)
+    """Require a nonempty list containing only SHA-256 strings."""
+    return isinstance(value, list) and bool(value) and all(
+        isinstance(item, str) and SHA256_RE.fullmatch(item) for item in value
+    )
 
 
-def validate_section_attestation(attestation: dict[str, Any], section: RulesetSection, evidence_ids: set[str]) -> list[str]:
+def validate_section_attestation(
+    attestation: dict[str, Any], section: RulesetSection, evidence_ids: set[str],
+) -> list[str]:
     """Validate a portable non-binary attestation without replacing scientific judgement."""
     reasons: list[str] = []
     prefix = f"section {section.number}"
@@ -69,7 +80,11 @@ def validate_section_attestation(attestation: dict[str, Any], section: RulesetSe
             reasons.append(f"{prefix} status {status} cannot claim SATISFIED")
         if not refs:
             reasons.append(f"{prefix} SATISFIED decision requires explicit evidence")
-    if status in {"EXECUTADO", "VERIFICADO"} and applicability == "APPLICABLE" and not refs:
+    if (
+        status in {OperationalStatus.EXECUTED.value, OperationalStatus.VERIFIED.value}
+        and applicability == "APPLICABLE"
+        and not refs
+    ):
         reasons.append(f"{prefix} {status} applicable attestation requires evidence")
     if not isinstance(trace, dict):
         reasons.append(f"{prefix} trace object is required")
@@ -82,7 +97,10 @@ def validate_section_attestation(attestation: dict[str, Any], section: RulesetSe
     if not _valid_timestamp(trace.get("created_at")):
         reasons.append(f"{prefix} trace.created_at must be an ISO-8601 timestamp")
     tool_versions = trace.get("tool_versions")
-    if not isinstance(tool_versions, dict) or any(not isinstance(k, str) or not isinstance(v, str) for k, v in tool_versions.items()):
+    if not isinstance(tool_versions, dict) or any(
+        not isinstance(k, str) or not isinstance(v, str)
+        for k, v in tool_versions.items()
+    ):
         reasons.append(f"{prefix} trace.tool_versions must be a string map")
     if applicability == "APPLICABLE" and decision == "SATISFIED":
         if not _valid_hash_list(trace.get("input_sha256")):
@@ -92,6 +110,9 @@ def validate_section_attestation(attestation: dict[str, Any], section: RulesetSe
     else:
         for field in ("input_sha256", "output_sha256"):
             value = trace.get(field, [])
-            if not isinstance(value, list) or any(not isinstance(item, str) or not SHA256_RE.fullmatch(item) for item in value):
+            if not isinstance(value, list) or any(
+                not isinstance(item, str) or not SHA256_RE.fullmatch(item)
+                for item in value
+            ):
                 reasons.append(f"{prefix} trace.{field} must contain SHA-256 hashes when present")
     return reasons

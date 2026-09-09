@@ -1,3 +1,4 @@
+"""Protect required canonical identity fields in the execution schema."""
 from __future__ import annotations
 
 import json
@@ -11,6 +12,7 @@ CANONICAL_FILENAME = "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
 
 
 def _minimal_object_contract_errors(contract: dict[str, Any], instance: object) -> list[str]:
+    """Check the object, required-key and constant subset used by these tests."""
     errors: list[str] = []
     if contract.get("type") == "object" and not isinstance(instance, dict):
         return ["type"]
@@ -27,13 +29,17 @@ def _minimal_object_contract_errors(contract: dict[str, Any], instance: object) 
 
 
 class ExecutionSchemaContractTests(unittest.TestCase):
-    def test_ruleset_requires_vigente_status(self) -> None:
+    """Require schema identity fields to remain aligned with the ruleset."""
+
+    def test_ruleset_requires_active_status(self) -> None:
+        """Keep the exact canonical status requirement in the schema."""
         schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
         ruleset = schema["properties"]["ruleset"]
         self.assertIn("status", ruleset["required"])
         self.assertEqual(ruleset["properties"]["status"], {"const": "VIGENTE"})
 
     def test_missing_or_wrong_status_cannot_satisfy_ruleset_contract(self) -> None:
+        """Distinguish absent, invalid and canonical status fixture values."""
         schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
         ruleset = schema["properties"]["ruleset"]
         base = {
