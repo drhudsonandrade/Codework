@@ -27,7 +27,8 @@
 
 **Files:**
 - Create: `tests/test_integration_code_language.py`
-- Modify: `mcp/test/server.test.ts`
+- Create: `mcp/test/payloadContracts.test.ts`
+- Preserve unchanged: `mcp/test/server.test.ts`
 
 **Interfaces:**
 - Consumes: current CodeRabbit setup script, MCP listTools contract, governance ruleset, workflow/source text.
@@ -35,7 +36,7 @@
 
 - [ ] **Step 1:** Add a bounded diagnostic scanner test for `scripts/codex/setup-coderabbit.sh` that rejects the inventoried Portuguese developer-facing terms while ignoring comments and contract values.
 - [ ] **Step 2:** Run `python -m unittest tests.test_integration_code_language -v`; expect failure on the current Portuguese diagnostics.
-- [ ] **Step 3:** Extend the existing MCP initialization test to assert exact input-schema property/required sets for all four tools; this should pass before production edits and becomes a contract lock.
+- [ ] **Step 3:** Add a small standalone MCP payload-contract test that asserts exact input-schema property/required sets for all four tools. Keep the pre-existing `server.test.ts` initialization test byte-identical to the base so stage-six coverage does not turn an older high-CRAP test function into a newly changed function.
 - [ ] **Step 4:** Add assertions for the protected-main check-context set and MCP environment-variable names without renaming either surface.
 - [ ] **Step 5:** Run the focused Python and MCP suites.
 
@@ -80,3 +81,16 @@
 - [ ] **Step 4:** Prove `.github/workflows/**`, `mcp/src/**`, adapters, MCP package/lock/config, and governance status-check contexts are unchanged from the base unless explicitly listed as test-only characterization files.
 - [ ] **Step 5:** Commit one coherent implementation batch, rerun the same validation on the committed SHA, push a Draft PR, bind evidence to the exact SHA/tree, mark Ready, and request CodeRabbit review.
 - [ ] **Step 6:** Stop before merge. Hand off only when applicable checks and review threads are clean; human approval/manual merge remains outstanding.
+
+## Review-driven correction boundary
+
+The first published stage-six SHA modified the existing MCP initialization test. Fallow then
+reported that pre-existing test callback as a newly changed high-CRAP function. The correction
+restores `mcp/test/server.test.ts` exactly to the stage-six base and moves the new schema proof
+into `mcp/test/payloadContracts.test.ts`, where it has a single bounded responsibility. No
+Fallow threshold, workflow, runtime source, or MCP contract is changed.
+
+DeepSource also flagged an unguarded `next()` in the new Python governance characterization.
+The correction instead requires exactly one `required_status_checks` rule before indexing it, so
+a missing or duplicate rule fails with an explicit test assertion rather than an incidental
+`StopIteration`. These are test/evidence fixes only; production behavior remains unchanged.

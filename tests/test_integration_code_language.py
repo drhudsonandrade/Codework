@@ -75,9 +75,11 @@ class IntegrationCodeLanguageTest(unittest.TestCase):
     def test_required_status_check_contexts_are_unchanged(self) -> None:
         """Workflow display cleanup cannot rename protected-main check identities."""
         payload = json.loads(GOVERNANCE.read_text(encoding="utf-8"))
-        status_rule = next(
+        status_rules = [
             rule for rule in payload["rules"] if rule["type"] == "required_status_checks"
-        )
+        ]
+        self.assertEqual(len(status_rules), 1)
+        status_rule = status_rules[0]
         contexts = {item["context"] for item in status_rule["parameters"]["required_status_checks"]}
         self.assertEqual(contexts, EXPECTED_REQUIRED_CHECKS)
 

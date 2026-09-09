@@ -43,18 +43,6 @@ test("MCP initialization lists only approved tools with annotations", async () =
   const canary = listed.tools.find((tool) => tool.name === "run_synthetic_canary");
   assert.equal(canary?.annotations?.readOnlyHint, false);
   assert.equal(canary?.annotations?.destructiveHint, false);
-
-  type InputSchema = { properties?: Record<string, unknown>; required?: string[] };
-  const schemas = Object.fromEntries(
-    listed.tools.map((tool) => [tool.name, tool.inputSchema as InputSchema]),
-  ) as Record<string, InputSchema>;
-  for (const name of ["runtime_status", "reference_status", "run_synthetic_canary", "audit_record"]) {
-    assert.deepEqual(Object.keys(schemas[name]?.properties ?? {}).sort(), ["requestId"]);
-  }
-  assert.deepEqual(schemas.runtime_status?.required ?? [], []);
-  assert.deepEqual(schemas.reference_status?.required ?? [], []);
-  assert.deepEqual(schemas.run_synthetic_canary?.required, ["requestId"]);
-  assert.deepEqual(schemas.audit_record?.required, ["requestId"]);
   await client.close();
   await server.close();
 });

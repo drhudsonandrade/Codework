@@ -83,6 +83,14 @@ git diff --check
 
 The stage-six Python test also pins the current MCP environment-variable set and required status-check contexts. The MCP initialization test pins tool/input-schema compatibility using the real in-memory MCP transport.
 
+
+## MCP test placement
+
+The payload compatibility lock lives in the dedicated `mcp/test/payloadContracts.test.ts`.
+The older `mcp/test/server.test.ts` remains byte-identical to the stage-six base. This prevents
+a documentation/test-only contract assertion from converting an existing complex test callback
+into newly changed high-CRAP code under Fallow. No analyzer threshold is changed.
+
 ## Compatibility classification
 
 - **A — private implementation/developer diagnostics:** CodeRabbit setup messages translated to English.
