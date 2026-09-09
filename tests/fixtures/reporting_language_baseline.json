@@ -1,0 +1,786 @@
+{
+  "base_sha": "0a643128f3ac3e99a51428644c3012a2d638ab8b",
+  "capture_kind": "synthetic baseline before production edits; generation clocks frozen",
+  "cases": {
+    "01:FINAL": {
+      "files": {
+        "html": {
+          "name": "01-genoma-clinico.html",
+          "sha256": "0c67e0ad9c403e489a2c7748d99f13e47256b3cfb51771ceb270069cb3b112b6"
+        },
+        "json": {
+          "name": "01-genoma-clinico.json",
+          "sha256": "e3cf5b4f97c3a386238a132be6724065f72730e0c6a0f1c42b2c98b9bf06b21a"
+        },
+        "markdown": {
+          "name": "01-genoma-clinico.md",
+          "sha256": "d9052e8814f11085f577bd8b569d38719da722deeeac2c673d956eb24067c066"
+        }
+      },
+      "html": "1b4a92b051ee1f4aa788f8c75cce60bf4e70f4e65af46e9433c9de5d49de3611",
+      "markdown": "d7cd28c137c22f6448246f9163b416d534467d2aea7f45a81e8cf6b3eecbd061",
+      "metadata_keys": [
+        "accent",
+        "audience",
+        "code",
+        "generated_at",
+        "mode",
+        "publication_blockers",
+        "purpose",
+        "report_id",
+        "ruleset_required",
+        "schema",
+        "slug",
+        "tagline",
+        "title"
+      ]
+    },
+    "01:MODEL": {
+      "files": {
+        "html": {
+          "name": "01-genoma-clinico.html",
+          "sha256": "ce365e0c1b8aec7a7fc3bf26df1a9d6246131bf6fda4eaebcc385d8d3320d14f"
+        },
+        "json": {
+          "name": "01-genoma-clinico.json",
+          "sha256": "a65583699f3536d3d9073f8688d317f495ce36856a33ccfea30233394f98471e"
+        },
+        "markdown": {
+          "name": "01-genoma-clinico.md",
+          "sha256": "335f03784d8a82c5657a5f1ee1355ead183ba0787c713e32acb86cfbcb2b839e"
+        }
+      },
+      "html": "2e8a4f04ce733daa12add0a6476c72479888f6b453f07ee29d60f2f40ecac276",
+      "markdown": "07458e33ed06e63dbb3e54312f65e41ac43d84319d40710cdb07e3d8737a345a",
+      "metadata_keys": [
+        "accent",
+        "audience",
+        "code",
+        "generated_at",
+        "mode",
+        "publication_blockers",
+        "purpose",
+        "report_id",
+        "ruleset_required",
+        "schema",
+        "slug",
+        "tagline",
+        "title"
+      ]
+    },
+    "02:FINAL": {
+      "files": {
+        "html": {
+          "name": "02-ancestralidade-genealogia-genetica.html",
+          "sha256": "bb7996d8716dae71bf84be7ec7e38ac10c3791e9deeed4c3451aa1a6fe6713b9"
+        },
+        "json": {
+          "name": "02-ancestralidade-genealogia-genetica.json",
+          "sha256": "0975c1f3a5e70e72507e135297079096be620d49dc1b7187860ccb6c84c7fad4"
+        },
+        "markdown": {
+          "name": "02-ancestralidade-genealogia-genetica.md",
+          "sha256": "17ce3b63cb5c39e3877cf12d855eba214faae8dfb6171909f06d34a24ebbc3cb"
+        }
+      },
+      "html": "c04559c147ed8c99f6eea11611071b0cbf49e6e52976fd04d9c70272ae36b29b",
+      "markdown": "6c077daa4dca4ba83f8a9412f2edea6b07489866310e73cf92d4e37b3c21d7de",
+      "metadata_keys": [
+        "accent",
+        "audience",
+        "code",
+        "generated_at",
+        "mode",
+        "publication_blockers",
+        "purpose",
+        "report_id",
+        "ruleset_required",
+        "schema",
+        "slug",
+        "tagline",
+        "title"
+      ]
+    },
+    "02:MODEL": {
+      "files": {
+        "html": {
+          "name": "02-ancestralidade-genealogia-genetica.html",
+          "sha256": "90fb0ccfd4afa6ddc84a77c6e65603e1b6711af026d6210939ce195f84a2aae7"
+        },
+        "json": {
+          "name": "02-ancestralidade-genealogia-genetica.json",
+          "sha256": "6ab8f47a95c41f924f3ceb72f74d77097816fe6e63004c28c8a8ae555d2c7b48"
+        },
+        "markdown": {
+          "name": "02-ancestralidade-genealogia-genetica.md",
+          "sha256": "f05d6375d83df2e91c281094fc067c20ba82c2ee696a2d4f9128a84a30ad7f2c"
+        }
+      },
+      "html": "b7880ef09fdb9bbd0f8c52f5b1bae48245e0ce3ce4e5e01f7b4fe5e0e296e27e",
+      "markdown": "b5cb3f35c74a39360aefa3d73dfb74c3d9139c742e811d5a02162b60da6a4e7e",
+      "metadata_keys": [
+        "accent",
+        "audience",
+        "code",
+        "generated_at",
+        "mode",
+        "publication_blockers",
+        "purpose",
+        "report_id",
+        "ruleset_required",
+        "schema",
+        "slug",
+        "tagline",
+        "title"
+      ]
+    },
+    "03:FINAL": {
+      "files": {
+        "html": {
+          "name": "03-reprodutivo-individual-casal.html",
+          "sha256": "0dea92fbec237ebf728e8de3f8d6f0cfeee65505afdd7a6832bf06c12542c7cb"
+        },
+        "json": {
+          "name": "03-reprodutivo-individual-casal.json",
+          "sha256": "56b7a6757e4698aef8f41e2ecfbb7371d77922ca5a7acf9861830acbbefb8e16"
+        },
+        "markdown": {
+          "name": "03-reprodutivo-individual-casal.md",
+          "sha256": "9d1418a376dcd9bafaa89375b324a21d9b782e45604bc60feb5d6ca9a00cb595"
+        }
+      },
+      "html": "03d843025a726e185ce597d33fb145ee69ec3cf320c8f174ee94cf5753135a6b",
+      "markdown": "c67849bf03c1a5cc3ca27696d0336b0422b8bc0c61c1654e95a17050564e2f57",
+      "metadata_keys": [
+        "accent",
+        "audience",
+        "code",
+        "generated_at",
+        "mode",
+        "publication_blockers",
+        "purpose",
+        "report_id",
+        "ruleset_required",
+        "schema",
+        "slug",
+        "tagline",
+        "title"
+      ]
+    },
+    "03:MODEL": {
+      "files": {
+        "html": {
+          "name": "03-reprodutivo-individual-casal.html",
+          "sha256": "488f22b158b18a87121025d15be7907499fe5e1cae16315e138558078bb1508b"
+        },
+        "json": {
+          "name": "03-reprodutivo-individual-casal.json",
+          "sha256": "27c2457c1e27abeb95a259626b836f216058142cfd557416924b4c804307c055"
+        },
+        "markdown": {
+          "name": "03-reprodutivo-individual-casal.md",
+          "sha256": "f5cd31e54c9a767d2287257b94cc8d1f80fe208bb02bba85f2ab4c8aa8dd9b6e"
+        }
+      },
+      "html": "3ee8c14b001d80fb6fc14728ba03796d28e2049066dde7356590188bfd98aca0",
+      "markdown": "867f8e6e7a46f06977b2d804fa0693c2c28dc94d064504ccda0409eaeddee65a",
+      "metadata_keys": [
+        "accent",
+        "audience",
+        "code",
+        "generated_at",
+        "mode",
+        "publication_blockers",
+        "purpose",
+        "report_id",
+        "ruleset_required",
+        "schema",
+        "slug",
+        "tagline",
+        "title"
+      ]
+    },
+    "04:FINAL": {
+      "files": {
+        "html": {
+          "name": "04-nutrigenetica-nutricao-precisao.html",
+          "sha256": "33a18179f114c0a8599731e617fcdc6accab708549d0fde03fff0b6bc3efe86e"
+        },
+        "json": {
+          "name": "04-nutrigenetica-nutricao-precisao.json",
+          "sha256": "975d083157d90fae9c5f3133a00374369fb1a06be15548c080ca402001375f12"
+        },
+        "markdown": {
+          "name": "04-nutrigenetica-nutricao-precisao.md",
+          "sha256": "3dd49453a944e623831359993e8c0ae56c67f3e1545a21ddc7a809092155a049"
+        }
+      },
+      "html": "fe680ada79d3a88e796ae671c975bfb61ec1b84d47ff571eb0f0ddb71db32d84",
+      "markdown": "0c0bc825401bc1901546eeb951f8a59d70628bbf30246b4707bbb3423cbf1a8c",
+      "metadata_keys": [
+        "accent",
+        "audience",
+        "code",
+        "generated_at",
+        "mode",
+        "publication_blockers",
+        "purpose",
+        "report_id",
+        "ruleset_required",
+        "schema",
+        "slug",
+        "tagline",
+        "title"
+      ]
+    },
+    "04:MODEL": {
+      "files": {
+        "html": {
+          "name": "04-nutrigenetica-nutricao-precisao.html",
+          "sha256": "2ac66b8ca5edc6a1361f22f7248310aee8a674c17557fda38171f77f1fd57428"
+        },
+        "json": {
+          "name": "04-nutrigenetica-nutricao-precisao.json",
+          "sha256": "4d1da36edb25bfa9ae9f5ffc7df8f948338fc2e92869e3c9d3b5a215500aeda1"
+        },
+        "markdown": {
+          "name": "04-nutrigenetica-nutricao-precisao.md",
+          "sha256": "dd6f8d6b45c21ebddee797042fe1bd0a1d0fab138bbe07e96a02e665b542c352"
+        }
+      },
+      "html": "d95cbc073fe7d2fdb5d777b40e9cd82b613dcf2fa36730c4378581d007973425",
+      "markdown": "15c76aa8eefa16f0db024892baabad7a6eb98ff328b7a55d76e2728b384646fd",
+      "metadata_keys": [
+        "accent",
+        "audience",
+        "code",
+        "generated_at",
+        "mode",
+        "publication_blockers",
+        "purpose",
+        "report_id",
+        "ruleset_required",
+        "schema",
+        "slug",
+        "tagline",
+        "title"
+      ]
+    },
+    "05:FINAL": {
+      "files": {
+        "html": {
+          "name": "05-tecnico-metodos-qc-limitacoes.html",
+          "sha256": "9b238a7981f90149bfc3289e13ad4ecada31be740a87a2ee363d58ed78d99522"
+        },
+        "json": {
+          "name": "05-tecnico-metodos-qc-limitacoes.json",
+          "sha256": "c6bf7f596f92ea758241228853a4f4b90edd29c69aabf1d634f1e5131eae84e2"
+        },
+        "markdown": {
+          "name": "05-tecnico-metodos-qc-limitacoes.md",
+          "sha256": "ea5e3e23077ff50b9951ae7bd356bee413f69713d6e8475b4fbf08317558c5c9"
+        }
+      },
+      "html": "ea24847c251fc54bc22dcef350b833e0f918309d3e7ca4c58fb696a8ab830eff",
+      "markdown": "7b655dd3eaccab870a5d4d4966ea34f637144df0404a7c60f4294f1300a70222",
+      "metadata_keys": [
+        "accent",
+        "audience",
+        "code",
+        "generated_at",
+        "mode",
+        "publication_blockers",
+        "purpose",
+        "report_id",
+        "ruleset_required",
+        "schema",
+        "slug",
+        "tagline",
+        "title"
+      ]
+    },
+    "05:MODEL": {
+      "files": {
+        "html": {
+          "name": "05-tecnico-metodos-qc-limitacoes.html",
+          "sha256": "ee890acef7adb32511a7f9f9033d6c7155ff4fb2d81b57eed235ad8c6acb91bf"
+        },
+        "json": {
+          "name": "05-tecnico-metodos-qc-limitacoes.json",
+          "sha256": "3be4015f4b5941d18c4ed9ad3358c6d03356853ed1bff8fb0ecf420d24787df2"
+        },
+        "markdown": {
+          "name": "05-tecnico-metodos-qc-limitacoes.md",
+          "sha256": "c9669ce7ee0bbb3511fdb36b2995c37c8043ed2bee75275a7a325e5149673f75"
+        }
+      },
+      "html": "e2d2f30ba3915a6e8489be73ebfe114f6d15e7142c9945901bba77b88c02ed2b",
+      "markdown": "77685ed268c9be698a8f6ff1654ca14ae0413ae28a035efdca78ccde62e5fe7a",
+      "metadata_keys": [
+        "accent",
+        "audience",
+        "code",
+        "generated_at",
+        "mode",
+        "publication_blockers",
+        "purpose",
+        "report_id",
+        "ruleset_required",
+        "schema",
+        "slug",
+        "tagline",
+        "title"
+      ]
+    },
+    "06:FINAL": {
+      "files": {
+        "html": {
+          "name": "06-farmacogenomica-cartao-anestesia.html",
+          "sha256": "3baeab218fc087b9b5b526ba340f187522676ae9a8380c6b1e5ea3c235d323b3"
+        },
+        "json": {
+          "name": "06-farmacogenomica-cartao-anestesia.json",
+          "sha256": "4979b22f4d2546d0d4b14b6a7271b9e000185b1e663b819dde96a1983bf5416d"
+        },
+        "markdown": {
+          "name": "06-farmacogenomica-cartao-anestesia.md",
+          "sha256": "66b795fcdcd66542da2d3b689a890d762d8713ce5e93755eda203a6f91ac4275"
+        }
+      },
+      "html": "f9980e5304d30091bb7a7b6726f0aaa938d7b611cf012f779790e662a10018fb",
+      "markdown": "74b2cb4bd9c58b893f39310883c299d9cf9e3e8b9dba838ab00c250a6411f000",
+      "metadata_keys": [
+        "accent",
+        "audience",
+        "code",
+        "generated_at",
+        "mode",
+        "publication_blockers",
+        "purpose",
+        "report_id",
+        "ruleset_required",
+        "schema",
+        "slug",
+        "tagline",
+        "title"
+      ]
+    },
+    "06:MODEL": {
+      "files": {
+        "html": {
+          "name": "06-farmacogenomica-cartao-anestesia.html",
+          "sha256": "0862b16ef0eab91312bbb375a4ff2226993bd6ec8c51b71fc3ee27becaa56748"
+        },
+        "json": {
+          "name": "06-farmacogenomica-cartao-anestesia.json",
+          "sha256": "4adad7206fb2e9828838c2523a62b0a49058d346178087a36707187415198f3c"
+        },
+        "markdown": {
+          "name": "06-farmacogenomica-cartao-anestesia.md",
+          "sha256": "f91116cf9e7f9815e108d184493c59506615a80aa76bb62542a925c6abf53d44"
+        }
+      },
+      "html": "3637873a4b2bfdcd85dd57af506071729617784609eef336c1506723e90d8cfe",
+      "markdown": "cf52b33f3609be3f6184388bb05cba8bc871c4804675871ee8cfe256c76e89a6",
+      "metadata_keys": [
+        "accent",
+        "audience",
+        "code",
+        "generated_at",
+        "mode",
+        "publication_blockers",
+        "purpose",
+        "report_id",
+        "ruleset_required",
+        "schema",
+        "slug",
+        "tagline",
+        "title"
+      ]
+    },
+    "07:FINAL": {
+      "files": {
+        "html": {
+          "name": "07-longevidade-protecao-prevencao.html",
+          "sha256": "a826ffdcbccb14e23be38d8ea46a5becea0b9382684033d85b48ebc97a16a610"
+        },
+        "json": {
+          "name": "07-longevidade-protecao-prevencao.json",
+          "sha256": "bd060df24d7f6bf8a7d5961ad1bd2422f78b68bf45547873fc5a226d913c8853"
+        },
+        "markdown": {
+          "name": "07-longevidade-protecao-prevencao.md",
+          "sha256": "6c093fc5ed6ed4efab3252bccfc8cc5c805246ef326e2f31774e67e1e180c0d7"
+        }
+      },
+      "html": "7003b17dea005a6fb185751ea23c62d09b69b83cb798b5537cc28ff82ee3df5b",
+      "markdown": "9b33569e3af2f16b60f509198727ccd69e680ccf8cfced9d5d78939cd1cb3f89",
+      "metadata_keys": [
+        "accent",
+        "audience",
+        "code",
+        "generated_at",
+        "mode",
+        "publication_blockers",
+        "purpose",
+        "report_id",
+        "ruleset_required",
+        "schema",
+        "slug",
+        "tagline",
+        "title"
+      ]
+    },
+    "07:MODEL": {
+      "files": {
+        "html": {
+          "name": "07-longevidade-protecao-prevencao.html",
+          "sha256": "a82f5f5918c20217542fb8bd772f635689154528f9a1e18e619b60c2d113cd5d"
+        },
+        "json": {
+          "name": "07-longevidade-protecao-prevencao.json",
+          "sha256": "2936031efc49d4c9d33d7133749fd25603af61241bd610cb9eb348a613358ce1"
+        },
+        "markdown": {
+          "name": "07-longevidade-protecao-prevencao.md",
+          "sha256": "427120978c3c2faafd46319c044c94a8cf4bf5afe55cea2335daad5f7a7ae625"
+        }
+      },
+      "html": "de4fc7a33a46970cc84ba72c433f1c2eda18389b4a00fc656ca21b74f80583fb",
+      "markdown": "17d59063d9a6ab574c13f0d202952550601b495cb3ca99e143144c3fa323c2d6",
+      "metadata_keys": [
+        "accent",
+        "audience",
+        "code",
+        "generated_at",
+        "mode",
+        "publication_blockers",
+        "purpose",
+        "report_id",
+        "ruleset_required",
+        "schema",
+        "slug",
+        "tagline",
+        "title"
+      ]
+    },
+    "08:FINAL": {
+      "files": {
+        "html": {
+          "name": "08-atlas-tracos-curiosidades.html",
+          "sha256": "913449a3f3cad25508ff8b959a8927baea93d74124f25da052b2d03a8c345b50"
+        },
+        "json": {
+          "name": "08-atlas-tracos-curiosidades.json",
+          "sha256": "39ec879d8b0ba0268b273da3a8af76fd2918500d3a6c37b41584e8fdb824062b"
+        },
+        "markdown": {
+          "name": "08-atlas-tracos-curiosidades.md",
+          "sha256": "26650e8b94f711dfef0ed75a53fd558d7e6578507512d756fc2bd332c906a624"
+        }
+      },
+      "html": "5544772bc406c06092084ec2df9bf9011966f244df4e406b8b06e4521e9ce0b5",
+      "markdown": "557296445b59b7dfad511e61b7e71bf8c8f12f7e964dedaa437d76cd7ec209d4",
+      "metadata_keys": [
+        "accent",
+        "audience",
+        "code",
+        "generated_at",
+        "mode",
+        "publication_blockers",
+        "purpose",
+        "report_id",
+        "ruleset_required",
+        "schema",
+        "slug",
+        "tagline",
+        "title"
+      ]
+    },
+    "08:MODEL": {
+      "files": {
+        "html": {
+          "name": "08-atlas-tracos-curiosidades.html",
+          "sha256": "a7c1b4633d812747136d65491bfcf7e44a351dae2e62d7817014cce340d55a55"
+        },
+        "json": {
+          "name": "08-atlas-tracos-curiosidades.json",
+          "sha256": "0316aa7ddf224cb05c5696b08530856853c2251a54066a640c84ab95ece54b41"
+        },
+        "markdown": {
+          "name": "08-atlas-tracos-curiosidades.md",
+          "sha256": "5615f1d845f43968674ab55d52a270a291109a09bfcccd3eaa0d40e287d76778"
+        }
+      },
+      "html": "bc1d72ac7486a1e33c6d7b445f3aa49f8234d6b21b4f93e618e4e9a979fd09a4",
+      "markdown": "baea29fe05ab10548bde0b2f39e776a113143c045e16f780e0b198e3dfc9ef0e",
+      "metadata_keys": [
+        "accent",
+        "audience",
+        "code",
+        "generated_at",
+        "mode",
+        "publication_blockers",
+        "purpose",
+        "report_id",
+        "ruleset_required",
+        "schema",
+        "slug",
+        "tagline",
+        "title"
+      ]
+    },
+    "09:FINAL": {
+      "files": {
+        "html": {
+          "name": "09-genome-completeness-blind-spots.html",
+          "sha256": "4813f2bed134c3ee84bc9da207cf4461c7c159c061cf4df3e7797b129236ad28"
+        },
+        "json": {
+          "name": "09-genome-completeness-blind-spots.json",
+          "sha256": "10910357e7e50fa9294450d8fbb222eeb35082b48c935385f18d73ab2418eb1e"
+        },
+        "markdown": {
+          "name": "09-genome-completeness-blind-spots.md",
+          "sha256": "d5c725ee148c285b0e207967c6fd2e4f424f7224934b00cfa4fa03a1b6ce6018"
+        }
+      },
+      "html": "f9819a15b92ebfc913e83ed2266347eef01865bd309ba95165bfd1cd932a7e97",
+      "markdown": "5cebb26499696d7636106444b873d10bc2c78a9a1bb111c89716a3f6fda96482",
+      "metadata_keys": [
+        "accent",
+        "audience",
+        "code",
+        "generated_at",
+        "mode",
+        "publication_blockers",
+        "purpose",
+        "report_id",
+        "ruleset_required",
+        "schema",
+        "slug",
+        "tagline",
+        "title"
+      ]
+    },
+    "09:MODEL": {
+      "files": {
+        "html": {
+          "name": "09-genome-completeness-blind-spots.html",
+          "sha256": "763740eae6aa763a6eafe56fae828da1233d21b88d19eace6fe189b5773a3e66"
+        },
+        "json": {
+          "name": "09-genome-completeness-blind-spots.json",
+          "sha256": "a0b6c374b84ca12d2a08ad68074de8e33b9f10db1d54769c8cfee005bf93b9c8"
+        },
+        "markdown": {
+          "name": "09-genome-completeness-blind-spots.md",
+          "sha256": "6ff80c6d09031f05c38d51bd67b0e08a87363f12af88bafa25295a5e21f7ab1a"
+        }
+      },
+      "html": "83c0e6663121481dcaea8364012f3d6cc873ba9adeeb4b6b1439f78782de1780",
+      "markdown": "8cd194efe61e833dc5e734af4dac9ac4bd8c8fc7fe732dae70ff528ff7f918d5",
+      "metadata_keys": [
+        "accent",
+        "audience",
+        "code",
+        "generated_at",
+        "mode",
+        "publication_blockers",
+        "purpose",
+        "report_id",
+        "ruleset_required",
+        "schema",
+        "slug",
+        "tagline",
+        "title"
+      ]
+    },
+    "10:FINAL": {
+      "files": {
+        "html": {
+          "name": "10-resumo-clinico-uma-pagina.html",
+          "sha256": "6e521f64ea0889db6f6ec5b0ec8d6b63f7ab3afd2e41c34020c9894eb9407585"
+        },
+        "json": {
+          "name": "10-resumo-clinico-uma-pagina.json",
+          "sha256": "5863b026faa5a25ee3ffd5f8cf57df1b9e1a9b62edb1855eebac2a23a513e5f6"
+        },
+        "markdown": {
+          "name": "10-resumo-clinico-uma-pagina.md",
+          "sha256": "f7f9461de43de15fa2418f5435859eb576d3e4eddd53b82b1d3097eacd2f7290"
+        }
+      },
+      "html": "346e5ab769a849c1f8625876fd3fa8471ca708fd6ee2672640cbb7cb6dca2bb1",
+      "markdown": "40d083ee64c91f8e41bcd3e545fc2b934d08c2ba2aa9d964da777bb94be6a722",
+      "metadata_keys": [
+        "accent",
+        "audience",
+        "code",
+        "generated_at",
+        "mode",
+        "publication_blockers",
+        "purpose",
+        "report_id",
+        "ruleset_required",
+        "schema",
+        "slug",
+        "tagline",
+        "title"
+      ]
+    },
+    "10:MODEL": {
+      "files": {
+        "html": {
+          "name": "10-resumo-clinico-uma-pagina.html",
+          "sha256": "bee164a459cf1131199f886b6f7bd5934a2a4afd5eaabf2345d96a4d04947ed6"
+        },
+        "json": {
+          "name": "10-resumo-clinico-uma-pagina.json",
+          "sha256": "55bd383c3ebdf7cd576f6ca4cf3de3e87a40afa481274297ec4540e277791971"
+        },
+        "markdown": {
+          "name": "10-resumo-clinico-uma-pagina.md",
+          "sha256": "5fa21bfefc2a180052a6573437756e7d8f881c0af373398272a6cfd599f7a1e7"
+        }
+      },
+      "html": "02866d4ff13776a5355a359cbb82ea8dd4e5cf1443933b7bec9a7d4426b8e0e4",
+      "markdown": "23dd6defcdcea916979339f1398a64d053eae2068667ad8d356b2cb2ef851bf8",
+      "metadata_keys": [
+        "accent",
+        "audience",
+        "code",
+        "generated_at",
+        "mode",
+        "publication_blockers",
+        "purpose",
+        "report_id",
+        "ruleset_required",
+        "schema",
+        "slug",
+        "tagline",
+        "title"
+      ]
+    },
+    "11:FINAL": {
+      "files": {
+        "html": {
+          "name": "11-guia-editorial-matriz-preenchimento.html",
+          "sha256": "a68e7384c315a659aaec27c14eb8aba65cdc1b5c388000dff7bb5b0badc0b129"
+        },
+        "json": {
+          "name": "11-guia-editorial-matriz-preenchimento.json",
+          "sha256": "229157fcc21d79d4ff14bbcacf31055c8d39982eb5cf6fde083b853daeb23e76"
+        },
+        "markdown": {
+          "name": "11-guia-editorial-matriz-preenchimento.md",
+          "sha256": "d0777c5a3c5faddfdce17c9817a28dcb97bc20f4d5a7ec0c01905282b3462961"
+        }
+      },
+      "html": "71eb908924cab7d313be78ad2e43f5595ee49ac8fe1d5653d143ebccf312f4e0",
+      "markdown": "0b67747bc107751efcb31f418bc7f03ff299bf4620ab218823a84393cadeab93",
+      "metadata_keys": [
+        "accent",
+        "audience",
+        "code",
+        "generated_at",
+        "mode",
+        "publication_blockers",
+        "purpose",
+        "report_id",
+        "ruleset_required",
+        "schema",
+        "slug",
+        "tagline",
+        "title"
+      ]
+    },
+    "11:MODEL": {
+      "files": {
+        "html": {
+          "name": "11-guia-editorial-matriz-preenchimento.html",
+          "sha256": "3de198b8ef7981eea281aab1bb1107e78bda4cb5ae429dbd3745987f66bf67f7"
+        },
+        "json": {
+          "name": "11-guia-editorial-matriz-preenchimento.json",
+          "sha256": "ed73e571543259ee2e7f1afd6986bcf61ccaca4c7d240f35b8685545d3fcc8f7"
+        },
+        "markdown": {
+          "name": "11-guia-editorial-matriz-preenchimento.md",
+          "sha256": "95d6f4cbfc507a1061a005a3c96719336a575b2dd5089e80ffc3d23a4fc92e26"
+        }
+      },
+      "html": "b4b6b236e38c9944572ac8310790697bde7f0ee22e725988554e5f7707fc7ce2",
+      "markdown": "7c161c4b094c3f7d84a4aeee08ccfaecb5e48fe6c0f65aa60271e7af102d5747",
+      "metadata_keys": [
+        "accent",
+        "audience",
+        "code",
+        "generated_at",
+        "mode",
+        "publication_blockers",
+        "purpose",
+        "report_id",
+        "ruleset_required",
+        "schema",
+        "slug",
+        "tagline",
+        "title"
+      ]
+    },
+    "private-formatting-only": {
+      "html": "4d4a76d46dc7d54e5a0b765a96b1c0ca49db549c99d2a5437350ab743739dba1",
+      "markdown": "ee3abf21ce1dbf1c75fa61c8ae28556de1a3fae558f97cbe1fbf06c368cb835b"
+    }
+  },
+  "presentation_text": {
+    "AUDIENCE": "Público",
+    "AUDIENCE_HEADING_MARKDOWN": "## Público",
+    "AUDIENCE_PREFIX": "Público: ",
+    "CASE_PREFIX": "Caso: ",
+    "CONFIDENTIAL_PAGE_PREFIX": "CONFIDENCIAL • página ",
+    "CONTROLLED_PUBLICATION_NOTICE": "PUBLICAÇÃO CONTROLADA • dados ausentes permanecem NÃO DISPONÍVEL; toda afirmação final exige rastreabilidade, QC, evidência e audit gate.",
+    "EXECUTION_MANIFEST": "Execution Manifest",
+    "EXECUTION_MANIFEST_HEADING_MARKDOWN": "## Execution Manifest",
+    "FIELD_LABEL": "CAMPO",
+    "FINAL_NOTICE_MARKDOWN": "**RESULTADO GENÔMICO — SAÍDA DETERMINÍSTICA DO PIPELINE DE RELATÓRIO**",
+    "FINDINGS": "Achados estruturados",
+    "FINDINGS_HEADING_MARKDOWN": "## Achados estruturados",
+    "FINDING_CONFIRMATION_PREFIX": "- Confirmação: ",
+    "FINDING_DOMAIN_PREFIX": "- Domínio: ",
+    "FINDING_EVIDENCE_PREFIX": "- Evidência: ",
+    "FINDING_INTERPRETATION_PREFIX": "- Interpretação: ",
+    "FINDING_NATURE_PREFIX": "- Natureza: ",
+    "FINDING_OBSERVED_DATA_PREFIX": "- Dado observado: ",
+    "FINDING_PRIORITY_PREFIX": "- Prioridade: ",
+    "FINDING_STATUS_PREFIX": "- Status operacional: ",
+    "FINDING_UNCERTAINTIES_PREFIX": "- Incertezas: ",
+    "FINDING_WITHOUT_ID": "ACHADO SEM ID",
+    "GENERATED_REPORT_SUFFIX": "  /  RESULTADO GERADO v3.0",
+    "GENOMIC_RESULT": "RESULTADO GENÔMICO",
+    "INDIVIDUAL_CASE": "INDIVIDUAL / CASO",
+    "LANGUAGE_TAG": "pt-BR",
+    "LIMITATIONS": "Limitações",
+    "LIMITATIONS_HEADING_MARKDOWN": "## Limitações",
+    "MODEL_NOTICE_MARKDOWN": "**MODELO — NÃO É RESULTADO GENÉTICO**",
+    "MODEL_SAFETY_NOTICE": "Preencher somente com dados rastreáveis. Não inventar resultado, execução, fonte, confirmação ou valor ausente.",
+    "MODEL_SUITE_PREFIX": "Modelo GENOMA v3.0 / ",
+    "MODEL_VERSION_PREFIX": "Versão do modelo: v3.0/",
+    "PENDING": "PENDENTE",
+    "PURPOSE": "Finalidade",
+    "PURPOSE_HEADING_MARKDOWN": "## Finalidade",
+    "PURPOSE_PREFIX": "Finalidade: ",
+    "REQUIRED_RULESET_PREFIX": ". Ruleset exigido: ",
+    "SAFETY_HEADING_MARKDOWN": "## Contrato de segurança",
+    "SCOPE_LABEL": "ESCOPO",
+    "SOURCES": "Fontes",
+    "SOURCES_HEADING_MARKDOWN": "## Fontes",
+    "STATUS_LABEL": "STATUS",
+    "SUITE_PREFIX": "GENOMA  /  SUÍTE v3.0  /  ",
+    "SUMMARY": "Resumo executivo",
+    "SUMMARY_HEADING_MARKDOWN": "## Resumo executivo",
+    "TYPE_LABEL": "TIPO",
+    "UNAVAILABLE": "NÃO DISPONÍVEL",
+    "VALUE_LABEL": "VALOR"
+  }
+}

@@ -1,9 +1,12 @@
+"""Programmatic report layout with explicitly owned pt-BR presentation text."""
+
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any
+
+from reporting import locale_pt_br as pt_br
 
 from reporting.engine import EXPECTED_RULESET
 
@@ -24,7 +27,8 @@ DESIGN = {
 }
 
 
-def _safe(value: Any, default: str = "NÃO DISPONÍVEL") -> str:
+def _safe(value: Any, default: str = pt_br.UNAVAILABLE) -> str:
+    """Render a display value with the existing absent-value substitution."""
     if value is None or value == "":
         return default
     if isinstance(value, (dict, list, tuple)):
@@ -56,7 +60,10 @@ def _register_pdf_fonts() -> tuple[str, str, str]:
             "/usr/share/fonts/truetype/carlito/Carlito-Bold.ttf",
         ],
     }
-    found = {key: next((path for path in paths if Path(path).is_file()), None) for key, paths in candidates.items()}
+    found = {
+        key: next((path for path in paths if Path(path).is_file()), None)
+        for key, paths in candidates.items()
+    }
     try:
         if found["regular"] and found["bold"]:
             pdfmetrics.registerFont(TTFont("GenomaSans", found["regular"]))
@@ -71,12 +78,23 @@ def _register_pdf_fonts() -> tuple[str, str, str]:
 
 
 def _hex(value: str):
+    """Resolve an existing hexadecimal design token as a ReportLab color."""
     from reportlab.lib.colors import HexColor
+
     return HexColor("#" + value)
 
 
 def _report_sections(rendered: dict[str, Any]) -> list[str]:
-    reserved = {"Finalidade", "Público", "Resumo executivo", "Achados estruturados", "Execution Manifest", "Fontes", "Limitações"}
+    """Extract report-specific headings without changing their order."""
+    reserved = {
+        pt_br.PURPOSE,
+        pt_br.AUDIENCE,
+        pt_br.SUMMARY,
+        pt_br.FINDINGS,
+        pt_br.EXECUTION_MANIFEST,
+        pt_br.SOURCES,
+        pt_br.LIMITATIONS,
+    }
     result: list[str] = []
     for line in rendered.get("markdown", "").splitlines():
         if line.startswith("## "):
@@ -87,11 +105,20 @@ def _report_sections(rendered: dict[str, Any]) -> list[str]:
 
 
 def _pdf(rendered: dict[str, Any], path: Path) -> dict[str, Any]:
+    """Write the existing programmatic PDF layout with pt-BR presentation text."""
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import mm
-    from reportlab.platypus import KeepInFrame, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from reportlab.platypus import (
+        KeepInFrame,
+        PageBreak,
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
+    )
 
     metadata = rendered["metadata"]
     data = rendered.get("data", {})
@@ -111,111 +138,260 @@ def _pdf(rendered: dict[str, Any], path: Path) -> dict[str, Any]:
         subject="GENOMA v3.0 deterministic genomic report",
     )
     styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(name="TopCode", fontName=bold, fontSize=7, leading=8.5, textColor=_hex(accent), spaceAfter=0))
-    styles.add(ParagraphStyle(name="Suite", fontName=bold, fontSize=8.5, leading=10.5, textColor=_hex(accent), spaceAfter=0))
-    styles.add(ParagraphStyle(name="HeroTitle", fontName=bold, fontSize=27, leading=31.5, textColor=colors.white, spaceAfter=5 * mm))
-    styles.add(ParagraphStyle(name="HeroTag", fontName=regular, fontSize=12.5, leading=16, textColor=_hex(DESIGN["pale_blue"])))
-    styles.add(ParagraphStyle(name="MetaLabel", fontName=bold, fontSize=6.5, leading=8, textColor=_hex(DESIGN["slate"])))
-    styles.add(ParagraphStyle(name="MetaValue", fontName=bold, fontSize=8.0, leading=9.5, textColor=_hex(accent)))
-    styles.add(ParagraphStyle(name="Section", fontName=section_bold, fontSize=12, leading=14.5, textColor=_hex(accent), spaceBefore=4.0 * mm, spaceAfter=2.2 * mm))
-    styles.add(ParagraphStyle(name="H2", fontName=bold, fontSize=12.2, leading=15.0, textColor=_hex(accent), spaceBefore=4.0 * mm, spaceAfter=2.0 * mm))
-    styles.add(ParagraphStyle(name="Body", fontName=regular, fontSize=9.3, leading=13.8, textColor=_hex(DESIGN["text"]), spaceAfter=2.5 * mm))
-    styles.add(ParagraphStyle(name="Small", fontName=regular, fontSize=7.0, leading=9.5, textColor=_hex(DESIGN["slate"])))
-    styles.add(ParagraphStyle(name="Callout", fontName=bold, fontSize=8.6, leading=12, textColor=_hex(DESIGN["amber"])))
-    styles.add(ParagraphStyle(name="WhiteSmall", fontName=bold, fontSize=7.5, leading=9.5, textColor=colors.white))
+    styles.add(
+        ParagraphStyle(
+            name="TopCode",
+            fontName=bold,
+            fontSize=7,
+            leading=8.5,
+            textColor=_hex(accent),
+            spaceAfter=0,
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="Suite",
+            fontName=bold,
+            fontSize=8.5,
+            leading=10.5,
+            textColor=_hex(accent),
+            spaceAfter=0,
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="HeroTitle",
+            fontName=bold,
+            fontSize=27,
+            leading=31.5,
+            textColor=colors.white,
+            spaceAfter=5 * mm,
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="HeroTag",
+            fontName=regular,
+            fontSize=12.5,
+            leading=16,
+            textColor=_hex(DESIGN["pale_blue"]),
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="MetaLabel",
+            fontName=bold,
+            fontSize=6.5,
+            leading=8,
+            textColor=_hex(DESIGN["slate"]),
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="MetaValue", fontName=bold, fontSize=8.0, leading=9.5, textColor=_hex(accent)
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="Section",
+            fontName=section_bold,
+            fontSize=12,
+            leading=14.5,
+            textColor=_hex(accent),
+            spaceBefore=4.0 * mm,
+            spaceAfter=2.2 * mm,
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="H2",
+            fontName=bold,
+            fontSize=12.2,
+            leading=15.0,
+            textColor=_hex(accent),
+            spaceBefore=4.0 * mm,
+            spaceAfter=2.0 * mm,
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="Body",
+            fontName=regular,
+            fontSize=9.3,
+            leading=13.8,
+            textColor=_hex(DESIGN["text"]),
+            spaceAfter=2.5 * mm,
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="Small",
+            fontName=regular,
+            fontSize=7.0,
+            leading=9.5,
+            textColor=_hex(DESIGN["slate"]),
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="Callout", fontName=bold, fontSize=8.6, leading=12, textColor=_hex(DESIGN["amber"])
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="WhiteSmall", fontName=bold, fontSize=7.5, leading=9.5, textColor=colors.white
+        )
+    )
 
     story: list[Any] = []
-    story.append(Paragraph(f"GENOMA  /  {code}  /  RESULTADO GERADO v3.0", styles["TopCode"]))
+    story.append(Paragraph(f"GENOMA  /  {code}{pt_br.GENERATED_REPORT_SUFFIX}", styles["TopCode"]))
     story.append(Spacer(1, 3 * mm))
-    story.append(Table([[""]], colWidths=[174 * mm], rowHeights=[0.35 * mm], style=TableStyle([("BACKGROUND", (0, 0), (-1, -1), _hex(DESIGN["border"]))])))
+    story.append(
+        Table(
+            [[""]],
+            colWidths=[174 * mm],
+            rowHeights=[0.35 * mm],
+            style=TableStyle([("BACKGROUND", (0, 0), (-1, -1), _hex(DESIGN["border"]))]),
+        )
+    )
     story.append(Spacer(1, 14 * mm))
-    story.append(Paragraph(f"GENOMA  /  SUÍTE v3.0  /  {code}", styles["Suite"]))
+    story.append(Paragraph(f"{pt_br.SUITE_PREFIX}{code}", styles["Suite"]))
     story.append(Spacer(1, 6 * mm))
 
     hero = Table(
-        [[Paragraph(metadata["title"], styles["HeroTitle"])], [Paragraph(metadata["tagline"], styles["HeroTag"])]],
+        [
+            [Paragraph(metadata["title"], styles["HeroTitle"])],
+            [Paragraph(metadata["tagline"], styles["HeroTag"])],
+        ],
         colWidths=[174 * mm],
     )
-    hero.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), _hex(DESIGN["navy"])),
-        ("LEFTPADDING", (0, 0), (-1, -1), 6 * mm),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 6 * mm),
-        ("TOPPADDING", (0, 0), (-1, 0), 10 * mm),
-        ("BOTTOMPADDING", (0, 1), (-1, -1), 9 * mm),
-    ]))
+    hero.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), _hex(DESIGN["navy"])),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6 * mm),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6 * mm),
+                ("TOPPADDING", (0, 0), (-1, 0), 10 * mm),
+                ("BOTTOMPADDING", (0, 1), (-1, -1), 9 * mm),
+            ]
+        )
+    )
     story.append(hero)
     story.append(Spacer(1, 8 * mm))
 
     meta_rows = [
-        [Paragraph("TIPO", styles["MetaLabel"]), Paragraph("ESCOPO", styles["MetaLabel"]), Paragraph("STATUS", styles["MetaLabel"])],
-        [Paragraph("RESULTADO GENÔMICO", styles["MetaValue"]), Paragraph("INDIVIDUAL / CASO", styles["MetaValue"]), Paragraph(_safe(data.get("post_deployment_status"), "PENDENTE"), styles["MetaValue"])],
+        [
+            Paragraph(pt_br.TYPE_LABEL, styles["MetaLabel"]),
+            Paragraph(pt_br.SCOPE_LABEL, styles["MetaLabel"]),
+            Paragraph(pt_br.STATUS_LABEL, styles["MetaLabel"]),
+        ],
+        [
+            Paragraph(pt_br.GENOMIC_RESULT, styles["MetaValue"]),
+            Paragraph(pt_br.INDIVIDUAL_CASE, styles["MetaValue"]),
+            Paragraph(
+                _safe(data.get("post_deployment_status"), pt_br.PENDING), styles["MetaValue"]
+            ),
+        ],
     ]
     meta = Table(meta_rows, colWidths=[58 * mm, 58 * mm, 58 * mm])
-    meta.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), _hex(DESIGN["light_gray"])),
-        ("LINEABOVE", (0, 0), (-1, 0), 1.2, _hex(accent)),
-        ("BOX", (0, 0), (-1, -1), 0.35, _hex(DESIGN["border"])),
-        ("INNERGRID", (0, 0), (-1, -1), 0.25, _hex(DESIGN["border"])),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 3.2 * mm),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 3.2 * mm),
-        ("TOPPADDING", (0, 0), (-1, -1), 2.8 * mm),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2.8 * mm),
-    ]))
+    meta.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), _hex(DESIGN["light_gray"])),
+                ("LINEABOVE", (0, 0), (-1, 0), 1.2, _hex(accent)),
+                ("BOX", (0, 0), (-1, -1), 0.35, _hex(DESIGN["border"])),
+                ("INNERGRID", (0, 0), (-1, -1), 0.25, _hex(DESIGN["border"])),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 3.2 * mm),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 3.2 * mm),
+                ("TOPPADDING", (0, 0), (-1, -1), 2.8 * mm),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2.8 * mm),
+            ]
+        )
+    )
     story.append(meta)
     story.append(Spacer(1, 7 * mm))
 
-    story.append(Paragraph("Finalidade", styles["Section"]))
+    story.append(Paragraph(pt_br.PURPOSE, styles["Section"]))
     story.append(Paragraph(metadata["purpose"], styles["Body"]))
-    story.append(Paragraph("Público", styles["Section"]))
+    story.append(Paragraph(pt_br.AUDIENCE, styles["Section"]))
     story.append(Paragraph(metadata["audience"], styles["Body"]))
 
-    safety = Table([[Paragraph("PUBLICAÇÃO CONTROLADA • dados ausentes permanecem NÃO DISPONÍVEL; toda afirmação final exige rastreabilidade, QC, evidência e audit gate.", styles["Callout"])]], colWidths=[174 * mm])
-    safety.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), _hex(DESIGN["cream"])),
-        ("BOX", (0, 0), (-1, -1), 0.6, _hex(DESIGN["amber"])),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4.5 * mm),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4.5 * mm),
-        ("TOPPADDING", (0, 0), (-1, -1), 3.5 * mm),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5 * mm),
-    ]))
+    safety = Table(
+        [[Paragraph(pt_br.CONTROLLED_PUBLICATION_NOTICE, styles["Callout"])]], colWidths=[174 * mm]
+    )
+    safety.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), _hex(DESIGN["cream"])),
+                ("BOX", (0, 0), (-1, -1), 0.6, _hex(DESIGN["amber"])),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4.5 * mm),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4.5 * mm),
+                ("TOPPADDING", (0, 0), (-1, -1), 3.5 * mm),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5 * mm),
+            ]
+        )
+    )
     story.append(Spacer(1, 5 * mm))
     story.append(safety)
 
     body_flow: list[Any] = []
-    body_flow.append(Paragraph("Resumo executivo", styles["H2"]))
+    body_flow.append(Paragraph(pt_br.SUMMARY, styles["H2"]))
     body_flow.append(Paragraph(_safe(data.get("summary")), styles["Body"]))
     section_data = data.get("sections") if isinstance(data.get("sections"), dict) else {}
     for name in _report_sections(rendered):
         body_flow.append(Paragraph(name, styles["H2"]))
         body_flow.append(Paragraph(_safe(section_data.get(name)), styles["Body"]))
 
-    body_flow.append(Paragraph("Achados estruturados", styles["H2"]))
+    body_flow.append(Paragraph(pt_br.FINDINGS, styles["H2"]))
     findings = data.get("findings") if isinstance(data.get("findings"), list) else []
     if not findings:
-        body_flow.append(Paragraph("NÃO DISPONÍVEL", styles["Body"]))
+        body_flow.append(Paragraph(pt_br.UNAVAILABLE, styles["Body"]))
     else:
         for finding in findings:
             if not isinstance(finding, dict):
                 continue
-            rows = [[Paragraph("CAMPO", styles["WhiteSmall"]), Paragraph("VALOR", styles["WhiteSmall"])]]
+            rows = [
+                [
+                    Paragraph(pt_br.FIELD_LABEL, styles["WhiteSmall"]),
+                    Paragraph(pt_br.VALUE_LABEL, styles["WhiteSmall"]),
+                ]
+            ]
             for key, value in finding.items():
-                rows.append([Paragraph(key.replace("_", " ").upper(), styles["Small"]), Paragraph(_safe(value), styles["Body"])])
+                rows.append(
+                    [
+                        Paragraph(key.replace("_", " ").upper(), styles["Small"]),
+                        Paragraph(_safe(value), styles["Body"]),
+                    ]
+                )
             table = Table(rows, colWidths=[48 * mm, 126 * mm], repeatRows=1)
-            table.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), _hex(accent)),
-                ("GRID", (0, 0), (-1, -1), 0.3, _hex(DESIGN["border"])),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 2.8 * mm),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 2.8 * mm),
-                ("TOPPADDING", (0, 0), (-1, -1), 2.2 * mm),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 2.2 * mm),
-            ]))
+            table.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, 0), _hex(accent)),
+                        ("GRID", (0, 0), (-1, -1), 0.3, _hex(DESIGN["border"])),
+                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 2.8 * mm),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 2.8 * mm),
+                        ("TOPPADDING", (0, 0), (-1, -1), 2.2 * mm),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 2.2 * mm),
+                    ]
+                )
+            )
             body_flow.extend([table, Spacer(1, 3 * mm)])
 
-    for heading, value in (("Fontes", data.get("sources")), ("Limitações", data.get("limitations")), ("Execution Manifest", data.get("execution_manifest"))):
+    for heading, value in (
+        (pt_br.SOURCES, data.get("sources")),
+        (pt_br.LIMITATIONS, data.get("limitations")),
+        (pt_br.EXECUTION_MANIFEST, data.get("execution_manifest")),
+    ):
         body_flow.append(Paragraph(heading, styles["H2"]))
-        body_flow.append(Paragraph(_safe(value), styles["Body"] if heading != "Execution Manifest" else styles["Small"]))
+        body_flow.append(
+            Paragraph(
+                _safe(value),
+                styles["Body"] if heading != pt_br.EXECUTION_MANIFEST else styles["Small"],
+            )
+        )
 
     if metadata["report_id"] == "10":
         story.append(Spacer(1, 4 * mm))
@@ -225,11 +401,14 @@ def _pdf(rendered: dict[str, Any], path: Path) -> dict[str, Any]:
         story.extend(body_flow)
 
     def page_decor(canvas, _doc):
+        """Draw the existing confidential page footer without changing geometry."""
         canvas.saveState()
         canvas.setFillColor(_hex(DESIGN["slate"]))
         canvas.setFont(regular, 7)
         canvas.drawString(18 * mm, 7 * mm, f"GENOMA / {code} / v3.0")
-        canvas.drawRightString(A4[0] - 18 * mm, 7 * mm, f"CONFIDENCIAL • página {canvas.getPageNumber()}")
+        canvas.drawRightString(
+            A4[0] - 18 * mm, 7 * mm, f"{pt_br.CONFIDENTIAL_PAGE_PREFIX}{canvas.getPageNumber()}"
+        )
         canvas.restoreState()
 
     doc.build(story, onFirstPage=page_decor, onLaterPages=page_decor)
@@ -243,8 +422,10 @@ def _pdf(rendered: dict[str, Any], path: Path) -> dict[str, Any]:
 
 
 def _set_cell_shading(cell, fill: str) -> None:
+    """Set the existing cell background in the editable document."""
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
+
     tc_pr = cell._tc.get_or_add_tcPr()
     shd = tc_pr.find(qn("w:shd"))
     if shd is None:
@@ -254,8 +435,10 @@ def _set_cell_shading(cell, fill: str) -> None:
 
 
 def _set_cell_border(cell, color: str, size: str = "3") -> None:
+    """Apply the existing border parameters to every cell edge."""
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
+
     tc_pr = cell._tc.get_or_add_tcPr()
     borders = tc_pr.first_child_found_in("w:tcBorders")
     if borders is None:
@@ -272,8 +455,10 @@ def _set_cell_border(cell, color: str, size: str = "3") -> None:
 
 
 def _set_repeat_table_header(row) -> None:
+    """Keep the document table header repeated across pages."""
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
+
     tr_pr = row._tr.get_or_add_trPr()
     tbl_header = OxmlElement("w:tblHeader")
     tbl_header.set(qn("w:val"), "true")
@@ -281,6 +466,7 @@ def _set_repeat_table_header(row) -> None:
 
 
 def _docx(rendered: dict[str, Any], path: Path) -> dict[str, Any]:
+    """Write the existing editable document without changing layout or field values."""
     from docx import Document
     from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
     from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -305,7 +491,11 @@ def _docx(rendered: dict[str, Any], path: Path) -> dict[str, Any]:
     normal.font.name = "DejaVu Sans"
     normal.font.size = Pt(9.3)
     normal.font.color.rgb = RGBColor.from_string(DESIGN["text"])
-    for style_name, size, color in (("Title", 27, DESIGN["navy"]), ("Heading 1", 12.2, accent), ("Heading 2", 11, accent)):
+    for style_name, size, color in (
+        ("Title", 27, DESIGN["navy"]),
+        ("Heading 1", 12.2, accent),
+        ("Heading 2", 11, accent),
+    ):
         style = doc.styles[style_name]
         style.font.name = "DejaVu Sans"
         style.font.size = Pt(size)
@@ -313,7 +503,7 @@ def _docx(rendered: dict[str, Any], path: Path) -> dict[str, Any]:
         style.font.color.rgb = RGBColor.from_string(color)
 
     header = section.header.paragraphs[0]
-    header.text = f"GENOMA  /  {code}  /  RESULTADO GERADO v3.0"
+    header.text = f"GENOMA  /  {code}{pt_br.GENERATED_REPORT_SUFFIX}"
     run = header.runs[0]
     run.font.name = "DejaVu Sans"
     run.font.size = Pt(7)
@@ -322,7 +512,7 @@ def _docx(rendered: dict[str, Any], path: Path) -> dict[str, Any]:
 
     footer = section.footer.paragraphs[0]
     footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = footer.add_run("CONFIDENCIAL • página ")
+    run = footer.add_run(pt_br.CONFIDENTIAL_PAGE_PREFIX)
     run.font.name = "DejaVu Sans"
     run.font.size = Pt(7)
     run.font.color.rgb = RGBColor.from_string(DESIGN["slate"])
@@ -333,7 +523,7 @@ def _docx(rendered: dict[str, Any], path: Path) -> dict[str, Any]:
     suite = doc.add_paragraph()
     suite.paragraph_format.space_before = Pt(18)
     suite.paragraph_format.space_after = Pt(9)
-    run = suite.add_run(f"GENOMA  /  SUÍTE v3.0  /  {code}")
+    run = suite.add_run(f"{pt_br.SUITE_PREFIX}{code}")
     run.font.name = "DejaVu Sans"
     run.font.size = Pt(8.5)
     run.font.bold = True
@@ -359,8 +549,12 @@ def _docx(rendered: dict[str, Any], path: Path) -> dict[str, Any]:
     r.font.color.rgb = RGBColor.from_string(DESIGN["pale_blue"])
 
     meta = doc.add_table(rows=2, cols=3)
-    labels = ("TIPO", "ESCOPO", "STATUS")
-    values = ("RESULTADO GENÔMICO", "INDIVIDUAL / CASO", _safe(data.get("post_deployment_status"), "PENDENTE"))
+    labels = (pt_br.TYPE_LABEL, pt_br.SCOPE_LABEL, pt_br.STATUS_LABEL)
+    values = (
+        pt_br.GENOMIC_RESULT,
+        pt_br.INDIVIDUAL_CASE,
+        _safe(data.get("post_deployment_status"), pt_br.PENDING),
+    )
     for row in meta.rows:
         for cell in row.cells:
             _set_cell_shading(cell, DESIGN["light_gray"])
@@ -379,46 +573,48 @@ def _docx(rendered: dict[str, Any], path: Path) -> dict[str, Any]:
         r.font.color.rgb = RGBColor.from_string(accent)
 
     def add_heading(text: str) -> None:
+        """Append a heading with the existing spacing and style."""
         p = doc.add_paragraph(text, style="Heading 1")
         p.paragraph_format.space_before = Pt(10)
         p.paragraph_format.space_after = Pt(4)
 
     def add_body(value: Any) -> None:
+        """Append the safely rendered body value with the existing spacing."""
         p = doc.add_paragraph(_safe(value))
         p.paragraph_format.space_after = Pt(5)
 
-    add_heading("Finalidade")
+    add_heading(pt_br.PURPOSE)
     add_body(metadata["purpose"])
-    add_heading("Público")
+    add_heading(pt_br.AUDIENCE)
     add_body(metadata["audience"])
 
     safety = doc.add_table(rows=1, cols=1)
     _set_cell_shading(safety.cell(0, 0), DESIGN["cream"])
     _set_cell_border(safety.cell(0, 0), DESIGN["amber"], "5")
-    r = safety.cell(0, 0).paragraphs[0].add_run("PUBLICAÇÃO CONTROLADA • dados ausentes permanecem NÃO DISPONÍVEL; toda afirmação final exige rastreabilidade, QC, evidência e audit gate.")
+    r = safety.cell(0, 0).paragraphs[0].add_run(pt_br.CONTROLLED_PUBLICATION_NOTICE)
     r.font.name = "DejaVu Sans"
     r.font.size = Pt(8.5)
     r.font.bold = True
     r.font.color.rgb = RGBColor.from_string(DESIGN["amber"])
 
-    add_heading("Resumo executivo")
+    add_heading(pt_br.SUMMARY)
     add_body(data.get("summary"))
     section_data = data.get("sections") if isinstance(data.get("sections"), dict) else {}
     for name in _report_sections(rendered):
         add_heading(name)
         add_body(section_data.get(name))
 
-    add_heading("Achados estruturados")
+    add_heading(pt_br.FINDINGS)
     findings = data.get("findings") if isinstance(data.get("findings"), list) else []
     if not findings:
-        add_body("NÃO DISPONÍVEL")
+        add_body(pt_br.UNAVAILABLE)
     else:
         for finding in findings:
             if not isinstance(finding, dict):
                 continue
             table = doc.add_table(rows=1, cols=2)
             _set_repeat_table_header(table.rows[0])
-            for idx, label in enumerate(("CAMPO", "VALOR")):
+            for idx, label in enumerate((pt_br.FIELD_LABEL, pt_br.VALUE_LABEL)):
                 cell = table.rows[0].cells[idx]
                 _set_cell_shading(cell, accent)
                 r = cell.paragraphs[0].add_run(label)
@@ -433,7 +629,11 @@ def _docx(rendered: dict[str, Any], path: Path) -> dict[str, Any]:
                 for cell in cells:
                     _set_cell_border(cell, DESIGN["border"])
 
-    for heading, value in (("Fontes", data.get("sources")), ("Limitações", data.get("limitations")), ("Execution Manifest", data.get("execution_manifest"))):
+    for heading, value in (
+        (pt_br.SOURCES, data.get("sources")),
+        (pt_br.LIMITATIONS, data.get("limitations")),
+        (pt_br.EXECUTION_MANIFEST, data.get("execution_manifest")),
+    ):
         add_heading(heading)
         add_body(value)
 
@@ -445,7 +645,10 @@ def _docx(rendered: dict[str, Any], path: Path) -> dict[str, Any]:
     return {"docx_font": "DejaVu Sans", "accent": accent, "a4": True}
 
 
-def write_editorial_bundle(rendered: dict[str, Any], output_dir: Path, *, stem: str | None = None) -> dict[str, Path]:
+def write_editorial_bundle(
+    rendered: dict[str, Any], output_dir: Path, *, stem: str | None = None
+) -> dict[str, Path]:
+    """Write programmatic PDF/DOCX and runtime metadata for the prepared input."""
     output_dir.mkdir(parents=True, exist_ok=True)
     metadata = rendered["metadata"]
     stem = stem or f"{metadata['report_id']}-{metadata['slug']}"
@@ -462,7 +665,9 @@ def write_editorial_bundle(rendered: dict[str, Any], output_dir: Path, *, stem: 
         "docx": docx_runtime,
         "visual_reference": "GENOMA model suite v3.0",
     }
-    (output_dir / f"{stem}.editorial.json").write_text(json.dumps(runtime, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (output_dir / f"{stem}.editorial.json").write_text(
+        json.dumps(runtime, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     return {"pdf": pdf, "docx": docx}
 
 

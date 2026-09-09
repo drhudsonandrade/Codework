@@ -1,0 +1,117 @@
+# Reporting Language and Presentation Ownership Inventory
+
+## Scope and reference
+
+Stage 5 follows the manual merge of PR #60. The fixed base is
+`0a643128f3ac3e99a51428644c3012a2d638ab8b`.
+The approved scope is implementation language and the presentation boundary;
+report text is not translated into English.
+
+A bounded inventory examined 33 Python files in `reporting/`, the report/template
+scripts and associated tests. No candidate Portuguese implementation identifier
+was found by the recorded token vocabulary. The 54 accented prose candidates
+quote normative values, report names, historical examples or fixture data inside
+otherwise English documentation. They are retained, not mechanically translated.
+This lexical inventory is not a proof about every possible natural-language term.
+
+## Ownership boundary
+
+`reporting/locale_pt_br.py` owns 48 fixed presentation strings under English names.
+`reporting/engine.py` and `reporting/editorial_v3_hifi.py` import it as `pt_br`.
+It has no external dependency, selector, environment setting, fallback or network
+lookup. The only implemented report language remains pt-BR.
+
+The constants include fixed headings, finding-label prefixes, safety notices,
+cover/table captions, the page-footer prefix and the HTML language tag. Their
+values, punctuation, accents, Markdown markers and significant spaces match the
+pre-migration values. The exact name/value inventory is recorded independently
+in `tests/fixtures/reporting_language_baseline.json` and tested against the module.
+
+Presentation defaults such as `UNAVAILABLE` and `PENDING` duplicate the existing
+printed labels only. This module is not the owner of policy state semantics and
+cannot introduce translated wire values. Catalog-driven titles/sections, payload
+content, coordinate keys, consent domains and normative values retain their
+existing owners. In particular, no caller-supplied locale field changes output.
+
+## A-E compatibility classification
+
+| Category | Decision |
+| --- | --- |
+| A: private implementation | Existing English identifiers remain; fixed display expressions reference English-named pt-BR constants. Missing docstrings and touched-file formatting are normalized. |
+| B: public/cross-module | Existing renderer function names, signatures, default values and explicit exports remain. An unused `os` import in the programmatic module is removed; repository search found no consumer of that incidental module attribute. |
+| C: serialized contracts | JSON keys, metadata schema, normative labels, file names, Markdown/HTML bytes and artifact digests retain their baseline representation. No locale metadata field is added. |
+| D: user-facing text | Fixed pt-BR strings receive an explicit presentation owner; report-specific catalog, payload and template text is not rewritten. |
+| E: immutable/canonical | Ruleset, sealed transport, reference manifests, coordinate packs, templates and historical artifacts are untouched. |
+
+The extraction does not change publication checks, provenance serialization,
+report-identity binding or the explicit authorization required by the public
+programmatic FINAL writer. Template rendering and its canonical identities remain
+outside the implementation diff. The locale module is not a publication capability.
+
+## Regression and reproduction
+
+Run `PYTHONPATH=tests:. python -m unittest tests.test_reporting_language_compatibility -v`.
+The nine tests check the presentation owner, exact literal values, all eleven
+MODEL/FINAL text bundles, absent-value formatting, reserved headings, unchanged
+language selection behavior, and publication/authorization refusals.
+The nine tests are part of the root suite, not an additional independent total.
+
+The golden fixture contains 22 public bundle cases (11 report IDs times two modes)
+and one explicitly private formatting-only case. Each public case records exact
+Markdown/HTML hashes, written JSON/Markdown/HTML file hashes and file names, and
+metadata key names. The private case covers finding-label/default formatting but
+is not described as a payload authorized for FINAL publication.
+
+Baseline capture occurred before production edits, with `reporting/` still
+byte-identical to the fixed base. The first test harness patched the wrong clock:
+`provenance_block` uses `datetime.now` directly, so JSON generation timestamps
+varied. That attempt was retained in local evidence, the fixture clock was fixed,
+and the snapshot was recaptured while production bytes were still unchanged.
+No post-refactor expectation was substituted to hide output drift.
+
+Only generation timestamps are fixed by the fixtures. Actual publication checks,
+provenance validation, authorization routing and serializers run normally.
+All inputs explicitly describe synthetic layout QA, never patient measurements.
+
+The [implementation plan](superpowers/plans/2026-09-09-reporting-english-locale.md)
+contains exact commands plus the full executable AST/blob and binary-output probes.
+The AST comparison reverses only the documented presentation extraction, strips
+docstrings and ignores the removed unused `os` import. Any other executable change
+fails. It also compares every out-of-scope tracked file to the fixed base.
+
+Representative PDF/DOCX comparisons use reports 01 and 10 (multi-page and single-
+page layouts). The probe compares page text, page dimensions, raster pixels and
+all decompressed DOCX package entries. It does not assert whole-PDF file identity,
+outer ZIP-container identity, universal cross-renderer parity, or equivalence to
+the immutable template pack. Existing programmatic layout constraints, including
+single-page shrinking in report 10, are not redesigned by this migration.
+
+## Exact-commit evidence and remaining work
+
+The [stage-five exact-HEAD evidence record](https://github.com/drhudsonandrade/Codework/pull/61#issuecomment-5601896618)
+identifies the commit/tree actually tested, commands, results and retained log
+hashes. Until it names the delivered HEAD, implementation validation is PENDING.
+A source document cannot embed its own final Git SHA; the real linked record
+avoids self-reference without inventing a revision or inheriting an old PASS.
+External review, applicable CI and manual merge remain separate requirements.
+
+This stage does not change clinical meaning, QC/calling/reference decisions,
+permission settings or deployment status. It does not authorize real genomic
+interpretation. The remaining planned stages are integration/tooling language,
+developer documentation, and the residual compatibility audit.
+
+## Static repository-gate consumer
+
+The repository validator previously searched the renderer source for the inline
+result caption. It now checks the exact literal in its locale owner and the
+renderer import/reference relationship without executing either source file.
+The locale file is a required repository path. The prior colors, font, writer,
+canonical and scientific checks remain enabled. This adaptation is covered by
+`tests/test_reporting_presentation_gate.py`, including negative fixtures and an
+integration test invoking the full validator; it is not a deleted safety check.
+The complete procedure is documented in
+[`2026-09-09-reporting-english-locale.md`](superpowers/plans/2026-09-09-reporting-english-locale.md).
+The two renderer ASTs still match their baseline after only the stated
+normalizations; the tested validator is excluded explicitly from the 390
+unchanged baseline files. No data-flow or clinical validation is inferred from
+this static check.

@@ -5,6 +5,7 @@ The renderer never interprets DNA. It only turns already-curated, provenance-bea
 structured data into publication artifacts. Scientific interpretation remains upstream
 behind the policy/QC/evidence/audit gates.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -14,6 +15,8 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from reporting import locale_pt_br as pt_br
 
 from reporting.provenance import provenance_blockers, render_value
 
@@ -66,9 +69,7 @@ def _assert_serializable_provenance(rendered: dict[str, Any]) -> None:
     if render_mode == "FINAL":
         blockers = _publication_blockers(data, report_id)
         if blockers:
-            raise ReportReleaseError(
-                "post-render publication gate failed: " + ", ".join(blockers)
-            )
+            raise ReportReleaseError("post-render publication gate failed: " + ", ".join(blockers))
         expected_markdown = _final_markdown(report_id, model, data)
     else:
         expected_markdown = _model_markdown(report_id, model)
@@ -80,7 +81,7 @@ def _assert_serializable_provenance(rendered: dict[str, Any]) -> None:
 
 
 def load_catalog() -> dict[str, dict[str, Any]]:
-    """The eleven v3 report models, refusing any catalog that is not exactly 01..11.
+    """Load the eleven v3 report models, refusing any catalog that is not exactly 01..11.
 
     A partial catalog would let a render pick a model nobody approved, and a model missing
     its editorial metadata would render a document with empty headings.
@@ -155,7 +156,7 @@ def _publication_blockers(data: dict[str, Any], report_id: str) -> list[str]:
     return blockers
 
 
-def _safe(value: Any, default: str = "NÃO DISPONÍVEL") -> str:
+def _safe(value: Any, default: str = pt_br.UNAVAILABLE) -> str:
     """Print `value` for the document, or `default` when there is nothing to print.
 
     The rendering itself belongs to `reporting.provenance.render_value`, which is what an
@@ -170,7 +171,7 @@ def _safe(value: Any, default: str = "NÃO DISPONÍVEL") -> str:
 
 
 def _model_markdown(report_id: str, model: dict[str, Any]) -> str:
-    """The empty template for a model, with every slot left as a visible placeholder.
+    """Render the empty template, leaving every slot as a visible placeholder.
 
     Reads no payload at all. MODEL mode exists to show the shape of a report without
     asserting anything, so the placeholders are printed rather than filled — a blank where a
@@ -181,24 +182,21 @@ def _model_markdown(report_id: str, model: dict[str, Any]) -> str:
         "",
         f"**{model['tagline']}**",
         "",
-        "**MODELO — NÃO É RESULTADO GENÉTICO**",
+        pt_br.MODEL_NOTICE_MARKDOWN,
         "",
-        f"Modelo GENOMA v3.0 / {model['code']}. Ruleset exigido: {RULESET_LABEL}.",
+        f"{pt_br.MODEL_SUITE_PREFIX}{model['code']}{pt_br.REQUIRED_RULESET_PREFIX}{RULESET_LABEL}.",
         "",
-        f"Finalidade: {model['purpose']}",
-        f"Público: {model['audience']}",
+        f"{pt_br.PURPOSE_PREFIX}{model['purpose']}",
+        f"{pt_br.AUDIENCE_PREFIX}{model['audience']}",
         "",
     ]
     for section in model["sections"]:
         lines.extend([f"## {section}", "", "[[DADO_RASTREAVEL_OU_NAO_DISPONIVEL]]", ""])
     lines.extend(
         [
-            "## Contrato de segurança",
+            pt_br.SAFETY_HEADING_MARKDOWN,
             "",
-            (
-                "Preencher somente com dados rastreáveis. Não inventar resultado, "
-                "execução, fonte, confirmação ou valor ausente."
-            ),
+            (pt_br.MODEL_SAFETY_NOTICE),
             "",
         ]
     )
@@ -206,7 +204,7 @@ def _model_markdown(report_id: str, model: dict[str, Any]) -> str:
 
 
 def _final_markdown(report_id: str, model: dict[str, Any], data: dict[str, Any]) -> str:
-    """The published document: every printed value comes from the payload.
+    """Render the published document with every printed value taken from the payload.
 
     Values are rendered through `reporting.provenance.render_value`, which is also what the
     anchors record, so the text on the page and the provenance block describing it cannot
@@ -217,23 +215,23 @@ def _final_markdown(report_id: str, model: dict[str, Any], data: dict[str, Any])
         "",
         f"**{model['tagline']}**",
         "",
-        "**RESULTADO GENÔMICO — SAÍDA DETERMINÍSTICA DO PIPELINE DE RELATÓRIO**",
+        pt_br.FINAL_NOTICE_MARKDOWN,
         "",
-        f"Caso: {_safe(data.get('case_id'))}",
-        f"Versão do modelo: v3.0/{model['code']}",
+        f"{pt_br.CASE_PREFIX}{_safe(data.get('case_id'))}",
+        f"{pt_br.MODEL_VERSION_PREFIX}{model['code']}",
         f"Ruleset: {RULESET_LABEL}",
         f"Ruleset SHA-256: {EXPECTED_RULESET['sha256']}",
-        f"POST-DEPLOYMENT: {_safe(data.get('post_deployment_status'), 'PENDENTE')}",
+        f"POST-DEPLOYMENT: {_safe(data.get('post_deployment_status'), pt_br.PENDING)}",
         "",
-        "## Finalidade",
+        pt_br.PURPOSE_HEADING_MARKDOWN,
         "",
         model["purpose"],
         "",
-        "## Público",
+        pt_br.AUDIENCE_HEADING_MARKDOWN,
         "",
         model["audience"],
         "",
-        "## Resumo executivo",
+        pt_br.SUMMARY_HEADING_MARKDOWN,
         "",
         _safe(data.get("summary")),
         "",
@@ -243,33 +241,33 @@ def _final_markdown(report_id: str, model: dict[str, Any], data: dict[str, Any])
         value = section_data.get(section)
         lines.extend([f"## {section}", "", _safe(value), ""])
 
-    lines.extend(["## Achados estruturados", ""])
+    lines.extend([pt_br.FINDINGS_HEADING_MARKDOWN, ""])
     findings = data.get("findings") if isinstance(data.get("findings"), list) else []
     if not findings:
-        lines.append("NÃO DISPONÍVEL")
+        lines.append(pt_br.UNAVAILABLE)
     else:
         for finding in findings:
             if not isinstance(finding, dict):
                 continue
             lines.extend(
                 [
-                    f"### {_safe(finding.get('id'), 'ACHADO SEM ID')}",
-                    f"- Domínio: {_safe(finding.get('domain'))}",
-                    f"- Natureza: {_safe(finding.get('nature'))}",
-                    f"- Prioridade: {_safe(finding.get('priority'))}",
-                    f"- Dado observado: {_safe(finding.get('observed_data'))}",
+                    f"### {_safe(finding.get('id'), pt_br.FINDING_WITHOUT_ID)}",
+                    f"{pt_br.FINDING_DOMAIN_PREFIX}{_safe(finding.get('domain'))}",
+                    f"{pt_br.FINDING_NATURE_PREFIX}{_safe(finding.get('nature'))}",
+                    f"{pt_br.FINDING_PRIORITY_PREFIX}{_safe(finding.get('priority'))}",
+                    f"{pt_br.FINDING_OBSERVED_DATA_PREFIX}{_safe(finding.get('observed_data'))}",
                     f"- QC: {_safe(finding.get('qc'))}",
-                    f"- Evidência: {_safe(finding.get('evidence_refs'))}",
-                    f"- Interpretação: {_safe(finding.get('interpretation'))}",
-                    f"- Incertezas: {_safe(finding.get('uncertainties'))}",
-                    f"- Confirmação: {_safe(finding.get('confirmation'))}",
-                    f"- Status operacional: {_safe(finding.get('status'))}",
+                    f"{pt_br.FINDING_EVIDENCE_PREFIX}{_safe(finding.get('evidence_refs'))}",
+                    f"{pt_br.FINDING_INTERPRETATION_PREFIX}{_safe(finding.get('interpretation'))}",
+                    f"{pt_br.FINDING_UNCERTAINTIES_PREFIX}{_safe(finding.get('uncertainties'))}",
+                    f"{pt_br.FINDING_CONFIRMATION_PREFIX}{_safe(finding.get('confirmation'))}",
+                    f"{pt_br.FINDING_STATUS_PREFIX}{_safe(finding.get('status'))}",
                     "",
                 ]
             )
     lines.extend(
         [
-            "## Execution Manifest",
+            pt_br.EXECUTION_MANIFEST_HEADING_MARKDOWN,
             "",
             "```json",
             json.dumps(
@@ -277,11 +275,11 @@ def _final_markdown(report_id: str, model: dict[str, Any], data: dict[str, Any])
             ),
             "```",
             "",
-            "## Fontes",
+            pt_br.SOURCES_HEADING_MARKDOWN,
             "",
             _safe(data.get("sources")),
             "",
-            "## Limitações",
+            pt_br.LIMITATIONS_HEADING_MARKDOWN,
             "",
             _safe(data.get("limitations")),
             "",
@@ -332,7 +330,7 @@ def _to_html(markdown: str, title: str) -> str:
         "background:#f4f4f4;padding:16px}"
     )
     return (
-        f"<!doctype html><html lang='pt-BR'><head><meta charset='utf-8'>"
+        f"<!doctype html><html lang='{pt_br.LANGUAGE_TAG}'><head><meta charset='utf-8'>"
         f"<title>{html.escape(title)}</title><style>{css}</style>"
         f"</head><body>{''.join(body)}</body></html>"
     )
