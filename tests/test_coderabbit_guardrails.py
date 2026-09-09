@@ -118,7 +118,7 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         script = (ROOT / "scripts" / "codex" / "setup-coderabbit.sh").read_text(
             encoding="utf-8"
         )
-        success = script.index("configurados a partir de release checksum-locked")
+        success = script.index("configured from a checksum-locked release")
         self.assertLess(script.index("marketplace_present()"), success)
         self.assertLess(script.index("plugin_installed()"), success)
         self.assertIn('.marketplaces[]?', script)
@@ -351,7 +351,7 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(marker_created, "available-only plugin must be installed before success")
         self.assertIn("plugin add coderabbit@codework-codex --json", calls)
-        self.assertIn("configurados a partir de release checksum-locked", result.stdout)
+        self.assertIn("configured from a checksum-locked release", result.stdout)
 
     def test_already_installed_plugin_is_not_added_again(self) -> None:
         result, _marker_created, calls = self._run_setup_with_fakes(already_installed=True)
@@ -360,15 +360,15 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         self.assertIn("plugin list --marketplace codework-codex --json --available", calls)
         self.assertIn("plugin list --marketplace codework-codex --json", calls)
         self.assertNotIn("plugin add coderabbit@codework-codex --json", calls)
-        self.assertIn("configurados a partir de release checksum-locked", result.stdout)
+        self.assertIn("configured from a checksum-locked release", result.stdout)
 
     def test_tampered_release_archive_fails_before_plugin_installation(self) -> None:
         result, marker_created, calls = self._run_setup_with_fakes(tamper_archive=True)
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertFalse(marker_created)
         self.assertNotIn("plugin add coderabbit@codework-codex --json", calls)
-        self.assertIn("archive CodeRabbit diverge do lock", result.stderr)
-        self.assertNotIn("configurados a partir de release checksum-locked", result.stdout)
+        self.assertIn("CodeRabbit archive SHA-256 does not match the versioned lock", result.stderr)
+        self.assertNotIn("configured from a checksum-locked release", result.stdout)
 
     def test_adulterated_marketplace_source_is_rejected(self) -> None:
         result, marker_created, calls = self._run_setup_with_fakes(adulterated_marketplace=True)
@@ -376,11 +376,11 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         self.assertFalse(marker_created)
         self.assertNotIn("plugin add coderabbit@codework-codex --json", calls)
         self.assertIn(
-            "marketplace codework-codex não foi confirmado no root local revisado",
+            "codework-codex marketplace was not confirmed against the reviewed local root",
             result.stderr,
             result.stdout + result.stderr,
         )
-        self.assertNotIn("configurados a partir de release checksum-locked", result.stdout)
+        self.assertNotIn("configured from a checksum-locked release", result.stdout)
 
     def test_disabled_installed_plugin_is_rejected(self) -> None:
         result, _marker_created, calls = self._run_setup_with_fakes(
@@ -389,8 +389,8 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         )
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertNotIn("plugin add coderabbit@codework-codex --json", calls)
-        self.assertIn("não foi confirmado como instalado, habilitado", result.stderr)
-        self.assertNotIn("configurados a partir de release checksum-locked", result.stdout)
+        self.assertIn("was not confirmed as installed, enabled", result.stderr)
+        self.assertNotIn("configured from a checksum-locked release", result.stdout)
 
     def test_version_prefix_does_not_satisfy_exact_cli_pin(self) -> None:
         result, marker_created, _calls = self._run_setup_with_fakes(
@@ -398,7 +398,7 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 5, result.stdout + result.stderr)
         self.assertFalse(marker_created)
-        self.assertNotIn("configurados a partir de release checksum-locked", result.stdout)
+        self.assertNotIn("configured from a checksum-locked release", result.stdout)
 
 
 if __name__ == "__main__":

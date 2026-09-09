@@ -1,7 +1,7 @@
 # GENOMA English Codebase Refactor — Compatibility-Preserving Design
 
 **Date:** 2026-09-03
-**Status:** Stages 1-4 merged (PR #38, #58, #59 and #60); stage 5 reporting implementation and pt-BR presentation ownership under validation. See `docs/REPORTING_CODE_LANGUAGE_INVENTORY.md`.
+**Status:** Stages 1-5 merged (PR #38, #58, #59, #60 and #61); stage 6 MCP/adapters/CI/developer-tooling language migration in implementation. See `docs/INTEGRATION_CODE_LANGUAGE_INVENTORY.md`.
 **Strategy:** Progressive migration by layers
 **Repository:** `drhudsonandrade/Codework`
 **Implementation reference:** `scripts/code_language_guard.py`
