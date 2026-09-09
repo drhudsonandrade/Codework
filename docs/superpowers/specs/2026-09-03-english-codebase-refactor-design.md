@@ -1,7 +1,7 @@
 # GENOMA English Codebase Refactor — Compatibility-Preserving Design
 
 **Date:** 2026-09-03
-**Status:** PR 1 implementation started; guardrails implemented in PR #38
+**Status:** Stages 1–2 merged (PR #38 and PR #58); stage 3 scientific-internals implementation in progress. See `docs/SCIENTIFIC_CODE_LANGUAGE_INVENTORY.md`.
 **Strategy:** Progressive migration by layers
 **Repository:** `drhudsonandrade/Codework`
 **Implementation reference:** `scripts/code_language_guard.py`

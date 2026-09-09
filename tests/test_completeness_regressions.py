@@ -19,6 +19,7 @@ from array_pipeline.completeness import (
 
 class CompletenessRegressionTest(unittest.TestCase):
     """How the completeness matrix classifies genotypes and reconciles duplicate rows."""
+
     def _entry_for_rows(self, rows):
         """Build the one-target matrix entry for synthetic array rows."""
         with tempfile.TemporaryDirectory() as td:
@@ -143,6 +144,7 @@ class CompletenessRegressionTest(unittest.TestCase):
                 self.assertEqual(classification, OBSERVADO)
                 self.assertIn("SNP diploide", basis)
                 self.assertIn("ACGT", basis)
+
     def test_non_comparable_called_genotype_is_structurally_not_applicable(self):
         """A called indel is not forwarded as an interpretable allele comparison."""
         entry = self._entry_for_rows(
@@ -153,7 +155,7 @@ class CompletenessRegressionTest(unittest.TestCase):
         self.assertFalse(entry["genotype_withheld"])
 
     def test_a_single_base_assessed_allele_absent_from_the_genotype_is_not_detected(self):
-        """Controle positivo: alelo SNP avaliado ausente continua NÃO DETECTADO."""
+        """Positive control: an absent assessed SNP allele remains NÃO DETECTADO."""
         classification, basis = _classify(
             {"RESULT": "GG", "__orientation_status": "VERIFICADO"},
             "raw_snp_array_v1",

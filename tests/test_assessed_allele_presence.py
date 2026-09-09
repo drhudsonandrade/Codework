@@ -33,9 +33,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+if str(Path(__file__).resolve().parents[1]) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from array_pipeline.completeness import (
     NAO_DETECTADO,
@@ -45,6 +44,8 @@ from array_pipeline.completeness import (
 )
 from array_pipeline.qc import inspect_array
 from tests.attestations import provenance_for
+
+ROOT = Path(__file__).resolve().parents[1]
 
 HEADER = (
     "RSID,CHROMOSOME,POSITION,CONSENSUS_RESULT,STATUS,GENERA_RESULT,"
@@ -125,7 +126,7 @@ class MultiAllelicClassificationTest(unittest.TestCase):
         self.assertIn("A, G", entries["rs2"]["basis"])
         self.assertEqual(entries["rs2"]["assessed_alleles"], ["A", "G"])
 
-    def test_a_genotype_carrying_one_of_the_alternates_is_observado(self):
+    def test_a_genotype_carrying_one_of_the_alternates_is_observed(self):
         """A genotype carrying one of the declared alternates is OBSERVADO."""
         entries = self._matrix(
             "rs1,1,100,TT,consensus,TT,TT,GM\n"
@@ -135,7 +136,7 @@ class MultiAllelicClassificationTest(unittest.TestCase):
         self.assertEqual(entries["rs2"]["classification"], OBSERVADO)
         self.assertIn("contém o alelo avaliado A", entries["rs2"]["basis"])
 
-    def test_a_locus_naming_no_base_stays_observado_and_says_so(self):
+    def test_a_locus_naming_no_base_stays_observed_and_says_so(self):
         """A locus naming no base stays OBSERVADO and records why it could not be read further."""
         entries = self._matrix(
             "rs1,1,100,TT,consensus,TT,TT,GM\n"
@@ -175,7 +176,7 @@ class InterpretationRefusesUntestedLociTest(unittest.TestCase):
 
         return cf._interpretation(entry, self.CLINVAR, self.VALIDITY, sex_at_birth=None)
 
-    def test_observado_without_any_assessed_base_is_never_a_finding(self):
+    def test_observed_without_any_assessed_base_is_never_a_finding(self):
         """OBSERVADO without any assessed base is never a finding."""
         from array_pipeline.clinical_findings import SEM_INTERPRETACAO
 
