@@ -24,9 +24,9 @@ The following active technical documents contained substantial Portuguese implem
 
 Portuguese remains intentional when it is part of an established wire/report vocabulary, a localized fixture/example, or historical evidence. In this stage that includes:
 
-- normative/report values such as `NÃO DISPONÍVEL`, `NÃO DETECTADO`, `NÃO TESTADO`, `NÃO REPORTÁVEL`, `EXECUTADO`, `VERIFICADO`, `INFERIDO`, and `PROPOSTO`;
+- normative/report values such as `NÃO DISPONÍVEL`, `NÃO DETECTADO`, `NÃO TESTADO`, `NÃO REPORTÁVEL`, `EXECUTADO`, `VERIFICADO`, `INFERIDO`, and `PROPOSTO`, plus exact localized report labels `MODELO`, `RESULTADO`, `DATA`, and `VERSÃO`;
 - PGS transferability labels `NÃO TRANSFERÍVEL SEM CALIBRAÇÃO`, `TRANSFERIBILIDADE INCERTA`, and `PARCIALMENTE TRANSFERÍVEL`;
-- the report-02 historical caveat quoted in Portuguese in `ANCESTRY_REFERENCE_PANEL.md`;
+- the report-02 historical caveat quoted in Portuguese in `ANCESTRY_REFERENCE_PANEL.md`; the document explicitly marks the validation artifact as a historical, non-reproducible snapshot because the former validation script is absent;
 - the historical statement and pt-BR conditional-diplotype example preserved in `PGX_ALLELE_DISCRIMINATION.md`;
 - blockquoted historical, non-verifiable measurements in `TARGET_REGISTRY_EXPANSION.md`;
 - private/path examples inside command snippets where translation would alter the recorded example rather than developer prose.

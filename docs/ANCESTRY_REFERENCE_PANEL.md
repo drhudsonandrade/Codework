@@ -88,7 +88,7 @@ The three Native American groups remain close to each other, as expected for rel
 
 ## Validation: eleven known individuals, including what the panel gets wrong
 
-`scripts/validate_ancestry_panel.py` projects people of known origin through the same path as a case and writes the result to `docs/evidence/ANCESTRY_PANEL_VALIDATION.json`, **including panel errors**, because a validation report listing only successful cases is marketing rather than validation.
+Historical validation was produced by the now-absent `scripts/validate_ancestry_panel.py` and is retained as the snapshot `docs/evidence/ANCESTRY_PANEL_VALIDATION.json`. These names identify the provenance of a historical, non-reproducible record rather than an available procedure. The snapshot **includes panel errors**, because a validation record listing only successful cases would be marketing rather than validation.
 
 | sample | known population | closest | residual | composition |
 |---|---|---|---:|---|

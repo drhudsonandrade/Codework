@@ -6,6 +6,7 @@ import re
 import unicodedata
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[1]
 ACTIVE_TECHNICAL_DOCS = (
@@ -28,6 +29,7 @@ PORTUGUESE_PROSE_TERMS = frozenset({
 PRESERVED_LITERALS = (
     "NÃO DISPONÍVEL", "NÃO DETECTADO", "NÃO TESTADO", "NÃO REPORTÁVEL",
     "EXECUTADO", "VERIFICADO", "INFERIDO", "PROPOSTO",
+    "MODELO", "RESULTADO", "DATA", "VERSÃO",
     "NÃO TRANSFERÍVEL SEM CALIBRAÇÃO", "TRANSFERIBILIDADE INCERTA",
     "PARCIALMENTE TRANSFERÍVEL",
 )
@@ -58,7 +60,7 @@ def _find_portuguese_prose(path: Path) -> list[tuple[int, tuple[str, ...]]]:
         if fenced or stripped.startswith(">"):
             continue
         tokens = tuple(sorted(_prose_tokens(raw)))
-        if len(tokens) >= 2:
+        if tokens:
             findings.append((lineno, tokens))
     return findings
 
@@ -113,6 +115,12 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
                          {"este", "painel", "deve", "dados", "somente", "apos", "revisao"})
         self.assertEqual(_prose_tokens("status = `NÃO DISPONÍVEL`; `EXECUTADO`"), set())
 
+    def test_scanner_rejects_a_short_line_with_one_portuguese_term(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "short.md"
+            path.write_text("## Como execute\n", encoding="utf-8")
+            self.assertEqual(_find_portuguese_prose(path), [(1, ("como",))])
+
     def test_migrated_docs_preserve_base_contract_tokens_and_commands(self) -> None:
         fixture = json.loads(
             (ROOT / "tests/fixtures/developer_documentation_contract.json").read_text(
@@ -142,6 +150,9 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
             "EXECUTADO", "VERIFICADO", "INFERIDO", "PROPOSTO", "NÃO DISPONÍVEL"
         ):
             self.assertIn(literal, projection)
+        editorial = (ROOT / "docs/EDITORIAL_V3_PIXEL_QA.md").read_text(encoding="utf-8")
+        for literal in ("MODELO", "RESULTADO", "DATA", "VERSÃO"):
+            self.assertIn(literal, editorial)
         target_registry = (ROOT / "docs/TARGET_REGISTRY_EXPANSION.md").read_text(
             encoding="utf-8"
         )
