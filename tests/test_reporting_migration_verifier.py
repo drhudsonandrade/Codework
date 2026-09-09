@@ -121,6 +121,45 @@ class ReportingMigrationVerifierTest(unittest.TestCase):
         inventory.assert_called_once_with(ROOT.resolve())
         self.assertEqual(json.loads(output.getvalue()), expected)
 
+    def test_git_invocation_resolves_an_absolute_executable(self):
+        """The proof launches the executable discovered on PATH, not an ambiguous token."""
+        verifier = self._verifier()
+        with (
+            patch("shutil.which", return_value="/verified/tools/git"),
+            patch.object(verifier.subprocess, "check_output", return_value=b"proof") as execute,
+        ):
+            self.assertEqual(verifier.git(ROOT, "status", "--porcelain"), b"proof")
+        execute.assert_called_once_with(
+            ["/verified/tools/git", "-C", str(ROOT), "status", "--porcelain"]
+        )
+
+    def test_missing_git_is_unavailable_without_launching_a_partial_command(self):
+        """Missing Git fails before subprocess execution, never by guessing a command."""
+        verifier = self._verifier()
+        with (
+            patch("shutil.which", return_value=None),
+            patch.object(verifier.subprocess, "check_output") as execute,
+            self.assertRaisesRegex(FileNotFoundError, "Git executable"),
+        ):
+            verifier.git(ROOT, "status")
+        execute.assert_not_called()
+
+    def test_typing_only_edits_require_each_exact_baseline_fragment(self):
+        """Type repairs cannot become an unrestricted exception for protected source files."""
+        verifier = self._verifier()
+        self.assertTrue(hasattr(verifier, "typing_only_expected"))
+        for relative, edits in verifier.TYPING_ONLY_EDITS.items():
+            original = "\n".join(before for before, _after in edits).encode()
+            expected = "\n".join(after for _before, after in edits).encode()
+            with self.subTest(path=relative):
+                self.assertEqual(verifier.typing_only_expected(relative, original), expected)
+                with self.assertRaisesRegex(ValueError, "typing-only baseline fragment"):
+                    verifier.typing_only_expected(relative, b"unreviewed source")
+        self.assertEqual(
+            set(verifier.TYPING_ONLY_EDITS),
+            {"reporting/deployment_target.py", "reporting/provenance.py"},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

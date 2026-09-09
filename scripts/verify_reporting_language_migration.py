@@ -9,6 +9,7 @@ import io
 import json
 import re
 import subprocess
+import shutil
 import tokenize
 from pathlib import Path
 
@@ -22,7 +23,7 @@ REFERENCE_DIGESTS = {
         "58316c45089f8354cc8ce7007237fa27544185b7f0b550147591ad0eb7318fd0"
     ),
 }
-EXPECTED_COMPARISON_SHA256 = "cd81d90e1d03d2d645ce286973d3673779a04a9393a644f7334d37a46e6aaa92"
+EXPECTED_COMPARISON_SHA256 = "697ed0716e46ced219856a77af5f50bd46bcd10f74e487cdb9474e84f3bc37ac"
 INVENTORY_PATHS = (
     "reporting/__init__.py",
     "reporting/assay.py",
@@ -117,6 +118,38 @@ DESIGN_FIELDS = {
 DESIGN_FIELDS.update(a4_mm="tuple[int, int]", cover_left_mm="float", content_width_mm="float")
 
 
+TYPING_ONLY_EDITS = {
+    "reporting/deployment_target.py": (
+        ("from typing import Any\n", "from typing import Any, cast\n"),
+        (
+            "return sorted({info[4][0] for info in infos})",
+            "return sorted({cast(str, info[4][0]) for info in infos})",
+        ),
+        ("SHORT = {\n", "SHORT: dict[str | None, str] = {\n"),
+    ),
+    "reporting/provenance.py": (
+        ("from typing import Any\n", "from typing import Any, cast\n"),
+        (
+            '    findings = data.get("findings") if '
+            'isinstance(data.get("findings"), list) else []\n',
+            "    findings = (\n"
+            '        cast(list[Any], data.get("findings")) if '
+            'isinstance(data.get("findings"), list) else []\n'
+            "    )\n",
+        ),
+        (
+            "    statuses = [\n"
+            '        a.get("operational_status")\n'
+            "        for a in fields.values()",
+            "    statuses = [\n"
+            '        cast(str, a.get("operational_status"))\n'
+            "        for a in fields.values()",
+        ),
+    ),
+}
+EXPECTED_CHANGES.update(TYPING_ONLY_EDITS)
+
+
 def require(condition: bool, message: str) -> None:
     """Keep proof failures active even when Python assertions are optimized away."""
     if not condition:
@@ -125,7 +158,10 @@ def require(condition: bool, message: str) -> None:
 
 def git(root: Path, *arguments: str) -> bytes:
     """Read the local Git object database without network or source execution."""
-    return subprocess.check_output(["git", "-C", str(root), *arguments])
+    executable = shutil.which("git")
+    if executable is None:
+        raise FileNotFoundError("Git executable is unavailable on PATH")
+    return subprocess.check_output([str(Path(executable).resolve()), "-C", str(root), *arguments])
 
 
 def require_digest(raw: bytes, digest: str, label: str) -> None:
@@ -270,6 +306,15 @@ def comparison_digest(result: dict[str, object]) -> str:
     return digest
 
 
+def typing_only_expected(relative: str, original: bytes) -> bytes:
+    """Apply only the exact type-only fragments pinned to the unchanged base."""
+    text = original.decode("utf-8")
+    for before, after in TYPING_ONLY_EDITS[relative]:
+        require(text.count(before) == 1, f"typing-only baseline fragment mismatch: {relative}")
+        text = text.replace(before, after, 1)
+    return text.encode("utf-8")
+
+
 def verify(root: Path) -> dict[str, object]:
     """Check reference integrity, allowed paths, renderer ASTs and protected file bytes."""
     references = {name: read_reference(root, name) for name in REFERENCE_DIGESTS}
@@ -310,6 +355,21 @@ def verify(root: Path) -> dict[str, object]:
         after = RestorePresentation(texts).visit(ast.parse((root / relative).read_bytes()))
         require(ast.dump(before) == ast.dump(after), f"executable AST differs: {relative}")
         matched.append(relative)
+    typing_only = []
+    for relative in sorted(TYPING_ONLY_EDITS):
+        original = git(root, "show", f"{BASE}:{relative}")
+        expected = typing_only_expected(relative, original)
+        require(
+            (root / relative).read_bytes() == expected,
+            f"typing-only source differs from its exact contract: {relative}",
+        )
+        typing_only.append(
+            {
+                "path": relative,
+                "base_sha256": hashlib.sha256(original).hexdigest(),
+                "expected_sha256": hashlib.sha256(expected).hexdigest(),
+            }
+        )
     protected = []
     for relative in sorted(base_paths - EXPECTED_CHANGES):
         original = git(root, "show", f"{BASE}:{relative}")
@@ -317,13 +377,19 @@ def verify(root: Path) -> dict[str, object]:
             (root / relative).read_bytes() == original, f"out-of-scope bytes differ: {relative}"
         )
         protected.append({"path": relative, "sha256": hashlib.sha256(original).hexdigest()})
-    result: dict[str, object] = {"base": BASE, "ast_matches": matched, "protected_files": protected}
+    result: dict[str, object] = {
+        "base": BASE,
+        "ast_matches": matched,
+        "protected_files": protected,
+        "typing_only_files": typing_only,
+    }
     comparison_sha256 = comparison_digest(result)
     return {
         "base": BASE,
         "reference_commit": REFERENCE_COMMIT,
         "ast_matches": len(matched),
         "protected_files": len(protected),
+        "typing_only_files": len(typing_only),
         "comparison_sha256": comparison_sha256,
     }
 

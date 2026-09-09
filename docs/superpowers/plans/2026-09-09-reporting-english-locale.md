@@ -107,11 +107,11 @@ python scripts/validate_repo.py
 ```
 
 The renderer AST comparison still covers the same two source files. The validator
-is now an explicitly tested change rather than an unchanged-file claim, leaving
-390 protected baseline files. The earlier 391-file comparison remains in the
-local historical log; it predates the validator adaptation and is not final
-release evidence. No protected scientific or canonical file was excluded to
-conceal a change.
+is an explicitly tested change. The current proof checks 388 unchanged baseline
+files and separately requires the exact enumerated type-only edits in
+`reporting/deployment_target.py` and `reporting/provenance.py`. These two files
+are not described as byte-identical. Earlier 391/390-file records remain historical
+and cannot certify this expanded, explicitly bounded correction.
 
 ## Evidence and continuity
 
@@ -170,8 +170,8 @@ the original ten string colors, integer A4 tuple and two float measurements; the
 precise fields are verified before normalization. No other class, annotation,
 value conversion or executable statement is normalized away.
 
-The expected scope remains two renderer AST matches and 390 unchanged baseline
-files. The validator and new proof utility are explicit tested modifications, not
+The expected scope is two renderer AST matches, 388 byte-identical baseline
+files and two exact type-only source transformations. The validator and new proof utility are explicit tested modifications, not
 claimed unchanged assets. The proof uses AST parsing and local Git reads and does
 not import the historical renderers or access the network.
 
@@ -384,7 +384,7 @@ new retained log digests. No reviewer approval or merge follows from this note.
 
 `verify_reporting_language_migration.py` rejects a proof whose canonical JSON
 record does not match the expected comparison SHA-256
-`cd81d90e1d03d2d645ce286973d3673779a04a9393a644f7334d37a46e6aaa92`.
+`697ed0716e46ced219856a77af5f50bd46bcd10f74e487cdb9474e84f3bc37ac`.
 The digest is checked, not merely printed. A unit test exercises acceptance and
 rejection by the same binding helper without comparing a future repository HEAD
 to this stage-specific scope. The complete CLI proof remains mandatory when
@@ -419,8 +419,8 @@ that static gate. Logs are retained as `engine-import-red.log` and
 
 ## Reconciled test scope and historical log locators
 
-The current targeted suite contains **27 tests**: 11 reporting-language tests,
-9 presentation-gate tests, and 7 migration-verifier tests. They are included
+The current targeted suite contains **30 tests**: 11 reporting-language tests,
+9 presentation-gate tests, and 10 migration-verifier tests. They are included
 in the root suite, not an additional independent total. The six-method and
 eight-method counts described earlier snapshots; neither is the current count.
 Run all three test modules together to reproduce the current targeted count:
@@ -455,3 +455,62 @@ commit still requires its own validation log.
 | `absolute-import-green.log` | `/srv/remote-desktop-commander-workspace/codework-audit/reporting-english-stage5/absolute-import-green.log` | `42c6662eb0ddf47fdbec5a6d4389c753ccb81327b5544e9f26f390af2c1bef8b` |
 | `engine-import-red.log` | `/srv/remote-desktop-commander-workspace/codework-audit/reporting-english-stage5/correction-resume-20260909T141824Z/engine-import-red.log` | `713fc3fb3a798ed380b854b4935196d8a7b8ccbab8a6cfe79f21d3e6b261bb31` |
 | `engine-import-green.log` | `/srv/remote-desktop-commander-workspace/codework-audit/reporting-english-stage5/correction-resume-20260909T141824Z/engine-import-green.log` | `ecf1eeb11e9325dfc2374ceabfebe9b0b6166d5e1df0796c1967938510c7f170` |
+
+## Remaining DeepSource diagnostics on the second correction
+
+The dashboard for the reviewed `61963e3f40174238da33f1cf61eae14b233a80a1`
+reported eight issues, including five type diagnostics in two formerly unchanged
+reporting modules. That source is the
+[commit-specific DeepSource run](https://app.deepsource.com/gh/drhudsonandrade/Codework/run/41339631-e574-4456-bee9-18d4da27b19d/python/).
+This is a narrow review-driven scope extension, not a change to scientific,
+publication or post-deployment decisions.
+
+The verifier's `TYPING_ONLY_EDITS` lists every allowed old/new byte fragment in
+`reporting/deployment_target.py` and `reporting/provenance.py`. It reads the exact
+source base, requires each old fragment once, applies only those substitutions,
+and requires the candidate bytes to equal that result. No generic cast stripping
+or arbitrary normalization is permitted. The two renderer AST comparisons remain
+separate, and the remaining 388 baseline files stay byte-identical.
+
+The three casts preserve values without conversion: the resolver already promises
+address strings; the findings expression already checks the list branch; status
+entries are already selected by membership in the status-rank mapping. The SHORT
+mapping annotation explicitly permits the existing nullable lookup. No runtime
+filter, new status, string coercion or validation suppression is introduced.
+Python documents that [cast returns its value unchanged](https://docs.python.org/3.11/library/typing.html#typing.cast).
+The [socket address contract](https://docs.python.org/3.11/library/socket.html#socket.getaddrinfo)
+describes the host/address position used by this resolver. These type annotations
+are not new runtime checks or new evidence of a deployment.
+
+The current comparison record includes the two type-only source identities and
+therefore has digest `697ed0716e46ced219856a77af5f50bd46bcd10f74e487cdb9474e84f3bc37ac`.
+It was computed from the fixed base plus the enumerated edits, not learned from
+unconstrained candidate output. The prior `cd81d90e1d03d2d645ce286973d3673779a04a9393a644f7334d37a46e6aaa92`
+record remains historical for the earlier 390-byte-identical-file scope.
+
+`validate_report_presentation` is decomposed into focused literal, reference,
+import/shadowing and result-caption checks. Diagnostic order and refusal behavior
+are preserved. Its earlier Ruff C901 failure is reproduced at complexity 18 with
+a limit of 15; the helper decomposition passes that same scoped check. No metric
+threshold or analyzer configuration is relaxed.
+
+The Git reader resolves Git with `shutil.which`, rejects an unavailable executable,
+and passes an absolute path to subprocess without a shell. This addresses
+[Bandit B607](https://bandit.readthedocs.io/en/latest/plugins/b607_start_process_with_partial_path.html)
+without a machine-specific hard-coded path. The existing PATH remains the discovery
+trust boundary; executable resolution is not a claim of binary attestation.
+
+The two executable-discovery tests and one exact-transformation test are included
+in the current 30-method targeted suite. The evidence directory is
+`/srv/remote-desktop-commander-workspace/codework-audit/reporting-english-stage5/deepsource-followup-20260909T153345Z` (a local locator, not a public download URL).
+`git-executable-red.log`, `typing-proof-red.log`, `complexity-red.log` and their
+GREEN counterparts retain the actual pre-implementation observations. The primary
+exact-HEAD PR record must name the final commit, full results and digests; these
+worktree observations alone cannot certify that commit.
+
+The separate behavioral comparison in `compare_behavior.py` uses the retained
+pre-correction source in the same unchanged repository context. It compares 512
+presentation-gate cases, 13 qualifier cases, seven resolver cases and 66 provenance
+payload cases, including refusals and exception outcomes. These are synthetic,
+finite comparisons, not an exhaustive proof. The 23 existing target-binding and
+provenance regression tests are also run; no real DNS or patient input is needed.

@@ -124,6 +124,7 @@ integration test invoking the full validator; it is not a deleted safety check.
 The complete procedure is documented in
 [`2026-09-09-reporting-english-locale.md`](superpowers/plans/2026-09-09-reporting-english-locale.md).
 The two renderer ASTs still match their baseline after only the stated
-normalizations; the tested validator is excluded explicitly from the 390
-unchanged baseline files. No data-flow or clinical validation is inferred from
+normalizations; the tested validator is excluded explicitly from the 388
+byte-identical baseline files. Two additional source files have exact, separately
+verified type-only corrections, as documented in the implementation plan. No data-flow or clinical validation is inferred from
 this static check.

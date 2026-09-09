@@ -33,7 +33,7 @@ import re
 from dataclasses import dataclass, field as dataclass_field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import normative
 from reporting import deployment_target
@@ -1713,7 +1713,9 @@ def provenance_blockers(data: dict[str, Any]) -> list[str]:
     for key, value in execution_manifest.items():
         check(_anchor_name_for_execution_manifest(str(key)), value)
 
-    findings = data.get("findings") if isinstance(data.get("findings"), list) else []
+    findings = (
+        cast(list[Any], data.get("findings")) if isinstance(data.get("findings"), list) else []
+    )
     present_finding_anchors: set[str] = set()
     for index, finding in enumerate(findings):
         if not isinstance(finding, dict):
@@ -1758,7 +1760,7 @@ def provenance_blockers(data: dict[str, Any]) -> list[str]:
     # recomputed here rather than trusted. A block that merely *stated* a reassuring floor
     # would be decoration.
     statuses = [
-        a.get("operational_status")
+        cast(str, a.get("operational_status"))
         for a in fields.values()
         if isinstance(a, dict) and a.get("operational_status") in _STATUS_RANK
     ]
