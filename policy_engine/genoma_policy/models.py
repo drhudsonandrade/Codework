@@ -1,3 +1,4 @@
+"""Define deterministic policy records and compatibility-preserving taxonomies."""
 from __future__ import annotations
 
 import copy
@@ -44,29 +45,55 @@ def evaluation_binding(manifest: dict[str, Any]) -> dict[str, Any]:
 
 
 class OperationalStatus(str, Enum):
+    """Expose English access while preserving legacy names and wire values."""
+
     EXECUTADO = "EXECUTADO"
     VERIFICADO = "VERIFICADO"
     INFERIDO = "INFERIDO"
     PROPOSTO = "PROPOSTO"
     NAO_DISPONIVEL = "NÃO DISPONÍVEL"
 
+    # Legacy declarations stay first to preserve member names and iteration.
+    EXECUTED = EXECUTADO
+    VERIFIED = VERIFICADO
+    INFERRED = INFERIDO
+    PROPOSED = PROPOSTO
+    UNAVAILABLE = NAO_DISPONIVEL
+
 
 class ClaimNature(str, Enum):
+    """Provide English aliases without translating the normative claim taxonomy."""
+
     FATO_CONFIRMADO = "FATO CONFIRMADO"
     INFERENCIA = "INFERÊNCIA"
     ASSOCIACAO = "ASSOCIAÇÃO"
     HIPOTESE = "HIPÓTESE"
     DESCONHECIDO = "DESCONHECIDO"
 
+    CONFIRMED_FACT = FATO_CONFIRMADO
+    INFERENCE = INFERENCIA
+    ASSOCIATION = ASSOCIACAO
+    HYPOTHESIS = HIPOTESE
+    UNKNOWN = DESCONHECIDO
+
 
 class Domain(str, Enum):
+    """Keep existing domain identities behind preferred English access names."""
+
     CLINICO = "CLÍNICO"
     PREDISPOSICAO = "PREDISPOSIÇÃO"
     PESQUISA = "PESQUISA"
     CURIOSIDADE = "CURIOSIDADE"
 
+    CLINICAL = CLINICO
+    PREDISPOSITION = PREDISPOSICAO
+    RESEARCH = PESQUISA
+    CURIOSITY = CURIOSIDADE
+
 
 class Priority(str, Enum):
+    """Represent the existing ordered policy priority labels."""
+
     P1 = "P1"
     P2 = "P2"
     P3 = "P3"
@@ -75,6 +102,8 @@ class Priority(str, Enum):
 
 
 class GateState(str, Enum):
+    """Represent pass, fail and pending outcomes without changing their values."""
+
     PASS = "PASS"
     FAIL = "FAIL"
     PENDING = "PENDING"
@@ -82,6 +111,8 @@ class GateState(str, Enum):
 
 @dataclass(frozen=True)
 class RulesetSection:
+    """Retain a numbered canonical section with its content digest."""
+
     number: int
     title: str
     body: str
@@ -89,11 +120,14 @@ class RulesetSection:
 
     @property
     def rule_id(self) -> str:
+        """Return the stable identifier bound to this canonical section number."""
         return f"GENOMA-V3.4-S{self.number:03d}"
 
 
 @dataclass(frozen=True)
 class GateResult:
+    """Carry one gate decision and its attributable evidence references."""
+
     gate: str
     state: GateState
     reasons: tuple[str, ...] = ()
@@ -101,6 +135,7 @@ class GateResult:
     blocking: bool = True
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize gate fields using the existing public wire representation."""
         return {
             "gate": self.gate,
             "state": self.state.value,
@@ -112,6 +147,8 @@ class GateResult:
 
 @dataclass
 class EvaluationReport:
+    """Collect the deterministic gate results and their manifest binding."""
+
     ruleset: dict[str, Any]
     evaluated_manifest: dict[str, Any] = field(default_factory=dict)
     gates: list[GateResult] = field(default_factory=list)
@@ -121,14 +158,17 @@ class EvaluationReport:
 
     @property
     def blocking_failures(self) -> list[GateResult]:
+        """Return only failed gates that block the requested operation."""
         return [g for g in self.gates if g.blocking and g.state == GateState.FAIL]
 
     @property
     def pending_blockers(self) -> list[GateResult]:
+        """Return pending gates that block the requested operation."""
         return [g for g in self.gates if g.blocking and g.state == GateState.PENDING]
 
     @property
     def ready(self) -> bool:
+        """Require the absence of both failed and pending blocking gates."""
         return not self.blocking_failures and not self.pending_blockers
 
     def to_dict(self, *, include_evaluated_manifest: bool = False) -> dict[str, Any]:
