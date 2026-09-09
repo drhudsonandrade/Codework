@@ -52,12 +52,36 @@ def _tooling_terms(text: str) -> set[str]:
     return words & PORTUGUESE_TOOLING_TERMS
 
 
+def _setup_diagnostics(source: str) -> tuple[str, ...]:
+    """Extract only quoted messages passed to executable fail/echo commands."""
+    command = re.compile(
+        r'(?:^|\|\||;|\))\s*(?:fail|echo)\s+"((?:[^"\\]|\\.)*)"',
+        re.MULTILINE,
+    )
+    return tuple(command.findall(source))
+
+
 class IntegrationCodeLanguageTest(unittest.TestCase):
     """Keep developer tooling English while preserving integration contracts."""
 
     def test_coderabbit_setup_diagnostics_are_english(self) -> None:
         """The stage-six inventoried developer diagnostics must not return in Portuguese."""
-        self.assertEqual(_tooling_terms(SETUP_SCRIPT.read_text(encoding="utf-8")), set())
+        diagnostics = _setup_diagnostics(SETUP_SCRIPT.read_text(encoding="utf-8"))
+        self.assertEqual(len(diagnostics), 35)
+        self.assertEqual(_tooling_terms("\n".join(diagnostics)), set())
+
+    def test_diagnostic_extraction_ignores_comments_and_contract_values(self) -> None:
+        """Portuguese outside executable fail/echo messages is not tooling-language debt."""
+        source = (
+            '# fail "versão ausente"\n'
+            'CONTRACT="plataforma não suportada"\n'
+            'fail "version is missing"\n'
+            'echo "ERROR: unsupported platform" >&2\n'
+        )
+        self.assertEqual(
+            _setup_diagnostics(source),
+            ("version is missing", "ERROR: unsupported platform"),
+        )
 
     def test_tooling_scanner_detects_portuguese_fixture(self) -> None:
         """The bounded scanner must reject representative translated diagnostics."""

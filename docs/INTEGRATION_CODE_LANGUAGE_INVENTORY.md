@@ -81,7 +81,7 @@ npm test --prefix mcp
 git diff --check
 ```
 
-The stage-six Python test also pins the current MCP environment-variable set and required status-check contexts. The MCP initialization test pins tool/input-schema compatibility using the real in-memory MCP transport.
+The stage-six Python test also pins the current MCP environment-variable set and required status-check contexts. The dedicated `mcp/test/payloadContracts.test.ts` pins tool/input-schema compatibility. The unchanged `mcp/test/server.test.ts` continues to exercise MCP initialization and tool listing over the real in-memory MCP transport.
 
 
 ## MCP test placement
