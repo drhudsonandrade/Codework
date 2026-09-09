@@ -1,14 +1,14 @@
-# GENOMA v3.0 - renderer editorial e contrato de regressão visual
+# GENOMA v3.0 — editorial renderer and visual regression contract
 
-## Objetivo
+## Objective
 
-O resultado final deve preservar a geometria e o sistema visual dos 11 modelos v3.0 sem congelar valores de modelo, placeholders ou identidade normativa obsoleta. O PDF é o artefato visual autoritativo. O DOCX é o artefato editável de alta fidelidade e é explicitamente tratado como dependente do renderer.
+The final result must preserve the geometry and visual system of the 11 v3.0 models without freezing model values, placeholders, or obsolete normative identity. PDF is the authoritative visual artifact. DOCX is the high-fidelity editable artifact and is explicitly treated as renderer-dependent.
 
-## Template pack externo e privado
+## External private template pack
 
-Os 11 PDFs de referência não são copiados para o repositório. `reporting/reference_v3_manifest.json` registra filename, número de páginas, SHA-256, campos dinâmicos e regiões controladas. `scripts/install_report_templates.py` só instala um pack que passe 11/11 hashes e page counts.
+The 11 reference PDFs are not copied into the repository. `reporting/reference_v3_manifest.json` records filename, page count, SHA-256, dynamic fields, and controlled regions. `scripts/install_report_templates.py` installs only a pack that passes all 11/11 hashes and page counts.
 
-Configure em runtime:
+Configure at runtime:
 
 ```bash
 export GENOMA_REPORT_TEMPLATE_DIR=/srv/genoma/templates/v3.0
@@ -18,23 +18,23 @@ python3 scripts/install_report_templates.py \
   --evidence results/editorial/template-install.json
 ```
 
-## Regra pixel-a-pixel
+## Pixel-by-pixel rule
 
-Comparar o PDF de referência com o resultado inteiro e exigir zero pixels alterados globalmente seria semanticamente incorreto: dados do caso, placeholders e alguns textos de modelo precisam mudar. Por isso o contrato é:
+Comparing the reference PDF with the entire result and requiring zero changed pixels globally would be semantically wrong: case data, placeholders, and some model text must change. The contract is therefore:
 
-> **zero pixels alterados fora das regiões dinâmicas/controladas declaradas no manifest**.
+> **zero changed pixels outside the dynamic/controlled regions declared in the manifest**.
 
-A região dinâmica inclui a caixa do placeholder e a área limitada destinada ao valor substituto. A região controlada inclui somente textos que precisam mudar de MODELO para RESULTADO ou corrigir identidade normativa. Todo o restante da página é o próprio PDF de referência e deve permanecer visualmente invariável.
+The dynamic region includes the placeholder box and the bounded area intended for the replacement value. The controlled region includes only text that must change from MODELO to RESULTADO or correct normative identity. Everything else on the page is the reference PDF itself and must remain visually invariant.
 
-QA executado em 16/08/2026:
+QA executed on 2026-08-16:
 
-- 11/11 relatórios gerados em modo `template-v3`, strict, sem campos não resolvidos;
-- page counts: 10,10,10,10,11,9,9,9,9,1,12 - exatamente os modelos;
-- comparação local a 200 DPI: 11/11 `VERIFICADO`, 0 pixels alterados fora das regiões permitidas;
-- confirmação independente com Poppler/pdftoppm: 11/11 `VERIFICADO` no smoke de rasterização;
-- relatório 10: 1 página, DATA e VERSÃO peer-bounded, sem colisão visual.
+- 11/11 reports generated in `template-v3` strict mode with no unresolved fields;
+- page counts: 10,10,10,10,11,9,9,9,9,1,12 — exactly the models;
+- local comparison at 200 DPI: 11/11 `VERIFICADO`, 0 changed pixels outside allowed regions;
+- independent Poppler/pdftoppm confirmation: 11/11 `VERIFICADO` in the rasterization smoke test;
+- report 10: 1 page, DATA and VERSÃO peer-bounded, with no visual collision.
 
-Evidências versionadas:
+Versioned evidence:
 
 - `docs/evidence/EDITORIAL_V3_PDF_PIXEL_QA_200DPI_2026-08-16.json`
 - `docs/evidence/EDITORIAL_V3_PDF_PIXEL_QA_POPPLER_72DPI_2026-08-16.json`
@@ -42,14 +42,14 @@ Evidências versionadas:
 
 ## DOCX
 
-O DOCX usa a página de referência convertida para SVG como placa visual estática, com PNG fallback, e valores do caso em textboxes VML editáveis. O arquivo foi re-renderizado via LibreOffice durante QA para todas as páginas dos 11 relatórios, com page counts preservados e sem clipping/overlap observado no fixture sintético.
+DOCX uses the reference page converted to SVG as a static visual plate, with PNG fallback, and case values in editable VML text boxes. During QA the file was re-rendered through LibreOffice for every page of all 11 reports, with page counts preserved and no clipping/overlap observed in the synthetic fixture.
 
-**Não declarar DOCX como pixel-idêntico de forma renderer-independent.** Word, LibreOffice e outros engines fazem rasterização/antialiasing diferentes. O contrato correto é:
+**Do not describe DOCX as renderer-independent pixel-identical.** Word, LibreOffice, and other engines rasterize and antialias differently. The correct contract is:
 
-- PDF: paridade estática pixel-a-pixel `VERIFICADO` fora das regiões dinâmicas/controladas;
-- DOCX: alta fidelidade visual + campos editáveis + QA de renderização `VERIFICADO`;
-- PDF continua sendo o artefato final autoritativo para publicação.
+- PDF: `VERIFICADO` static pixel-by-pixel parity outside dynamic/controlled regions;
+- DOCX: high visual fidelity + editable fields + `VERIFICADO` rendering QA;
+- PDF remains the authoritative final publication artifact.
 
 ## Fail closed
 
-`template_fields_complete=true` ativa strict mode. Se qualquer campo obrigatório não tiver valor explícito (inclusive `NÃO DISPONÍVEL` quando apropriado), o renderer recusa o PDF/DOCX final. Hash incorreto ou pack ausente também bloqueia a publicação.
+`template_fields_complete=true` activates strict mode. If any required field lacks an explicit value (including `NÃO DISPONÍVEL` where appropriate), the renderer refuses the final PDF/DOCX. An incorrect hash or missing pack also blocks publication.

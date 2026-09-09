@@ -1,10 +1,10 @@
-# GENOMA v3.4 — Scientific Data Plane para SNP-array parcial
+# GENOMA v3.4 — Scientific Data Plane for partial SNP arrays
 
-## Objetivo
+## Objective
 
-Esta via existe para dados de genotipagem parcial (por exemplo, chips comerciais) e é deliberadamente separada do pipeline WGS/FASTQ/BAM/CRAM. Ela executa QC, proveniência, callability e concordância entre fontes sem fingir cobertura de genoma inteiro.
+This path exists for partial genotyping data (for example, commercial chips) and is deliberately separate from the WGS/FASTQ/BAM/CRAM pipeline. It performs QC, provenance, callability, and cross-source concordance without pretending to provide whole-genome coverage.
 
-## Gate antes de interpretação
+## Gate before interpretation
 
 ```bash
 python3 scripts/run_snp_array.py \
@@ -17,31 +17,31 @@ python3 scripts/run_snp_array.py \
   --output-dir /caminho/privado/resultados
 ```
 
-A execução falha fechada quando build/strand não têm evidência explícita, quando a estrutura harmonizada contém rsID duplicado, quando há genótipos chamados inválidos ou quando os gates configurados de callability/concordância falham.
+Execution fails closed when build/strand lack explicit evidence, when the harmonized structure contains duplicate rsIDs, when called genotypes are invalid, or when configured callability/concordance gates fail.
 
-Arquivos brutos de fornecedor podem conter mais de uma sonda/registro para o mesmo rsID. Esses registros não são colapsados silenciosamente: permanecem na proveniência e precisam ser resolvidos na harmonização. Depois da harmonização, rsID duplicado é bloqueador.
+Raw vendor files may contain more than one probe/record for the same rsID. Those records are not silently collapsed: they remain in provenance and must be resolved during harmonization. After harmonization, a duplicate rsID is blocking.
 
-## Saída
+## Output
 
-- `array-qc.json`: hashes, metadados, métricas, gates, limitações e observações de baseline.
-- `baseline-marker-observations.tsv`: observações dos marcadores definidos no ruleset; **não é laudo clínico**.
-- `SHA256SUMS`: hashes dos artefatos de saída.
+- `array-qc.json`: hashes, metadata, metrics, gates, limitations, and baseline observations.
+- `baseline-marker-observations.tsv`: observations for the markers defined in the ruleset; **not a clinical report**.
+- `SHA256SUMS`: hashes of output artifacts.
 
-## Escopo honesto
+## Honest scope
 
-`LIMITED_INTERPRETATION_GATE=PASS` autoriza somente interpretação dos loci efetivamente interrogados e aprovados em QC. Não autoriza:
+`LIMITED_INTERPRETATION_GATE=PASS` authorizes interpretation only for loci that were actually interrogated and approved by QC. It does not authorize:
 
-- exclusão de doença por ausência no chip;
-- inferência de CNV/SV, expansões, mosaicismo ou variantes intrônicas profundas;
-- diplótipos complexos em CYP2D6/HLA e outros loci que exigem CNV/fase/método especializado;
-- uso de SNP-array como substituto de WGS ou confirmação clínica/ortogonal.
+- excluding disease because a variant is absent from the chip;
+- inferring CNV/SV, expansions, mosaicism, or deep intronic variants;
+- complex diplotypes in CYP2D6/HLA and other loci that require CNV/phasing/specialized methods;
+- using an SNP array as a substitute for WGS or clinical/orthogonal confirmation.
 
-Marcadores presentes nas duas plataformas e concordantes recebem maior garantia de orientação. Marcadores MyHeritage-only podem usar a declaração forward (+) do próprio arquivo quando presente. Marcadores Genera-only permanecem `INFERIDO` quanto à orientação até confirmação por referência/alelo/build ou outra evidência rastreável.
+Markers present on both platforms and concordant receive stronger strand-orientation assurance. MyHeritage-only markers may use the forward (+) declaration from the source file when present. Genera-only markers remain `INFERIDO` for orientation until confirmation by reference/allele/build or other traceable evidence.
 
-## Privacidade
+## Privacy
 
-O CI usa exclusivamente fixtures sintéticas. DNA pessoal não é enviado para GitHub Actions, Cloudflare, Supabase, microfn ou qualquer serviço opcional. Os padrões de `.gitignore` bloqueiam nomes usuais dos arquivos genéticos pessoais; o workflow também rejeita fixtures com nomes de dados reais.
+CI uses synthetic fixtures exclusively. Personal DNA is not sent to GitHub Actions, Cloudflare, Supabase, microfn, or any optional service. `.gitignore` patterns block common personal genetic-data filenames; the workflow also rejects fixtures with real-data filenames.
 
-## Relação com WGS
+## Relationship to WGS
 
-O Runtime/Resource Gate de WGS continua independente e deve ser reexecutado na sessão de calling real. `full-grch38` e o runner high-memory não são pré-requisitos para o QC de SNP-array parcial, mas continuam obrigatórios antes da via WGS correspondente.
+The WGS Runtime/Resource Gate remains independent and must be rerun in the real calling session. `full-grch38` and the high-memory runner are not prerequisites for partial SNP-array QC, but they remain mandatory before the corresponding WGS path.

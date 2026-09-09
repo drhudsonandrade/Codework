@@ -1,28 +1,22 @@
-# Discriminação de alelos, risco residual e requisição de sequenciamento
+# Allele discrimination, residual risk, and sequencing requisition
 
-## O problema, como estava enunciado
+## The problem as it had been stated
+
+The prior wording is preserved as historical context:
 
 > A array cobre 1 a 4 das 40 a 80 posições definidoras por gene do CPIC. Nenhum diplótipo
 > farmacogenético sairá dela além do VKORC1. Isso pede sequenciamento dirigido dos genes de
 > interesse, não mais código.
 
-Duas afirmações estavam embutidas nessa frase. Uma era um artefato deste pipeline. A outra era
-real, mas admitia uma resposta muito melhor do que "não dá".
+Two claims were embedded in that sentence. One was an artifact of this pipeline. The other was real, but admitted a much better answer than “it cannot be done.”
 
-## Primeira causa: a cobertura media a lista de alvos, não o array
+## First cause: coverage measured the target list, not the array
 
-`config/partial_genome_annotation_targets.json` lista 29 loci escolhidos à mão. A matriz de
-completude classifica exatamente esses 29. O passaporte então cruzava as posições definidoras
-do CPIC contra essa matriz — de modo que **toda posição do CPIC fora dos 29 voltava
-`NÃO TESTADO` por construção**, o array a carregando ou não.
+`config/partial_genome_annotation_targets.json` lists 29 hand-selected loci. The completeness matrix classifies exactly those 29. The passport then compared CPIC defining positions against that matrix, so **every CPIC position outside those 29 returned `NÃO TESTADO` by construction**, whether the array actually assayed it or not.
 
-O CPIC publica 342 posições definidoras únicas para os dez genes do registro. Um array de
-consumo ensaia centenas de milhares de posições. Quantas das 342 ele carrega nunca havia sido
-medido — apenas suposto.
+CPIC publishes 342 unique defining positions for the ten genes in the registry. A consumer array assays hundreds of thousands of genomic positions. How many of the 342 it actually carries had never been measured; it had only been assumed.
 
-`scripts/build_pgx_panel.py` deriva um segundo manifesto de alvos com **todas** as 342, com
-coordenada GRCh38 e acesso de referência. Rodando a matriz de completude sobre ele, a pergunta
-vira medição:
+`scripts/build_pgx_panel.py` derives a second target manifest containing **all** 342 positions, with GRCh38 coordinates and reference accessions. Running the completeness matrix over that manifest turns the question into a measurement:
 
 ```bash
 python3 scripts/build_pgx_panel.py
@@ -35,61 +29,44 @@ python3 scripts/build_pharmacogenomic_report.py \
     --passport-out passport.json --payload-out payload-06.json
 ```
 
-Sem `--pgx-panel` o passaporte continua funcionando e **declara na própria face** que a
-cobertura mede só os alvos curados (`panel_matrix.status = NÃO DISPONÍVEL`). A ausência do
-painel nunca equivale à cobertura completa.
+Without `--pgx-panel`, the passport still works and **states on its face** that coverage measures only the curated targets (`panel_matrix.status = NÃO DISPONÍVEL`). Absence of the panel never means complete coverage.
 
-## Segunda causa: a recusa era binária onde o dado é quantitativo
+## Second cause: the refusal was binary while the data are quantitative
 
-`_diplotype_for` recusa se *qualquer* posição definidora do gene não for interpretável. A
-recusa é correta — `*1` afirma a base de referência em todas as posições, inclusive as que o
-chip nunca leu — mas é tudo-ou-nada. Ela dispara igualmente para um gene a que falta um alelo
-raríssimo e para um gene a que faltam quarenta alelos comuns, e o leitor não tem como
-distinguir os dois casos.
+`_diplotype_for` refuses a call if *any* defining position for the gene is not interpretable. The refusal is correct — `*1` asserts the reference base at every defining position, including positions the chip never read — but it is all-or-nothing. It fires identically for a gene missing one extremely rare allele and for a gene missing forty common alleles, leaving the reader unable to distinguish those cases.
 
-`array_pipeline/allele_discrimination.py` substitui o binário por uma medição.
+`array_pipeline/allele_discrimination.py` replaces that binary decision with a measurement.
 
-### 1. Partição
+### 1. Partition
 
-Para cada gene, os alelos do CPIC são separados em **discrimináveis** (toda posição
-definidora interpretável nesta amostra) e **não discrimináveis** (ao menos uma não). Um alelo
-sem nenhuma posição definidora no registro nunca conta como discriminável: `all()` sobre um
-requisito vazio é verdadeiro, e essa é exatamente a verdade vácua que este projeto passa o
-tempo encontrando.
+For each gene, CPIC alleles are separated into **discriminable** (every defining position is interpretable in this sample) and **non-discriminable** (at least one is not). An allele with no defining position in the registry never counts as discriminable: `all()` over an empty requirement is true, which is exactly the kind of vacuous truth this project repeatedly guards against.
 
-### 2. Risco residual
+### 2. Residual risk
 
-Os alelos não discrimináveis são precificados pela tabela de frequência do próprio CPIC, por
-grupo biogeográfico:
+Non-discriminable alleles are weighted using CPIC’s own allele-frequency table by biogeographic group:
 
 ```text
-residual = P(um cromossomo carrega alelo de função alterada que este painel não vê)
+residual = P(one chromosome carries an altered-function allele that this panel cannot see)
 ```
 
-Como a ancestralidade da amostra não está estabelecida, reporta-se o **grupo de maior risco**,
-não a média — a média subestimaria o risco para a população a que a pessoa de fato pertence.
+Because the sample ancestry is not established, the system reports the **highest-risk group**, not the average. An average could underestimate risk for the population to which the person actually belongs.
 
-Dois sinalizadores carregam a honestidade do número:
+Two flags preserve the honesty of the number:
 
-| campo | significado |
+| field | meaning |
 |---|---|
-| `computable` | o CPIC publica frequência para ao menos um dos alelos não excluídos |
-| `bounded` | o CPIC publica frequência para **todos** eles, logo o número é o residual e não um limite inferior |
+| `computable` | CPIC publishes a frequency for at least one allele not excluded |
+| `bounded` | CPIC publishes a frequency for **all** of them, so the number is the residual rather than a lower bound |
 
-Um residual zero porque tudo foi excluído e um residual zero porque nada pôde ser precificado
-são coisas opostas. Os dois sinalizadores existem para que nunca se pareçam.
+A residual of zero because everything was excluded and a residual of zero because nothing could be priced are opposite situations. The two flags exist so they can never look the same.
 
-Função clínica fora do vocabulário publicado pelo CPIC — inclusive nula — conta como
-**incerta**, nunca como normal. Se o CPIC renomear um status, o residual cresce; ele não
-encolhe em silêncio.
+A clinical-function label outside the vocabulary published by CPIC — including null — counts as **uncertain**, never normal. If CPIC renames a status, residual risk increases; it does not silently shrink.
 
-### 3. Diplótipo condicional
+### 3. Conditional diplotype
 
-Emitido em campo próprio (`discrimination.conditional_diplotype`), **nunca** em
-`diplotype.value`. Nada que já lia um diplótipo estabelecido passa a ler um condicional.
+This is emitted in its own field (`discrimination.conditional_diplotype`), **never** in `diplotype.value`. A consumer that already reads an established diplotype therefore cannot silently begin reading a conditional one.
 
-O segundo elemento não é `*1`. É `[NÃO DETECTADO]` — vocabulário do relatório 09, que afirma
-"interrogado e ausente", que é o que de fato se sabe:
+The second element is not `*1`. It is `[NÃO DETECTADO]` — report-09 vocabulary that means “interrogated and absent,” which is what is actually known:
 
 ```text
 CYP2C19*2/[NÃO DETECTADO]
@@ -99,60 +76,40 @@ CYP2C19*2/[NÃO DETECTADO]
   residual: 0,0321 (Sub-Saharan African), limite inferior
 ```
 
-Todas as precondições do diplótipo incondicional continuam valendo — gene não estrutural,
-haplótipo de referência nomeado, no máximo um alelo detectado, no máximo uma posição
-definidora heterozigota. A única substituída é a completude do painel, trocada por uma
-suposição de mundo fechado **explícita e quantificada**. Status sempre `INFERIDO`.
+Every precondition for the unconditional diplotype remains in force: non-structural gene, named reference haplotype, at most one detected allele, and at most one heterozygous defining position. The only replaced requirement is panel completeness, exchanged for an **explicit and quantified** closed-world assumption. Status is always `INFERIDO`.
 
-Conjunto discriminável vazio não produz chamada: um "referência/referência" a partir de zero
-posições interrogadas é precisamente a troca de NÃO TESTADO por NÃO DETECTADO que o relatório
-09 existe para impedir.
+An empty discriminable set does not produce a call: a “reference/reference” result from zero interrogated positions would be precisely the conversion from NÃO TESTADO to NÃO DETECTADO that report 09 exists to prevent.
 
-### 4. Fenótipo condicional
+### 4. Conditional phenotype
 
-Consultado na tabela do CPIC, nunca composto. Exige residual `computable`; boundedness **não**
-é exigida — punhados de alelos do CPIC não têm frequência publicada em nenhuma população, o
-que bloquearia todos os genes — mas nunca é escondida. O registro do fenótipo carrega
-`residual_bounded`, `residual_worst_altered`, `residual_unpriced_alleles` e um `caveat` em
-texto corrido, de modo que o rótulo não possa ser citado separado da suposição que o sustenta.
+The phenotype is looked up in the CPIC table, never composed. It requires a `computable` residual; bounded is **not** required, because a small number of CPIC alleles have no published frequency in any population and that would otherwise block every gene, but the limitation is never hidden. The phenotype record carries `residual_bounded`, `residual_worst_altered`, `residual_unpriced_alleles`, and a prose `caveat`, so the label cannot be quoted separately from the assumption supporting it.
 
-### 5. Requisição de sequenciamento dirigido
+### 5. Targeted-sequencing requisition
 
-"Precisa de sequenciamento dirigido" é uma conclusão, não uma instrução. `sequencing_requisition`
-transforma em instrução: seleção gulosa sobre as posições não cobertas, ordenada pela massa de
-frequência que cada uma recupera, com coordenada GRCh38 e o residual após cada passo.
+“Targeted sequencing is needed” is a conclusion, not an instruction. `sequencing_requisition` turns it into an instruction: a greedy selection over uncovered positions, ordered by the frequency mass recovered at each position, with GRCh38 coordinates and the residual after each step.
 
-Exemplo **ilustrativo, não verificado** (não há artefato de saída, SHA-256 da entrada nem
-comando pinado em `docs/evidence/` que sustente estes números; eles não são evidência de
-release):
+The following example is **illustrative and unverified**. There is no output artifact, input SHA-256, or pinned command under `docs/evidence/` supporting these numbers, so they are not release evidence:
 
-| gene | posições faltantes | 1ª posição | massa recuperada |
+| gene | missing positions | 1st position | recovered mass |
 |---|---|---|---|
-| NAT2 | 31 | rs1208 (chr8:18400806) | 0,684 |
-| SLCO1B1 | 26 | rs2306283 (chr12:21176804) | 0,150 |
-| CYP3A5 | 5 | rs10264272 (chr7:99665212) | 0,193 |
+| NAT2 | 31 | rs1208 (chr8:18400806) | 0.684 |
+| SLCO1B1 | 26 | rs2306283 (chr12:21176804) | 0.150 |
+| CYP3A5 | 5 | rs10264272 (chr7:99665212) | 0.193 |
 
-No exemplo, a linha do CYP3A5 ilustra o argumento: `rs10264272` é o `*6`, comum em
-populações africanas, e é a razão pela qual um CYP3A5 chamado só a partir de `rs776746` é
-inseguro para esse grupo. O algoritmo foi desenhado para derivar essa priorização da tabela do CPIC; a tabela acima
-permanece apenas ilustrativa até que uma execução materialize e pine os artefatos.
+In the example, the CYP3A5 row illustrates the point: `rs10264272` is `*6`, common in African populations, which is why a CYP3A5 call based only on `rs776746` is unsafe for that group. The algorithm is designed to derive that prioritization from the CPIC table; the table above remains illustrative until an execution materializes and pins the artifacts.
 
-## O que continua verdadeiro
+## What remains true
 
-Sequenciar as posições listadas **não** resolve alelos estruturais (duplicações, híbridos,
-deleções), **não** estabelece fase, e um alelo que o CPIC não cataloga permanece
-indistinguível do haplótipo de referência mesmo com cobertura completa. `scope_note` diz isso
-em toda requisição.
+Sequencing the listed positions does **not** resolve structural alleles (duplications, hybrids, deletions), does **not** establish phase, and an allele that CPIC does not catalogue remains indistinguishable from the reference haplotype even with complete coverage. Every requisition states this in `scope_note`.
 
-O CYP2D6 segue sem diplótipo em qualquer cenário: sua variação clinicamente relevante é
-estrutural.
+CYP2D6 still has no diplotype in any scenario because its clinically relevant variation is structural.
 
-## Onde está cada coisa
+## Where each component lives
 
-| arquivo | papel |
+| file | role |
 |---|---|
-| `scripts/build_pgx_registry.py` | busca no CPIC as definições, funções clínicas, **frequências por população** e **coordenadas GRCh38** |
-| `scripts/build_pgx_panel.py` | deriva o manifesto de alvos com as 342 posições definidoras |
-| `array_pipeline/allele_discrimination.py` | partição, residual, diplótipo/fenótipo condicional, requisição |
-| `array_pipeline/pharmacogenomics.py` | integra por gene; totais condicionais separados dos estabelecidos |
-| `tests/test_allele_discrimination.py` | cada guarda com seu controle negativo |
+| `scripts/build_pgx_registry.py` | retrieves CPIC definitions, clinical functions, **population frequencies**, and **GRCh38 coordinates** |
+| `scripts/build_pgx_panel.py` | derives the target manifest containing all 342 defining positions |
+| `array_pipeline/allele_discrimination.py` | partitioning, residual risk, conditional diplotype/phenotype, requisition |
+| `array_pipeline/pharmacogenomics.py` | integrates per gene; conditional totals remain separate from established totals |
+| `tests/test_allele_discrimination.py` | each guard with its negative control |
