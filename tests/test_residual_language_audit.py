@@ -3,19 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import re
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from array_pipeline import clinical_findings, homozygosity
-from policy_engine.genoma_policy.models import (
-    ClaimNature,
-    Domain,
-    OperationalStatus,
-)
-from scripts import validate_repo
 from scripts.residual_language_audit import (
     ALLOWED_CATEGORIES,
     audit_repository,
@@ -26,12 +20,15 @@ from scripts.residual_language_audit import (
 ROOT = Path(__file__).resolve().parents[1]
 LEDGER = ROOT / "config" / "residual_language_classification.json"
 INVENTORY = ROOT / "docs" / "ENGLISH_CODEBASE_MIGRATION_FINAL_INVENTORY.md"
+validate_repo = importlib.import_module("scripts.validate_repo")
+
 CODERABBIT_STRUCTURE_SHA256 = (
     "2384fda094768a8f16b01efd20f0150a7ac3acf81de51fb4867334ba1e57f25b"
 )
 
 
 def _coderabbit_nonprose_contract(text: str) -> str:
+    """Return the configuration-only CodeRabbit representation."""
     lines: list[str] = []
     block_indent: int | None = None
     for raw in text.splitlines():
@@ -64,6 +61,7 @@ class ResidualLanguageAuditTest(unittest.TestCase):
     """Require every retained Portuguese surface to be explicit and stable."""
 
     def test_detector_finds_portuguese_tooling_prose(self) -> None:
+        """Detect Portuguese tooling prose without flagging English controls."""
         self.assertTrue(
             detect_text("Revise apenas problemas introduzidos por este PR.")
         )
@@ -77,12 +75,14 @@ class ResidualLanguageAuditTest(unittest.TestCase):
     def test_current_repository_has_no_unclassified_or_drifted_residual(
         self,
     ) -> None:
+        """Require every current residual to match the reviewed ledger."""
         report = audit_repository(ROOT)
         self.assertEqual(report["unclassified"], [])
         self.assertEqual(report["missing"], [])
         self.assertEqual(report["drift"], [])
 
     def test_validate_repo_invokes_residual_language_audit(self) -> None:
+        """Keep the residual audit inside the official repository validator."""
         with mock.patch.object(
             validate_repo,
             "validate_residual_language",
@@ -100,6 +100,7 @@ class ResidualLanguageAuditTest(unittest.TestCase):
     def test_ledger_categories_are_closed_and_reasons_are_explicit(
         self,
     ) -> None:
+        """Keep classification categories closed and explanations explicit."""
         payload = json.loads(LEDGER.read_text(encoding="utf-8"))
         self.assertEqual(
             payload["schema"], "genoma-residual-language-classification-v1"
@@ -124,6 +125,7 @@ class ResidualLanguageAuditTest(unittest.TestCase):
         self.assertNotIn("RULESET_V3.3", ledger_text)
 
     def test_coderabbit_technical_instructions_are_english(self) -> None:
+        """Require English reviewer prose while preserving pt-BR localization."""
         self.assertEqual(
             findings_for_path(ROOT / ".coderabbit.yaml", root=ROOT), ()
         )
@@ -138,6 +140,7 @@ class ResidualLanguageAuditTest(unittest.TestCase):
     def test_coderabbit_nonprose_configuration_matches_stage_eight_base(
         self,
     ) -> None:
+        """Prove the CodeRabbit migration changed prose rather than settings."""
         config = (ROOT / ".coderabbit.yaml").read_text(encoding="utf-8")
         observed = hashlib.sha256(
             _coderabbit_nonprose_contract(config).encode()
@@ -145,6 +148,8 @@ class ResidualLanguageAuditTest(unittest.TestCase):
         self.assertEqual(observed, CODERABBIT_STRUCTURE_SHA256)
 
     def test_private_moi_alias_is_removed(self) -> None:
+        """Remove only the repository-private MOI compatibility shim."""
+        clinical_findings = importlib.import_module("array_pipeline.clinical_findings")
         self.assertFalse(hasattr(clinical_findings, "_normalised_moi"))
         self.assertEqual(
             clinical_findings.normalised_moi("Autosomal recessive"), "AR"
@@ -154,10 +159,16 @@ class ResidualLanguageAuditTest(unittest.TestCase):
         )
 
     def test_supported_compatibility_aliases_remain(self) -> None:
-        self.assertIs(OperationalStatus.EXECUTED, OperationalStatus.EXECUTADO)
-        self.assertIs(OperationalStatus.VERIFIED, OperationalStatus.VERIFICADO)
-        self.assertIs(ClaimNature.CONFIRMED_FACT, ClaimNature.FATO_CONFIRMADO)
-        self.assertIs(Domain.CLINICAL, Domain.CLINICO)
+        """Preserve public taxonomy and GRCh37 compatibility surfaces."""
+        models = importlib.import_module("policy_engine.genoma_policy.models")
+        homozygosity = importlib.import_module("array_pipeline.homozygosity")
+        operational_status = models.OperationalStatus
+        claim_nature = models.ClaimNature
+        domain = models.Domain
+        self.assertIs(operational_status.EXECUTED, operational_status.EXECUTADO)
+        self.assertIs(operational_status.VERIFIED, operational_status.VERIFICADO)
+        self.assertIs(claim_nature.CONFIRMED_FACT, claim_nature.FATO_CONFIRMADO)
+        self.assertIs(domain.CLINICAL, domain.CLINICO)
         self.assertEqual(
             homozygosity.CHROMOSOME_KB,
             homozygosity.CHROMOSOME_KB_BY_BUILD["GRCh37"],
@@ -168,6 +179,7 @@ class ResidualLanguageAuditTest(unittest.TestCase):
         )
 
     def test_final_inventory_documents_stage_eight_decisions(self) -> None:
+        """Pin the final inventory to the actual Stage 8 decisions."""
         text = INVENTORY.read_text(encoding="utf-8")
         for category in ALLOWED_CATEGORIES:
             self.assertIn(f"`{category}`", text)

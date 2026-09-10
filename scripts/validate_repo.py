@@ -14,9 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.code_language_guard import LanguagePolicyError, validate_code_language
-from scripts.residual_language_audit import ResidualLanguageError, audit_repository
-from scripts.sealed_ruleset import (
+from scripts.code_language_guard import LanguagePolicyError, validate_code_language  # noqa: E402
+from scripts.residual_language_audit import ResidualLanguageError, audit_repository  # noqa: E402
+from scripts.sealed_ruleset import (  # noqa: E402
     EXPECTED_NAME,
     EXPECTED_SHA,
     SealedRulesetError,

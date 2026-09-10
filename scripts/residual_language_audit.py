@@ -193,6 +193,7 @@ LOCAL_PORTUGUESE_PROSE_TERMS = frozenset(
 
 
 def _normalize(value: str) -> str:
+    """Normalize Portuguese matching text without changing source bytes."""
     decomposed = unicodedata.normalize("NFKD", value)
     return "".join(
         ch for ch in decomposed if not unicodedata.combining(ch)
@@ -201,6 +202,7 @@ def _normalize(value: str) -> str:
 
 @lru_cache(maxsize=8)
 def _policy_terms(root: Path = ROOT) -> tuple[frozenset[str], tuple[str, ...]]:
+    """Load the existing language policy terms and exact contract literals."""
     path = root / "config" / "code_language_policy.json"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -224,6 +226,7 @@ def _policy_terms(root: Path = ROOT) -> tuple[frozenset[str], tuple[str, ...]]:
 def _known_inflection_hints(
     words: set[str], terms: frozenset[str]
 ) -> set[str]:
+    """Return known Portuguese inflections derived from policy vocabulary."""
     matches: set[str] = set()
     for word in words:
         candidates: set[str] = set()
@@ -241,6 +244,7 @@ def _known_inflection_hints(
 
 
 def _ascii_hints(words: set[str]) -> set[str]:
+    """Return multi-signal hints for otherwise ambiguous ASCII Portuguese."""
     hints = words & PORTUGUESE_ASCII_COMMON_WORDS
     for word in words:
         if len(word) >= 5 and word.endswith(PORTUGUESE_ASCII_VERB_ENDINGS):
@@ -299,9 +303,9 @@ def findings_for_path(
 
 
 def _tracked_paths(root: Path) -> tuple[Path, ...]:
+    """List tracked regular files through fixed-argv trusted Git."""
     try:
-        # nosec B603 -- fixed Git argv; no shell or user command.
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603 -- fixed Git argv; no shell.
             ["/usr/bin/git", "-C", str(root), "ls-files", "-z"],
             check=False,
             capture_output=True,
@@ -371,6 +375,7 @@ def _validate_classification(
     identity: str,
     entry: dict[str, Any],
 ) -> None:
+    """Validate one closed-category residual classification record."""
     category = entry.get("category")
     reason = entry.get("reason")
     count = entry.get("count")
@@ -392,6 +397,7 @@ def _validate_classification(
 
 
 def _relative_identity(value: object, label: str) -> str:
+    """Normalize a repository-relative classification identity."""
     if not isinstance(value, str) or not value:
         raise ResidualLanguageError(f"invalid {label}: {value!r}")
     path = Path(value)
@@ -400,9 +406,8 @@ def _relative_identity(value: object, label: str) -> str:
     return path.as_posix().rstrip("/")
 
 
-def _load_ledger(
-    root: Path,
-) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+def _read_ledger_lists(root: Path) -> tuple[list[object], list[object]]:
+    """Read and validate the residual ledger container and list fields."""
     path = root / "config" / "residual_language_classification.json"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -418,67 +423,95 @@ def _load_ledger(
         raise ResidualLanguageError(
             "residual-language ledger entries and root_entries must be lists"
         )
+    return raw_entries, raw_roots
 
+
+def _index_direct_entries(raw_entries: list[object]) -> dict[str, dict[str, Any]]:
+    """Index validated direct-file classifications by repository path."""
     entries: dict[str, dict[str, Any]] = {}
-    for entry in raw_entries:
-        if not isinstance(entry, dict):
-            raise ResidualLanguageError(
-                "invalid residual-language ledger entry"
-            )
-        path_value = _relative_identity(entry.get("path"), "residual path")
+    for raw in raw_entries:
+        if not isinstance(raw, dict):
+            raise ResidualLanguageError("invalid residual-language ledger entry")
+        path_value = _relative_identity(raw.get("path"), "residual path")
         if path_value in entries:
-            raise ResidualLanguageError(
-                f"duplicate residual path: {path_value!r}"
-            )
-        _validate_classification(path_value, entry)
-        entries[path_value] = entry
+            raise ResidualLanguageError(f"duplicate residual path: {path_value!r}")
+        _validate_classification(path_value, raw)
+        entries[path_value] = raw
+    return entries
 
+
+def _index_root_entries(raw_roots: list[object]) -> dict[str, dict[str, Any]]:
+    """Index validated aggregate-root classifications by repository path."""
     roots: dict[str, dict[str, Any]] = {}
-    for entry in raw_roots:
-        if not isinstance(entry, dict):
+    for raw in raw_roots:
+        if not isinstance(raw, dict):
             raise ResidualLanguageError("invalid residual-language root entry")
-        root_value = _relative_identity(entry.get("root"), "residual root")
+        root_value = _relative_identity(raw.get("root"), "residual root")
         if root_value in roots:
-            raise ResidualLanguageError(
-                f"duplicate residual root: {root_value!r}"
-            )
-        _validate_classification(root_value, entry)
-        files = entry.get("files")
+            raise ResidualLanguageError(f"duplicate residual root: {root_value!r}")
+        _validate_classification(root_value, raw)
+        files = raw.get("files")
         if not isinstance(files, int) or isinstance(files, bool) or files < 1:
             raise ResidualLanguageError(
                 f"invalid residual root file count for {root_value}"
             )
-        roots[root_value] = entry
-
-    sorted_roots = sorted(roots)
-    for index, first in enumerate(sorted_roots):
-        for second in sorted_roots[index + 1:]:
-            if second.startswith(first + "/"):
-                raise ResidualLanguageError(
-                    f"overlapping residual roots: {first!r}, {second!r}"
-                )
-    for path_value in entries:
-        if any(
-            path_value == root_value or path_value.startswith(root_value + "/")
-            for root_value in roots
-        ):
-            raise ResidualLanguageError(
-                f"direct residual entry is covered by root: {path_value}"
-            )
-    return entries, roots
+        roots[root_value] = raw
+    return roots
 
 
 def _root_for(path: str, roots: dict[str, dict[str, Any]]) -> str | None:
+    """Return the single classified root that owns a residual path, if any."""
     for root_value in roots:
         if path == root_value or path.startswith(root_value + "/"):
             return root_value
     return None
 
 
-def audit_repository(root: Path = ROOT) -> dict[str, Any]:
-    """Compare tracked residuals with reviewed classifications."""
-    current = scan_repository(root)
-    ledger, roots = _load_ledger(root)
+def _validate_root_ownership(
+    entries: dict[str, dict[str, Any]],
+    roots: dict[str, dict[str, Any]],
+) -> None:
+    """Reject overlapping roots and direct entries hidden below a root."""
+    sorted_roots = sorted(roots)
+    for index, first in enumerate(sorted_roots):
+        overlap = next(
+            (
+                second
+                for second in sorted_roots[index + 1:]
+                if second.startswith(first + "/")
+            ),
+            None,
+        )
+        if overlap is not None:
+            raise ResidualLanguageError(
+                f"overlapping residual roots: {first!r}, {overlap!r}"
+            )
+    covered = next((path for path in entries if _root_for(path, roots)), None)
+    if covered is not None:
+        raise ResidualLanguageError(
+            f"direct residual entry is covered by root: {covered}"
+        )
+
+
+def _load_ledger(
+    root: Path,
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Load the closed direct-file and aggregate-root classification maps."""
+    raw_entries, raw_roots = _read_ledger_lists(root)
+    entries = _index_direct_entries(raw_entries)
+    roots = _index_root_entries(raw_roots)
+    _validate_root_ownership(entries, roots)
+    return entries, roots
+
+
+def _partition_current(
+    current: dict[str, tuple[ResidualFinding, ...]],
+    roots: dict[str, dict[str, Any]],
+) -> tuple[
+    dict[str, tuple[ResidualFinding, ...]],
+    dict[str, dict[str, tuple[ResidualFinding, ...]]],
+]:
+    """Separate direct-file findings from aggregate-root findings."""
     root_current: dict[str, dict[str, tuple[ResidualFinding, ...]]] = {
         root_value: {} for root_value in roots
     }
@@ -489,14 +522,17 @@ def audit_repository(root: Path = ROOT) -> dict[str, Any]:
             direct_current[path] = findings
         else:
             root_current[root_value][path] = findings
+    return direct_current, root_current
 
-    current_paths = set(direct_current)
-    ledger_paths = set(ledger)
-    unclassified = sorted(current_paths - ledger_paths)
-    missing = sorted(ledger_paths - current_paths)
+
+def _direct_drift(
+    current: dict[str, tuple[ResidualFinding, ...]],
+    ledger: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return count or fingerprint drift for direct-file classifications."""
     drift: list[dict[str, Any]] = []
-    for path in sorted(current_paths & ledger_paths):
-        findings = direct_current[path]
+    for path in sorted(set(current) & set(ledger)):
+        findings = current[path]
         entry = ledger[path]
         observed = {
             "count": len(findings),
@@ -507,12 +543,18 @@ def audit_repository(root: Path = ROOT) -> dict[str, Any]:
             "fingerprint": entry["fingerprint"],
         }
         if observed != expected:
-            drift.append(
-                {"path": path, "expected": expected, "observed": observed}
-            )
+            drift.append({"path": path, "expected": expected, "observed": observed})
+    return drift
 
+
+def _root_drift(
+    current: dict[str, dict[str, tuple[ResidualFinding, ...]]],
+    roots: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return aggregate file-count, line-count, or fingerprint root drift."""
+    drift: list[dict[str, Any]] = []
     for root_value, entry in roots.items():
-        grouped = root_current[root_value]
+        grouped = current[root_value]
         observed = {
             "files": len(grouped),
             "count": sum(len(findings) for findings in grouped.values()),
@@ -525,13 +567,17 @@ def audit_repository(root: Path = ROOT) -> dict[str, Any]:
         }
         if observed != expected:
             drift.append(
-                {
-                    "root": root_value,
-                    "expected": expected,
-                    "observed": observed,
-                }
+                {"root": root_value, "expected": expected, "observed": observed}
             )
+    return drift
 
+
+def _category_totals(
+    ledger: dict[str, dict[str, Any]],
+    roots: dict[str, dict[str, Any]],
+    root_current: dict[str, dict[str, tuple[ResidualFinding, ...]]],
+) -> tuple[dict[str, int], dict[str, int]]:
+    """Count classified files and detected lines by closed category."""
     category_files = {category: 0 for category in ALLOWED_CATEGORIES}
     category_lines = {category: 0 for category in ALLOWED_CATEGORIES}
     for entry in ledger.values():
@@ -543,6 +589,20 @@ def audit_repository(root: Path = ROOT) -> dict[str, Any]:
         category_lines[entry["category"]] += sum(
             len(findings) for findings in grouped.values()
         )
+    return category_files, category_lines
+
+
+def audit_repository(root: Path = ROOT) -> dict[str, Any]:
+    """Compare tracked residuals with reviewed classifications."""
+    current = scan_repository(root)
+    ledger, roots = _load_ledger(root)
+    direct_current, root_current = _partition_current(current, roots)
+    current_paths = set(direct_current)
+    ledger_paths = set(ledger)
+    unclassified = sorted(current_paths - ledger_paths)
+    missing = sorted(ledger_paths - current_paths)
+    drift = _direct_drift(direct_current, ledger) + _root_drift(root_current, roots)
+    category_files, category_lines = _category_totals(ledger, roots, root_current)
     return {
         "schema": "genoma-residual-language-audit-v1",
         "tracked_files_with_residuals": len(current),

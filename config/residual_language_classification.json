@@ -1598,7 +1598,7 @@
       "category": "compatibility-preserved",
       "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
       "count": 5,
-      "fingerprint": "8c6a3a1bb8b44dd6873f748ee182f1197ee0a24aa18cda97fe34f075103d1aa8"
+      "fingerprint": "63eb70aa1e5386349520f405c7815d5d435c6a44b5386f3faae4a4fb4985ef5a"
     },
     {
       "path": "tests/test_scientific_code_language.py",

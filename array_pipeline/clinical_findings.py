@@ -121,6 +121,8 @@ def normalised_moi(label: Any) -> str:
     return _GENCC_MOI.get(text, MOI_UNKNOWN)
 
 
+#: Stage 8 removed the repository-private normalization alias.
+#: Internal callers now use the public normalised_moi function directly.
 
 #: What a locus is reported as. These are not severities; they are different *kinds* of
 #: statement, and collapsing them is how a carrier finding becomes a diagnosis.
