@@ -140,7 +140,7 @@ jobs:
             genoma-ruleset-catalog.json
             genoma-policy-engine-source.tgz
             genoma-policy-engine-source.tgz.sha256
-          retention-days: 90
+          retention-days: 14
           if-no-files-found: error
 
   rego:

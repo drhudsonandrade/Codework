@@ -12,6 +12,7 @@ from tests.workflow_test_utils import job_block as _job_block
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 CLASSIFIER = ROOT / "scripts" / "ci_change_classifier.py"
+RETENTION_DAYS_PATTERN = re.compile(r"(?m)^\s*retention-days:\s*[\"\']?(\d+)[\"\']?\s*(?:#.*)?$")
 
 
 def _ngs_script_dependency_closure() -> set[str]:
@@ -918,7 +919,7 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertIn("python3 scripts/genoma_audit.py --allow-template-sealed-only --output audit.json", job)
         self.assertIn("python3 scripts/verify_template_store.py --allow-sealed-only", job)
         self.assertIn("name: genoma-v0.8-audit-${{ github.sha }}", job)
-        self.assertIn("retention-days: 365", job)
+        self.assertIn("retention-days: 90", job)
         self.assertIn("if: always()", job)
 
     def test_policy_required_checks_use_job_level_scope_gates(self):
@@ -975,17 +976,45 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertIn("bash tests/test_ci_changed_paths.sh", static)
 
     def test_high_volume_artifact_retention_is_bounded(self):
-        """Keep disposable artifacts at 30 days while audit evidence stays long-lived."""
+        """Keep disposable CI evidence short-lived while preserving bounded audit evidence."""
         scaffold = _read("scaffold-validation.yml")
         canary = _job_block(scaffold, "container-canary")
-        self.assertIn("retention-days: 30", canary)
+        self.assertIn("retention-days: 7", canary)
 
         ngs = _read("genoma-ngs-runtime-gate.yml")
         preflight = _job_block(ngs, "preflight")
-        self.assertIn("retention-days: 30", preflight)
+        self.assertIn("retention-days: 7", preflight)
+
+        visual = _job_block(_read("genoma-visual-qa-candidates.yml"), "render-candidates")
+        self.assertIn("retention-days: 7", visual)
+
+        array = _job_block(_read("genoma-snp-array.yml"), "array-nextflow-orchestration")
+        self.assertIn("retention-days: 7", array)
+
+        policy = _job_block(_read("genoma-policy-engine.yml"), "policy")
+        self.assertIn("retention-days: 14", policy)
 
         audit = _read("genoma-audit.yml")
-        self.assertIn("retention-days: 365", _job_block(audit, "audit"))
+        self.assertIn("retention-days: 90", _job_block(audit, "audit"))
+
+    def test_workflow_artifact_retention_never_exceeds_repository_limit(self):
+        """Reject every numeric artifact retention request above the public-repo limit."""
+        for path in WORKFLOWS.glob("*.yml"):
+            with self.subTest(workflow=path.name):
+                values = [
+                    int(value)
+                    for value in RETENTION_DAYS_PATTERN.findall(
+                        path.read_text(encoding="utf-8")
+                    )
+                ]
+                for retention_days in values:
+                    self.assertLessEqual(retention_days, 90)
+
+    def test_artifact_retention_guard_recognizes_quoted_numeric_scalars(self):
+        """Treat quoted numeric YAML values as numeric retention requests."""
+        probe = "retention-days: \"91\"\nretention-days: '92'\n"
+        values = [int(value) for value in RETENTION_DAYS_PATTERN.findall(probe)]
+        self.assertEqual(values, [91, 92])
 
     def test_scaffold_publish_owns_build_cache_without_widening_permissions(self):
         workflow = _read("scaffold-validation.yml")

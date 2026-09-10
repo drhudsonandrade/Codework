@@ -207,5 +207,5 @@ jobs:
         with:
           name: genoma-array-nextflow-${{ github.sha }}
           path: ${{ runner.temp }}/genoma-array/workspace/
-          retention-days: 30
+          retention-days: 7
           if-no-files-found: error
