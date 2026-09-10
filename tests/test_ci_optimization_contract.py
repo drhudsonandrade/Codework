@@ -423,16 +423,22 @@ def _pr_template_draft_flow_errors(template: str) -> list[str]:
     except IndexError:
         return ["CI / GitHub Actions section is missing or not bounded"]
     markers = (
-        "keep the PR in Draft",
-        "Confirm the exact HEAD is locally validated",
-        "Mark the PR Ready for Review",
-        "After Ready for Review, wait for all required GitHub Actions checks on the exact HEAD",
+        "During implementation, keep the PR in Draft and run corrections and validations locally.",
+        "- [ ] Confirm the exact HEAD is locally validated before the final round",
+        "- [ ] Mark the PR Ready for Review only when the exact HEAD is ready for final validation",
+        (
+            "- [ ] After Ready for Review, wait for all required GitHub Actions "
+            "checks on the exact HEAD"
+        ),
     )
+    lines = [line.strip() for line in section.splitlines() if line.strip()]
     positions: list[int] = []
     for marker in markers:
-        index = section.find(marker)
-        if index < 0:
+        try:
+            index = lines.index(marker)
+        except ValueError:
             errors.append(f"draft-first flow marker missing: {marker}")
+            index = -1
         positions.append(index)
     if all(index >= 0 for index in positions) and positions != sorted(positions):
         errors.append("draft-first flow markers are out of order")
@@ -535,6 +541,15 @@ class CIOptimizationContractTest(unittest.TestCase):
             + final_line
         )
         self.assertTrue(_pr_template_draft_flow_errors(mutant))
+
+        negated = template.replace(
+            "During implementation, keep the PR in Draft and run corrections "
+            "and validations locally.",
+            "During implementation, do not keep the PR in Draft and run corrections "
+            "and validations locally.",
+            1,
+        )
+        self.assertTrue(_pr_template_draft_flow_errors(negated))
 
         markers = (
             "keep the PR in Draft",

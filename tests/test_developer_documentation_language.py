@@ -97,6 +97,7 @@ PRESERVED_LITERALS = tuple(dict.fromkeys((
     "NAO_DISPONIVEL", "NAO_TESTADO", "NAO_REPORTAVEL", "NAO_DETECTADO",
     "NAO_INTERROGADO",
 )))
+PRESERVED_PROPER_NOUNS = ("Tupí", "Rondônia")
 COMPATIBILITY_INLINE_EXCLUSIONS = frozenset({
     "NÃO DISPONÍVEL", "NÃO DETECTADO", "NÃO TESTADO", "NÃO REPORTÁVEL",
     "EXECUTADO", "VERIFICADO", "INFERIDO", "PROPOSTO",
@@ -120,7 +121,7 @@ EXPECTED_PRESERVED_PORTUGUESE_COUNTS = {
     "docs/TARGET_REGISTRY_EXPANSION.md": 16,
     "docs/ARRAY_PROVENANCE_PROBE.md": 2,
     "docs/GENOME_COMPLETENESS_MATRIX.md": 2,
-    "docs/PHARMACOGENOMIC_PASSPORT.md": 11,
+    "docs/PHARMACOGENOMIC_PASSPORT.md": 12,
 }
 EXPECTED_PRESERVED_INLINE_COUNTS = {
     "docs/ANCESTRY_REFERENCE_PANEL.md": 1,
@@ -174,6 +175,8 @@ def _prose_tokens(line: str) -> set[str]:
     line = re.sub(r"https?://\S+", " ", line)
     for literal in sorted(PRESERVED_LITERALS, key=len, reverse=True):
         line = line.replace(literal, " ")
+    for proper_noun in PRESERVED_PROPER_NOUNS:
+        line = line.replace(proper_noun, " ")
     line = EMAIL_ADDRESS.sub(" ", line)
     line = DOMAIN_COM_SUFFIX.sub(" ", line)
     parts = re.findall(r"[^\W_]+", line, flags=re.UNICODE)
@@ -183,7 +186,7 @@ def _prose_tokens(line: str) -> set[str]:
     matches.update(
         _normalize(word)
         for word in parts
-        if (word[:1].islower() or word.isupper()) and PORTUGUESE_ACCENT.search(word)
+        if PORTUGUESE_ACCENT.search(word)
     )
     if not matches:
         matches.update(_ascii_portuguese_hints(words))
@@ -472,6 +475,18 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
             path = Path(directory) / "doc.md"
             path.write_text("DOCUMENTAÇÃO TÉCNICA APROVADA.\n", encoding="utf-8")
             self.assertTrue(_find_portuguese_prose(path))
+
+    def test_titlecase_accented_portuguese_is_detected(self) -> None:
+        """Title-case accented Portuguese must not bypass diacritic detection."""
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "doc.md"
+            path.write_text("Ótimo.\n", encoding="utf-8")
+            self.assertTrue(_find_portuguese_prose(path))
+
+    def test_accented_proper_nouns_are_explicitly_preserved(self) -> None:
+        """Reviewed accented proper nouns remain allowed without reopening TitleCase bypasses."""
+        self.assertEqual(_prose_tokens("Tupí peoples from Rondônia."), set())
+        self.assertTrue(_prose_tokens("Ótimo."))
 
     def test_inline_code_does_not_create_a_portuguese_bypass(self) -> None:
         """Backticks must not hide developer prose that is not an explicit contract literal."""

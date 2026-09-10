@@ -1186,6 +1186,10 @@
         "reason": "localized_example"
       },
       {
+        "line": "Diplótipos estabelecidos: 0. Fenótipos emitidos: 0.",
+        "reason": "localized_example"
+      },
+      {
         "line": "BCHE   (2/2): rs1799807=CT, rs1803274=CC   | diplótipo: NÃO DISPONÍVEL",
         "reason": "localized_example"
       },
