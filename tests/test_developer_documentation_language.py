@@ -9,7 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[1]
-ACTIVE_TECHNICAL_DOCS = (
+MIGRATED_TECHNICAL_DOCS = (
     "docs/ANCESTRY_REFERENCE_PANEL.md",
     "docs/EDITORIAL_V3_PIXEL_QA.md",
     "docs/HIGHMEM_GRCH38_RUNNER.md",
@@ -17,6 +17,35 @@ ACTIVE_TECHNICAL_DOCS = (
     "docs/SNP_ARRAY_PARTIAL_GENOME.md",
     "docs/TARGET_REGISTRY_EXPANSION.md",
 )
+ACTIVE_DOCUMENTATION_EXCLUDED_PREFIXES = (
+    "docs/evidence/",
+    "docs/audits/",
+    "docs/history/",
+    "docs/superpowers/plans/",
+    "docs/superpowers/checkpoints/",
+    "docs/superpowers/evidence/",
+)
+
+
+def _discover_active_developer_docs(root: Path) -> tuple[str, ...]:
+    """Discover active Markdown developer docs while excluding evidence/history surfaces."""
+    candidates = set(root.glob("*.md"))
+    candidates.update((root / "docs").rglob("*.md"))
+    candidates.update((root / "mcp").glob("README.md"))
+    candidates.update((root / "policy_engine").glob("README*.md"))
+    candidates.update((root / "adapters").glob("*/README.md"))
+    relative = []
+    for path in candidates:
+        if not path.is_file():
+            continue
+        name = path.relative_to(root).as_posix()
+        if name.startswith(ACTIVE_DOCUMENTATION_EXCLUDED_PREFIXES):
+            continue
+        relative.append(name)
+    return tuple(sorted(relative))
+
+
+ACTIVE_TECHNICAL_DOCS = _discover_active_developer_docs(ROOT)
 LOCAL_PORTUGUESE_PROSE_TERMS = frozenset({
     "apenas", "ainda", "alem", "antes", "apos", "arquivo", "arquivos",
     "cada", "como", "com", "dados", "deve", "devem", "durante", "entre",
@@ -55,19 +84,29 @@ PRESERVED_LITERALS = (
     "MODELO", "RESULTADO", "DATA", "VERSÃO",
     "NÃO TRANSFERÍVEL SEM CALIBRAÇÃO", "TRANSFERIBILIDADE INCERTA",
     "PARCIALMENTE TRANSFERÍVEL",
+    "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt",
+    "REGRAS_..._v3.4_2026-08-17.txt",
+    "NAO_DISPONIVEL", "NAO_TESTADO", "NAO_REPORTAVEL", "NAO_DETECTADO",
+    "NAO_INTERROGADO",
 )
 RETIRED_BASE_COMMANDS = frozenset({"python3 scripts/curate_panelapp.py"})
-PRESERVED_PORTUGUESE_REASONS = frozenset({"historical_quote", "localized_example"})
+PRESERVED_PORTUGUESE_REASONS = frozenset({
+    "historical_quote", "localized_example", "safety_pattern"
+})
 EXPECTED_PRESERVED_PORTUGUESE_COUNTS = {
     "docs/ANCESTRY_REFERENCE_PANEL.md": 1,
     "docs/EDITORIAL_V3_PIXEL_QA.md": 1,
     "docs/PGX_ALLELE_DISCRIMINATION.md": 7,
     "docs/SNP_ARRAY_PARTIAL_GENOME.md": 4,
     "docs/TARGET_REGISTRY_EXPANSION.md": 16,
+    "docs/ARRAY_PROVENANCE_PROBE.md": 2,
+    "docs/GENOME_COMPLETENESS_MATRIX.md": 2,
+    "docs/PHARMACOGENOMIC_PASSPORT.md": 11,
 }
 EXPECTED_PRESERVED_INLINE_COUNTS = {
     "docs/ANCESTRY_REFERENCE_PANEL.md": 1,
     "docs/TARGET_REGISTRY_EXPANSION.md": 1,
+    "docs/INTEGRATION_CODE_LANGUAGE_INVENTORY.md": 3,
 }
 
 
@@ -75,6 +114,29 @@ def _normalize(value: str) -> str:
     """Normalize Unicode text for bounded Portuguese-token matching."""
     decomposed = unicodedata.normalize("NFKD", value)
     return "".join(ch for ch in decomposed if not unicodedata.combining(ch)).casefold()
+
+
+def _known_portuguese_inflection_hints(words: set[str]) -> set[str]:
+    """Map common plural/gender inflections back to known Portuguese policy terms."""
+    matches = set()
+    for word in words:
+        candidates = set()
+        if len(word) > 3 and word.endswith("s"):
+            candidates.add(word[:-1])
+        if len(word) > 4 and word.endswith("oes"):
+            candidates.add(word[:-3] + "ao")
+        if len(word) > 4 and word.endswith("ais"):
+            candidates.add(word[:-3] + "al")
+        if len(word) > 4 and word.endswith("eis"):
+            candidates.add(word[:-3] + "el")
+        if len(word) > 4 and word.endswith("is"):
+            candidates.add(word[:-2] + "il")
+        for candidate in tuple(candidates):
+            if candidate.endswith("a"):
+                candidates.add(candidate[:-1] + "o")
+        if candidates & PORTUGUESE_PROSE_TERMS:
+            matches.add(word)
+    return matches
 
 
 def _ascii_portuguese_hints(words: set[str]) -> set[str]:
@@ -96,6 +158,7 @@ def _prose_tokens(line: str) -> set[str]:
     parts = re.findall(r"[^\W_]+", line, flags=re.UNICODE)
     words = {_normalize(word) for word in parts}
     matches = words & PORTUGUESE_PROSE_TERMS
+    matches.update(_known_portuguese_inflection_hints(words))
     matches.update(
         _normalize(word)
         for word in parts
@@ -197,6 +260,58 @@ def _protected_contract(text: str) -> dict[str, list[str]]:
 class DeveloperDocumentationLanguageTest(unittest.TestCase):
     """Bound stage-seven English documentation without rewriting contracts/history."""
 
+    def test_active_scope_covers_repository_developer_documentation(self) -> None:
+        """Stage seven must guard the active developer-documentation surface, not six files."""
+        active = set(ACTIVE_TECHNICAL_DOCS)
+        required = {
+            "README.md",
+            "AGENTS.md",
+            "mcp/README.md",
+            "policy_engine/README_GENOMA_POLICY.md",
+            "docs/DETERMINISTIC_ENGINE.md",
+            "docs/DEVELOPER_DOCUMENTATION_LANGUAGE_INVENTORY.md",
+            "docs/superpowers/specs/2026-09-03-english-codebase-refactor-design.md",
+        }
+        required.update(
+            path.relative_to(ROOT).as_posix()
+            for path in (ROOT / "adapters").glob("*/README.md")
+        )
+        self.assertTrue(required <= active, sorted(required - active))
+        self.assertFalse(any(path.startswith("docs/evidence/") for path in active))
+        self.assertFalse(any(path.startswith("docs/audits/") for path in active))
+        self.assertFalse(any(path.startswith("docs/history/") for path in active))
+        self.assertFalse(any(path.startswith("docs/superpowers/plans/") for path in active))
+        self.assertFalse(any(path.startswith("docs/superpowers/checkpoints/") for path in active))
+        self.assertFalse(any(path.startswith("docs/superpowers/evidence/") for path in active))
+
+    def test_active_scope_discovery_includes_new_docs_and_excludes_records(self) -> None:
+        """Discovery must include new developer Markdown and exclude record/evidence surfaces."""
+        with TemporaryDirectory() as directory:
+            temp = Path(directory)
+            included = (
+                "README.md",
+                "CONTRIBUTING.md",
+                "docs/ACTIVE.md",
+                "docs/superpowers/specs/DESIGN.md",
+                "mcp/README.md",
+                "policy_engine/README_EXTRA.md",
+                "adapters/example/README.md",
+            )
+            excluded = (
+                "docs/evidence/EVIDENCE.md",
+                "docs/audits/AUDIT.md",
+                "docs/history/HISTORY.md",
+                "docs/superpowers/plans/PLAN.md",
+                "docs/superpowers/checkpoints/CHECKPOINT.md",
+                "docs/superpowers/evidence/PROOF.md",
+            )
+            for relative in included + excluded:
+                path = temp / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("# Document\n", encoding="utf-8")
+            discovered = set(_discover_active_developer_docs(temp))
+            self.assertEqual(discovered, set(included))
+
     def test_active_technical_docs_have_no_detected_portuguese_prose(self) -> None:
         """Selected active technical docs must contain no detected Portuguese prose."""
         for relative in ACTIVE_TECHNICAL_DOCS:
@@ -237,6 +352,19 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
                 with self.subTest(example=example):
                     path.write_text(example + "\n", encoding="utf-8")
                     self.assertTrue(_find_portuguese_prose(path), index)
+
+    def test_scanner_detects_inflected_ascii_portuguese_with_one_strong_signal(self) -> None:
+        """Common Portuguese inflections must not require two unrelated weak hints."""
+        examples = (
+            "Falhas graves surgiram hoje.",
+            "Mudancas importantes apareceram ontem.",
+        )
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "doc.md"
+            for example in examples:
+                with self.subTest(example=example):
+                    path.write_text(example + "\n", encoding="utf-8")
+                    self.assertTrue(_find_portuguese_prose(path))
 
     def test_ascii_heuristic_does_not_reject_plain_english_prose(self) -> None:
         """Broad Portuguese detection must retain negative controls for English prose."""
@@ -343,7 +471,7 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
     def test_documented_repo_script_entrypoints_exist(self) -> None:
         """Executable doc commands must not call repository scripts absent from HEAD."""
         missing = []
-        for relative in ACTIVE_TECHNICAL_DOCS:
+        for relative in MIGRATED_TECHNICAL_DOCS:
             text = (ROOT / relative).read_text(encoding="utf-8")
             for line in _executable_lines(text):
                 for script_path in re.findall(
@@ -356,7 +484,7 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
     def test_documented_evidence_references_exist(self) -> None:
         """Active technical docs must not cite missing versioned evidence artifacts."""
         missing = []
-        for relative in ACTIVE_TECHNICAL_DOCS:
+        for relative in MIGRATED_TECHNICAL_DOCS:
             text = (ROOT / relative).read_text(encoding="utf-8")
             for evidence_path in re.findall(r"`(docs/evidence/[^`\n]+)`", text):
                 if not (ROOT / evidence_path).is_file():
@@ -384,12 +512,12 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
                 encoding="utf-8"
             )
         )
-        self.assertEqual(fixture["schema"], "genoma-developer-documentation-contract-v5")
+        self.assertEqual(fixture["schema"], "genoma-developer-documentation-contract-v6")
         self.assertEqual(
             fixture["base_sha"], "185996841b55669e42aa641896e2947748e04704"
         )
-        self.assertEqual(set(fixture["documents"]), set(ACTIVE_TECHNICAL_DOCS))
-        for relative in ACTIVE_TECHNICAL_DOCS:
+        self.assertEqual(set(fixture["documents"]), set(MIGRATED_TECHNICAL_DOCS))
+        for relative in MIGRATED_TECHNICAL_DOCS:
             with self.subTest(path=relative):
                 current = (ROOT / relative).read_text(encoding="utf-8")
                 self.assertEqual(
@@ -411,6 +539,21 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
         editorial = (ROOT / "docs/EDITORIAL_V3_PIXEL_QA.md").read_text(encoding="utf-8")
         for literal in ("MODELO", "RESULTADO", "DATA", "VERSÃO"):
             self.assertIn(literal, editorial)
+        policy_readme = (ROOT / "policy_engine/README_GENOMA_POLICY.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt", policy_readme
+        )
+        policy_inventory = (ROOT / "docs/POLICY_CODE_LANGUAGE_INVENTORY.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("NAO_DISPONIVEL", policy_inventory)
+        scientific_inventory = (
+            ROOT / "docs/SCIENTIFIC_CODE_LANGUAGE_INVENTORY.md"
+        ).read_text(encoding="utf-8")
+        for literal in ("NAO_TESTADO", "NAO_REPORTAVEL", "NAO_DETECTADO", "NAO_INTERROGADO"):
+            self.assertIn(literal, scientific_inventory)
         target_registry = (ROOT / "docs/TARGET_REGISTRY_EXPANSION.md").read_text(
             encoding="utf-8"
         )

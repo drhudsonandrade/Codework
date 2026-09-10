@@ -1064,6 +1064,20 @@
         "reason": "historical_quote"
       }
     ],
+    "docs/INTEGRATION_CODE_LANGUAGE_INVENTORY.md": [
+      {
+        "literal": "Conteúdo rastreável para teste editorial de regressão visual.",
+        "reason": "localized_example"
+      },
+      {
+        "literal": "Fixture editorial; não representa paciente.",
+        "reason": "localized_example"
+      },
+      {
+        "literal": "dados[ _-]*dna",
+        "reason": "safety_pattern"
+      }
+    ],
     "docs/TARGET_REGISTRY_EXPANSION.md": [
       {
         "literal": "só 1★",
@@ -1078,9 +1092,29 @@
         "reason": "localized_example"
       }
     ],
+    "docs/ARRAY_PROVENANCE_PROBE.md": [
+      {
+        "line": "## Historical observation on a real file — não verificada",
+        "reason": "historical_quote"
+      },
+      {
+        "line": "[observação histórica, não verificada — sem artefato de entrada/saída]",
+        "reason": "historical_quote"
+      }
+    ],
     "docs/EDITORIAL_V3_PIXEL_QA.md": [
       {
         "line": "  --source-dir /caminho/pack-aprovado \\",
+        "reason": "localized_example"
+      }
+    ],
+    "docs/GENOME_COMPLETENESS_MATRIX.md": [
+      {
+        "line": "8 de 29 alvos do registro são interpretáveis (27.6%).",
+        "reason": "localized_example"
+      },
+      {
+        "line": "21 não foram testados, 0 sem chamada e 0 não reportáveis.",
         "reason": "localized_example"
       }
     ],
@@ -1111,6 +1145,52 @@
       },
       {
         "line": "  residual: 0,0321 (Sub-Saharan African), limite inferior",
+        "reason": "localized_example"
+      }
+    ],
+    "docs/PHARMACOGENOMIC_PASSPORT.md": [
+      {
+        "line": "   them says *\"nenhum dos alelos testados foi detectado\"* — not `*1`. `*1` is the reference",
+        "reason": "localized_example"
+      },
+      {
+        "line": "| gene is not structurally unresolved | CYP2D6: variação estrutural não resolvida por array |",
+        "reason": "localized_example"
+      },
+      {
+        "line": "| a curated allele registry was supplied | registro curado não foi fornecido |",
+        "reason": "localized_example"
+      },
+      {
+        "line": "| the registry declares `complete_panel` for the gene | alelos não definidos permaneceriam indistinguíveis do haplótipo de referência |",
+        "reason": "localized_example"
+      },
+      {
+        "line": "| the registry names `reference_allele` | sem ele um portador heterozigoto não tem segundo elemento |",
+        "reason": "localized_example"
+      },
+      {
+        "line": "| every defining position is interpretable | posições definidoras não interpretáveis: … |",
+        "reason": "localized_example"
+      },
+      {
+        "line": "| at most one heterozygous position in the gene | fase não resolvida: N posições heterozigotas |",
+        "reason": "localized_example"
+      },
+      {
+        "line": "| at most one defined allele detected | genótipo composto: atribuição a cada cromossomo exige fase |",
+        "reason": "localized_example"
+      },
+      {
+        "line": "8 de 19 loci farmacogenômicos são interpretáveis (42.1%) em 10 genes.",
+        "reason": "localized_example"
+      },
+      {
+        "line": "BCHE   (2/2): rs1799807=CT, rs1803274=CC   | diplótipo: NÃO DISPONÍVEL",
+        "reason": "localized_example"
+      },
+      {
+        "line": "DPYD   (0/4): todos NÃO TESTADO",
         "reason": "localized_example"
       }
     ],
@@ -1199,5 +1279,5 @@
       }
     ]
   },
-  "schema": "genoma-developer-documentation-contract-v5"
+  "schema": "genoma-developer-documentation-contract-v6"
 }
