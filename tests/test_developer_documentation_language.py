@@ -29,7 +29,7 @@ ACTIVE_DOCUMENTATION_EXCLUDED_PREFIXES = (
     "vendor/",
 )
 ACTIVE_DOCUMENTATION_EXCLUDED_PARTS = frozenset({
-    ".git", "node_modules", "dist", "build", ".venv", "__pycache__"
+    ".git", "node_modules", "dist", "build", "generated", ".venv", "__pycache__"
 })
 
 
@@ -339,6 +339,7 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
                 "normative/sealed/README.md",
                 "template_store/v3.0/report-01/README.md",
                 "vendor/example/README.md",
+                "generated/output/README.md",
             )
             for relative in included + excluded:
                 path = temp / relative
