@@ -39,7 +39,10 @@ These exceptions are deliberate and are not permission to add new Portuguese dev
 
 The same test also asserts that representative normative and localized values remain present, so the language migration cannot pass by translating wire/report contracts.
 
-`tests/fixtures/developer_documentation_contract.json` was captured from the fixed base commit and pins SHA-256 literals, URLs, inline-code spans, non-comment executable lines from `bash`/`python` fenced blocks, and the multiset of numeric digit groups. `tests/test_developer_documentation_language.py` compares every migrated document with that fixture. Documentation prose may change; commands, artifact identities, pinned digests, and code-like contract tokens may not drift silently.
+`tests/fixtures/developer_documentation_contract.json` was captured from the fixed base commit and pins SHA-256 literals, URLs, stable inline-code spans, non-comment executable lines from `bash`/`python` fenced blocks, and the multiset of numeric digit groups. Exact localized/normative labels and `docs/evidence/...` references are excluded from that frozen inline-code set: localized labels have dedicated preservation assertions, while evidence paths must exist in the current checkout and selected QA claims are checked against the status recorded by the referenced JSON artifact. `tests/test_developer_documentation_language.py` compares every migrated document with that split contract. Documentation prose and evidence references may be corrected; commands, pinned digests, stable code-like tokens, and non-evidence numeric content may not drift silently.
+
+
+The editorial QA document is explicitly bounded to versioned evidence. The 200 DPI static PDF artifact from 2026-08-16 is `VERIFICADO`; the current versioned DOCX parity record is `NÃO DISPONÍVEL`; no current Poppler verdict is claimed without a versioned artifact.
 
 ## Exclusions and stage 8
 

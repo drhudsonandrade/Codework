@@ -36,11 +36,13 @@ PRESERVED_LITERALS = (
 
 
 def _normalize(value: str) -> str:
+    """Normalize Unicode text for bounded Portuguese-token matching."""
     decomposed = unicodedata.normalize("NFKD", value)
     return "".join(ch for ch in decomposed if not unicodedata.combining(ch)).casefold()
 
 
 def _prose_tokens(line: str) -> set[str]:
+    """Return high-confidence Portuguese prose tokens after contract exclusions."""
     line = re.sub(r"`[^`]*`", " ", line)
     line = re.sub(r"https?://\S+", " ", line)
     for literal in PRESERVED_LITERALS:
@@ -50,6 +52,7 @@ def _prose_tokens(line: str) -> set[str]:
 
 
 def _find_portuguese_prose(path: Path) -> list[tuple[int, tuple[str, ...]]]:
+    """Scan unfenced developer prose while leaving quoted history untouched."""
     findings: list[tuple[int, tuple[str, ...]]] = []
     fenced = False
     for lineno, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
@@ -66,6 +69,7 @@ def _find_portuguese_prose(path: Path) -> list[tuple[int, tuple[str, ...]]]:
 
 
 def _executable_lines(text: str) -> list[str]:
+    """Extract executable lines from shell and Python code fences."""
     lines: list[str] = []
     fenced = False
     language = ""
@@ -91,14 +95,21 @@ def _executable_lines(text: str) -> list[str]:
 
 
 def _protected_contract(text: str) -> dict[str, list[str]]:
+    """Pin stable commands/tokens while evidence references follow live artifacts."""
+    evidence_free = re.sub(r"`docs/evidence/[^`\n]+`", " ", text)
+    inline_code = [
+        value
+        for value in re.findall(r"`([^`\n]+)`", text)
+        if not value.startswith("docs/evidence/") and value not in PRESERVED_LITERALS
+    ]
     return {
         "sha256_literals": sorted(
             re.findall(r"(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])", text)
         ),
         "urls": sorted(re.findall(r"https?://[^\s)`]+", text)),
-        "inline_code": sorted(re.findall(r"`([^`\n]+)`", text)),
+        "inline_code": sorted(inline_code),
         "executable_lines": _executable_lines(text),
-        "digit_groups": sorted(re.findall(r"\d+", text)),
+        "digit_groups": sorted(re.findall(r"\d+", evidence_free)),
     }
 
 
@@ -106,28 +117,56 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
     """Bound stage-seven English documentation without rewriting contracts/history."""
 
     def test_active_technical_docs_have_no_detected_portuguese_prose(self) -> None:
+        """Selected active technical docs must contain no detected Portuguese prose."""
         for relative in ACTIVE_TECHNICAL_DOCS:
             with self.subTest(path=relative):
                 self.assertEqual(_find_portuguese_prose(ROOT / relative), [])
 
     def test_scanner_detects_portuguese_prose_but_ignores_contract_literals(self) -> None:
+        """The bounded scanner must detect prose while ignoring exact contract labels."""
         self.assertEqual(_prose_tokens("Este painel deve usar dados somente após revisão."),
                          {"este", "painel", "deve", "dados", "somente", "apos", "revisao"})
         self.assertEqual(_prose_tokens("status = `NÃO DISPONÍVEL`; `EXECUTADO`"), set())
 
     def test_scanner_rejects_a_short_line_with_one_portuguese_term(self) -> None:
+        """A one-token Portuguese heading must not escape the language gate."""
         with TemporaryDirectory() as directory:
             path = Path(directory) / "short.md"
             path.write_text("## Como execute\n", encoding="utf-8")
             self.assertEqual(_find_portuguese_prose(path), [(1, ("como",))])
 
+    def test_documented_evidence_references_exist(self) -> None:
+        """Active technical docs must not cite missing versioned evidence artifacts."""
+        missing = []
+        for relative in ACTIVE_TECHNICAL_DOCS:
+            text = (ROOT / relative).read_text(encoding="utf-8")
+            for evidence_path in re.findall(r"`(docs/evidence/[^`\n]+)`", text):
+                if not (ROOT / evidence_path).is_file():
+                    missing.append((relative, evidence_path))
+        self.assertEqual(missing, [])
+
+    def test_editorial_qa_claims_match_versioned_evidence(self) -> None:
+        """Editorial QA prose must not overstate evidence present in the repository."""
+        document = (ROOT / "docs/EDITORIAL_V3_PIXEL_QA.md").read_text(encoding="utf-8")
+        static_path = "docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_2026-08-16.json"
+        docx_path = "docs/evidence/EDITORIAL_V3_DOCX_PARITY_150DPI_2026-08-20.json"
+        static = json.loads((ROOT / static_path).read_text(encoding="utf-8"))
+        docx = json.loads((ROOT / docx_path).read_text(encoding="utf-8"))
+        self.assertEqual(static["status"], "VERIFICADO")
+        self.assertEqual(docx["status"], "NÃO DISPONÍVEL")
+        self.assertIn(f"`{static_path}`", document)
+        self.assertIn(f"`{docx_path}`", document)
+        self.assertNotIn("Poppler/pdftoppm confirmation: 11/11 `VERIFICADO`", document)
+        self.assertIn("current reproducible DOCX QA status is `NÃO DISPONÍVEL`", document)
+
     def test_migrated_docs_preserve_base_contract_tokens_and_commands(self) -> None:
+        """Stable base commands/tokens remain pinned while evidence paths may advance."""
         fixture = json.loads(
             (ROOT / "tests/fixtures/developer_documentation_contract.json").read_text(
                 encoding="utf-8"
             )
         )
-        self.assertEqual(fixture["schema"], "genoma-developer-documentation-contract-v1")
+        self.assertEqual(fixture["schema"], "genoma-developer-documentation-contract-v2")
         self.assertEqual(
             fixture["base_sha"], "185996841b55669e42aa641896e2947748e04704"
         )
@@ -140,6 +179,7 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
                 )
 
     def test_intentional_portuguese_contract_values_are_still_present(self) -> None:
+        """Normative and localized Portuguese labels must remain available unchanged."""
         matrix = (ROOT / "docs/GENOME_COMPLETENESS_MATRIX.md").read_text(encoding="utf-8")
         for literal in ("NÃO DETECTADO", "NÃO TESTADO", "NÃO REPORTÁVEL"):
             self.assertIn(literal, matrix)

@@ -26,28 +26,28 @@ Comparing the reference PDF with the entire result and requiring zero changed pi
 
 The dynamic region includes the placeholder box and the bounded area intended for the replacement value. The controlled region includes only text that must change from MODELO to RESULTADO or correct normative identity. Everything else on the page is the reference PDF itself and must remain visually invariant.
 
-QA executed on 2026-08-16:
+QA record dated 2026-08-16:
 
-- 11/11 reports generated in `template-v3` strict mode with no unresolved fields;
+- 11/11 reports are represented in the versioned static-pixel artifact; that artifact does not independently prove `template-v3` strict-mode generation or unresolved-field handling;
 - page counts: 10,10,10,10,11,9,9,9,9,1,12 — exactly the models;
 - local comparison at 200 DPI: 11/11 `VERIFICADO`, 0 changed pixels outside allowed regions;
-- independent Poppler/pdftoppm confirmation: 11/11 `VERIFICADO` in the rasterization smoke test;
-- report 10: 1 page, DATA and VERSÃO peer-bounded, with no visual collision.
+- a historical 11/11 Poppler/pdftoppm observation was previously described, but no versioned artifact in this checkout supports a current `VERIFICADO` claim for that smoke test; current status is `NÃO DISPONÍVEL`;
+- report 10 is 1 page in the versioned static artifact; localized labels `DATA` and `VERSÃO` remain report vocabulary, while peer-bounding and collision claims beyond the static-mask comparison are not independently evidenced here.
 
-Versioned evidence:
+Versioned evidence and current status:
 
-- `docs/evidence/EDITORIAL_V3_PDF_PIXEL_QA_200DPI_2026-08-16.json`
-- `docs/evidence/EDITORIAL_V3_PDF_PIXEL_QA_POPPLER_72DPI_2026-08-16.json`
-- `docs/evidence/EDITORIAL_V3_DOCX_VISUAL_QA_2026-08-16.json`
+- `docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_2026-08-16.json` — `VERIFICADO`; supports exact static-pixel preservation outside declared masks.
+- `docs/evidence/EDITORIAL_V3_DOCX_PARITY_150DPI_2026-08-20.json` — `NÃO DISPONÍVEL`; preserves a historical LibreOffice observation but explicitly does not authorize current publication approval.
+- no versioned Poppler/pdftoppm raster artifact is present in this checkout, so no current Poppler QA verdict is claimed.
 
 ## DOCX
 
-DOCX uses the reference page converted to SVG as a static visual plate, with PNG fallback, and case values in editable VML text boxes. During QA the file was re-rendered through LibreOffice for every page of all 11 reports, with page counts preserved and no clipping/overlap observed in the synthetic fixture.
+DOCX uses the reference page converted to SVG as a static visual plate, with PNG fallback, and case values in editable VML text boxes. A historical LibreOffice observation covered all 11 reports, but the current versioned DOCX parity artifact marks reproducibility and aggregate approval as `NÃO DISPONÍVEL`; that observation is therefore not current `VERIFICADO` evidence.
 
-**Do not describe DOCX as renderer-independent pixel-identical.** Word, LibreOffice, and other engines rasterize and antialias differently. The correct contract is:
+**Do not describe DOCX as renderer-independent pixel-identical.** Word, LibreOffice, and other engines rasterize and antialias differently. The current contract is:
 
-- PDF: `VERIFICADO` static pixel-by-pixel parity outside dynamic/controlled regions;
-- DOCX: high visual fidelity + editable fields + `VERIFICADO` rendering QA;
+- PDF: `VERIFICADO` static pixel-by-pixel parity outside dynamic/controlled regions, bounded to the versioned static artifact above;
+- DOCX: high visual fidelity and editable fields remain design goals, while the current reproducible DOCX QA status is `NÃO DISPONÍVEL`;
 - PDF remains the authoritative final publication artifact.
 
 ## Fail closed
