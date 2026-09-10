@@ -32,6 +32,23 @@ _POLICY_PAYLOAD = json.loads(
 POLICY_TECHNICAL_TERMS = frozenset(_POLICY_PAYLOAD["technical_terms"])
 PORTUGUESE_PROSE_TERMS = LOCAL_PORTUGUESE_PROSE_TERMS | POLICY_TECHNICAL_TERMS
 PORTUGUESE_LOWERCASE_ACCENT = re.compile(r"[áéíóúâêôãõçà]")
+PORTUGUESE_ASCII_COMMON_WORDS = frozenset({
+    "agora", "ainda", "aqui", "assim", "cada", "como", "depois", "desde",
+    "esse", "essa", "este", "esta", "isso", "isto", "mais", "menos", "mesmo",
+    "muito", "muitos", "nao", "onde", "ontem", "outro", "outros", "outra",
+    "outras", "para", "pela", "pelas", "pelo", "pelos", "pois", "porque",
+    "quando", "sem", "somente", "tambem", "talvez", "toda", "todas", "todo",
+    "todos", "uma", "umas", "uns",
+})
+PORTUGUESE_ASCII_VERB_ENDINGS = (
+    "ando", "endo", "indo", "amos", "emos", "imos", "aram", "eram", "iram",
+    "avam", "aria", "ariam", "eria", "eriam", "iria", "iriam", "asse", "assem",
+    "esse", "essem", "isse", "issem", "ou", "eu", "iu",
+)
+PORTUGUESE_ASCII_NOMINAL_ENDINGS = (
+    "cao", "coes", "dade", "dades", "mente", "amento", "amentos", "imento",
+    "imentos", "avel", "aveis", "ivel", "iveis",
+)
 PRESERVED_LITERALS = (
     "NÃO DISPONÍVEL", "NÃO DETECTADO", "NÃO TESTADO", "NÃO REPORTÁVEL",
     "EXECUTADO", "VERIFICADO", "INFERIDO", "PROPOSTO",
@@ -56,8 +73,19 @@ def _normalize(value: str) -> str:
     return "".join(ch for ch in decomposed if not unicodedata.combining(ch)).casefold()
 
 
+def _ascii_portuguese_hints(words: set[str]) -> set[str]:
+    """Return multi-signal Portuguese hints for otherwise ambiguous ASCII prose."""
+    hints = words & PORTUGUESE_ASCII_COMMON_WORDS
+    for word in words:
+        if len(word) >= 5 and word.endswith(PORTUGUESE_ASCII_VERB_ENDINGS):
+            hints.add(word)
+        if len(word) >= 6 and word.endswith(PORTUGUESE_ASCII_NOMINAL_ENDINGS):
+            hints.add(word)
+    return hints if len(hints) >= 2 else set()
+
+
 def _prose_tokens(line: str) -> set[str]:
-    """Return repository-policy and accented Portuguese prose tokens after exclusions."""
+    """Return policy, diacritic, and multi-signal ASCII Portuguese prose tokens."""
     line = re.sub(r"`[^`]*`", " ", line)
     line = re.sub(r"https?://\S+", " ", line)
     for literal in PRESERVED_LITERALS:
@@ -70,6 +98,8 @@ def _prose_tokens(line: str) -> set[str]:
         for word in parts
         if word[:1].islower() and PORTUGUESE_LOWERCASE_ACCENT.search(word)
     )
+    if not matches:
+        matches.update(_ascii_portuguese_hints(words))
     return matches
 
 
@@ -173,6 +203,35 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
             path = Path(directory) / "doc.md"
             path.write_text("Falha crítica detectada imediatamente.\n", encoding="utf-8")
             self.assertTrue(_find_portuguese_prose(path))
+
+    def test_scanner_detects_ascii_portuguese_without_known_vocabulary(self) -> None:
+        """Common all-ASCII Portuguese must not depend only on enumerated vocabulary."""
+        examples = (
+            "Isso ocorreu ontem.",
+            "Precisamos corrigir outros problemas.",
+            "Aquilo aconteceu ontem.",
+            "Talvez possamos melhorar depois.",
+        )
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "doc.md"
+            for index, example in enumerate(examples):
+                with self.subTest(example=example):
+                    path.write_text(example + "\n", encoding="utf-8")
+                    self.assertTrue(_find_portuguese_prose(path), index)
+
+    def test_ascii_heuristic_does_not_reject_plain_english_prose(self) -> None:
+        """Broad Portuguese detection must retain negative controls for English prose."""
+        examples = (
+            "This panel validates files and reports current results.",
+            "The runner checks reproducible artifacts before publication.",
+            "We need to correct other problems before release.",
+        )
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "doc.md"
+            for example in examples:
+                with self.subTest(example=example):
+                    path.write_text(example + "\n", encoding="utf-8")
+                    self.assertEqual(_find_portuguese_prose(path), [])
 
     def test_markdown_syntax_does_not_create_a_portuguese_bypass(self) -> None:
         """Arbitrary blockquotes and fenced comments must remain subject to language checks."""
