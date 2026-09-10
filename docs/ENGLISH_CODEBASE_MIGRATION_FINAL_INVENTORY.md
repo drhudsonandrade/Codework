@@ -73,3 +73,7 @@ The existing Python implementation-language guard and active Markdown documentat
 The detector is a deterministic lexical guard, not a natural-language classifier. It intentionally favors reviewability and fail-closed drift detection over probabilistic language inference. A legitimate localized or canonical text change therefore requires an explicit ledger review/update.
 
 Stage 8 is a source-code migration only. It does not execute a production genomic workflow and does not establish `POST-DEPLOYMENT` completion; that state remains governed by the separate live evidence contract.
+
+## Post-migration development rule
+
+After Stage 8, new or modified technical implementation is English-only. Future code must use the authoritative or de facto standard style guide and idiomatic conventions of the language being changed, together with the repository-pinned formatter, linter, type-checker, compiler, and validation gates. Portuguese remains permitted only for the explicit normative, localized, canonical, historical, or compatibility-preserved surfaces classified by repository policy.

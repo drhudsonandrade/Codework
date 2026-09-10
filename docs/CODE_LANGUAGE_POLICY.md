@@ -12,7 +12,15 @@ New implementation identifiers, comments, and docstrings must use English.
 
 Portuguese remains valid when it is required by an explicit normative contract, serialized compatibility surface, localized user-facing output, canonical identity, or immutable historical evidence.
 
-For PR 1, automated enforcement scans Python source only. The policy applies to other implementation languages as well, but automated adapters must be introduced before their bulk migration layers begin.
+## Post-migration invariant
+
+After completion of the English-codebase migration, all new or modified technical implementation is English-only. This applies to identifiers, comments, docstrings, internal technical messages, test names, developer-facing technical documentation, and newly introduced implementation prose. A new Portuguese implementation occurrence cannot be grandfathered merely by adding it to a baseline or classification ledger.
+
+Exceptions remain limited to explicit normative, serialized compatibility, localized pt-BR, canonical, or immutable historical requirements. Those exceptions must be intentional, reviewable, and covered by the repository's existing classification or compatibility controls where applicable.
+
+All new or modified code must follow the authoritative or de facto standard style guide and idiomatic conventions for the development language in use, together with repository-pinned formatter, linter, type-checker, compiler, and validation rules. There is no single cross-language universal syntax or formatting standard; the portable rule is to use the accepted standard conventions of each language while preserving explicit repository contracts and fail-closed behavior.
+
+Automated enforcement currently has language-specific adapters and repository-wide residual-language controls. The policy applies to every implementation language even when a particular language does not yet have a dedicated lexical adapter.
 
 Ordinary runtime string literals are not scanned by the PR 1 Python adapter. This prevents the language guard from treating pt-BR output or established serialized text as implementation-language debt.
 
