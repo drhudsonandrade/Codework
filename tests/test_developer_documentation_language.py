@@ -175,17 +175,16 @@ def _prose_tokens(line: str) -> set[str]:
     line = re.sub(r"https?://\S+", " ", line)
     for literal in sorted(PRESERVED_LITERALS, key=len, reverse=True):
         line = line.replace(literal, " ")
-    for proper_noun in PRESERVED_PROPER_NOUNS:
-        line = line.replace(proper_noun, " ")
     line = EMAIL_ADDRESS.sub(" ", line)
     line = DOMAIN_COM_SUFFIX.sub(" ", line)
     parts = re.findall(r"[^\W_]+", line, flags=re.UNICODE)
-    words = {_normalize(word) for word in parts}
+    analysis_parts = [word for word in parts if word not in PRESERVED_PROPER_NOUNS]
+    words = {_normalize(word) for word in analysis_parts}
     matches = words & PORTUGUESE_PROSE_TERMS
     matches.update(_known_portuguese_inflection_hints(words))
     matches.update(
         _normalize(word)
-        for word in parts
+        for word in analysis_parts
         if PORTUGUESE_ACCENT.search(word)
     )
     if not matches:
@@ -484,8 +483,11 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
             self.assertTrue(_find_portuguese_prose(path))
 
     def test_accented_proper_nouns_are_explicitly_preserved(self) -> None:
-        """Reviewed accented proper nouns remain allowed without reopening TitleCase bypasses."""
+        """Only exact reviewed proper-name tokens bypass the diacritic detector."""
         self.assertEqual(_prose_tokens("Tupí peoples from Rondônia."), set())
+        for attached in ("Tupíagem", "preTupí", "RondôniaExtra", "xRondônia"):
+            with self.subTest(attached=attached):
+                self.assertTrue(_prose_tokens(attached))
         self.assertTrue(_prose_tokens("Ótimo."))
 
     def test_inline_code_does_not_create_a_portuguese_bypass(self) -> None:
