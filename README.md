@@ -1,6 +1,6 @@
 # GENOMA deterministic runtime
 
-Private, reproducible genomics execution repository governed by the canonical GENOMA v3.4 ruleset.
+Public, reproducible genomics execution repository governed by the canonical GENOMA v3.4 ruleset.
 
 ## Architecture
 

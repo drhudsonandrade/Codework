@@ -16,7 +16,7 @@ suite proves `passed == 15`, `total == 15`, `critical_failures == 0` and
 
 | Layer | Source of truth | Retention rule | Recovery role |
 |---|---|---|---|
-| Source and configuration | Private GitHub repository, protected `main` | No fixed workflow-artifact expiry; retained while the repository/account is retained | Rebuild every component from reviewed source |
+| Source and configuration | Public GitHub repository, protected `main`, with no personal genomic data or credentials | No fixed workflow-artifact expiry; retained while the repository/account is retained | Rebuild every component from reviewed source |
 | Executable environment | `ghcr.io/<github-owner>/codework-genome` pinned by digest | Retained under the repository owner's package policy | Pull the exact tested container without resolving packages again |
 | Build/test evidence | Recovery bundle in the project's persistent document store | Retained until the owner deletes it or an account/workspace policy removes it | Preserve the synthetic canary ZIP, checksums and release evidence beyond Actions retention |
 | GitHub Actions artifacts | `synthetic-canary-*` and `ghcr-image-reference-*` | Disposable canary evidence: 7 days; immutable image references: 90 days, both capped by repository/org policy | Convenient CI evidence only; never the sole backup |
@@ -39,12 +39,12 @@ keeping at least two independent copies and retaining the manifests needed to ve
 
 ## Clean recovery from GitHub and GHCR
 
-Use a trusted Linux host with Docker. Replace the placeholders with the current private repository owner and the digest recorded by the successful main-branch workflow or the recovery manifest.
+Use a trusted Linux host with Docker. Replace the placeholders with the current repository owner and the digest recorded by the successful main-branch workflow or the recovery manifest.
 
 ```bash
 export GITHUB_REPOSITORY_OWNER='<github-owner>'
-git clone "https://github.com/${GITHUB_REPOSITORY_OWNER}/Codework.git"
-cd Codework
+git clone "https://github.com/${GITHUB_REPOSITORY_OWNER}/OmniGenis.git"
+cd OmniGenis
 git switch main
 python3 scripts/validate_repo.py
 python3 -m unittest discover -s tests -v

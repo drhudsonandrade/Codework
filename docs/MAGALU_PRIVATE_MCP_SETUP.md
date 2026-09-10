@@ -20,14 +20,14 @@ This confirms the hash and the `VIGENTE`/`v3.4`/`17/08/2026` header but delibera
 
 You do not need to create folders in advance. Git creates paths such as `.github/workflows` when files are committed.
 
-1. Open <https://github.com/settings/installations> while signed in to the GitHub account that owns the private `Codework` repository.
+1. Open <https://github.com/settings/installations> while signed in to the GitHub account that owns the public `OmniGenis` repository.
 2. Locate the ChatGPT/OpenAI GitHub App and choose **Configure**.
-3. Under repository access, choose **Only select repositories** and select `Codework`, or choose all repositories if that broader scope is intentional.
+3. Under repository access, choose **Only select repositories** and select `OmniGenis`, or choose all repositories if that broader scope is intentional.
 4. Confirm the requested permissions include repository contents and pull requests. GitHub App permissions are defined by the app; if write permissions are not requested, reconnecting cannot upgrade them.
 5. Open the repository's **Settings → Actions** page and allow Actions for the repository.
-6. Before attaching any self-hosted runner, make the repository private. Never execute workflows from untrusted forks on the genomic VM.
+6. The repository is public. Never route untrusted pull-request or fork code to the genomic VM; reserve the private `codework-isolated` runner for trusted protected-`main` execution under the existing workflow gates.
 
-If ChatGPT still shows the repository but calls return `Unknown tool`, start a new ChatGPT conversation after reconnecting. If GitHub returns `403 Resource not accessible by integration`, re-open the installation page and verify that `Codework` is selected; this is an installation-scope problem, not a missing repository folder.
+If ChatGPT still shows the repository but calls return `Unknown tool`, start a new ChatGPT conversation after reconnecting. If GitHub returns `403 Resource not accessible by integration`, re-open the installation page and verify that `OmniGenis` is selected; this is an installation-scope problem, not a missing repository folder.
 
 ## 2. Target VM and persistent storage
 
@@ -52,12 +52,12 @@ Enable disk encryption and restrict SSH/firewall access before copying any perso
 
 ## 3. Repository and container
 
-Clone the private repository on the VM and build or pull an immutable image. Set the owner at execution time instead of hard-coding a personal account name:
+Clone the public repository on the VM and build or pull an immutable image. Set the owner at execution time instead of hard-coding a personal account name:
 
 ```bash
 export GITHUB_REPOSITORY_OWNER='<github-owner>'
 sudo install -d -o genome -g genome -m 0750 /opt/codework
-sudo -u genome git clone "https://github.com/${GITHUB_REPOSITORY_OWNER}/Codework.git" /opt/codework
+sudo -u genome git clone "https://github.com/${GITHUB_REPOSITORY_OWNER}/OmniGenis.git" /opt/codework
 cd /opt/codework
 docker build --tag codework-genome:local .
 ```
