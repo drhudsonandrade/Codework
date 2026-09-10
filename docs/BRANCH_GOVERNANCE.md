@@ -59,7 +59,7 @@ If the repository plan/settings cannot express the documented layered restrictio
 
 After applying the GitHub settings, record all of the following in the closure report:
 
-- repository: `drhudsonandrade/Codework`;
+- repository: `drhudsonandrade/OmniGenis`;
 - branch names: `main`, `audit-evidence`;
 - observed protected/ruleset state for each branch;
 - required status checks actually configured on `main`;

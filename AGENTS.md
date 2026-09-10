@@ -1,8 +1,8 @@
-# AGENTS.md — GENOMA Codework
+# AGENTS.md — GENOMA OmniGenis
 
 ## Purpose
 
-This repository is a private, reproducible genomics runtime. Preserve the canonical
+This repository is a public, reproducible genomics runtime. Preserve the canonical
 architecture and evidence model described by `README.md`:
 
 `Policy Control Plane -> Scientific Data Plane -> Evidence Plane -> Audit Plane`
