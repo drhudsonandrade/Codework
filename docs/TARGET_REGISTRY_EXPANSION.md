@@ -172,7 +172,7 @@ Old execution narratives for reports 05 and 09 also remain outside the verifiabl
 
 Report 03 emits, for every execution, the numerator of interrogated variants and the denominator of the applicable catalog. Historical values from a local execution were removed because no output artifact, input SHA-256, and pinned command allow them to be reproduced on this HEAD. The verifiable contract is that numerator and denominator are derived from artifacts belonging to the execution itself and that output describes them as variant counts rather than allele frequency.
 
-## Reproduce
+## Reproduce from the inputs available in this checkout
 
 The GWAS slice used for this curation is the release dated **2026-08-24**. Download the two exact files and verify their bytes before running the builder:
 
@@ -186,11 +186,12 @@ printf '%s  %s\n' \
   gwas-catalog-download-ancestries-v1.0.3.1.txt | sha256sum --check --strict
 ```
 
+The current checkout does **not** contain the historical python3 scripts/curate_panelapp.py collector command. Therefore a fresh PanelApp recollection is not reproducible from this repository. The committed `docs/evidence/PANELAPP_CURATION.json.gz` snapshot is the explicit downstream input boundary; its stored-file digest is published below. Using that snapshot can reproduce downstream transformations, but it must not be described as a fresh PanelApp collection.
+
 ```bash
 curl -O https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.txt.gz
 curl -O https://ftp.clinicalgenome.org/ClinGen_gene_curation_list_GRCh38.tsv
 curl -O https://storage.googleapis.com/gcp-public-data--gnomad/release/4.1/constraint/gnomad.v4.1.constraint_metrics.tsv
-python3 scripts/curate_panelapp.py            # scans both instances; refuses a short read
 python3 scripts/expand_clinvar_targets.py \
     --clinvar-bulk variant_summary.txt.gz \
     --panelapp docs/evidence/PANELAPP_CURATION.json.gz \
@@ -212,7 +213,7 @@ python3 scripts/merge_target_manifests.py \
 
 ## Provenance of published counts
 
-The URLs above **do not pin a release or digest**. ClinVar, ClinGen, gnomAD, and PanelApp are mutable sources: running the block on another date may produce records and counts different from those published here. That is not a reproduction defect; it is the nature of the sources.
+The live URLs above **do not pin a release or digest**. ClinVar, ClinGen, and gnomAD are mutable sources, so running the block on another date may produce records and counts different from those published here. PanelApp is different in this checkout: the live collector is absent, so the block uses the versioned PanelApp snapshot and does not recollect that source.
 
 What remains fixed is the other side of the comparison. Every count in this document was read from the artifacts below as versioned in this commit. Recounting from those artifacts is deterministic; recollecting from upstream sources is not.
 
@@ -229,4 +230,4 @@ What remains fixed is the other side of the comparison. Every count in this docu
 
 The SHA-256 values in this table are hashes of the **versioned file bytes**. Some JSON documents also carry an internal `sha256` field for the logical payload; that internal digest has a different scope and does not replace the hash of the stored `.json`/`.json.gz` file. The two new file hashes were rerun on this HEAD with `sha256sum`.
 
-To compare a new collection with what is published, generate the artifacts, compare SHA-256 against the table, and treat any difference as an updated source rather than a reproduction error.
+To compare a new collection with what is published, generate the artifacts for sources that still have active collectors, compare SHA-256 against the table, and treat any difference as an updated source rather than a reproduction error. A fresh PanelApp comparison is `NÃO DISPONÍVEL` until a reviewed collector is restored or replaced.

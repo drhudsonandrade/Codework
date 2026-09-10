@@ -33,6 +33,7 @@ PRESERVED_LITERALS = (
     "NÃO TRANSFERÍVEL SEM CALIBRAÇÃO", "TRANSFERIBILIDADE INCERTA",
     "PARCIALMENTE TRANSFERÍVEL",
 )
+RETIRED_BASE_COMMANDS = frozenset({"python3 scripts/curate_panelapp.py"})
 
 
 def _normalize(value: str) -> str:
@@ -108,7 +109,9 @@ def _protected_contract(text: str) -> dict[str, list[str]]:
         ),
         "urls": sorted(re.findall(r"https?://[^\s)`]+", text)),
         "inline_code": sorted(inline_code),
-        "executable_lines": _executable_lines(text),
+        "executable_lines": [
+            line for line in _executable_lines(text) if line not in RETIRED_BASE_COMMANDS
+        ],
         "digit_groups": sorted(re.findall(r"\d+", evidence_free)),
     }
 
@@ -134,6 +137,19 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
             path = Path(directory) / "short.md"
             path.write_text("## Como execute\n", encoding="utf-8")
             self.assertEqual(_find_portuguese_prose(path), [(1, ("como",))])
+
+    def test_documented_repo_script_entrypoints_exist(self) -> None:
+        """Executable doc commands must not call repository scripts absent from HEAD."""
+        missing = []
+        for relative in ACTIVE_TECHNICAL_DOCS:
+            text = (ROOT / relative).read_text(encoding="utf-8")
+            for line in _executable_lines(text):
+                for script_path in re.findall(
+                    r"(?:python3?|bash)\s+(scripts/[A-Za-z0-9_./-]+)", line
+                ):
+                    if not (ROOT / script_path).is_file():
+                        missing.append((relative, script_path))
+        self.assertEqual(missing, [])
 
     def test_documented_evidence_references_exist(self) -> None:
         """Active technical docs must not cite missing versioned evidence artifacts."""
@@ -166,7 +182,7 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
                 encoding="utf-8"
             )
         )
-        self.assertEqual(fixture["schema"], "genoma-developer-documentation-contract-v2")
+        self.assertEqual(fixture["schema"], "genoma-developer-documentation-contract-v3")
         self.assertEqual(
             fixture["base_sha"], "185996841b55669e42aa641896e2947748e04704"
         )

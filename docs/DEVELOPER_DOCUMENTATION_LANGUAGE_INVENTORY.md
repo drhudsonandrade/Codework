@@ -44,6 +44,8 @@ The same test also asserts that representative normative and localized values re
 
 The editorial QA document is explicitly bounded to versioned evidence. The 200 DPI static PDF artifact from 2026-08-16 is `VERIFICADO`; the current versioned DOCX parity record is `NÃO DISPONÍVEL`; no current Poppler verdict is claimed without a versioned artifact.
 
+The target-registry reproduction block is also bounded to entrypoints present in the checkout. The historical python3 scripts/curate_panelapp.py collector is absent, so fresh PanelApp recollection is not presented as reproducible; the committed `docs/evidence/PANELAPP_CURATION.json.gz` snapshot is used only as the explicit downstream input boundary. The contract fixture excludes that single retired invalid base command, while the active documentation test requires every executable `python`/`bash` `scripts/...` entrypoint it sees to exist in the current repository.
+
 ## Exclusions and stage 8
 
 This is not the repository-wide residual audit. Stage 8 still owns the final classification of every remaining Portuguese occurrence, including compatibility aliases and any intentionally retained documentation content.

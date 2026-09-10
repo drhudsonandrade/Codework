@@ -963,7 +963,6 @@
         "curl -O https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.txt.gz",
         "curl -O https://ftp.clinicalgenome.org/ClinGen_gene_curation_list_GRCh38.tsv",
         "curl -O https://storage.googleapis.com/gcp-public-data--gnomad/release/4.1/constraint/gnomad.v4.1.constraint_metrics.tsv",
-        "python3 scripts/curate_panelapp.py",
         "python3 scripts/expand_clinvar_targets.py \\",
         "    --clinvar-bulk variant_summary.txt.gz \\",
         "    --panelapp docs/evidence/PANELAPP_CURATION.json.gz \\",
@@ -1058,5 +1057,5 @@
       ]
     }
   },
-  "schema": "genoma-developer-documentation-contract-v2"
+  "schema": "genoma-developer-documentation-contract-v3"
 }
