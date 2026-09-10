@@ -5,7 +5,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class RepositoryIdentityMigrationTest(unittest.TestCase):
-    def read(self, path: str) -> str:
+    @staticmethod
+    def read(path: str) -> str:
         return (ROOT / path).read_text(encoding="utf-8")
 
     def test_active_repository_identity_uses_omnigenis(self):
