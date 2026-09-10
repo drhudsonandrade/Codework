@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -61,6 +62,66 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
             "CODEWORK_CODERABBIT_BIN_DIR",
             self.read("scripts/codex/setup-coderabbit.sh"),
         )
+
+
+    def test_recovery_doc_requires_live_verification_of_app_and_legacy_pr(self):
+        text = self.read("docs/GITHUB_MOBILE_IMPORT.md")
+        self.assertNotIn("The GitHub App is now installed", text)
+        self.assertIn("Verify the GitHub App installation and PR #2 state", text)
+        self.assertIn("evidence artifact", text)
+
+    def test_migration_evidence_attests_raw_captures_and_ruleset_semantics(self):
+        evidence = json.loads(
+            self.read(
+                "docs/superpowers/evidence/"
+                "2026-09-10-omnigenis-repository-identity-migration.json"
+            )
+        )
+        attestation = evidence["raw_capture_attestation"]
+        for phase in ("pre", "post"):
+            record = attestation[phase]
+            self.assertRegex(record["manifest_sha256"], r"^[0-9a-f]{64}$")
+            self.assertIn("sha256sum -c manifest.sha256", record["verification_command"])
+            self.assertTrue(record["location"].startswith("/tmp/omnigenis-rename-"))
+
+        before = evidence["ruleset_semantics_pre"]
+        after = evidence["ruleset_semantics_post"]
+        self.assertEqual(before, after)
+        self.assertEqual(set(before), {"21303100", "22347095"})
+        for ruleset in before.values():
+            for key in (
+                "enforcement",
+                "conditions",
+                "rules",
+                "bypass_actors",
+                "required_status_contexts",
+            ):
+                self.assertIn(key, ruleset)
+
+    def test_migration_plan_uses_fail_closed_reference_and_phase_two_gates(self):
+        plan = self.read(
+            "docs/superpowers/plans/"
+            "2026-09-10-omnigenis-repository-identity-migration.md"
+        )
+        self.assertIn("unexpected_old_references", plan)
+        self.assertIn("allowed_historical_old_references", plan)
+        self.assertIn("phase2_changed_paths", plan)
+        self.assertNotIn(
+            "git grep -n 'drhudsonandrade/Codework' -- "
+            "':!docs/history/**' ':!docs/superpowers/specs/",
+            plan,
+        )
+
+    def test_migration_plan_compares_complete_ruleset_semantics(self):
+        plan = self.read(
+            "docs/superpowers/plans/"
+            "2026-09-10-omnigenis-repository-identity-migration.md"
+        )
+        self.assertIn("def normalize_ruleset", plan)
+        self.assertIn("bypass_actors", plan)
+        self.assertIn("required_status_contexts", plan)
+        self.assertIn("ruleset_semantics_pre", plan)
+        self.assertIn("ruleset_semantics_post", plan)
 
 
 if __name__ == "__main__":

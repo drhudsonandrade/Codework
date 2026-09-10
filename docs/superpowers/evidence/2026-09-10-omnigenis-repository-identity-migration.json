@@ -1,4 +1,25 @@
 {
+  "authenticated_recovery_reference_verification": {
+    "github_app_installation": {
+      "account_login": "drhudsonandrade",
+      "installation_id": 153834452,
+      "repository_access_verified": true,
+      "repository_full_name": "drhudsonandrade/OmniGenis",
+      "repository_id": 1212760346,
+      "repository_selection": "selected",
+      "verification_source": "Authenticated GitHub connector installation and repository enumeration"
+    },
+    "legacy_pr_2": {
+      "head_repo_full_name": "drhudsonandrade/OmniGenis",
+      "head_repo_id": 1212760346,
+      "merged": true,
+      "number": 2,
+      "state": "closed",
+      "url": "https://github.com/drhudsonandrade/OmniGenis/pull/2",
+      "verification_source": "Authenticated GitHub pull-request lookup"
+    },
+    "verified_at_utc": "2026-09-10T22:54:21.181814Z"
+  },
   "captured_post_rename_at_utc": "2026-09-10T22:18:04.504461Z",
   "captured_pre_rename_at_utc": "2026-09-10T22:16:29.812273Z",
   "default_branch_post": "main",
@@ -14,6 +35,21 @@
   "main_sha_pre": "ae3cd2166d1f6ed5875fdb8be7d82543c962ee54",
   "new_full_name": "drhudsonandrade/OmniGenis",
   "old_full_name": "drhudsonandrade/Codework",
+  "raw_capture_attestation": {
+    "post": {
+      "byte_verification": "PASS",
+      "location": "/tmp/omnigenis-rename-post",
+      "manifest_sha256": "967ce5eb40d57e4565dbce2a5c679d9fa20c1962d954255f29ca985da7199309",
+      "verification_command": "cd /tmp/omnigenis-rename-post && sha256sum -c manifest.sha256"
+    },
+    "pre": {
+      "byte_verification": "PASS",
+      "location": "/tmp/omnigenis-rename-pre",
+      "manifest_sha256": "fea193fc245bc669e22ec10ada993ad48c904193247ccf4f2959dd924d556e6a",
+      "verification_command": "cd /tmp/omnigenis-rename-pre && sha256sum -c manifest.sha256"
+    },
+    "retention_note": "The raw captures are ephemeral local execution artifacts. This committed Git evidence attests their locations, manifest digests, per-file digests, and byte-verification commands."
+  },
   "raw_capture_sha256": {
     "post": {
       "main.json": "c5e97c446ca5dc885c226b47fc94997fbce9b1597cebacf877cb8b2439d4206f",
@@ -49,6 +85,283 @@
     "security/snyk (drhudsonandrade)",
     "semgrep-cloud-platform/scan"
   ],
+  "ruleset_semantics_match": true,
+  "ruleset_semantics_post": {
+    "21303100": {
+      "bypass_actors": [],
+      "conditions": {
+        "ref_name": {
+          "exclude": [],
+          "include": [
+            "refs/heads/main"
+          ]
+        }
+      },
+      "enforcement": "active",
+      "id": 21303100,
+      "name": "GENOMA protected main",
+      "required_status_contexts": [
+        "static",
+        "container-canary",
+        "Canonical policy + 263-rule contract",
+        "OPA/Rego parity",
+        "Real Docker + canonical read-only mount",
+        "CodeRabbit",
+        "GitGuardian Security Checks",
+        "DeepSource: Python",
+        "DeepSource: JavaScript",
+        "DeepSource: Shell",
+        "DeepSource: Docker",
+        "DeepSource: SQL",
+        "security/snyk (drhudsonandrade)",
+        "semgrep-cloud-platform/scan"
+      ],
+      "rules": [
+        {
+          "type": "deletion"
+        },
+        {
+          "type": "non_fast_forward"
+        },
+        {
+          "parameters": {
+            "do_not_enforce_on_create": false,
+            "required_status_checks": [
+              {
+                "context": "static"
+              },
+              {
+                "context": "container-canary"
+              },
+              {
+                "context": "Canonical policy + 263-rule contract"
+              },
+              {
+                "context": "OPA/Rego parity"
+              },
+              {
+                "context": "Real Docker + canonical read-only mount"
+              },
+              {
+                "context": "CodeRabbit"
+              },
+              {
+                "context": "GitGuardian Security Checks",
+                "integration_id": 46505
+              },
+              {
+                "context": "DeepSource: Python",
+                "integration_id": 16372
+              },
+              {
+                "context": "DeepSource: JavaScript",
+                "integration_id": 16372
+              },
+              {
+                "context": "DeepSource: Shell",
+                "integration_id": 16372
+              },
+              {
+                "context": "DeepSource: Docker",
+                "integration_id": 16372
+              },
+              {
+                "context": "DeepSource: SQL",
+                "integration_id": 16372
+              },
+              {
+                "context": "security/snyk (drhudsonandrade)"
+              },
+              {
+                "context": "semgrep-cloud-platform/scan",
+                "integration_id": 4836909
+              }
+            ],
+            "strict_required_status_checks_policy": true
+          },
+          "type": "required_status_checks"
+        }
+      ]
+    },
+    "22347095": {
+      "bypass_actors": [
+        {
+          "actor_id": 116986656,
+          "actor_type": "User",
+          "bypass_mode": "pull_request"
+        }
+      ],
+      "conditions": {
+        "ref_name": {
+          "exclude": [],
+          "include": [
+            "refs/heads/main"
+          ]
+        }
+      },
+      "enforcement": "active",
+      "id": 22347095,
+      "name": "GENOMA approval gate",
+      "required_status_contexts": [],
+      "rules": [
+        {
+          "parameters": {
+            "allowed_merge_methods": [
+              "merge",
+              "squash",
+              "rebase"
+            ],
+            "dismiss_stale_reviews_on_push": true,
+            "require_code_owner_review": false,
+            "require_extra_approval_for_unattributed_changes": false,
+            "require_last_push_approval": false,
+            "required_approving_review_count": 0,
+            "required_review_thread_resolution": true,
+            "required_reviewers": []
+          },
+          "type": "pull_request"
+        }
+      ]
+    }
+  },
+  "ruleset_semantics_pre": {
+    "21303100": {
+      "bypass_actors": [],
+      "conditions": {
+        "ref_name": {
+          "exclude": [],
+          "include": [
+            "refs/heads/main"
+          ]
+        }
+      },
+      "enforcement": "active",
+      "id": 21303100,
+      "name": "GENOMA protected main",
+      "required_status_contexts": [
+        "static",
+        "container-canary",
+        "Canonical policy + 263-rule contract",
+        "OPA/Rego parity",
+        "Real Docker + canonical read-only mount",
+        "CodeRabbit",
+        "GitGuardian Security Checks",
+        "DeepSource: Python",
+        "DeepSource: JavaScript",
+        "DeepSource: Shell",
+        "DeepSource: Docker",
+        "DeepSource: SQL",
+        "security/snyk (drhudsonandrade)",
+        "semgrep-cloud-platform/scan"
+      ],
+      "rules": [
+        {
+          "type": "deletion"
+        },
+        {
+          "type": "non_fast_forward"
+        },
+        {
+          "parameters": {
+            "do_not_enforce_on_create": false,
+            "required_status_checks": [
+              {
+                "context": "static"
+              },
+              {
+                "context": "container-canary"
+              },
+              {
+                "context": "Canonical policy + 263-rule contract"
+              },
+              {
+                "context": "OPA/Rego parity"
+              },
+              {
+                "context": "Real Docker + canonical read-only mount"
+              },
+              {
+                "context": "CodeRabbit"
+              },
+              {
+                "context": "GitGuardian Security Checks",
+                "integration_id": 46505
+              },
+              {
+                "context": "DeepSource: Python",
+                "integration_id": 16372
+              },
+              {
+                "context": "DeepSource: JavaScript",
+                "integration_id": 16372
+              },
+              {
+                "context": "DeepSource: Shell",
+                "integration_id": 16372
+              },
+              {
+                "context": "DeepSource: Docker",
+                "integration_id": 16372
+              },
+              {
+                "context": "DeepSource: SQL",
+                "integration_id": 16372
+              },
+              {
+                "context": "security/snyk (drhudsonandrade)"
+              },
+              {
+                "context": "semgrep-cloud-platform/scan",
+                "integration_id": 4836909
+              }
+            ],
+            "strict_required_status_checks_policy": true
+          },
+          "type": "required_status_checks"
+        }
+      ]
+    },
+    "22347095": {
+      "bypass_actors": [
+        {
+          "actor_id": 116986656,
+          "actor_type": "User",
+          "bypass_mode": "pull_request"
+        }
+      ],
+      "conditions": {
+        "ref_name": {
+          "exclude": [],
+          "include": [
+            "refs/heads/main"
+          ]
+        }
+      },
+      "enforcement": "active",
+      "id": 22347095,
+      "name": "GENOMA approval gate",
+      "required_status_contexts": [],
+      "rules": [
+        {
+          "parameters": {
+            "allowed_merge_methods": [
+              "merge",
+              "squash",
+              "rebase"
+            ],
+            "dismiss_stale_reviews_on_push": true,
+            "require_code_owner_review": false,
+            "require_extra_approval_for_unattributed_changes": false,
+            "require_last_push_approval": false,
+            "required_approving_review_count": 0,
+            "required_review_thread_resolution": true,
+            "required_reviewers": []
+          },
+          "type": "pull_request"
+        }
+      ]
+    }
+  },
   "rulesets_post": [
     {
       "enforcement": "active",

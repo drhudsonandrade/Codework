@@ -135,18 +135,52 @@ gh api repos/drhudsonandrade/OmniGenis/rulesets/21303100 > /tmp/omnigenis-rename
 python3 - <<'PY'
 import json
 from pathlib import Path
-root = Path('/tmp/omnigenis-rename-post')
-repo = json.loads((root / 'repository.json').read_text())
-main = json.loads((root / 'main.json').read_text())
-rulesets = json.loads((root / 'rulesets.json').read_text())
+
+pre_root = Path('/tmp/omnigenis-rename-pre')
+post_root = Path('/tmp/omnigenis-rename-post')
+expected_ids = {21303100, 22347095}
+
+
+def normalize_ruleset(path: Path) -> dict:
+    data = json.loads(path.read_text(encoding='utf-8'))
+    required_status_contexts = []
+    for rule in data.get('rules', []):
+        if rule.get('type') == 'required_status_checks':
+            required_status_contexts = [
+                item['context']
+                for item in rule.get('parameters', {}).get('required_status_checks', [])
+            ]
+    return {
+        'id': data['id'],
+        'name': data['name'],
+        'enforcement': data['enforcement'],
+        'conditions': data.get('conditions'),
+        'rules': data.get('rules'),
+        'bypass_actors': data.get('bypass_actors', []),
+        'required_status_contexts': required_status_contexts,
+    }
+
+repo = json.loads((post_root / 'repository.json').read_text(encoding='utf-8'))
+main = json.loads((post_root / 'main.json').read_text(encoding='utf-8'))
+rulesets = json.loads((post_root / 'rulesets.json').read_text(encoding='utf-8'))
+ruleset_semantics_pre = {
+    str(rid): normalize_ruleset(pre_root / f'ruleset-{rid}.json') for rid in expected_ids
+}
+ruleset_semantics_post = {
+    str(rid): normalize_ruleset(post_root / f'ruleset-{rid}.json') for rid in expected_ids
+}
+
 assert repo['id'] == 1212760346
 assert repo['name'] == 'OmniGenis'
 assert repo['full_name'] == 'drhudsonandrade/OmniGenis'
 assert repo['visibility'] == 'public'
 assert repo['default_branch'] == 'main'
 assert main['sha'] == 'ae3cd2166d1f6ed5875fdb8be7d82543c962ee54'
-assert {r['id'] for r in rulesets} == {22347095, 21303100}
+assert {r['id'] for r in rulesets} == expected_ids
+assert {int(key) for key in ruleset_semantics_pre} == expected_ids
+assert ruleset_semantics_pre == ruleset_semantics_post
 print('POST_RENAME_GATE=PASS')
+print('RULESET_SEMANTICS_CONTINUITY=PASS')
 PY
 ```
 
@@ -216,7 +250,11 @@ Expected: the design and plan commits are present without modifying runtime code
 
 - [ ] **Step 4: Persist a concise pre/post rename evidence record**
 
-Create `docs/superpowers/evidence/2026-09-10-omnigenis-repository-identity-migration.json` containing only non-secret fields: repository ID, old/new full names, pre/post `main` SHA, visibility, default branch, ruleset IDs/names, required status contexts, old/new Git endpoint verification, UTC timestamps, and SHA-256 values of the raw `/tmp/omnigenis-rename-*/*.json` captures.
+Create `docs/superpowers/evidence/2026-09-10-omnigenis-repository-identity-migration.json` containing only non-secret fields: repository ID, old/new full names, pre/post `main` SHA, visibility, default branch, normalized pre/post ruleset semantics, required status contexts, old/new Git endpoint verification, UTC timestamps, and SHA-256 values of the raw `/tmp/omnigenis-rename-*/*.json` captures.
+
+The committed evidence must also contain an immutable raw-capture attestation for both the pre-rename and post-rename capture directories. Record the ephemeral location, SHA-256 of `manifest.sha256`, every per-file digest already captured, the exact byte-verification command `sha256sum -c manifest.sha256`, and the observed verification result. This makes the Git record self-describing even after `/tmp` is reclaimed.
+
+Record an authenticated recovery-reference verification: enumerate the GitHub App installation and selected repositories to prove access to repository ID `1212760346`, and query PR `#2` to record its observed state instead of asserting that state in recovery prose. Store only normalized non-secret output in the evidence artifact.
 
 Use Python standard-library JSON serialization with `sort_keys=True` and `indent=2`. Do not embed authentication headers, tokens, cookies, or environment secrets.
 
@@ -374,20 +412,99 @@ Expected: all repository identity, historical-preservation, public-state, and Ph
 Run:
 
 ```bash
-git grep -n 'drhudsonandrade/Codework' -- ':!docs/history/**' ':!docs/superpowers/specs/2026-09-10-omnigenis-repository-identity-migration-design.md' ':!docs/superpowers/plans/2026-09-10-omnigenis-repository-identity-migration.md' || true
+python3 - <<'PY'
+import subprocess
+from pathlib import Path
+
+needle = 'drhudsonandrade/Codework'
+allowed_historical_old_references = {
+    'docs/POLICY_CODE_LANGUAGE_INVENTORY.md',
+    'docs/REPORTING_CODE_LANGUAGE_INVENTORY.md',
+    'docs/superpowers/checkpoints/2026-09-03-local-first-ci-session.md',
+    'docs/superpowers/plans/2026-09-05-four-plane-audit-static-dependency.md',
+    'docs/superpowers/plans/2026-09-08-scientific-internals-english.md',
+    'docs/superpowers/plans/2026-09-09-policy-evidence-audit-english.md',
+    'docs/superpowers/plans/2026-09-09-reporting-english-locale.md',
+    'docs/superpowers/specs/2026-09-03-english-codebase-refactor-design.md',
+    'docs/superpowers/specs/2026-09-03-local-first-ci-architecture-design.md',
+    'docs/superpowers/specs/2026-09-05-draft-first-final-ci-design.md',
+    'docs/superpowers/specs/2026-09-05-four-plane-audit-static-dependency-design.md',
+}
+migration_identity_records = {
+    'docs/superpowers/evidence/2026-09-10-omnigenis-repository-identity-migration.json',
+    'docs/superpowers/plans/2026-09-10-omnigenis-repository-identity-migration.md',
+    'docs/superpowers/specs/2026-09-10-omnigenis-repository-identity-migration-design.md',
+    'tests/test_repository_identity_migration.py',
+}
+
+result = subprocess.run(
+    ['git', 'grep', '-n', needle, '--'],
+    text=True,
+    capture_output=True,
+    check=False,
+)
+if result.returncode not in (0, 1):
+    raise SystemExit(result.stderr or f'git grep failed with {result.returncode}')
+
+unexpected_old_references = []
+for line in result.stdout.splitlines():
+    file_path = line.split(':', 1)[0]
+    if file_path.startswith('docs/history/') or file_path in migration_identity_records:
+        continue
+    if file_path in allowed_historical_old_references:
+        baseline = subprocess.run(
+            ['git', 'show', f'origin/main:{file_path}'],
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout
+        current = Path(file_path).read_text(encoding='utf-8')
+        if current == baseline:
+            continue
+    unexpected_old_references.append(line)
+
+if unexpected_old_references:
+    raise SystemExit(
+        'Unexpected old repository references:
+' + '
+'.join(unexpected_old_references)
+    )
+print('OLD_REPOSITORY_REFERENCE_GATE=PASS')
+PY
 ```
 
-Expected: only intentionally preserved historical evidence links such as the PR #60 and PR #61 records remain. Any current operational clone/setup/governance reference is blocking.
+Expected: the only old repository references outside immutable `docs/history/**` and the migration record itself are the explicitly listed historical files, and each listed file must remain byte-identical to `origin/main`. Any current operational reference or modified historical allowance is blocking.
 
 - [ ] **Step 6: Review the Phase 1 preservation boundary**
 
 Run:
 
 ```bash
-git diff -- Dockerfile environment.yml nextflow.config .github/workflows mcp scripts/codex/setup-coderabbit.sh
+python3 - <<'PY'
+import subprocess
+
+phase2_changed_paths = subprocess.run(
+    [
+        'git', 'diff', '--name-only', 'origin/main', '--',
+        'Dockerfile', 'environment.yml', 'nextflow.config',
+        '.github/workflows', 'mcp', 'scripts/codex/setup-coderabbit.sh',
+    ],
+    text=True,
+    capture_output=True,
+    check=True,
+).stdout.splitlines()
+if phase2_changed_paths:
+    raise SystemExit(
+        'Phase 2 contract files changed during Phase 1:
+'
+        + '
+'.join(phase2_changed_paths)
+    )
+print('PHASE2_PRESERVATION_GATE=PASS')
+PY
 ```
 
-Expected: no Phase 2 internal identity file is changed by the rename cleanup.
+Expected: `phase2_changed_paths` is empty. Any changed Phase 2 contract path is blocking.
 
 ### Task 6: Run full local validation at the exact implementation HEAD
 
