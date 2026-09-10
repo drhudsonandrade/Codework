@@ -63,11 +63,11 @@ _POLICY_PAYLOAD = json.loads(
 )
 POLICY_TECHNICAL_TERMS = frozenset(_POLICY_PAYLOAD["technical_terms"])
 PORTUGUESE_PROSE_TERMS = LOCAL_PORTUGUESE_PROSE_TERMS | POLICY_TECHNICAL_TERMS
-PORTUGUESE_LOWERCASE_ACCENT = re.compile(r"[áéíóúâêôãõçà]")
+PORTUGUESE_ACCENT = re.compile(r"[áéíóúâêôãõçà]", re.IGNORECASE)
 EMAIL_ADDRESS = re.compile(
     r"\b[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}\b"
 )
-BARE_DOMAIN = re.compile(r"\b(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}\b")
+DOMAIN_COM_SUFFIX = re.compile(r"(?<=\.)com\b", re.IGNORECASE)
 PORTUGUESE_ASCII_COMMON_WORDS = frozenset({
     "agora", "ainda", "aqui", "assim", "cada", "como", "depois", "desde",
     "esse", "essa", "este", "esta", "isso", "isto", "mais", "menos", "mesmo",
@@ -85,7 +85,19 @@ PORTUGUESE_ASCII_NOMINAL_ENDINGS = (
     "cao", "coes", "dade", "dades", "mente", "amento", "amentos", "imento",
     "imentos", "avel", "aveis", "ivel", "iveis",
 )
-PRESERVED_LITERALS = (
+PRESERVED_LITERALS = tuple(dict.fromkeys((
+    *_POLICY_PAYLOAD["contract_literals"],
+    "NÃO DETECTADO", "NÃO TESTADO", "NÃO REPORTÁVEL",
+    "MODELO", "RESULTADO", "DATA", "VERSÃO",
+    "NÃO TRANSFERÍVEL SEM CALIBRAÇÃO", "TRANSFERIBILIDADE INCERTA",
+    "PARCIALMENTE TRANSFERÍVEL",
+    "ACHADO PRELIMINAR", "ACHADO ACIONÁVEL",
+    "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt",
+    "REGRAS_..._v3.4_2026-08-17.txt",
+    "NAO_DISPONIVEL", "NAO_TESTADO", "NAO_REPORTAVEL", "NAO_DETECTADO",
+    "NAO_INTERROGADO",
+)))
+COMPATIBILITY_INLINE_EXCLUSIONS = frozenset({
     "NÃO DISPONÍVEL", "NÃO DETECTADO", "NÃO TESTADO", "NÃO REPORTÁVEL",
     "EXECUTADO", "VERIFICADO", "INFERIDO", "PROPOSTO",
     "MODELO", "RESULTADO", "DATA", "VERSÃO",
@@ -95,7 +107,7 @@ PRESERVED_LITERALS = (
     "REGRAS_..._v3.4_2026-08-17.txt",
     "NAO_DISPONIVEL", "NAO_TESTADO", "NAO_REPORTAVEL", "NAO_DETECTADO",
     "NAO_INTERROGADO",
-)
+})
 RETIRED_BASE_COMMANDS = frozenset({"python3 scripts/curate_panelapp.py"})
 PRESERVED_PORTUGUESE_REASONS = frozenset({
     "historical_quote", "localized_example", "safety_pattern"
@@ -160,10 +172,10 @@ def _ascii_portuguese_hints(words: set[str]) -> set[str]:
 def _prose_tokens(line: str) -> set[str]:
     """Return policy, diacritic, and multi-signal ASCII Portuguese prose tokens."""
     line = re.sub(r"https?://\S+", " ", line)
-    for literal in PRESERVED_LITERALS:
+    for literal in sorted(PRESERVED_LITERALS, key=len, reverse=True):
         line = line.replace(literal, " ")
     line = EMAIL_ADDRESS.sub(" ", line)
-    line = BARE_DOMAIN.sub(" ", line)
+    line = DOMAIN_COM_SUFFIX.sub(" ", line)
     parts = re.findall(r"[^\W_]+", line, flags=re.UNICODE)
     words = {_normalize(word) for word in parts}
     matches = words & PORTUGUESE_PROSE_TERMS
@@ -171,7 +183,7 @@ def _prose_tokens(line: str) -> set[str]:
     matches.update(
         _normalize(word)
         for word in parts
-        if word[:1].islower() and PORTUGUESE_LOWERCASE_ACCENT.search(word)
+        if (word[:1].islower() or word.isupper()) and PORTUGUESE_ACCENT.search(word)
     )
     if not matches:
         matches.update(_ascii_portuguese_hints(words))
@@ -251,7 +263,10 @@ def _protected_contract(text: str) -> dict[str, list[str]]:
     inline_code = [
         value
         for value in re.findall(r"`([^`\n]+)`", text)
-        if not value.startswith("docs/evidence/") and value not in PRESERVED_LITERALS
+        if (
+            not value.startswith("docs/evidence/")
+            and value not in COMPATIBILITY_INLINE_EXCLUSIONS
+        )
     ]
     return {
         "sha256_literals": sorted(
@@ -364,6 +379,15 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
                          {"este", "painel", "deve", "dados", "somente", "apos", "revisao"})
         self.assertEqual(_prose_tokens("status = `NÃO DISPONÍVEL`; `EXECUTADO`"), set())
 
+    def test_policy_contract_literals_are_excluded_by_exact_identity(self) -> None:
+        """Every repository policy contract literal must remain outside prose detection."""
+        for literal in _POLICY_PAYLOAD["contract_literals"]:
+            with self.subTest(literal=literal):
+                self.assertEqual(_prose_tokens(f"status = `{literal}`"), set())
+        self.assertEqual(
+            _prose_tokens("REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"), set()
+        )
+
     def test_scanner_rejects_a_short_line_with_one_portuguese_term(self) -> None:
         """A one-token Portuguese heading must not escape the language gate."""
         with TemporaryDirectory() as directory:
@@ -433,6 +457,20 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
                 with self.subTest(example=example):
                     path.write_text(example + "\n", encoding="utf-8")
                     self.assertEqual(_find_portuguese_prose(path), [])
+
+    def test_dotted_portuguese_identifier_is_not_discarded_as_a_domain(self) -> None:
+        """Dotted implementation identifiers must remain visible to the language guard."""
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "doc.md"
+            path.write_text("Use `arquivo.configuracao` here.\n", encoding="utf-8")
+            self.assertTrue(_find_portuguese_prose(path))
+
+    def test_uppercase_accented_portuguese_is_detected(self) -> None:
+        """Uppercase accented prose must not bypass diacritic detection."""
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "doc.md"
+            path.write_text("DOCUMENTAÇÃO TÉCNICA APROVADA.\n", encoding="utf-8")
+            self.assertTrue(_find_portuguese_prose(path))
 
     def test_inline_code_does_not_create_a_portuguese_bypass(self) -> None:
         """Backticks must not hide developer prose that is not an explicit contract literal."""
