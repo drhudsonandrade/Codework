@@ -12,6 +12,7 @@ from tests.workflow_test_utils import job_block as _job_block
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 CLASSIFIER = ROOT / "scripts" / "ci_change_classifier.py"
+RETENTION_DAYS_PATTERN = re.compile(r"(?m)^\s*retention-days:\s*[\"\']?(\d+)[\"\']?\s*(?:#.*)?$")
 
 
 def _ngs_script_dependency_closure() -> set[str]:
@@ -1002,12 +1003,18 @@ class CIOptimizationContractTest(unittest.TestCase):
             with self.subTest(workflow=path.name):
                 values = [
                     int(value)
-                    for value in re.findall(
-                        r"retention-days:\s*(\d+)", path.read_text(encoding="utf-8")
+                    for value in RETENTION_DAYS_PATTERN.findall(
+                        path.read_text(encoding="utf-8")
                     )
                 ]
                 for retention_days in values:
                     self.assertLessEqual(retention_days, 90)
+
+    def test_artifact_retention_guard_recognizes_quoted_numeric_scalars(self):
+        """Treat quoted numeric YAML values as numeric retention requests."""
+        probe = "retention-days: \"91\"\nretention-days: '92'\n"
+        values = [int(value) for value in RETENTION_DAYS_PATTERN.findall(probe)]
+        self.assertEqual(values, [91, 92])
 
     def test_scaffold_publish_owns_build_cache_without_widening_permissions(self):
         workflow = _read("scaffold-validation.yml")
