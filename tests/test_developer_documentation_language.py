@@ -65,6 +65,10 @@ EXPECTED_PRESERVED_PORTUGUESE_COUNTS = {
     "docs/SNP_ARRAY_PARTIAL_GENOME.md": 4,
     "docs/TARGET_REGISTRY_EXPANSION.md": 16,
 }
+EXPECTED_PRESERVED_INLINE_COUNTS = {
+    "docs/ANCESTRY_REFERENCE_PANEL.md": 1,
+    "docs/TARGET_REGISTRY_EXPANSION.md": 1,
+}
 
 
 def _normalize(value: str) -> str:
@@ -86,7 +90,6 @@ def _ascii_portuguese_hints(words: set[str]) -> set[str]:
 
 def _prose_tokens(line: str) -> set[str]:
     """Return policy, diacritic, and multi-signal ASCII Portuguese prose tokens."""
-    line = re.sub(r"`[^`]*`", " ", line)
     line = re.sub(r"https?://\S+", " ", line)
     for literal in PRESERVED_LITERALS:
         line = line.replace(literal, " ")
@@ -115,14 +118,30 @@ def _preserved_portuguese_lines(path: Path) -> frozenset[str]:
     return frozenset(item["line"] for item in values)
 
 
+def _preserved_inline_portuguese_literals(path: Path) -> frozenset[str]:
+    """Load exact reviewed Portuguese literals allowed only inside backticks."""
+    try:
+        relative = path.resolve().relative_to(ROOT.resolve()).as_posix()
+    except ValueError:
+        return frozenset()
+    fixture_path = ROOT / "tests/fixtures/developer_documentation_contract.json"
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    values = fixture.get("preserved_inline_portuguese_literals", {}).get(relative, [])
+    return frozenset(item["literal"] for item in values)
+
+
 def _find_portuguese_prose(path: Path) -> list[tuple[int, tuple[str, ...]]]:
     """Scan every Markdown line except exact reviewed historical/localized exceptions."""
     findings: list[tuple[int, tuple[str, ...]]] = []
     preserved = _preserved_portuguese_lines(path)
+    preserved_inline = _preserved_inline_portuguese_literals(path)
     for lineno, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         if raw in preserved or raw.lstrip().startswith("```"):
             continue
-        tokens = tuple(sorted(_prose_tokens(raw)))
+        scanned = raw
+        for literal in preserved_inline:
+            scanned = scanned.replace(f"`{literal}`", " ")
+        tokens = tuple(sorted(_prose_tokens(scanned)))
         if tokens:
             findings.append((lineno, tokens))
     return findings
@@ -233,6 +252,32 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
                     path.write_text(example + "\n", encoding="utf-8")
                     self.assertEqual(_find_portuguese_prose(path), [])
 
+    def test_inline_code_does_not_create_a_portuguese_bypass(self) -> None:
+        """Backticks must not hide developer prose that is not an explicit contract literal."""
+        examples = (
+            "`Este painel deve usar dados somente após revisão.`",
+            "Prefix `Isso ocorreu ontem.` suffix",
+        )
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "doc.md"
+            for example in examples:
+                with self.subTest(example=example):
+                    path.write_text(example + "\n", encoding="utf-8")
+                    self.assertTrue(_find_portuguese_prose(path))
+
+    def test_inline_code_identifiers_and_contract_literals_remain_allowed(self) -> None:
+        """Scanning inline prose must not reject ordinary identifiers or exact contracts."""
+        examples = (
+            "Use `result_path` and `panel_matrix.status` for the current artifact.",
+            "Status remains `NÃO DISPONÍVEL` until evidence exists.",
+        )
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "doc.md"
+            for example in examples:
+                with self.subTest(example=example):
+                    path.write_text(example + "\n", encoding="utf-8")
+                    self.assertEqual(_find_portuguese_prose(path), [])
+
     def test_markdown_syntax_does_not_create_a_portuguese_bypass(self) -> None:
         """Arbitrary blockquotes and fenced comments must remain subject to language checks."""
         with TemporaryDirectory() as directory:
@@ -266,6 +311,26 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
                 self.assertIn(item["reason"], PRESERVED_PORTUGUESE_REASONS)
                 self.assertEqual(source_lines.count(item["line"]), 1)
                 self.assertTrue(_prose_tokens(item["line"]))
+
+    def test_preserved_inline_portuguese_literals_are_exact_and_justified(self) -> None:
+        """Only enumerated Portuguese backtick literals may bypass inline scanning."""
+        fixture = json.loads(
+            (ROOT / "tests/fixtures/developer_documentation_contract.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        preserved = fixture["preserved_inline_portuguese_literals"]
+        self.assertEqual(set(preserved), set(EXPECTED_PRESERVED_INLINE_COUNTS))
+        for relative, expected_count in EXPECTED_PRESERVED_INLINE_COUNTS.items():
+            entries = preserved[relative]
+            self.assertEqual(len(entries), expected_count)
+            self.assertEqual(len({item["literal"] for item in entries}), expected_count)
+            source = (ROOT / relative).read_text(encoding="utf-8")
+            for item in entries:
+                self.assertEqual(set(item), {"literal", "reason"})
+                self.assertIn(item["reason"], PRESERVED_PORTUGUESE_REASONS)
+                self.assertEqual(source.count(f"`{item['literal']}`"), 1)
+                self.assertTrue(_prose_tokens(item["literal"]))
 
     def test_inventory_does_not_document_a_retired_markdown_bypass(self) -> None:
         """The inventory must describe the current Markdown scanning boundary."""
@@ -319,7 +384,7 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
                 encoding="utf-8"
             )
         )
-        self.assertEqual(fixture["schema"], "genoma-developer-documentation-contract-v4")
+        self.assertEqual(fixture["schema"], "genoma-developer-documentation-contract-v5")
         self.assertEqual(
             fixture["base_sha"], "185996841b55669e42aa641896e2947748e04704"
         )

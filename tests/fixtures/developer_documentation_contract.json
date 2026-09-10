@@ -1057,6 +1057,20 @@
       ]
     }
   },
+  "preserved_inline_portuguese_literals": {
+    "docs/ANCESTRY_REFERENCE_PANEL.md": [
+      {
+        "literal": "48 + linha × indivíduos",
+        "reason": "historical_quote"
+      }
+    ],
+    "docs/TARGET_REGISTRY_EXPANSION.md": [
+      {
+        "literal": "só 1★",
+        "reason": "localized_example"
+      }
+    ]
+  },
   "preserved_portuguese_lines": {
     "docs/ANCESTRY_REFERENCE_PANEL.md": [
       {
@@ -1185,5 +1199,5 @@
       }
     ]
   },
-  "schema": "genoma-developer-documentation-contract-v4"
+  "schema": "genoma-developer-documentation-contract-v5"
 }
