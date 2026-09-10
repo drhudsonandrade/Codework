@@ -1,8 +1,8 @@
-## Escopo
+## Scope
 
-Descreva uma única mudança e por que ela é necessária.
+Describe one change and why it is necessary.
 
-## Contratos/arquitetura afetados
+## Affected contracts/architecture
 
 - [ ] Policy Control Plane
 - [ ] Scientific Data Plane
@@ -10,57 +10,58 @@ Descreva uma única mudança e por que ela é necessária.
 - [ ] Audit Plane
 - [ ] Ruleset/manifest/hash
 - [ ] MCP/adapters
-- [ ] Nenhum dos anteriores
+- [ ] None of the above
 
-## Arquivos alterados intencionalmente
+## Intentionally changed files
 
-Liste os caminhos principais e justifique alterações amplas.
+List the main paths and justify broad changes.
 
-## Evidência local
+## Local evidence
 
-Comandos realmente executados e resultados:
+Commands actually executed and their results:
 
 ```text
-<cole apenas resultados reais; não escreva PASS se não executou>
+<paste only real results; do not write PASS unless it was actually executed>
 ```
 
 - [ ] `python3 scripts/validate_repo.py`
 - [ ] `python3 scripts/verify_supply_chain_lock.py`
 - [ ] `python3 -m unittest discover -s tests -v`
-- [ ] testes específicos do componente alterado
-- [ ] CodeRabbit CLI pré-PR, se disponível/autenticado
+- [ ] component-specific tests
+- [ ] pre-PR CodeRabbit CLI, if available/authenticated
 
 ## CodeRabbit
 
-- [ ] Nenhum finding bloqueante conhecido no review pré-PR, quando executado
-- [ ] Aguardar review automático do CodeRabbit GitHub App após abrir o PR
-- [ ] Findings bloqueantes serão corrigidos nesta branch e re-revisados
+- [ ] No known blocking finding in the pre-PR review, when executed
+- [ ] Wait for the automatic CodeRabbit GitHub App review after opening the PR
+- [ ] Blocking findings will be corrected on this branch and reviewed again
 
 ## CI / GitHub Actions
 
-Durante a implementação, mantenha a PR como Draft e execute as correções e validações
-localmente. Para evitar consumo iterativo de runners, não aguarde os checks obrigatórios do GitHub Actions enquanto a PR estiver em Draft.
+During implementation, keep the PR in Draft and run corrections and validations locally.
+To avoid iterative runner consumption, do not wait for required GitHub Actions checks while
+the PR is in Draft.
 
-- [ ] Confirmar que o HEAD exato está validado localmente antes da rodada final
-- [ ] Marcar a PR como Ready for Review somente quando o HEAD estiver pronto para validação final
-- [ ] Após Ready for Review, aguardar todos os checks obrigatórios do GitHub Actions no HEAD exato
-- [ ] Não usar resultado de CI inexistente como evidência
+- [ ] Confirm the exact HEAD is locally validated before the final round
+- [ ] Mark the PR Ready for Review only when the exact HEAD is ready for final validation
+- [ ] After Ready for Review, wait for all required GitHub Actions checks on the exact HEAD
+- [ ] Do not use a nonexistent CI result as evidence
 
-## Mudança canônica
+## Canonical change
 
-Este PR altera versão/data/hash/nome do ruleset, manifest, sealed transport,
-attestation ou contrato de evidência?
+Does this PR change the ruleset version/date/hash/name, manifest, sealed transport,
+attestation, or evidence contract?
 
-**Resposta:** Sim / Não
+**Answer:** Yes / No
 
-Se sim, descreva a migração coordenada e todos os consumidores atualizados.
+If yes, describe the coordinated migration and every updated consumer.
 
-## Limitações conhecidas
+## Known limitations
 
-Liste validações que não puderam ser executadas e por quê.
+List validations that could not be executed and why.
 
 ## Merge
 
-- [ ] Sem auto-merge
-- [ ] Merge manual somente após CodeRabbit + CI + todos os demais required checks
-- [ ] Se necessário, usar o bypass PR-only do owner somente na approval layer; nunca contornar Security & CI
+- [ ] No auto-merge
+- [ ] Manual merge only after CodeRabbit + CI + all other required checks
+- [ ] If needed, use the owner's PR-only bypass only at the approval layer; never bypass Security & CI

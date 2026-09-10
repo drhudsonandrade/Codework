@@ -417,20 +417,28 @@ def _pr_template_draft_flow_errors(template: str) -> list[str]:
     errors: list[str] = []
     visible_template = re.sub(r"<!--.*?(?:-->|$)", "", template, flags=re.DOTALL)
     try:
-        section = visible_template.split("## CI / GitHub Actions", 1)[1].split("## Mudan\u00e7a can\u00f4nica", 1)[0]
+        section = visible_template.split("## CI / GitHub Actions", 1)[1].split(
+            "## Canonical change", 1
+        )[0]
     except IndexError:
         return ["CI / GitHub Actions section is missing or not bounded"]
     markers = (
-        "mantenha a PR como Draft",
-        "Confirmar que o HEAD exato est\u00e1 validado localmente",
-        "Marcar a PR como Ready for Review",
-        "Ap\u00f3s Ready for Review, aguardar todos os checks obrigat\u00f3rios do GitHub Actions no HEAD exato",
+        "During implementation, keep the PR in Draft and run corrections and validations locally.",
+        "- [ ] Confirm the exact HEAD is locally validated before the final round",
+        "- [ ] Mark the PR Ready for Review only when the exact HEAD is ready for final validation",
+        (
+            "- [ ] After Ready for Review, wait for all required GitHub Actions "
+            "checks on the exact HEAD"
+        ),
     )
+    lines = [line.strip() for line in section.splitlines() if line.strip()]
     positions: list[int] = []
     for marker in markers:
-        index = section.find(marker)
-        if index < 0:
+        try:
+            index = lines.index(marker)
+        except ValueError:
             errors.append(f"draft-first flow marker missing: {marker}")
+            index = -1
         positions.append(index)
     if all(index >= 0 for index in positions) and positions != sorted(positions):
         errors.append("draft-first flow markers are out of order")
@@ -520,26 +528,46 @@ class CIOptimizationContractTest(unittest.TestCase):
 
     def test_pr_template_draft_flow_rejects_unrelated_or_reordered_markers(self):
         template = (ROOT / ".github" / "pull_request_template.md").read_text(encoding="utf-8")
-        ci_section, rest = template.split("## Mudan\u00e7a can\u00f4nica", 1)
-        final_line = "- [ ] Ap\u00f3s Ready for Review, aguardar todos os checks obrigat\u00f3rios do GitHub Actions no HEAD exato\n"
-        mutant = ci_section.replace(final_line, "") + "## Mudan\u00e7a can\u00f4nica" + rest + "\n" + final_line
+        ci_section, rest = template.split("## Canonical change", 1)
+        final_line = (
+            "- [ ] After Ready for Review, wait for all required GitHub Actions checks "
+            "on the exact HEAD\n"
+        )
+        mutant = (
+            ci_section.replace(final_line, "")
+            + "## Canonical change"
+            + rest
+            + "\n"
+            + final_line
+        )
         self.assertTrue(_pr_template_draft_flow_errors(mutant))
 
+        negated = template.replace(
+            "During implementation, keep the PR in Draft and run corrections "
+            "and validations locally.",
+            "During implementation, do not keep the PR in Draft and run corrections "
+            "and validations locally.",
+            1,
+        )
+        self.assertTrue(_pr_template_draft_flow_errors(negated))
+
         markers = (
-            "mantenha a PR como Draft",
-            "Confirmar que o HEAD exato est\u00e1 validado localmente",
-            "Marcar a PR como Ready for Review",
-            "Ap\u00f3s Ready for Review, aguardar todos os checks obrigat\u00f3rios do GitHub Actions no HEAD exato",
+            "keep the PR in Draft",
+            "Confirm the exact HEAD is locally validated",
+            "Mark the PR Ready for Review",
+            "After Ready for Review, wait for all required GitHub Actions checks on the exact HEAD",
         )
         commented = template
         for marker in markers:
             commented = commented.replace(marker, "", 1)
         payload = "<!-- " + " | ".join(markers) + " -->\n"
-        commented = commented.replace("## Mudan\u00e7a can\u00f4nica", payload + "## Mudan\u00e7a can\u00f4nica", 1)
+        commented = commented.replace("## Canonical change", payload + "## Canonical change", 1)
         self.assertTrue(_pr_template_draft_flow_errors(commented))
 
         spanning_comment = template.replace("## CI / GitHub Actions", "<!--\n## CI / GitHub Actions", 1)
-        spanning_comment = spanning_comment.replace("## Mudan\u00e7a can\u00f4nica", "-->\n## Mudan\u00e7a can\u00f4nica", 1)
+        spanning_comment = spanning_comment.replace(
+            "## Canonical change", "-->\n## Canonical change", 1
+        )
         self.assertTrue(_pr_template_draft_flow_errors(spanning_comment))
 
         unclosed_comment = template.replace("## CI / GitHub Actions", "<!--\n## CI / GitHub Actions", 1)

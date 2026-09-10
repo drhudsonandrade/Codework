@@ -1,32 +1,22 @@
-# Expansão do registro de alvos
+# Target registry expansion
 
-## O que mudou
+## What changed
 
-| registro | alvos | fonte |
+| registry | targets | source |
 |---|---:|---|
-| `partial_genome_annotation_targets.json` | 29 | curadoria manual (ClinVar + CPIC + dbSNP) |
-| `pgx_panel_targets.json` | 342 | posições definidoras do CPIC |
-| `targets_clinvar_plp.json.gz` | **54.845** | release em massa do ClinVar, P/LP, 2★+ |
-| `targets_clinvar_plp_1star.json.gz` | **123.551** | o mesmo, admitindo também o nível de uma estrela |
-| `targets_gwas_traits.json` | **733** | GWAS Catalog, termos declarados |
-| `targets_merged_panel.json.gz` | 55.916 | união com o corte de 2★ |
-| **`targets_merged_panel_1star.json.gz`** | **124.621** | união com o corte de 1★ — **o padrão** |
+| `partial_genome_annotation_targets.json` | 29 | manual curation (ClinVar + CPIC + dbSNP) |
+| `pgx_panel_targets.json` | 342 | CPIC defining positions |
+| `targets_clinvar_plp.json.gz` | **54,845** | ClinVar bulk release, P/LP, 2★+ |
+| `targets_clinvar_plp_1star.json.gz` | **123,551** | same source, also admitting one-star review |
+| `targets_gwas_traits.json` | **733** | GWAS Catalog, declared terms |
+| `targets_merged_panel.json.gz` | 55,916 | union using the 2★ threshold |
+| **`targets_merged_panel_1star.json.gz`** | **124,621** | union using the 1★ threshold — **the default** |
 
-O padrão passou a ser o registro de 1★ porque a interpretação classifica por nível de
-revisão, não por pertencimento: o nível fica visível no laudo em vez de diluído nele. Numa
-execução de demonstração o resultado saiu 93 ACHADO PRELIMINAR contra 20 ACHADO ACIONÁVEL —
-número **ilustrativo, não verificado**, sem artefato de saída, SHA-256 de entrada ou comando
-pinado em `docs/evidence/` que o sustente. O par de 2★ continua selecionável com `--targets`/`--evidence` para uma execução
-que só deva ver consenso curado.
+The default moved to the 1★ registry because interpretation classifies by review level rather than simple membership: the level remains visible in the report instead of being diluted into the panel. In one demonstration execution the output contained 93 ACHADO PRELIMINAR versus 20 ACHADO ACIONÁVEL. That number is **illustrative and unverified** because no output artifact, input SHA-256, or pinned command under `docs/evidence/` supports it. The 2★ pair remains selectable through `--targets`/`--evidence` for an execution that should consider only curated consensus.
 
-No corte de 1★: **4.408 genes**, dos quais **3.895** com relação gene-doença estabelecida —
-2.535 aparecem em relações recessivas, 1.602 em dominantes e 163 em ligadas ao X. Essas
-categorias se sobrepõem: as 4.300 ocorrências representam 3.895 genes únicos e não são
-conjuntos disjuntos.
+At the 1★ threshold there are **4,408 genes**, of which **3,895** have established gene-disease validity: 2,535 occur in recessive relationships, 1,602 in dominant relationships, and 163 in X-linked relationships. These categories overlap. The 4,300 occurrences represent 3,895 unique genes and are not disjoint sets.
 
-Com o corte de 2★, que era o padrão anterior, o artefato de alvos versionado
-`config/targets_clinvar_plp.json.gz` permite reproduzir **54.845 rsids e 3.082 genes**.
-Esse é o limite do que o HEAD atual sustenta para esse corte.
+At the 2★ threshold, which was the former default, the versioned target artifact `config/targets_clinvar_plp.json.gz` supports reproducible counts of **54,845 rsIDs and 3,082 genes**. That is the limit of what the current HEAD supports for this threshold.
 
 > **Medição histórica não verificada — validade gene-doença no corte 2★.** Uma revisão
 > anterior deste documento publicou **2.965 genes estabelecidos**, **117 sem relação
@@ -39,111 +29,60 @@ Esse é o limite do que o HEAD atual sustenta para esse corte.
 > evidência de release**. Elas só podem voltar como verificadas quando um artefato versionado,
 > com SHA-256 e comando reproduzível, materializar esse mesmo corte.
 
-No artefato **1★** que está efetivamente versionado, as contagens de validade são
-reproduzíveis: **4.408 genes**, **3.895 com validade estabelecida**, **540 estabelecidos
-apenas pelo PanelApp**, **3 apenas pelo GenCC**, **0 apenas por ClinGen Dosage**, **3.249**
-com sobreposição PanelApp/GenCC e **103 estabelecidos por ClinGen Gene-Disease Validity fora
-dessas categorias PanelApp/GenCC**. Essa decomposição exaustiva fecha os **3.895** estabelecidos;
-além dela, **1.289** têm curadoria de dosagem e **3.990** têm métrica de
-restrição do gnomAD e **1.004** com pLI ≥ 0,90. Esses números vêm de
-`docs/evidence/GENE_DISEASE_VALIDITY_1STAR.json.gz`; PanelApp sobreposto ao GenCC continua
-marcado como uma única base de curadoria, e gnomAD continua sem poder estabelecer relação
-gene-doença.
+For the **1★ artifact** that is actually versioned, validity counts are reproducible: **4,408 genes**, **3,895 with established validity**, **540 established only by PanelApp**, **3 only by GenCC**, **0 only by ClinGen Dosage**, **3,249** with PanelApp/GenCC overlap, and **103 established by ClinGen Gene-Disease Validity outside those PanelApp/GenCC categories**. This exhaustive decomposition closes to the **3,895** established genes. Separately, **1,289** have dosage curation, **3,990** have a gnomAD constraint metric, and **1,004** have pLI ≥ 0.90. These counts come from `docs/evidence/GENE_DISEASE_VALIDITY_1STAR.json.gz`. PanelApp submissions overlapping GenCC remain marked as one curation basis, and gnomAD still cannot establish a gene-disease relationship.
 
-## Os registros curados que decidem o que vira achado
+## Curated registries that decide what becomes a finding
 
-Nenhum deles é o ClinVar. O ClinVar diz o que uma **variante** é; estes dizem se o **gene**
-tem relação estabelecida com doença — e sem isso o sistema não converte variante em achado
-clínico.
+None of them is ClinVar. ClinVar says what a **variant** is; these registries say whether the **gene** has an established relationship with disease. Without that second condition, the system does not convert a variant into a clinical finding.
 
-| registro | o que afirma | conta como estabelecido quando |
+| registry | what it states | counts as established when |
 |---|---|---|
-| ClinGen Gene-Disease Validity | painel de especialistas curou a relação | classificação Definitive ou Strong |
-| GenCC | vários curadores submeteram a mesma relação | ≥2 submetentes independentes em Definitive/Strong |
-| **PanelApp** (Genomics England + Austrália) | um serviço de saúde testa o gene na prática | gene **verde** em ao menos um painel diagnóstico |
-| **ClinGen Dosage Sensitivity** | perder ou ganhar uma cópia é o mecanismo | escore 3 de haploinsuficiência ou triplossensibilidade |
-| gnomAD v4.1 constraint | quão intolerante o gene é a perda de função | **nunca** — restrição não é relação gene-doença |
+| ClinGen Gene-Disease Validity | an expert panel curated the relationship | Definitive or Strong classification |
+| GenCC | multiple curators submitted the same relationship | ≥2 independent submitters at Definitive/Strong |
+| **PanelApp** (Genomics England + Australia) | a health service tests the gene in practice | **green** gene in at least one diagnostic panel |
+| **ClinGen Dosage Sensitivity** | copy loss or gain is the mechanism | score 3 for haploinsufficiency or triplosensitivity |
+| gnomAD v4.1 constraint | how intolerant the gene is to loss of function | **never** — constraint is not gene-disease validity |
 
-Cada gene registra qual deles o sustentou em `established_by`. "Definitivo por painel de
-especialistas do ClinGen" e "verde num painel do NHS" são afirmações de pesos diferentes, e
-achatá-las num booleano esconderia qual foi.
+Each gene records its supporting sources in `established_by`. “Definitive by a ClinGen expert panel” and “green in an NHS panel” carry different evidentiary weights, and flattening them into one boolean would hide that distinction.
 
-**PanelApp não é independente do GenCC.** O export do GenCC já agrega as submissões das duas
-instâncias do PanelApp. Onde os dois estabelecem o mesmo gene, é um corpo de curadoria
-aparecendo duas vezes, não duas fontes concordando: `panelapp_overlaps_gencc` marca esses
-genes e o relatório 01 escreve a ressalva na seção de incertezas.
+**PanelApp is not independent of GenCC.** The GenCC export already aggregates submissions from both PanelApp instances. Where both establish the same gene, that is one body of curation appearing twice, not two agreeing sources. `panelapp_overlaps_gencc` marks those genes, and report 01 writes the caveat in the uncertainty section.
 
-**A varredura, medida.** 68.991 entradas gene-painel nas duas instâncias, cobrindo **657
-painéis** — 414 do Genomics England e 243 do PanelApp Australia — dos quais 652 carregam ao
-menos um gene verde. São 7.239 genes indexados e **5.004 verdes**. O PanelApp é vivo: entre
-duas varreduras com poucas horas de intervalo, as contagens da Austrália foram de 36.485 para
-36.491 entradas, e por isso a data e as contagens ficam gravadas no artefato em vez de serem
-citadas de memória. Uma leitura curta é recusada, não publicada: um varrimento parcial não é
-um registro menor, é um registro que omite em silêncio os painéis que ordenam por último.
+**The scan, measured.** Across the two instances there are 68,991 gene-panel entries covering **657 panels** — 414 from Genomics England and 243 from PanelApp Australia — of which 652 contain at least one green gene. The index contains 7,239 genes and **5,004 green genes**. PanelApp is live: across two scans a few hours apart, Australian counts moved from 36,485 to 36,491 entries. The artifact therefore records date and counts instead of citing them from memory. A short read is refused rather than published: a partial crawl is not a smaller registry; it is a registry that silently omits panels sorted later.
 
-**Verde, e só verde.** Âmbar é evidência insuficiente para reportar e vermelho é gene
-considerado e rejeitado pelos próprios curadores. Ler âmbar como evidência colocaria num
-laudo um gene que o painel explicitamente recusou endossar. Os dois são retidos no artefato;
-apenas verde estabelece.
+**Green, and only green.** Amber means insufficient evidence for reporting, while red means the curators considered and rejected the gene. Treating amber as evidence would place in a report a gene the panel explicitly declined to endorse. Both categories remain in the artifact; only green establishes validity.
 
-**Os escores de dosagem não são uma escala.** 30 e 40 são maiores que 3 como número e não
-como evidência: 3 é "evidência suficiente para patogenicidade por dosagem", 30 é o curador
-escrevendo "gene associado a fenótipo autossômico recessivo" *em vez* de pontuar, e 40 é
-"dosagem improvável de ser sensível". Tratar 30 como acima de 3 estabeleceria 599 genes que o
-ClinGen nunca afirmou. Aqui 3 estabelece, 30 contribui o modo de herança AR sem estabelecer, e
-40 não contribui nada.
+**Dosage scores are not a scale.** The values 30 and 40 are numerically larger than 3 but not stronger evidence. A score of 3 means “sufficient evidence for dosage pathogenicity”; 30 means the curator wrote “gene associated with autosomal recessive phenotype” *instead of* scoring, and 40 means “dosage sensitivity unlikely.” Treating 30 as greater than 3 would establish 599 genes that ClinGen never established. Here, 3 establishes validity, 30 contributes AR inheritance mode without establishing validity, and 40 contributes nothing.
 
-**Restrição populacional é carregada e nunca estabelece.** Um gene pode ser exigentemente
-intolerante a perda de função sem doença curada, e um gene Definitivo pode ser irrestrito — o
-pLI do CFTR é ~0 porque portadores são comuns e saudáveis. Ela entra no laudo para que uma
-linha "sem validade estabelecida" possa acrescentar se o gene é ainda assim restrito, e por
-nenhum outro motivo.
+**Population constraint is carried but never establishes.** A gene may be highly intolerant of loss of function without a curated disease relationship, and a Definitive disease gene may be unconstrained. CFTR has pLI around 0 because carriers are common and healthy. Constraint appears in the report so that a “no established validity” row may still state whether the gene is constrained, and for no other purpose.
 
-## PGS Catalog: 6.972 escores, e as duas coisas que decidem se algum pode ser usado
+## PGS Catalog: 6,972 scores and the two conditions that determine whether any can be used
 
-O PGS Catalog publica 6.972 escores poligênicos em 807 traços mapeados — muito mais traços do
-que a rota do GWAS Catalog alcança. O que ele **não** publica é permissão para aplicar
-qualquer um deles a uma pessoa específica, e dois campos decidem isso. Os dois são
-computados, não estimados.
+PGS Catalog publishes 6,972 polygenic scores across 807 mapped traits, far more traits than the GWAS Catalog route reaches. What it **does not** publish is permission to apply every score to a specific person. Two fields decide whether application is defensible; both are computed rather than estimated.
 
-**A ancestralidade das coortes em que o escore foi construído.** Um escore poligênico é um
-conjunto de pesos ajustado numa população, e sua acurácia cai — muitas vezes pela metade —
-ao ser levado para outra, com frequências alélicas e desequilíbrio de ligação diferentes.
-Para um genoma brasileiro miscigenado isso não é nota de rodapé, é a fonte dominante de erro:
+**Ancestry of the cohorts in which the score was built.** A polygenic score is a set of weights fitted in one population, and its accuracy falls — often by half — when transferred to another population with different allele frequencies and linkage disequilibrium. For an admixed Brazilian genome this is not a footnote but a dominant error source:
 
-| classe | escores |
+| class | scores |
 |---|---:|
-| **NÃO TRANSFERÍVEL SEM CALIBRAÇÃO** (coortes ≥90% europeias) | **4.361** |
-| TRANSFERIBILIDADE INCERTA | 2.393 |
-| **PARCIALMENTE TRANSFERÍVEL** (≥20% hispânica/latina, africana ou nativa) | **202** |
-| ancestralidade não declarada pelo catálogo | 16 |
+| **NÃO TRANSFERÍVEL SEM CALIBRAÇÃO** (cohorts ≥90% European) | **4,361** |
+| TRANSFERIBILIDADE INCERTA | 2,393 |
+| **PARCIALMENTE TRANSFERÍVEL** (≥20% Hispanic/Latino, African, or Native) | **202** |
+| ancestry not declared by the catalog | 16 |
 
-**O número de variantes, contra quantas um array consegue ler.** O escore mediano tem 123.613
-variantes e o maior tem 10,3 milhões; um array de consumo carrega ~700.000 posições no genoma
-inteiro. Somar os pesos das variantes presentes e tratar as ausentes como dose zero é a falha
-por verdade vácua na forma mais pura: produz um número finito, plausível e errado, e nada na
-saída diz que faltava a maior parte do escore. Abaixo de **95%** de cobertura o sistema recusa
-em vez de emitir.
+**Number of variants versus how many an array can read.** The median score contains 123,613 variants and the largest contains 10.3 million; a consumer array carries about 700,000 positions across the whole genome. Summing weights only for present variants while treating missing variants as dosage zero is vacuous truth in its purest form: it produces a finite, plausible, wrong number, and nothing in the output reveals that most of the score was missing. Below **95%** coverage the system refuses rather than emits a score.
 
-Nenhum peso é copiado para este repositório. Cada escore é citado pela URL do arquivo
-harmonizado e pela **própria licença**, que não é uniforme: 6.879 são de citação, 31 são CC
-BY-NC-ND, 7 são só para uso acadêmico, 1 é restrito a pesquisa e 54 não declaram licença no
-catálogo. Um registro que achatasse isso autorizaria um uso que o autor proibiu.
+No score weights are copied into this repository. Each score is cited by the harmonized-file URL and by its **own license**, which is not uniform: 6,879 are citation-only, 31 are CC BY-NC-ND, 7 are academic use only, 1 is research restricted, and 54 declare no license in the catalog. Flattening these terms into one registry-level license could authorize a use forbidden by the score author.
 
-## O nível de revisão do ClinVar viaja com o alvo
+## ClinVar review level travels with the target
 
-O registro pode ser construído a partir de 2★ (consenso curado) ou de 1★ (submetente único),
-e cada alvo declara o próprio `clinvar_review_stars`. Isso é o que torna o segundo seguro:
+The registry can be built from 2★ (curated consensus) or 1★ (single submitter), and every target declares its own `clinvar_review_stars`. That is what makes the broader registry safe:
 
-| corte | rsids | genes | genes só alcançáveis nesse corte |
+| threshold | rsIDs | genes | genes reachable only at this threshold |
 |---|---:|---:|---:|
-| 2★+ | 54.845 | 3.082 | — |
-| só 1★ | 68.706 | — | 1.326 |
-| união | **123.551** | **4.408** | |
+| 2★+ | 54,845 | 3,082 | — |
+| 1★ only | 68,706 | — | 1,326 |
+| union | **123,551** | **4,408** | |
 
-Estes números são **derivados dos artefatos versionados**, não transcritos: saem de
-`config/targets_clinvar_plp.json.gz` e `config/targets_clinvar_plp_1star.json.gz`, cujos
-SHA-256 estão publicados abaixo. Reproduza com:
+These counts are **derived from versioned artifacts**, not transcribed. They come from `config/targets_clinvar_plp.json.gz` and `config/targets_clinvar_plp_1star.json.gz`; their SHA-256 values are published below. Reproduce them with:
 
 ```bash
 python3 - <<'PY'
@@ -170,28 +109,15 @@ print(len(r1), len(genes(one)))
 PY
 ```
 
-A tabela anterior publicava 54.801 / 74.161 / 123.541 e contagens de genes que não
-correspondiam a nenhum campo dos artefatos. `só 1★` é a faixa exclusiva de uma estrela
-(`target_statistics.tier_1_star`), não o total do arquivo de 1★ — e 54.845 + 68.706 = 123.551
-fecha exatamente com o total publicado.
+The previous table published 54,801 / 74,161 / 123,541 and gene counts that did not correspond to any artifact field. `só 1★` is the one-star-exclusive tier (`target_statistics.tier_1_star`), not the total size of the 1★ file; 54,845 + 68,706 = 123,551 closes exactly to the published total.
 
-Um locus de uma estrela **nunca** vira achado acionável nem estado de portador: a
-interpretação o rebaixa a `ACHADO PRELIMINAR`, com o texto dizendo que uma asserção de
-submetente único é a opinião de um laboratório e não consenso curado. Sem esse rebaixamento,
-baixar o corte reportaria dezenas de milhares de opiniões únicas como achados — que é
-exatamente o motivo de o nível viajar com cada alvo. O painel de aplicação padrão é a união
-de 1★ declarada no início deste documento; o gerador conserva 2★ como default fail-closed e
-exige `--min-review-stars 1` para materializar explicitamente a alternativa ampliada.
+A one-star locus **never** becomes an actionable finding or carrier state. Interpretation downgrades it to `ACHADO PRELIMINAR`, with report text stating that a single-submitter assertion is one laboratory’s opinion rather than curated consensus. Without that downgrade, lowering the threshold would report tens of thousands of single opinions as findings, which is precisely why review level travels with each target. The default application panel is the 1★ union declared at the start of this document; the generator keeps 2★ as its fail-closed default and requires `--min-review-stars 1` to materialize the expanded alternative explicitly.
 
-## Por que o release em massa, e não a API
+## Why the bulk release instead of the API
 
-A rota por E-utilities exige muitas requisições e pode terminar parcialmente sob limites de
-tráfego sem produzir um artefato único que materialize o release consultado.
-`variant_summary.txt.gz` oferece o mesmo tipo de dado em um download materializável: ou o
-arquivo completo está disponível ou a execução deve recusar. O mesmo princípio vale para os
-artefatos usados do GenCC e do GWAS Catalog.
+The E-utilities route requires many requests and may terminate partially under traffic limits without producing one artifact that materializes the consulted release. `variant_summary.txt.gz` provides the same kind of data in one materializable download: either the complete file is available or execution must refuse. The same principle applies to the GenCC and GWAS Catalog artifacts used here.
 
-## Filtros do ClinVar, e por que cada um é recusa e não conveniência
+## ClinVar filters and why each is a refusal rather than convenience
 
 > **Medição histórica não verificada:** a cadeia de contagens publicada anteriormente não
 > fechava aritmeticamente entre 62.367 linhas e 54.845 alvos e não citava um artefato de
@@ -200,92 +126,55 @@ artefatos usados do GenCC e do GWAS Catalog.
 > alelos A/C/G/T; as contagens devem ser lidas de `scan_statistics`,
 > `target_statistics` e `totals` nos artefatos gerados pela execução.
 
+Of the 54,845 targets, **50,515** have one assessed allele and **4,330** do not. ClinVar asserts more than one alternate base at the same coordinate for the latter group, and choosing one would be arbitrary. Those loci can reach OBSERVADO but never NÃO DETECTADO.
 
+## Coordinate joining in both routes
 
-Dos 54.845, **50.515** têm alelo avaliado único e **4.330** não: o ClinVar assere mais de uma
-base alternativa na mesma coordenada, e escolher uma seria arbitrar. Esses loci só chegam a
-OBSERVADO, nunca a NÃO DETECTADO.
+The API route finds records through **text search** by rsID, which may return variants unrelated to the intended locus. Those records do not carry their own coordinate and are admitted only when the accession is already present in the verified set at the target coordinate.
 
-## A junção por coordenada, nas duas rotas
+The bulk route reads accession, classification, and coordinate from the **same release row**. There is no cross-source join to misalign, and the record carries the coordinate, so it enters only when it matches the locus coordinate. This is a check performed in code, not a flag that an evidence file can set to excuse itself: a record without a coordinate falls back to the accession list regardless of what provenance the file declares.
 
-A rota da API acha registros por **busca textual** de rsid, que pode devolver variantes não
-relacionadas ao locus pretendido. Esses registros não trazem coordenada própria e
-só entram se o acesso constar do conjunto já verificado na coordenada do alvo.
+## Trait scope: the only judgment-based component
 
-A rota em massa lê acesso, classificação e coordenada da **mesma linha** do release. Não há
-junção entre fontes a errar, e o registro carrega a coordenada — então ele entra quando ela
-bate com a do locus. Isso é conferência feita no código, não um sinalizador que o arquivo de
-evidência possa levantar para se isentar: registro sem coordenada volta para a lista de
-acessos, seja qual for a proveniência que o arquivo declara.
+GWAS Catalog labels each association with an ontology term but **does not publish thematic categorization**; nothing in the catalog says that lactose intolerance is nutritional. That decision lives in `config/trait_scopes.json`, with the ontology ID for each term and a written justification. Everything downstream — which loci, which risk allele, effect size, and discovery cohort — comes from the catalog.
 
-## Escopo de traços: a única parte que é julgamento
+`scripts/build_trait_targets.py` **refuses** a declared term with no genome-wide significant association in the release. Two terms were caught by that guard:
 
-O GWAS Catalog rotula cada associação com um termo de ontologia mas **não publica
-categorização temática** — nada nele diz que intolerância à lactose é nutricional. Essa
-decisão está em `config/trait_scopes.json`, com o ID de ontologia de cada termo e a
-justificativa escrita. Tudo abaixo da lista — quais loci, qual alelo de risco, qual tamanho
-de efeito, qual coorte de descoberta — vem do catálogo.
-
-`scripts/build_trait_targets.py` **recusa** um termo declarado que não tenha nenhuma
-associação de significância genômica no release. Dois termos caíram nessa guarda:
-
-| termo | motivo |
+| term | reason |
 |---|---|
-| `GO_0050916` percepção de sabor doce | 56 associações, a mais forte p = 4e-07 — abaixo da significância genômica. Traço popular em relatório de consumo, sem locus estabelecido. |
-| `MONDO_0100345` intolerância à lactose | zero associações mapeadas no release anotado. A persistência da lactase entra por `EFO_0801753` (rs4988235) e `OBA_VT0015043`, ambos verificados. |
+| `GO_0050916` sweet taste perception | 56 associations, strongest p = 4e-07 — below genome-wide significance. Popular consumer-report trait, with no established locus. |
+| `MONDO_0100345` lactose intolerance | zero mapped associations in the annotated release. Lactase persistence enters through `EFO_0801753` (rs4988235) and `OBA_VT0015043`, both verified. |
 
-## O conflito que a fusão encontrou
+## Conflict found by the merge
 
-`rs3918290` é **multialélico** em chr1:97450058 (GRCh38, referência C):
+`rs3918290` is **multiallelic** at chr1:97450058 (GRCh38, reference C):
 
-* **C>T** = `c.1905+1G>A` = **DPYD\*2A**, classificado pelo ClinVar como *drug response* — é o
-  alelo que o CPIC define;
-* **C>G** = `c.1905+1G>C`, variante **diferente** na mesma posição, essa sim P/LP.
+* **C>T** = `c.1905+1G>A` = **DPYD\*2A**, classified by ClinVar as *drug response*; this is the allele CPIC defines;
+* **C>G** = `c.1905+1G>C`, a **different** variant at the same position, and this one is P/LP.
 
-O filtro P/LP pegou o G; o CPIC declara o T. As duas fontes estão certas sobre variantes
-distintas. Um rsid **não identifica uma variante** num sítio multialélico, e arbitrar teria
-pontuado o genótipo contra a base errada num locus de toxicidade a fluoropirimidina. A fusão
-remove o alelo avaliado e registra a divergência.
+Both sources are correct about distinct variants. An rsID **does not identify one variant** at a multiallelic site. Arbitrating between them would score a genotype against the wrong base at a fluoropyrimidine-toxicity locus. The merge therefore removes the assessed allele and records the divergence.
 
-O custo é pequeno e correto: o passaporte farmacogenômico não é afetado, porque testa contra
-o alelo do **seu** registro (CPIC), não contra o `assessed_allele` do alvo. Só a classe
-NÃO DETECTADO da matriz de completude é retida naquele locus — que é o certo, já que "não
-detectado" é ambíguo quando duas variantes clinicamente distintas ocupam uma posição.
+The cost is small and correct: the pharmacogenomic passport is unaffected because it tests against the allele from **its own** CPIC registry, not the target’s `assessed_allele`. Only the NÃO DETECTADO completeness-matrix class is withheld at that locus, which is correct because “not detected” is ambiguous when two clinically distinct variants occupy one position.
 
-## Escala observada numa execução de demonstração
+## Scale observed in a demonstration execution
 
-Os benchmarks quantitativos da execução histórica foram removidos deste documento porque o
-repositório não contém o artefato de saída, SHA-256 das entradas, versões do ambiente e
-comando pinado necessários para reproduzi-los. Eles não são evidência do HEAD atual e não
-podem ser usados como alegação de desempenho.
+Quantitative benchmarks from the historical execution were removed from this document because the repository does not contain the output artifact, input SHA-256 values, environment versions, and pinned command needed to reproduce them. They are not evidence for the current HEAD and cannot be used as performance claims.
 
-O comportamento reproduzível preservado dessa investigação é o suporte a evidência
-comprimida: `build_clinical_findings` lê o manifesto por `read_manifest_text`, que detecta
-compressão pelo conteúdo do arquivo. O contrato é exercitado por
-`tests/test_clinical_findings_regressions.py::test_the_gene_disease_evidence_may_arrive_compressed`.
-Execute apenas esse conjunto com:
+The reproducible behavior preserved from that investigation is compressed-evidence support: `build_clinical_findings` reads the manifest through `read_manifest_text`, which detects compression from file contents. The contract is exercised by `tests/test_clinical_findings_regressions.py::test_the_gene_disease_evidence_may_arrive_compressed`. Run only that suite with:
 
 ```bash
 python3 -m unittest discover -s tests -p test_clinical_findings_regressions.py
 ```
 
-As antigas narrativas de execução referentes aos relatórios 05 e 09 também permanecem fora
-do conjunto verificável deste HEAD: não há aqui artefato versionado e reproducer correspondente
-que autorize atribuir resultados quantitativos a esses caminhos.
+Old execution narratives for reports 05 and 09 also remain outside the verifiable set for this HEAD: there is no versioned artifact and corresponding reproducer here that authorizes quantitative results to be attributed to those paths.
 
-## Taxa de detecção, que era o objetivo
+## Detection rate, the original objective
 
-O relatório 03 emite, em cada execução, o numerador de variantes interrogadas e o denominador
-do catálogo aplicável. Os valores históricos de uma execução local foram removidos porque
-não há artefato de saída, SHA-256 de entrada e comando pinado que permitam reproduzi-los neste
-HEAD. O contrato verificável é que numerador e denominador sejam derivados dos artefatos da
-própria execução e que a saída os descreva como contagem de variantes, não como frequência
-alélica.
+Report 03 emits, for every execution, the numerator of interrogated variants and the denominator of the applicable catalog. Historical values from a local execution were removed because no output artifact, input SHA-256, and pinned command allow them to be reproduced on this HEAD. The verifiable contract is that numerator and denominator are derived from artifacts belonging to the execution itself and that output describes them as variant counts rather than allele frequency.
 
-## Reproduzir
+## Reproduce from the inputs available in this checkout
 
-O recorte GWAS usado nesta curadoria é o release datado de **2026-08-24**. Baixe os
-dois arquivos exatos e verifique seus bytes antes de executar o construtor:
+The GWAS slice used for this curation is the release dated **2026-08-24**. Download the two exact files and verify their bytes before running the builder:
 
 ```bash
 curl -fLO https://ftp.ebi.ac.uk/pub/databases/gwas/releases/2026/08/24/gwas-catalog-associations_ontology-annotated-full.zip
@@ -297,11 +186,12 @@ printf '%s  %s\n' \
   gwas-catalog-download-ancestries-v1.0.3.1.txt | sha256sum --check --strict
 ```
 
+The current checkout does **not** contain the historical python3 scripts/curate_panelapp.py collector command. Therefore a fresh PanelApp recollection is not reproducible from this repository. The committed `docs/evidence/PANELAPP_CURATION.json.gz` snapshot is the explicit downstream input boundary; its stored-file digest is published below. Using that snapshot can reproduce downstream transformations, but it must not be described as a fresh PanelApp collection.
+
 ```bash
 curl -O https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.txt.gz
 curl -O https://ftp.clinicalgenome.org/ClinGen_gene_curation_list_GRCh38.tsv
 curl -O https://storage.googleapis.com/gcp-public-data--gnomad/release/4.1/constraint/gnomad.v4.1.constraint_metrics.tsv
-python3 scripts/curate_panelapp.py            # varre as duas instâncias; recusa leitura curta
 python3 scripts/expand_clinvar_targets.py \
     --clinvar-bulk variant_summary.txt.gz \
     --panelapp docs/evidence/PANELAPP_CURATION.json.gz \
@@ -321,17 +211,13 @@ python3 scripts/merge_target_manifests.py \
     --output config/targets_merged_panel_1star.json.gz
 ```
 
-## Procedência das contagens publicadas
+## Provenance of published counts
 
-As URLs acima **não fixam release nem digest**. ClinVar, ClinGen, gnomAD e PanelApp são fontes
-mutáveis: executar o bloco em outra data produz registros e contagens diferentes das
-publicadas aqui, e isso não é um defeito da reprodução — é a natureza das fontes.
+The live URLs above **do not pin a release or digest**. ClinVar, ClinGen, and gnomAD are mutable sources, so running the block on another date may produce records and counts different from those published here. PanelApp is different in this checkout: the live collector is absent, so the block uses the versioned PanelApp snapshot and does not recollect that source.
 
-O que fica fixo é o outro lado. Toda contagem deste documento foi lida dos artefatos abaixo,
-como versionados neste commit. Recontar a partir deles é determinístico; recoletar das fontes
-não é.
+What remains fixed is the other side of the comparison. Every count in this document was read from the artifacts below as versioned in this commit. Recounting from those artifacts is deterministic; recollecting from upstream sources is not.
 
-| Artefato | SHA-256 |
+| Artifact | SHA-256 |
 | --- | --- |
 | `config/targets_clinvar_plp.json.gz` | `8afcfa91ffe98407ca16685a2d85a2794bf54984c9120aa46c38307b462e97fd` |
 | `config/targets_clinvar_plp_1star.json.gz` | `dfee157e673bad8611076ea5d3f57037fc7cc38b8dc4731f8be918e1d2b852f8` |
@@ -342,10 +228,6 @@ não é.
 | `docs/evidence/GENE_DISEASE_VALIDITY_1STAR.json.gz` | `39aedaa763db55812ee4bf230e8c02068da012b034ffa7d78d23fff64c42a925` |
 | `docs/evidence/PGS_CATALOG_REGISTRY.json.gz` | `a3f4c61c672850e0f18d915d6e4460d7731ca859e2e2f3de25aa9d959f024cbd` |
 
-Os SHA-256 da tabela são dos **bytes dos arquivos versionados**. Alguns JSON também carregam
-um campo interno `sha256` para o payload lógico; esse digest interno tem outro escopo e não
-substitui o hash do arquivo `.json`/`.json.gz` armazenado no repositório. Os dois novos hashes
-foram reexecutados neste HEAD com `sha256sum`.
+The SHA-256 values in this table are hashes of the **versioned file bytes**. Some JSON documents also carry an internal `sha256` field for the logical payload; that internal digest has a different scope and does not replace the hash of the stored `.json`/`.json.gz` file. The two new file hashes were rerun on this HEAD with `sha256sum`.
 
-Para comparar uma nova coleta com o publicado, gere os artefatos, confira o SHA-256 contra a
-tabela e trate qualquer divergência como fonte atualizada, não como erro de reprodução.
+To compare a new collection with what is published, generate the artifacts for sources that still have active collectors, compare SHA-256 against the table, and treat any difference as an updated source rather than a reproduction error. A fresh PanelApp comparison is `NÃO DISPONÍVEL` until a reviewed collector is restored or replaced.

@@ -1,9 +1,9 @@
-# Matriz de tradução — norma → código
+# Translation matrix — norm → code
 
-O TXT canônico permanece a fonte normativa. O código não reescreve silenciosamente ciência ou julgamento profissional em booleanos.
+The canonical TXT remains the normative source. Code does not silently rewrite science or professional judgment into booleans.
 
-Cada seção `0–262` é compilada em `GENOMA-V3.4-S000` … `GENOMA-V3.4-S262`, com hash do texto e attestation obrigatória quando a operação é geneticamente relevante.
+Each section `0–262` is compiled as `GENOMA-V3.4-S000` … `GENOMA-V3.4-S262`, with a text hash and mandatory attestation whenever the operation is genetically relevant.
 
-Há três formas de execução: **gate determinístico** para invariantes verificáveis; **attestation estruturada** para regras que dependem de curadoria/evidência/contexto, exigindo status, evidência, justificativa e rastreabilidade; e **bloqueio por indisponibilidade**, sem converter ausência de recurso/fonte em PASS.
+There are three execution forms: a **deterministic gate** for verifiable invariants; a **structured attestation** for rules that depend on curation/evidence/context, requiring status, evidence, justification, and traceability; and **unavailability blocking**, without converting a missing resource/source into PASS.
 
-O sistema é executável sem ChatGPT, mas automação não substitui avaliação clínica ou dados ausentes.
+The system is executable without ChatGPT, but automation does not replace clinical assessment or missing data.

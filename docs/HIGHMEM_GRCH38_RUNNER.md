@@ -1,32 +1,32 @@
-# GENOMA - high-memory runner e full-grch38
+# GENOMA — high-memory runner and full-grch38
 
-## Contrato
+## Contract
 
-`full-grch38` só roda em um runner GitHub Actions com labels:
+`full-grch38` runs only on a GitHub Actions runner with these labels:
 
 `self-hosted, linux, x64, genoma-production, highmem`
 
-O workflow exige pelo menos ~96 GiB de RAM, espaço persistente para o bundle, Docker, e um `GRCh38.lock.sha256.approved` externo em `REF_ROOT`.
+The workflow requires at least ~96 GiB of RAM, persistent storage for the bundle, Docker, and an external `GRCh38.lock.sha256.approved` under `REF_ROOT`.
 
-## Provisionamento
+## Provisioning
 
-1. Provisionar ou ligar um host Linux x86_64 com >=96 GiB RAM e armazenamento persistente suficiente.
-2. Registrar GitHub Actions Runner no repositório/organização e aplicar exatamente `genoma-production` e `highmem` além dos labels padrão.
-3. Criar `REF_ROOT` (padrão `/srv/genoma/refs/GRCh38`).
-4. Obter os 9 artefatos definidos por `manifests/GRCh38.sources.tsv` usando `scripts/fetch_grch38.sh` ou uma cópia aprovada equivalente.
-5. Gerar o lock pendente no host. Revisar independentemente proveniência e todos os SHA-256. **Somente após essa revisão**, instalar o lock como `GRCh38.lock.sha256.approved`. O arquivo example não é aprovação.
-6. Executar o workflow `GENOMA NGS Runtime Resource Gate` com `mode=full-grch38`.
+1. Provision or start a Linux x86_64 host with >=96 GiB RAM and enough persistent storage.
+2. Register a GitHub Actions Runner for the repository/organization and apply exactly `genoma-production` and `highmem` in addition to the default labels.
+3. Create `REF_ROOT` (default `/srv/genoma/refs/GRCh38`).
+4. Obtain the 9 artifacts defined by `manifests/GRCh38.sources.tsv` using `scripts/fetch_grch38.sh` or an equivalent approved copy.
+5. Generate the pending lock on the host. Independently review provenance and every SHA-256. **Only after that review**, install the lock as `GRCh38.lock.sha256.approved`. The example file is not approval.
+6. Run the `GENOMA NGS Runtime Resource Gate` workflow with `mode=full-grch38`.
 
-## O que o workflow faz
+## What the workflow does
 
-- resolve uma candidata atual compatível sem alterar o ambiente pinado;
-- roda canário funcional direto, incluindo caller e runtime editorial;
-- roda o mesmo canário via Nextflow;
-- promoção de sessão só ocorre quando **os dois** canários são PASS e o inventário está completo;
-- atualiza e valida freshness das fontes oficiais críticas;
-- valida 9/9 recursos, checksums, FASTA/FAI/dict e contigs;
-- constrói índices BWA-MEM2 somente se faltarem;
-- revalida os cinco arquivos do índice e executa canário funcional do BWA-MEM2;
-- reexecuta o Runtime/Resource Gate na sessão atual.
+- resolves a current compatible candidate without changing the pinned environment;
+- runs the direct functional canary, including the caller and editorial runtime;
+- runs the same canary through Nextflow;
+- promotes the session only when **both** canaries are PASS and the inventory is complete;
+- updates and validates freshness for critical official sources;
+- validates 9/9 resources, checksums, FASTA/FAI/dict, and contigs;
+- builds BWA-MEM2 indexes only when they are missing;
+- revalidates the five index files and executes the BWA-MEM2 functional canary;
+- reruns the Runtime/Resource Gate in the current session.
 
-A existência deste runbook não significa que o runner esteja ligado nem que `full-grch38` tenha sido executado. O status só pode mudar após evidência de execução do workflow.
+The existence of this runbook does not mean that the runner is online or that `full-grch38` has been executed. Status may change only after workflow execution evidence exists.
