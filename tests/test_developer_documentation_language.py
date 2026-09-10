@@ -61,6 +61,10 @@ _POLICY_PAYLOAD = json.loads(
 POLICY_TECHNICAL_TERMS = frozenset(_POLICY_PAYLOAD["technical_terms"])
 PORTUGUESE_PROSE_TERMS = LOCAL_PORTUGUESE_PROSE_TERMS | POLICY_TECHNICAL_TERMS
 PORTUGUESE_LOWERCASE_ACCENT = re.compile(r"[áéíóúâêôãõçà]")
+EMAIL_ADDRESS = re.compile(
+    r"\b[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}\b"
+)
+BARE_DOMAIN = re.compile(r"\b(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}\b")
 PORTUGUESE_ASCII_COMMON_WORDS = frozenset({
     "agora", "ainda", "aqui", "assim", "cada", "como", "depois", "desde",
     "esse", "essa", "este", "esta", "isso", "isto", "mais", "menos", "mesmo",
@@ -155,6 +159,8 @@ def _prose_tokens(line: str) -> set[str]:
     line = re.sub(r"https?://\S+", " ", line)
     for literal in PRESERVED_LITERALS:
         line = line.replace(literal, " ")
+    line = EMAIL_ADDRESS.sub(" ", line)
+    line = BARE_DOMAIN.sub(" ", line)
     parts = re.findall(r"[^\W_]+", line, flags=re.UNICODE)
     words = {_normalize(word) for word in parts}
     matches = words & PORTUGUESE_PROSE_TERMS
@@ -400,6 +406,20 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
             "This panel validates files and reports current results.",
             "The runner checks reproducible artifacts before publication.",
             "We need to correct other problems before release.",
+        )
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "doc.md"
+            for example in examples:
+                with self.subTest(example=example):
+                    path.write_text(example + "\n", encoding="utf-8")
+                    self.assertEqual(_find_portuguese_prose(path), [])
+
+    def test_email_and_bare_domain_syntax_do_not_create_portuguese_false_positives(self) -> None:
+        """Email and domain suffixes must not be tokenized as Portuguese prose."""
+        examples = (
+            "Contact support@example.com for assistance.",
+            "See docs.example.com for the current guide.",
+            "Mail security-team@sub.example.org before release.",
         )
         with TemporaryDirectory() as directory:
             path = Path(directory) / "doc.md"
