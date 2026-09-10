@@ -25,20 +25,20 @@ ACTIVE_DOCUMENTATION_EXCLUDED_PREFIXES = (
     "docs/superpowers/checkpoints/",
     "docs/superpowers/evidence/",
 )
+ACTIVE_DOCUMENTATION_EXCLUDED_PARTS = frozenset({
+    ".git", "node_modules", "dist", "build", ".venv", "__pycache__"
+})
 
 
 def _discover_active_developer_docs(root: Path) -> tuple[str, ...]:
     """Discover active Markdown developer docs while excluding evidence/history surfaces."""
-    candidates = set(root.glob("*.md"))
-    candidates.update((root / "docs").rglob("*.md"))
-    candidates.update((root / "mcp").glob("README.md"))
-    candidates.update((root / "policy_engine").glob("README*.md"))
-    candidates.update((root / "adapters").glob("*/README.md"))
     relative = []
-    for path in candidates:
+    for path in root.rglob("*.md"):
         if not path.is_file():
             continue
         name = path.relative_to(root).as_posix()
+        if any(part in ACTIVE_DOCUMENTATION_EXCLUDED_PARTS for part in path.parts):
+            continue
         if name.startswith(ACTIVE_DOCUMENTATION_EXCLUDED_PREFIXES):
             continue
         relative.append(name)
@@ -266,11 +266,16 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
         required = {
             "README.md",
             "AGENTS.md",
+            ".github/pull_request_template.md",
             "mcp/README.md",
             "policy_engine/README_GENOMA_POLICY.md",
             "docs/DETERMINISTIC_ENGINE.md",
             "docs/DEVELOPER_DOCUMENTATION_LANGUAGE_INVENTORY.md",
             "docs/superpowers/specs/2026-09-03-english-codebase-refactor-design.md",
+            "adapters/README.md",
+            "policy_engine/docs/TRANSLATION_MATRIX.md",
+            "policy_engine/docs/GENOMA_EXECUTABLE_ARCHITECTURE.md",
+            "policy_engine/docs/REMAINING_GAPS.md",
         }
         required.update(
             path.relative_to(ROOT).as_posix()
@@ -291,11 +296,14 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
             included = (
                 "README.md",
                 "CONTRIBUTING.md",
+                ".github/pull_request_template.md",
                 "docs/ACTIVE.md",
                 "docs/superpowers/specs/DESIGN.md",
                 "mcp/README.md",
                 "policy_engine/README_EXTRA.md",
+                "adapters/README.md",
                 "adapters/example/README.md",
+                "policy_engine/docs/ACTIVE.md",
             )
             excluded = (
                 "docs/evidence/EVIDENCE.md",
@@ -311,6 +319,26 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
                 path.write_text("# Document\n", encoding="utf-8")
             discovered = set(_discover_active_developer_docs(temp))
             self.assertEqual(discovered, set(included))
+
+    def test_translated_contribution_and_policy_docs_preserve_key_contracts(self) -> None:
+        """Stage-seven translations must preserve validation and policy identifiers."""
+        template = (ROOT / ".github/pull_request_template.md").read_text(encoding="utf-8")
+        for command in (
+            "python3 scripts/validate_repo.py",
+            "python3 scripts/verify_supply_chain_lock.py",
+            "python3 -m unittest discover -s tests -v",
+        ):
+            self.assertIn(f"`{command}`", template)
+        self.assertIn("No auto-merge", template)
+        self.assertIn(
+            "Manual merge only after CodeRabbit + CI + all other required checks", template
+        )
+        matrix = (ROOT / "policy_engine/docs/TRANSLATION_MATRIX.md").read_text(
+            encoding="utf-8"
+        )
+        for literal in ("`0–262`", "`GENOMA-V3.4-S000`", "`GENOMA-V3.4-S262`"):
+            self.assertIn(literal, matrix)
+        self.assertIn("PASS", matrix)
 
     def test_active_technical_docs_have_no_detected_portuguese_prose(self) -> None:
         """Selected active technical docs must contain no detected Portuguese prose."""
