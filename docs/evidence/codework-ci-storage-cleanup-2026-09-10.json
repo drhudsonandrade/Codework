@@ -1,0 +1,100 @@
+{
+  "cleanup_policy": {
+    "excluded": "all artifacts whose workflow_run.head_branch == main",
+    "procedure": "List artifacts through the GitHub REST API; dry-run candidates by prefix, branch and age; delete each selected artifact through DELETE /repos/{owner}/{repo}/actions/artifacts/{artifact_id}; count successful/failed deletions and bytes selected.",
+    "rules_days": {
+      "genoma-array-nextflow-*": 7,
+      "genoma-ngs-runtime-preflight-*": 7,
+      "genoma-policy-verification-*": 14,
+      "genoma-v3-visual-candidates-*": 7,
+      "synthetic-canary-*": 7
+    },
+    "scope": "non-main disposable GitHub Actions artifacts only"
+  },
+  "deletion_execution": {
+    "deleted_artifacts": 2134,
+    "failed_deletions": 0,
+    "selected_and_deleted_bytes": 1082282653,
+    "selected_artifacts": 2134
+  },
+  "first_post_cleanup_measurement": {
+    "active_artifacts": 1670,
+    "active_bytes": 359395005,
+    "note": "Measured after cleanup; concurrent/new workflow activity means this snapshot is not expected to equal before minus deleted bytes exactly."
+  },
+  "fresh_verification_snapshot": {
+    "active_artifacts": 1676,
+    "active_bytes": 361763601,
+    "expired_artifacts": 1,
+    "note": "Fresh API observation captured while PR validation may be generating new artifacts."
+  },
+  "integrity_note": "This evidence file is committed with the PR; its SHA-256 sidecar is generated from these exact UTF-8 bytes.",
+  "measured_before_cleanup": {
+    "active_artifacts": 3776,
+    "active_bytes": 1434023443
+  },
+  "observed_at_utc": "2026-09-10T18:18:34.765853Z",
+  "repository": "drhudsonandrade/Codework",
+  "schema_version": "codework-ci-storage-cleanup-evidence-v1",
+  "source_endpoints": [
+    "https://api.github.com/repos/drhudsonandrade/Codework/actions/artifacts",
+    "https://api.github.com/repos/drhudsonandrade/Codework/actions/workflows",
+    "https://api.github.com/repos/drhudsonandrade/Codework/actions/cache/usage"
+  ],
+  "stale_workflow_records_disabled": [
+    {
+      "id": 335657934,
+      "name": "GENOMA source snapshot",
+      "path": ".github/workflows/genoma-source-snapshot.yml",
+      "state": "disabled_manually"
+    },
+    {
+      "id": 347214679,
+      "name": "PR30 blocker repair",
+      "path": ".github/workflows/pr30-blocker-repair.yml",
+      "state": "disabled_manually"
+    },
+    {
+      "id": 347187090,
+      "name": ".github/workflows/pr30-claims-repair.yml",
+      "path": ".github/workflows/pr30-claims-repair.yml",
+      "state": "disabled_manually"
+    },
+    {
+      "id": 347504534,
+      "name": "PR30 final CI fixture repair",
+      "path": ".github/workflows/pr30-final-ci-fix.yml",
+      "state": "disabled_manually"
+    },
+    {
+      "id": 347142412,
+      "name": "PR30 regenerate HFE curated artifacts",
+      "path": ".github/workflows/pr30-regenerate-hfe.yml",
+      "state": "disabled_manually"
+    },
+    {
+      "id": 347165026,
+      "name": "PR30 registry evidence provenance",
+      "path": ".github/workflows/pr30-registry-evidence.yml",
+      "state": "disabled_manually"
+    },
+    {
+      "id": 347188564,
+      "name": "PR30 type repair",
+      "path": ".github/workflows/pr30-type-repair.yml",
+      "state": "disabled_manually"
+    },
+    {
+      "id": 347788431,
+      "name": "PR31 maintenance repair",
+      "path": ".github/workflows/pr31-maintenance-repair.yml",
+      "state": "disabled_manually"
+    },
+    {
+      "id": 347792381,
+      "name": ".github/workflows/pr31-tdd-final.yml",
+      "path": ".github/workflows/pr31-tdd-final.yml",
+      "state": "disabled_manually"
+    }
+  ]
+}

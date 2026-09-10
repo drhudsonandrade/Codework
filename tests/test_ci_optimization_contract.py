@@ -997,9 +997,17 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertIn("retention-days: 90", _job_block(audit, "audit"))
 
     def test_workflow_artifact_retention_never_exceeds_repository_limit(self):
+        """Reject every numeric artifact retention request above the public-repo limit."""
         for path in WORKFLOWS.glob("*.yml"):
             with self.subTest(workflow=path.name):
-                self.assertNotIn("retention-days: 365", path.read_text(encoding="utf-8"))
+                values = [
+                    int(value)
+                    for value in re.findall(
+                        r"retention-days:\s*(\d+)", path.read_text(encoding="utf-8")
+                    )
+                ]
+                for retention_days in values:
+                    self.assertLessEqual(retention_days, 90)
 
     def test_scaffold_publish_owns_build_cache_without_widening_permissions(self):
         workflow = _read("scaffold-validation.yml")
