@@ -208,6 +208,14 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
                 self.assertEqual(source_lines.count(item["line"]), 1)
                 self.assertTrue(_prose_tokens(item["line"]))
 
+    def test_inventory_does_not_document_a_retired_markdown_bypass(self) -> None:
+        """The inventory must describe the current Markdown scanning boundary."""
+        inventory = (
+            ROOT / "docs/DEVELOPER_DOCUMENTATION_LANGUAGE_INVENTORY.md"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("outside fenced code and blockquotes", inventory)
+        self.assertIn("Markdown syntax is not an exemption", inventory)
+
     def test_documented_repo_script_entrypoints_exist(self) -> None:
         """Executable doc commands must not call repository scripts absent from HEAD."""
         missing = []

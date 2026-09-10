@@ -35,7 +35,7 @@ These exceptions are deliberate and are not permission to add new Portuguese dev
 
 ## Compatibility controls
 
-`tests/test_developer_documentation_language.py` scans the six migrated active documents outside fenced code and blockquotes. It removes explicit preserved literals before testing prose, and a positive fixture proves that ordinary Portuguese developer prose is detected.
+`tests/test_developer_documentation_language.py` scans all six migrated active documents across ordinary prose, blockquotes, and fenced-code content; only Markdown fence-delimiter lines and the 29 exact fixture-enumerated historical/localized lines are skipped. It removes explicit preserved literals before testing the remaining text, and positive fixtures prove that ordinary Portuguese developer prose is detected.
 
 The same test also asserts that representative normative and localized values remain present, so the language migration cannot pass by translating wire/report contracts.
 
