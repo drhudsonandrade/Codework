@@ -31,5 +31,5 @@ jobs:
           path: |
             audit.json
             template-store-verification.json
-          retention-days: 365
+          retention-days: 90
           if-no-files-found: warn

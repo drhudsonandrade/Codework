@@ -19,7 +19,7 @@ suite proves `passed == 15`, `total == 15`, `critical_failures == 0` and
 | Source and configuration | Private GitHub repository, protected `main` | No fixed workflow-artifact expiry; retained while the repository/account is retained | Rebuild every component from reviewed source |
 | Executable environment | `ghcr.io/<github-owner>/codework-genome` pinned by digest | Retained under the repository owner's package policy | Pull the exact tested container without resolving packages again |
 | Build/test evidence | Recovery bundle in the project's persistent document store | Retained until the owner deletes it or an account/workspace policy removes it | Preserve the synthetic canary ZIP, checksums and release evidence beyond Actions retention |
-| GitHub Actions artifacts | `synthetic-canary-*` and `ghcr-image-reference-*` | Requested retention: 90 days, capped by repository/org policy | Convenient CI evidence only; never the sole backup |
+| GitHub Actions artifacts | `synthetic-canary-*` and `ghcr-image-reference-*` | Disposable canary evidence: 7 days; immutable image references: 90 days, both capped by repository/org policy | Convenient CI evidence only; never the sole backup |
 | Future genomic data | Encrypted VM block/object storage plus an independent encrypted backup | Provider lifecycle policy controlled by the owner | Store FASTQ/BAM/CRAM/VCF and GRCh38; never commit or upload them through ChatGPT |
 | Work scratch filesystem | Temporary ChatGPT Work runtime | May be reclaimed after inactivity | Build staging only; never a durable source of truth |
 

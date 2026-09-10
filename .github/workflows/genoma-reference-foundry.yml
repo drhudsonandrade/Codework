@@ -187,5 +187,5 @@ jobs:
         with:
           name: genoma-grch38-reference-foundry-${{ inputs.phase }}-${{ github.sha }}
           path: results/reference-foundry
-          retention-days: 365
+          retention-days: 90
           if-no-files-found: error

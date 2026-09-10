@@ -121,5 +121,5 @@ jobs:
           path: |
             results/sample-runtime-gate/runtime-resource-gate.redacted.json
             results/sample-runtime-gate/SHA256SUMS
-          retention-days: 365
+          retention-days: 90
           if-no-files-found: error

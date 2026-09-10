@@ -169,7 +169,7 @@ jobs:
           name: synthetic-canary-${{ github.sha }}
           path: ci-results/canary/
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 7
 
   publish-ghcr:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

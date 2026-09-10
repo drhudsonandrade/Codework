@@ -132,5 +132,5 @@ jobs:
         with:
           name: genoma-v3-visual-candidates-${{ github.sha }}
           path: visual-qa/candidates
-          retention-days: 30
+          retention-days: 7
           if-no-files-found: error
