@@ -17,7 +17,7 @@ ACTIVE_TECHNICAL_DOCS = (
     "docs/SNP_ARRAY_PARTIAL_GENOME.md",
     "docs/TARGET_REGISTRY_EXPANSION.md",
 )
-PORTUGUESE_PROSE_TERMS = frozenset({
+LOCAL_PORTUGUESE_PROSE_TERMS = frozenset({
     "apenas", "ainda", "alem", "antes", "apos", "arquivo", "arquivos",
     "cada", "como", "com", "dados", "deve", "devem", "durante", "entre",
     "essa", "esse", "esta", "este", "execucao", "fica", "ficam", "foi",
@@ -26,6 +26,12 @@ PORTUGUESE_PROSE_TERMS = frozenset({
     "resultados", "revisao", "sem", "sobre", "somente", "tambem", "todos",
     "todas", "uma", "versao",
 })
+_POLICY_PAYLOAD = json.loads(
+    (ROOT / "config/code_language_policy.json").read_text(encoding="utf-8")
+)
+POLICY_TECHNICAL_TERMS = frozenset(_POLICY_PAYLOAD["technical_terms"])
+PORTUGUESE_PROSE_TERMS = LOCAL_PORTUGUESE_PROSE_TERMS | POLICY_TECHNICAL_TERMS
+PORTUGUESE_LOWERCASE_ACCENT = re.compile(r"[áéíóúâêôãõçà]")
 PRESERVED_LITERALS = (
     "NÃO DISPONÍVEL", "NÃO DETECTADO", "NÃO TESTADO", "NÃO REPORTÁVEL",
     "EXECUTADO", "VERIFICADO", "INFERIDO", "PROPOSTO",
@@ -34,6 +40,14 @@ PRESERVED_LITERALS = (
     "PARCIALMENTE TRANSFERÍVEL",
 )
 RETIRED_BASE_COMMANDS = frozenset({"python3 scripts/curate_panelapp.py"})
+PRESERVED_PORTUGUESE_REASONS = frozenset({"historical_quote", "localized_example"})
+EXPECTED_PRESERVED_PORTUGUESE_COUNTS = {
+    "docs/ANCESTRY_REFERENCE_PANEL.md": 1,
+    "docs/EDITORIAL_V3_PIXEL_QA.md": 1,
+    "docs/PGX_ALLELE_DISCRIMINATION.md": 7,
+    "docs/SNP_ARRAY_PARTIAL_GENOME.md": 4,
+    "docs/TARGET_REGISTRY_EXPANSION.md": 16,
+}
 
 
 def _normalize(value: str) -> str:
@@ -43,25 +57,40 @@ def _normalize(value: str) -> str:
 
 
 def _prose_tokens(line: str) -> set[str]:
-    """Return high-confidence Portuguese prose tokens after contract exclusions."""
+    """Return repository-policy and accented Portuguese prose tokens after exclusions."""
     line = re.sub(r"`[^`]*`", " ", line)
     line = re.sub(r"https?://\S+", " ", line)
     for literal in PRESERVED_LITERALS:
         line = line.replace(literal, " ")
-    words = {_normalize(word) for word in re.findall(r"[^\W_]+", line, flags=re.UNICODE)}
-    return words & PORTUGUESE_PROSE_TERMS
+    parts = re.findall(r"[^\W_]+", line, flags=re.UNICODE)
+    words = {_normalize(word) for word in parts}
+    matches = words & PORTUGUESE_PROSE_TERMS
+    matches.update(
+        _normalize(word)
+        for word in parts
+        if word[:1].islower() and PORTUGUESE_LOWERCASE_ACCENT.search(word)
+    )
+    return matches
+
+
+def _preserved_portuguese_lines(path: Path) -> frozenset[str]:
+    """Load exact reviewed historical/localized Portuguese lines for a tracked document."""
+    try:
+        relative = path.resolve().relative_to(ROOT.resolve()).as_posix()
+    except ValueError:
+        return frozenset()
+    fixture_path = ROOT / "tests/fixtures/developer_documentation_contract.json"
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    values = fixture.get("preserved_portuguese_lines", {}).get(relative, [])
+    return frozenset(item["line"] for item in values)
 
 
 def _find_portuguese_prose(path: Path) -> list[tuple[int, tuple[str, ...]]]:
-    """Scan unfenced developer prose while leaving quoted history untouched."""
+    """Scan every Markdown line except exact reviewed historical/localized exceptions."""
     findings: list[tuple[int, tuple[str, ...]]] = []
-    fenced = False
+    preserved = _preserved_portuguese_lines(path)
     for lineno, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        stripped = raw.lstrip()
-        if stripped.startswith("```"):
-            fenced = not fenced
-            continue
-        if fenced or stripped.startswith(">"):
+        if raw in preserved or raw.lstrip().startswith("```"):
             continue
         tokens = tuple(sorted(_prose_tokens(raw)))
         if tokens:
@@ -138,6 +167,47 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
             path.write_text("## Como execute\n", encoding="utf-8")
             self.assertEqual(_find_portuguese_prose(path), [(1, ("como",))])
 
+    def test_scanner_detects_portuguese_beyond_the_local_word_list(self) -> None:
+        """Repository policy terms and accented prose must extend the local token vocabulary."""
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "doc.md"
+            path.write_text("Falha crítica detectada imediatamente.\n", encoding="utf-8")
+            self.assertTrue(_find_portuguese_prose(path))
+
+    def test_markdown_syntax_does_not_create_a_portuguese_bypass(self) -> None:
+        """Arbitrary blockquotes and fenced comments must remain subject to language checks."""
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "doc.md"
+            path.write_text(
+                "> Este painel deve usar dados somente após revisão.\n"
+                "```bash\n"
+                "# Este painel deve usar dados somente após revisão.\n"
+                "```\n",
+                encoding="utf-8",
+            )
+            findings = _find_portuguese_prose(path)
+            self.assertEqual([line for line, _ in findings], [1, 3])
+
+    def test_preserved_portuguese_exceptions_are_exact_and_justified(self) -> None:
+        """Only enumerated historical/localized lines may bypass the language detector."""
+        fixture = json.loads(
+            (ROOT / "tests/fixtures/developer_documentation_contract.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        preserved = fixture["preserved_portuguese_lines"]
+        self.assertEqual(set(preserved), set(EXPECTED_PRESERVED_PORTUGUESE_COUNTS))
+        for relative, expected_count in EXPECTED_PRESERVED_PORTUGUESE_COUNTS.items():
+            entries = preserved[relative]
+            self.assertEqual(len(entries), expected_count)
+            self.assertEqual(len({item["line"] for item in entries}), expected_count)
+            source_lines = (ROOT / relative).read_text(encoding="utf-8").splitlines()
+            for item in entries:
+                self.assertEqual(set(item), {"line", "reason"})
+                self.assertIn(item["reason"], PRESERVED_PORTUGUESE_REASONS)
+                self.assertEqual(source_lines.count(item["line"]), 1)
+                self.assertTrue(_prose_tokens(item["line"]))
+
     def test_documented_repo_script_entrypoints_exist(self) -> None:
         """Executable doc commands must not call repository scripts absent from HEAD."""
         missing = []
@@ -182,7 +252,7 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
                 encoding="utf-8"
             )
         )
-        self.assertEqual(fixture["schema"], "genoma-developer-documentation-contract-v3")
+        self.assertEqual(fixture["schema"], "genoma-developer-documentation-contract-v4")
         self.assertEqual(
             fixture["base_sha"], "185996841b55669e42aa641896e2947748e04704"
         )

@@ -1057,5 +1057,133 @@
       ]
     }
   },
-  "schema": "genoma-developer-documentation-contract-v3"
+  "preserved_portuguese_lines": {
+    "docs/ANCESTRY_REFERENCE_PANEL.md": [
+      {
+        "line": "> Componentes abaixo de 20% não são estabelecidos por esta projeção.",
+        "reason": "localized_example"
+      }
+    ],
+    "docs/EDITORIAL_V3_PIXEL_QA.md": [
+      {
+        "line": "  --source-dir /caminho/pack-aprovado \\",
+        "reason": "localized_example"
+      }
+    ],
+    "docs/PGX_ALLELE_DISCRIMINATION.md": [
+      {
+        "line": "> A array cobre 1 a 4 das 40 a 80 posições definidoras por gene do CPIC. Nenhum diplótipo",
+        "reason": "historical_quote"
+      },
+      {
+        "line": "> farmacogenético sairá dela além do VKORC1. Isso pede sequenciamento dirigido dos genes de",
+        "reason": "historical_quote"
+      },
+      {
+        "line": "> interesse, não mais código.",
+        "reason": "historical_quote"
+      },
+      {
+        "line": "  \"*2 detectado em um cromossomo; o outro cromossomo não carrega nenhum dos 15 alelos",
+        "reason": "localized_example"
+      },
+      {
+        "line": "   discrimináveis, e permanece indistinguível de 30 alelos não interrogados\"",
+        "reason": "localized_example"
+      },
+      {
+        "line": "  conditional_on: nenhum dos 30 alelos do catálogo CPIC não interrogados está presente",
+        "reason": "localized_example"
+      },
+      {
+        "line": "  residual: 0,0321 (Sub-Saharan African), limite inferior",
+        "reason": "localized_example"
+      }
+    ],
+    "docs/SNP_ARRAY_PARTIAL_GENOME.md": [
+      {
+        "line": "  --input /caminho/privado/arquivo.csv.gz \\",
+        "reason": "localized_example"
+      },
+      {
+        "line": "  --build-evidence 'fonte rastreável' \\",
+        "reason": "localized_example"
+      },
+      {
+        "line": "  --strand-evidence 'fonte rastreável' \\",
+        "reason": "localized_example"
+      },
+      {
+        "line": "  --output-dir /caminho/privado/resultados",
+        "reason": "localized_example"
+      }
+    ],
+    "docs/TARGET_REGISTRY_EXPANSION.md": [
+      {
+        "line": "> **Medição histórica não verificada — validade gene-doença no corte 2★.** Uma revisão",
+        "reason": "historical_quote"
+      },
+      {
+        "line": "> anterior deste documento publicou **2.965 genes estabelecidos**, **117 sem relação",
+        "reason": "historical_quote"
+      },
+      {
+        "line": "> estabelecida** e uma decomposição por ClinGen/GenCC/PanelApp/ClinGen Dosage/gnomAD. O",
+        "reason": "historical_quote"
+      },
+      {
+        "line": "> repositório atual não contém um artefato de validade gene-doença para o mesmo universo de",
+        "reason": "historical_quote"
+      },
+      {
+        "line": "> 3.082 genes que permita reproduzir essas contagens. `docs/evidence/GENE_DISEASE_VALIDITY.json`",
+        "reason": "historical_quote"
+      },
+      {
+        "line": "> contém apenas **16 genes (7 estabelecidos, 9 não estabelecidos)** e, portanto, não é o",
+        "reason": "historical_quote"
+      },
+      {
+        "line": "> denominador correspondente ao painel 2★. As contagens 2.965/117 e sua antiga tabela por",
+        "reason": "historical_quote"
+      },
+      {
+        "line": "> fonte ficam preservadas apenas como histórico de uma execução não reproduzível e **não são",
+        "reason": "historical_quote"
+      },
+      {
+        "line": "> evidência de release**. Elas só podem voltar como verificadas quando um artefato versionado,",
+        "reason": "historical_quote"
+      },
+      {
+        "line": "> com SHA-256 e comando reproduzível, materializar esse mesmo corte.",
+        "reason": "historical_quote"
+      },
+      {
+        "line": "> **Medição histórica não verificada:** a cadeia de contagens publicada anteriormente não",
+        "reason": "historical_quote"
+      },
+      {
+        "line": "> fechava aritmeticamente entre 62.367 linhas e 54.845 alvos e não citava um artefato de",
+        "reason": "historical_quote"
+      },
+      {
+        "line": "> saída com SHA-256. Os números intermediários foram removidos. O filtro reproduzível é:",
+        "reason": "historical_quote"
+      },
+      {
+        "line": "> GRCh38, SNV, classificação P/LP exata, limiar explícito de estrelas, rsid presente e",
+        "reason": "historical_quote"
+      },
+      {
+        "line": "> alelos A/C/G/T; as contagens devem ser lidas de `scan_statistics`,",
+        "reason": "historical_quote"
+      },
+      {
+        "line": "> `target_statistics` e `totals` nos artefatos gerados pela execução.",
+        "reason": "historical_quote"
+      }
+    ]
+  },
+  "schema": "genoma-developer-documentation-contract-v4"
 }
