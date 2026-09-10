@@ -147,10 +147,13 @@ class ResidualLanguageAuditTest(unittest.TestCase):
         ).hexdigest()
         self.assertEqual(observed, CODERABBIT_STRUCTURE_SHA256)
 
-    def test_private_moi_alias_is_removed(self) -> None:
-        """Remove only the repository-private MOI compatibility shim."""
+    def test_private_moi_alias_is_retained_for_scoped_compatibility(self) -> None:
+        """Retain the private shim when removing it widens unrelated review scope."""
         clinical_findings = importlib.import_module("array_pipeline.clinical_findings")
-        self.assertFalse(hasattr(clinical_findings, "_normalised_moi"))
+        self.assertIs(
+            clinical_findings._normalised_moi,
+            clinical_findings.normalised_moi,
+        )
         self.assertEqual(
             clinical_findings.normalised_moi("Autosomal recessive"), "AR"
         )
@@ -181,6 +184,7 @@ class ResidualLanguageAuditTest(unittest.TestCase):
     def test_final_inventory_documents_stage_eight_decisions(self) -> None:
         """Pin the final inventory to the actual Stage 8 decisions."""
         text = INVENTORY.read_text(encoding="utf-8")
+        self.assertIn("The private `_normalised_moi` alias is retained", text)
         for category in ALLOWED_CATEGORIES:
             self.assertIn(f"`{category}`", text)
         for literal in (

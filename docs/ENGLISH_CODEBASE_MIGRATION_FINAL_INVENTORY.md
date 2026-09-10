@@ -10,7 +10,7 @@ The deterministic audit is:
 python3 scripts/residual_language_audit.py --check
 ```
 
-At the Stage 8 implementation state used to create the classification ledger, the audit records **252 tracked files** containing **7,603 detected lines**. Every detected file has one exact ledger entry with a reviewed category, reason, count, and content fingerprint.
+At the Stage 8 implementation state used to create the classification ledger, the audit records **252 tracked files** containing **7,602 detected lines**. Every detected file has one exact ledger entry with a reviewed category, reason, count, and content fingerprint.
 
 ## Closed classification categories
 
@@ -27,7 +27,7 @@ The reviewed ledger distributes those lines as follows:
 | Category | Files | Detected lines |
 | --- | ---: | ---: |
 | `canonical` | 13 | 31 |
-| `compatibility-preserved` | 108 | 4,862 |
+| `compatibility-preserved` | 108 | 4,861 |
 | `historical` | 27 | 766 |
 | `localized` | 68 | 1,740 |
 | `normative` | 36 | 204 |
@@ -38,7 +38,7 @@ These are detected lines, not a claim that each line is independent prose. A lin
 
 `.coderabbit.yaml` was the remaining active reviewer-tooling surface with Portuguese technical instructions. Its technical prompts and custom-check display names are now English. All review controls, paths, blocking modes, auto-review settings, safety constraints, and `language: "pt-BR"` localization preference remain unchanged.
 
-The private `_normalised_moi` alias was removed after repository-wide consumer analysis showed that only two calls in its defining module used it. Those calls now use the public `normalised_moi` implementation directly.
+The private `_normalised_moi` alias is retained in Stage 8. Repository-wide consumer analysis found only same-module calls, but removing the shim causes the changed scientific module to pull unrelated pre-existing style and typing debt from its import graph into the review surface. Stage 8 does not hide, ignore, or repair that unrelated debt. The scientific module is therefore restored byte-for-byte to the Stage 8 base, `normalised_moi` remains the preferred implementation path, and alias removal is deferred to a separately scoped scientific-maintenance change.
 
 Public compatibility surfaces were deliberately retained. English policy access names such as `OperationalStatus.EXECUTED` remain identity-equal to their legacy members because changing the canonical enum member order/names would alter reflection, iteration, pickling, and compatibility behavior. The GRCh37 aliases `CHROMOSOME_KB` and `AUTOSOME_KB` also remain because they are public module-level compatibility constants.
 

@@ -4,7 +4,7 @@
 
 **Goal:** Complete the English-codebase migration by classifying every remaining Portuguese occurrence, removing only demonstrably private temporary aliases, and preserving every supported canonical, localized, historical, normative, or compatibility contract.
 
-**Architecture:** Add a deterministic residual-language ledger keyed by exact tracked file, category, reason, detected-line count, and content fingerprint. The audit fails closed on any unclassified or drifted occurrence. Translate the remaining active reviewer-tooling prose in `.coderabbit.yaml`, remove the one repository-private temporary MOI alias, retain public compatibility aliases, and publish the final migration inventory.
+**Architecture:** Add a deterministic residual-language ledger keyed by exact tracked file, category, reason, detected-line count, and content fingerprint. The audit fails closed on any unclassified or drifted occurrence. Translate the remaining active reviewer-tooling prose in `.coderabbit.yaml`, review compatibility aliases conservatively, retain any alias whose removal widens unrelated scientific review scope, and publish the final migration inventory.
 
 **Tech Stack:** Python 3.12/3.11-compatible standard library, `unittest`, Git, existing language scanners, YAML text configuration, GitHub Actions/CodeRabbit.
 
@@ -117,42 +117,36 @@ Preserve every configuration key, boolean, numeric setting, path filter, path se
 Run: `python -m unittest tests.test_residual_language_audit tests.test_coderabbit_guardrails -v`
 Expected: PASS.
 
-### Task 3: Remove only the proven-private temporary alias
+### Task 3: Review the private MOI alias without widening scientific scope
 
 **Files:**
-- Modify: `array_pipeline/clinical_findings.py`
+- Preserve byte-for-byte: `array_pipeline/clinical_findings.py`
 - Test: `tests/test_residual_language_audit.py`
-- Preserve: `policy_engine/genoma_policy/models.py`, `array_pipeline/homozygosity.py`
 
 **Interfaces:**
-- Consumes: `normalised_moi(label: Any) -> str`.
-- Produces: all in-repository MOI normalization calls through `normalised_moi`; public/cross-module compatibility aliases remain unchanged.
+- Consumes: `normalised_moi(label: Any) -> str` and its existing private `_normalised_moi` compatibility alias.
+- Produces: an explicit decision to retain the thin alias in Stage 8 while keeping `normalised_moi` as the preferred implementation path.
 
-- [ ] **Step 1: Add RED compatibility-cleanup tests**
+- [ ] **Step 1: Add the failing compatibility-boundary test**
 
 ```python
-def test_private_moi_alias_is_removed(self):
-    self.assertFalse(hasattr(clinical_findings, "_normalised_moi"))
-
-def test_supported_compatibility_aliases_remain(self):
-    self.assertIs(OperationalStatus.EXECUTED, OperationalStatus.EXECUTADO)
-    self.assertEqual(homozygosity.AUTOSOME_KB,
-                     homozygosity.AUTOSOME_KB_BY_BUILD["GRCh37"])
+def test_private_moi_alias_is_retained_for_scoped_compatibility(self):
+    self.assertIs(clinical_findings._normalised_moi, clinical_findings.normalised_moi)
 ```
 
-- [ ] **Step 2: Run and verify RED only for the private alias**
+- [ ] **Step 2: Run and verify RED on the alias-removed candidate**
 
 Run: `python -m unittest tests.test_residual_language_audit -v`
-Expected: the private-alias assertion FAILS while preservation assertions PASS.
+Expected: FAIL while the alias is absent.
 
-- [ ] **Step 3: Replace the two internal `_normalised_moi(...)` calls with `normalised_moi(...)` and delete the private alias assignment/comment**
+- [ ] **Step 3: Restore `array_pipeline/clinical_findings.py` byte-for-byte to the Stage 8 base**
 
-Do not rename the public `normalised_moi` function and do not remove enum or GRCh37 compatibility aliases.
+DeepSource analysis of the alias-removed candidate surfaced unrelated pre-existing line-length and imported-module typing debt. Do not expand Stage 8 into scientific maintenance and do not suppress those findings globally. Retain the existing thin alias and defer its removal to a separately scoped change.
 
-- [ ] **Step 4: Run focused scientific/policy compatibility tests**
+- [ ] **Step 4: Run focused compatibility tests**
 
 Run: `python -m unittest tests.test_residual_language_audit tests.test_clinical_findings_regressions tests.test_policy_language_compatibility tests.test_array_assembly_regressions -v`
-Expected: PASS.
+Expected: PASS, with `array_pipeline/clinical_findings.py` byte-identical to `origin/main`.
 
 ### Task 4: Publish the final migration inventory
 
@@ -162,11 +156,11 @@ Expected: PASS.
 
 **Interfaces:**
 - Consumes: live audit report and the approved Stage 8 classification ledger.
-- Produces: active English documentation stating what was translated, what remains Portuguese, why each category remains, which aliases were removed/retained, and the exact reproducible audit command.
+- Produces: active English documentation stating what was translated, what remains Portuguese, why each category remains, which aliases were reviewed/retained, and the exact reproducible audit command.
 
 - [ ] **Step 1: Add a failing inventory contract**
 
-Require the document to name all five categories, `.coderabbit.yaml`, the removed `_normalised_moi` alias, retained policy enum aliases, retained GRCh37 aliases, canonical v3.4 identity, and the audit command.
+Require the document to name all five categories, `.coderabbit.yaml`, the retained `_normalised_moi` compatibility alias, retained policy enum aliases, retained GRCh37 aliases, canonical v3.4 identity, and the audit command.
 
 - [ ] **Step 2: Run and verify RED**
 

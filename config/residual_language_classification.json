@@ -575,8 +575,8 @@
       "path": "docs/superpowers/plans/2026-09-10-compatibility-cleanup-residual-audit.md",
       "category": "compatibility-preserved",
       "reason": "The Stage 8 plan intentionally contains a Portuguese detector fixture used to specify the regression test.",
-      "count": 2,
-      "fingerprint": "d2fd21944beb3b308afc68d068b74cc814409cc22c04e0e1c775453966c5a5a3"
+      "count": 1,
+      "fingerprint": "b0469c1193a955f9e5825907789b4037a9b2973d5328729a4fc7bfaf5e8def72"
     },
     {
       "path": "docs/superpowers/specs/2026-09-03-english-codebase-refactor-design.md",
