@@ -121,8 +121,6 @@ def normalised_moi(label: Any) -> str:
     return _GENCC_MOI.get(text, MOI_UNKNOWN)
 
 
-#: Kept as a private alias so existing call sites read unchanged.
-_normalised_moi = normalised_moi
 
 #: What a locus is reported as. These are not severities; they are different *kinds* of
 #: statement, and collapsing them is how a carrier finding becomes a diagnosis.
@@ -390,12 +388,12 @@ def _validity_for(gene: str | None, evidence: dict[str, Any]) -> dict[str, Any]:
             {
                 str(c["disease"])
                 for c in established_clingen
-                if _normalised_moi(c.get("mode_of_inheritance")) == mode and c.get("disease")
+                if normalised_moi(c.get("mode_of_inheritance")) == mode and c.get("disease")
             }
             | {
                 str(g["disease"])
                 for g in established_gencc
-                if _normalised_moi(g.get("mode_of_inheritance")) == mode and g.get("disease")
+                if normalised_moi(g.get("mode_of_inheritance")) == mode and g.get("disease")
             }
         )
 
