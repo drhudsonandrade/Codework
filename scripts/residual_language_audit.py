@@ -320,9 +320,18 @@ def _tracked_paths(root: Path) -> tuple[Path, ...]:
             f"git tracked-file discovery failed: {detail}"
         )
     names = result.stdout.decode("utf-8").split("\0")
-    return tuple(
-        root / name for name in names if name and (root / name).is_file()
-    )
+    paths: list[Path] = []
+    for name in names:
+        if not name:
+            continue
+        path = root / name
+        if path.is_symlink():
+            raise ResidualLanguageError(
+                f"tracked symlink is not supported by residual audit: {name}"
+            )
+        if path.is_file():
+            paths.append(path)
+    return tuple(paths)
 
 
 def scan_repository(root: Path) -> dict[str, tuple[ResidualFinding, ...]]:

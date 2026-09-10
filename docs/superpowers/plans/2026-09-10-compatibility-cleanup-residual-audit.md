@@ -190,7 +190,7 @@ Temporarily inject Portuguese technical prose into an unclassified tracked-like 
 
 - [ ] **Step 3: Review the final diff against `origin/main`**
 
-Require only Stage 8 plan, audit implementation/ledger/tests, `.coderabbit.yaml`, `array_pipeline/clinical_findings.py`, and the final migration inventory. Confirm no canonical ruleset, manifest, scientific evidence artifact, dependency, workflow behavior, or MCP payload changed.
+Require only Stage 8 plan, audit implementation/ledger/tests, code-language policy/docs/tests, `.coderabbit.yaml`, `scripts/validate_repo.py`, `tests/test_ci_optimization_contract.py`, `.github/workflows/genoma-ngs-runtime-gate.yml`, and the final migration inventory. Confirm the workflow change is limited to adding the residual-audit script to the explicit path-trigger dependency closure. Confirm `array_pipeline/clinical_findings.py` is byte-for-byte identical to `origin/main` and absent from the effective PR diff. Confirm no canonical ruleset, manifest, scientific evidence artifact, dependency, workflow job/permission/runtime behavior, or MCP payload changed.
 
 - [ ] **Step 4: Commit one coherent locally validated block and push the branch**
 

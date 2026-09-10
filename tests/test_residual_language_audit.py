@@ -6,15 +6,19 @@ import hashlib
 import importlib
 import json
 import re
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from scripts.residual_language_audit import (
     ALLOWED_CATEGORIES,
+    ResidualLanguageError,
     audit_repository,
     detect_text,
     findings_for_path,
+    scan_repository,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -71,6 +75,30 @@ class ResidualLanguageAuditTest(unittest.TestCase):
                 "Review only problems introduced by this pull request."
             )
         )
+
+    def test_tracked_symlink_fails_closed_before_following_target(self) -> None:
+        """Reject tracked symlinks instead of scanning filesystem targets."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            root = temp / "repo"
+            root.mkdir()
+            outside = temp / "outside.txt"
+            outside.write_text("outside content\n", encoding="utf-8")
+            subprocess.run(
+                ["/usr/bin/git", "-C", str(root), "init", "-q"],
+                check=True,
+            )
+            link = root / "escape.txt"
+            try:
+                link.symlink_to(outside)
+            except OSError as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+            subprocess.run(
+                ["/usr/bin/git", "-C", str(root), "add", "escape.txt"],
+                check=True,
+            )
+            with self.assertRaisesRegex(ResidualLanguageError, "tracked symlink"):
+                scan_repository(root)
 
     def test_current_repository_has_no_unclassified_or_drifted_residual(
         self,

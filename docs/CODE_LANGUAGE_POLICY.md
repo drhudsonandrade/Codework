@@ -14,7 +14,7 @@ Portuguese remains valid when it is required by an explicit normative contract, 
 
 ## Post-migration invariant
 
-After completion of the English-codebase migration, all new or modified technical implementation is English-only. This applies to identifiers, comments, docstrings, internal technical messages, test names, developer-facing technical documentation, and newly introduced implementation prose. A new Portuguese implementation occurrence cannot be grandfathered merely by adding it to a baseline or classification ledger.
+After completion of the English-codebase migration, English-only technical implementation is required for all new or modified technical code. This applies to identifiers, comments, docstrings, internal technical messages, test names, developer-facing technical documentation, and newly introduced implementation prose. A new Portuguese implementation occurrence cannot be grandfathered merely by adding it to a baseline or classification ledger.
 
 Exceptions remain limited to explicit normative, serialized compatibility, localized pt-BR, canonical, or immutable historical requirements. Those exceptions must be intentional, reviewable, and covered by the repository's existing classification or compatibility controls where applicable.
 

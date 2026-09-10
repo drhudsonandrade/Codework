@@ -776,7 +776,7 @@ class LanguagePolicyDocumentationTest(unittest.TestCase):
         self.assertIn("authoritative or de facto standard style guide", agents)
         self.assertIn("code_language_legacy_baseline.json", agents)
         self.assertIn("Post-migration invariant", policy_doc)
-        self.assertIn("English-only", policy_doc)
+        self.assertIn("English-only technical implementation", policy_doc)
         self.assertIn("authoritative or de facto standard style guide", policy_doc)
         self.assertIn("Category A — Private implementation identifier", policy_doc)
         self.assertIn("Category E — Immutable or historical evidence", policy_doc)
