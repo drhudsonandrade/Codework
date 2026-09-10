@@ -126,6 +126,7 @@ NGS_TRIGGER_SCRIPT_PATHS = (
     "scripts/materialize_ruleset.py",
     "scripts/prepare_latest_candidate.py",
     "scripts/prepare_report_release.py",
+    "scripts/residual_language_audit.py",
     "scripts/promote_latest_candidate.py",
     "scripts/refresh_evidence_sources.py",
     "scripts/run_canary.sh",

@@ -40,9 +40,11 @@ CodeRabbit also uses this file as a review guideline.
 
 ## Code language policy
 
-- English-first technical code is required for new implementation identifiers, comments and docstrings.
-- Portuguese remains valid only where it is an explicit normative, serialized compatibility, localized, canonical, or historical requirement.
-- `config/code_language_legacy_baseline.json` records pre-migration debt; it is not permission to add new Portuguese implementation language.
+- Post-migration invariant: English-only technical implementation is required for every new or modified implementation identifier, comment, docstring, internal technical message, test name, and developer-facing technical document.
+- Portuguese remains valid only where it is an explicit normative, serialized compatibility, localized, canonical, or historical requirement; such exceptions must remain explicit and auditable.
+- All new or modified code must follow the authoritative or de facto standard style guide and idiomatic conventions for the language in use, together with the repository-pinned formatter, linter, type-checker, compiler, and validation rules.
+- There is no single cross-language "universal syntax". Use the standard development conventions of each language, and preserve repository contracts whenever a generic style recommendation would conflict with an explicit project invariant.
+- `config/code_language_legacy_baseline.json` records pre-migration debt; it is not permission to add new Portuguese implementation language or new style debt.
 - Run `python3 scripts/code_language_guard.py --check` for changes touching scanned languages.
 - When a migration removes tracked debt, update the baseline in the same PR and review the generated diff.
 

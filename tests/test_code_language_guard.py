@@ -772,8 +772,12 @@ class LanguagePolicyDocumentationTest(unittest.TestCase):
     def test_agent_and_policy_docs_name_the_enforced_contract(self):
         agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
         policy_doc = (ROOT / "docs" / "CODE_LANGUAGE_POLICY.md").read_text(encoding="utf-8")
-        self.assertIn("English-first technical code", agents)
+        self.assertIn("English-only technical implementation", agents)
+        self.assertIn("authoritative or de facto standard style guide", agents)
         self.assertIn("code_language_legacy_baseline.json", agents)
+        self.assertIn("Post-migration invariant", policy_doc)
+        self.assertIn("English-only technical implementation", policy_doc)
+        self.assertIn("authoritative or de facto standard style guide", policy_doc)
         self.assertIn("Category A — Private implementation identifier", policy_doc)
         self.assertIn("Category E — Immutable or historical evidence", policy_doc)
         self.assertIn("python3 scripts/code_language_guard.py --check", policy_doc)

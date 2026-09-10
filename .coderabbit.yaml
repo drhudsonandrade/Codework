@@ -4,9 +4,9 @@ language: "pt-BR"
 early_access: false
 
 tone_instructions: >-
-  Seja técnico, conciso e conservador. Priorize correção, determinismo,
-  segurança, integridade de evidências e prevenção de regressões. Não elogie
-  nem repita o diff. Diferencie bug bloqueante de sugestão não bloqueante.
+  Be technical, concise, and conservative. Prioritize correctness, determinism,
+  security, evidence integrity, and regression prevention. Do not praise or
+  repeat the diff. Distinguish blocking bugs from non-blocking suggestions.
 
 reviews:
   profile: "assertive"
@@ -75,218 +75,187 @@ reviews:
   path_instructions:
     - path: "**/*"
       instructions: |
-        Revise apenas problemas introduzidos ou agravados por este PR.
-        Preserve a arquitetura de quatro planos:
+        Review only problems introduced or worsened by this PR.
+        Preserve the four-plane architecture:
         Policy Control Plane -> Scientific Data Plane -> Evidence Plane -> Audit Plane.
-        Não aceite mudanças que contornem contratos existentes, removam validações,
-        silenciem falhas, convertam erro em sucesso, reduzam cobertura de testes ou
-        alterem comportamento não relacionado ao escopo declarado.
-        Mudanças amplas devem ser justificadas no PR e acompanhadas por testes.
-        Não trate uma alegação textual de "corrigido", "PASS", "validado" ou
-        "implantado" como evidência técnica.
-
+        Do not accept changes that bypass existing contracts, remove validation,
+        silence failures, convert errors into success, reduce test coverage, or
+        change behavior unrelated to the declared scope.
+        Broad changes must be justified in the PR and accompanied by tests.
+        Do not treat a textual claim of "fixed", "PASS", "validated", or
+        "deployed" as technical evidence.
     - path: "policy_engine/**"
       instructions: |
-        Preserve comportamento determinístico e o policy engine como fonte normativa
-        executável. O modo core-only não deve passar a depender de LLM, banco de dados,
-        MCP, serviço externo ou rede. Verifique parsing, identidade do ruleset,
-        attestations, ledger/auditoria, fail-closed behavior e compatibilidade de CLI/HTTP.
-        Alterações comportamentais exigem testes de regressão correspondentes.
-
+        Preserve deterministic behavior and the policy engine as the executable
+        normative authority. Core-only mode must not acquire a dependency on an LLM,
+        database, MCP, external service, or network. Check ruleset parsing and identity,
+        attestations, the audit ledger, fail-closed behavior, and CLI/HTTP compatibility.
+        Behavioral changes require corresponding regression tests.
     - path: "scripts/validate_repo.py"
       instructions: |
-        Trate este arquivo como guardião do contrato do repositório. Falhe a revisão se
-        o PR enfraquecer invariantes, aceitar estado ambíguo, ignorar artefatos ausentes
-        ou deixar validator e materializer com contratos divergentes.
-
+        Treat this file as the guardian of the repository contract. Fail the review if
+        the PR weakens invariants, accepts ambiguous state, ignores missing artifacts,
+        or lets the validator and materializer contracts diverge.
     - path: "scripts/materialize_ruleset.py"
       instructions: |
-        Exija identidade byte-exact do ruleset, permissões read-only e concordância com
-        manifest/hash/nome/versionamento. Não permita criar segunda cópia ativa do
-        ruleset nem alterar o contrato sem atualizar validação e testes correlatos.
-
+        Require byte-exact ruleset identity, read-only permissions, and agreement with
+        the manifest/hash/name/version contract. Do not allow a second active ruleset
+        copy or a contract change without coordinated validation and tests.
     - path: "scripts/sealed_ruleset.py"
       instructions: |
-        Preserve o transporte selado/inativo, verificação de hash e fail-closed.
-        Sinalize qualquer caminho que permita materialização sem validação de integridade.
-
+        Preserve inactive sealed transport, hash verification, and fail-closed behavior.
+        Flag any path that permits materialization without integrity verification.
     - path: "normative/**"
       instructions: |
-        O conteúdo normativo selado é sensível à identidade de bytes. Mudanças devem
-        manter exatamente uma cópia ativa apenas em runtime, com hash/manifesto,
-        materializer, validator, docs e testes coerentes. Não aceite plaintext normativo
-        adicional persistido no repositório.
-
+        The sealed normative content is byte-identity sensitive. Changes must preserve
+        exactly one active copy only at runtime, with coherent hash/manifest, materializer,
+        validator, documentation, and tests. Do not accept an additional persisted
+        plaintext normative copy in the repository.
     - path: "manifests/**"
       instructions: |
-        Manifests são evidência de integridade. Sinalize hashes, nomes, versões, datas,
-        contigs ou referências inconsistentes com scripts, workflows e documentação.
-        Não aceite atualização de manifesto sem atualização coordenada dos consumidores.
-
+        Manifests are integrity evidence. Flag hashes, names, versions, dates, contigs,
+        or references that disagree with scripts, workflows, or documentation. Do not
+        accept a manifest update without a coordinated update of its consumers.
     - path: "locks/**"
       instructions: |
-        Preserve pinning e imutabilidade da supply chain. Sinalize dependências
-        flutuantes, checksums removidos, tags mutáveis ou validações de lock enfraquecidas.
-
+        Preserve supply-chain pinning and immutability. Flag floating dependencies,
+        removed checksums, mutable tags, or weakened lock validation.
     - path: "template_store/**"
       instructions: |
-        Preserve MANIFEST, identidade dos artefatos e estado sealed-only quando aplicável.
-        Não permita renomeações de contrato ou transporte monolítico que contradiga a
-        arquitetura existente sem migração explícita, teste e compatibilidade.
-
+        Preserve MANIFEST identity, artifact identity, and sealed-only state where
+        applicable. Do not allow contract renames or a monolithic transport that
+        contradicts the existing architecture without an explicit, tested compatibility migration.
     - path: ".github/workflows/**"
       instructions: |
-        Revise com rigor de supply chain e privilégio mínimo. GitHub Actions devem estar
-        pinadas de forma imutável quando possível; permissões devem permanecer mínimas.
-        PRs não devem publicar artefatos de produção nem contornar gates. Publicação deve
-        ocorrer somente a partir de main após dependências de validação aprovadas.
-        Sinalize referências de versão/hash/nome do ruleset que divergem da fonte vigente.
-        Não aceite alteração que torne testes opcionais ou use `continue-on-error` para
-        mascarar falhas críticas.
-
+        Review supply-chain and least-privilege behavior rigorously. GitHub Actions
+        should be immutably pinned where possible; permissions must remain minimal.
+        PRs must not publish production artifacts or bypass gates. Production publishing
+        must occur only from main after required validations pass. Flag ruleset
+        version/hash/name references that diverge from the active source. Do not accept
+        changes that make tests optional or use `continue-on-error` to mask critical failures.
     - path: "main.nf"
       instructions: |
-        Preserve determinismo, provenance e separação entre dados científicos e policy.
-        Mudanças de pipeline devem manter gates de runtime/referência e canários não
-        sensíveis, sem introduzir dados pessoais/genômicos reais no repositório ou CI.
-
+        Preserve determinism, provenance, and separation between scientific data and policy.
+        Pipeline changes must keep runtime/reference gates and non-sensitive canaries,
+        without introducing real personal/genomic data into the repository or CI.
     - path: "workflows/**"
       instructions: |
-        Para Nextflow/processos científicos, verifique pinning de ferramentas/referências,
-        determinismo, tratamento de contigs, arquivos intermediários, erros fail-closed e
-        compatibilidade com os gates existentes. Mudanças de calling/QC exigem testes ou
-        canários que exercitem o comportamento modificado.
-
+        For Nextflow/scientific processes, verify tool/reference pinning, determinism,
+        contig handling, intermediate files, fail-closed errors, and compatibility with
+        existing gates. Calling/QC changes require tests or canaries that exercise the
+        modified behavior.
     - path: "nextflow.config"
       instructions: |
-        Sinalize mudanças que reduzam reprodutibilidade, removam limites/gates, usem
-        versões flutuantes ou alterem perfis de execução sem documentação e validação.
-
+        Flag changes that reduce reproducibility, remove limits/gates, use floating
+        versions, or alter execution profiles without documentation and validation.
     - path: "Dockerfile"
       instructions: |
-        Exija versões/pinning reproduzíveis, usuário/permissões seguros, ausência de
-        segredos e preservação do canário. Sinalize downloads sem verificação quando a
-        supply chain exigir checksum/digest.
-
+        Require reproducible versions/pinning, safe user/permissions, no secrets, and
+        preservation of the canary. Flag downloads without verification when the
+        supply-chain contract requires a checksum or digest.
     - path: "policy_engine/Dockerfile"
       instructions: |
-        Preserve root filesystem read-only em runtime, canonical ruleset montado read-only,
-        privilégio mínimo e comportamento determinístico. Não embuta plaintext normativo
-        ativo na imagem.
-
+        Preserve a read-only root filesystem at runtime, the canonical ruleset mounted
+        read-only, least privilege, and deterministic behavior. Do not embed active
+        plaintext normative content in the image.
     - path: "mcp/**"
       instructions: |
-        MCP é interface opcional e nunca fonte de verdade. Não permita que MCP altere
-        regras canônicas, bypass de policy/evidence gates, aumento desnecessário de
-        ferramentas, exposição de segredos/dados genômicos ou redução de auditoria.
-        Mudanças de contrato precisam de testes TypeScript correspondentes.
-
+        MCP is an optional interface and never a source of truth. Do not allow MCP to
+        modify canonical rules, bypass policy/evidence gates, add unnecessary tools,
+        expose secrets/genomic data, or reduce auditability. Contract changes require
+        corresponding TypeScript tests.
     - path: "adapters/**"
       instructions: |
-        Adapters devem permanecer interfaces opcionais. Não introduza dependência runtime
-        obrigatória do core nem bypass dos contratos de policy/evidence/audit.
-
+        Adapters must remain optional interfaces. Do not introduce a mandatory runtime
+        dependency for the core or a bypass around policy/evidence/audit contracts.
     - path: "evidence_adapters/**"
       instructions: |
-        Evidence adapters devem permanecer interfaces opcionais e auditáveis. Verifique
-        proveniência, status de recuperação, digest, locator e fail-closed. Não permita
-        promover fonte inacessível para VERIFICADO nem criar dependência obrigatória do core.
-
+        Evidence adapters must remain optional and auditable. Verify provenance,
+        retrieval status, digest, locator, and fail-closed behavior. Do not promote an
+        inaccessible source to verified status or create a mandatory core dependency.
     - path: "reporting/**"
       instructions: |
-        Relatórios devem ser derivados de evidência disponível. Sinalize inferências não
-        suportadas, dados inventados, perda de provenance, incompatibilidade de templates,
-        ou mudança que permita declarar achados sem evidência correspondente.
-
+        Reports must be derived from available evidence. Flag unsupported inferences,
+        invented data, provenance loss, template incompatibility, or any change that
+        allows findings to be declared without corresponding evidence.
     - path: "tests/**"
       instructions: |
-        Verifique se os testes realmente falham quando o comportamento protegido é
-        quebrado. Não aceite remoção, enfraquecimento, mocks que eliminem o caminho real,
-        asserts triviais ou alteração de esperado apenas para fazer o teste passar.
-        Bugfix e mudança comportamental precisam de teste de regressão.
-
+        Verify that tests actually fail when protected behavior is broken. Do not accept
+        test deletion or weakening, mocks that remove the real path, trivial assertions,
+        or expected-value changes made only to make a test pass. Bug fixes and
+        behavioral changes require regression tests.
     - path: "policy_engine/tests/**"
       instructions: |
-        Preserve testes da identidade canônica, parser/contratos, CLI/HTTP, audit ledger
-        e fail-closed. Testes devem usar bytes/artefatos canônicos quando o contrato exigir.
-
+        Preserve tests of canonical identity, parser/contracts, CLI/HTTP, audit ledger,
+        and fail-closed behavior. Tests must use canonical bytes/artifacts where the
+        contract requires them.
     - path: "README.md"
       instructions: |
-        README deve refletir o runtime real. Sinalize versão, data, hash, nome de arquivo,
-        estado de deployment ou arquitetura incompatíveis com manifests, código e CI.
-
+        README must describe the real runtime. Flag version, date, hash, filename,
+        deployment-state, or architecture claims that disagree with manifests, code, or CI.
     - path: "docs/**"
       instructions: |
-        Documentação operacional e de evidência deve permanecer sincronizada com o código.
-        Não aceite declarações PRE/POST-DEPLOYMENT PASS, 15/15, versão vigente ou artefatos
-        disponíveis sem caminho verificável para a evidência correspondente.
-
+        Operational and evidence documentation must remain synchronized with the code.
+        Do not accept PRE/POST-DEPLOYMENT PASS, 15/15, active-version, or artifact-availability
+        claims without a verifiable path to the corresponding evidence.
     - path: "AGENTS.md"
       instructions: |
-        Este arquivo governa agentes de código. Sinalize qualquer alteração que reduza
-        proteção da main, elimine testes obrigatórios, permita auto-merge, autorize
-        alegações sem evidência ou permita mudanças fora de escopo.
-
+        This file governs coding agents. Flag any change that weakens main protection,
+        removes required tests, permits auto-merge, authorizes evidence-free claims, or
+        allows changes outside the declared scope.
     - path: ".coderabbit.yaml"
       instructions: |
-        Sinalize qualquer mudança que desative auto-review, reduza o perfil assertive,
-        habilite autofix/fix-ci/merge-conflict automático, ignore agentes de código,
-        enfraqueça pre-merge checks ou reduza fail-closed/review status sem justificativa.
-
+        Flag any change that disables auto-review, reduces the assertive profile,
+        enables autofix/fix-ci/automatic conflict resolution, ignores coding agents,
+        weakens pre-merge checks, or reduces fail-closed/review-status behavior without justification.
   pre_merge_checks:
     title:
       mode: "error"
       requirements: >-
-        O título deve descrever uma única mudança técnica e não deve afirmar
-        "fix", "validated", "PASS" ou equivalente sem evidência no PR.
+        The title must describe one technical change and must not claim
+        "fix", "validated", "PASS", or an equivalent without evidence in the PR.
     description:
       mode: "error"
     custom_checks:
-      - name: "Preservar arquitetura de quatro planos"
+      - name: "Preserve the four-plane architecture"
         mode: "error"
         instructions: |
-          Falhe se este PR introduzir ou ampliar um caminho que:
-          1) contorne Policy Control Plane, Evidence Plane ou Audit Plane;
-          2) transforme MCP/adapters/UI em fonte de verdade ou dependência obrigatória do core;
-          3) remova um gate existente sem substituição equivalente e justificativa.
-          Não falhe por problema preexistente que o PR não altere nem agrave.
-
-      - name: "Consistência do ruleset canônico"
+          Fail if this PR introduces or expands a path that:
+          1) bypasses the Policy Control Plane, Evidence Plane, or Audit Plane;
+          2) turns MCP/adapters/UI into a source of truth or mandatory core dependency;
+          3) removes an existing gate without an equivalent replacement and justification.
+          Do not fail for a pre-existing issue that the PR neither changes nor worsens.
+      - name: "Canonical ruleset consistency"
         mode: "error"
         instructions: |
-          Se o PR alterar qualquer identificador do ruleset canônico (versão, data, hash,
-          nome de arquivo, manifesto, transporte selado ou bootstrap), verifique todos os
-          consumidores modificados e relacionados no diff. Falhe se o PR introduzir ou
-          agravar divergência entre README/docs, manifests, validator, materializer,
-          policy engine, containers, attestations e workflows. Não falhe apenas por
-          divergência preexistente fora do escopo do PR.
-
-      - name: "Validação não pode ser enfraquecida"
+          If the PR changes any canonical ruleset identifier (version, date, hash,
+          filename, manifest, sealed transport, or bootstrap), verify every modified and
+          related consumer in the diff. Fail if the PR introduces or worsens disagreement
+          among README/docs, manifests, validator, materializer, policy engine, containers,
+          attestations, and workflows. Do not fail only for a pre-existing divergence
+          outside the PR scope.
+      - name: "Validation must not be weakened"
         mode: "error"
         instructions: |
-          Falhe se o PR remover, pular, silenciar ou tornar não bloqueante uma validação,
-          teste, audit, hash/checksum, supply-chain lock, runtime/reference gate ou canário
-          sem substituição equivalente claramente demonstrada. Inclui asserts removidos,
-          exceptions engolidas, `continue-on-error`, retornos de sucesso artificiais e
-          alteração de expectativa apenas para fazer teste passar.
-
-      - name: "Alegações exigem evidência"
+          Fail if the PR removes, skips, silences, or makes non-blocking a validation,
+          test, audit, hash/checksum, supply-chain lock, runtime/reference gate, or canary
+          without a clearly demonstrated equivalent replacement. This includes removed
+          assertions, swallowed exceptions, `continue-on-error`, artificial success returns,
+          and expected-value changes made only to make tests pass.
+      - name: "Claims require evidence"
         mode: "error"
         instructions: |
-          Falhe se o PR introduzir afirmações de "corrigido", "PASS", "validado",
-          "implantado", "15/15" ou equivalentes sem apontar para teste, gate, artefato,
-          hash ou procedimento reprodutível que sustente a afirmação. Para
-          POST-DEPLOYMENT PASS, exija o contrato de evidência definido pelo projeto.
-          Não trate texto do próprio PR como prova.
-
-      - name: "Supply chain e privilégios"
+          Fail if the PR introduces claims of "fixed", "PASS", "validated", "deployed",
+          "15/15", or equivalents without pointing to the test, gate, artifact, hash, or
+          reproducible procedure that supports the claim. For POST-DEPLOYMENT PASS, require
+          the evidence contract defined by the project. Do not treat PR prose itself as proof.
+      - name: "Supply chain and privileges"
         mode: "error"
         instructions: |
-          Falhe se o PR introduzir GitHub Action, imagem, ferramenta ou dependência
-          crítica flutuante onde o projeto exige pinning; remover verificação de
-          checksum/digest; ampliar permissões GitHub sem necessidade; expor segredos;
-          ou permitir publicação de produção a partir de PR/branch não protegida.
-
+          Fail if the PR introduces a floating GitHub Action, image, tool, or critical
+          dependency where the project requires pinning; removes checksum/digest verification;
+          broadens GitHub permissions without need; exposes secrets; or permits production
+          publishing from an unprotected PR/branch.
 knowledge_base:
   web_search:
     enabled: false

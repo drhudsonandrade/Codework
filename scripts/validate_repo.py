@@ -14,8 +14,14 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.code_language_guard import LanguagePolicyError, validate_code_language
-from scripts.sealed_ruleset import EXPECTED_NAME, EXPECTED_SHA, SealedRulesetError, verify_transport
+from scripts.code_language_guard import LanguagePolicyError, validate_code_language  # noqa: E402
+from scripts.residual_language_audit import ResidualLanguageError, audit_repository  # noqa: E402
+from scripts.sealed_ruleset import (  # noqa: E402
+    EXPECTED_NAME,
+    EXPECTED_SHA,
+    SealedRulesetError,
+    verify_transport,
+)
 
 CANONICAL_RULESET = EXPECTED_NAME
 CANONICAL_RULESET_SHA256 = EXPECTED_SHA
@@ -29,9 +35,11 @@ REQUIRED_PATHS = (
     "nextflow.config", "workflows/wgs.nf", "workflows/array.nf", "array_pipeline/qc.py",
     "array_pipeline/annotation.py", "array_pipeline/targets.py", "config/partial_genome_annotation_targets.json",
     "config/code_language_policy.json", "config/code_language_legacy_baseline.json",
+    "config/residual_language_classification.json",
     "manifests/GRCh38.sources.tsv", "manifests/GRCh38.lock.sha256.example", "manifests/RULESET_V3.4.sha256",
     "normative/sealed/MANIFEST.json", "normative/sealed/README.md",
     "scripts/__init__.py", "scripts/sealed_ruleset.py", "scripts/code_language_guard.py",
+    "scripts/residual_language_audit.py",
     "scripts/check_versions.sh", "scripts/fetch_grch38.sh",
     "scripts/build_bwa_mem2_index.sh", "scripts/validate_grch38.sh", "scripts/validate_bwa_mem2_functional.sh",
     "scripts/generate_canary.py", "scripts/score_variants.py", "scripts/run_canary.sh", "scripts/verify_ruleset.sh",
@@ -602,6 +610,22 @@ def validate_language_policy(root: Path, errors: list[str]) -> None:
         errors.append(f"code language policy unavailable: {exc}")
 
 
+def validate_residual_language(root: Path, errors: list[str]) -> None:
+    """Enforce the reviewed Stage 8 residual-language classification."""
+    try:
+        report = audit_repository(root)
+    except ResidualLanguageError as exc:
+        errors.append(f"residual language audit unavailable: {exc}")
+        return
+    for path in report["unclassified"]:
+        errors.append(f"unclassified residual Portuguese: {path}")
+    for path in report["missing"]:
+        errors.append(f"stale residual language classification: {path}")
+    for item in report["drift"]:
+        identity = item.get("path", item.get("root", "unknown"))
+        errors.append(f"residual language classification drift: {identity}")
+
+
 def validate_production_witness_contract(root: Path, errors: list[str]) -> None:
     witness = root / ".github/workflows/genoma-production-witness.yml"
     if not witness.is_file():
@@ -903,6 +927,7 @@ def validate(root: Path) -> list[str]:
             except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                 errors.append(f"invalid JSON: {relative}: {exc}")
     validate_language_policy(root, errors)
+    validate_residual_language(root, errors)
     return errors
 
 

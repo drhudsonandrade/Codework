@@ -1,0 +1,1723 @@
+{
+  "schema": "genoma-residual-language-classification-v1",
+  "root_entries": [
+    {
+      "root": "docs/history",
+      "category": "historical",
+      "reason": "The immutable historical tree preserves superseded normative and evidence records; this aggregate fingerprint binds every detected path and line without copying superseded identifiers outside the historical root.",
+      "files": 8,
+      "count": 93,
+      "fingerprint": "f3b34d0de8aee0b11435e88f5790dd63e7683a7e3bb888d69d8f7282f7093c84"
+    }
+  ],
+  "entries": [
+    {
+      "path": ".circleci/config.yml",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 1,
+      "fingerprint": "60842ada44d5b7d22d06560d1a6efbba91b4c00494e6575e4b108e78cfe53830"
+    },
+    {
+      "path": ".github/workflows/genoma-ngs-runtime-gate.yml",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 4,
+      "fingerprint": "e4d83f38e079259beb1699270bde381285654cec52d161e03e55425f68e16a2b"
+    },
+    {
+      "path": ".github/workflows/genoma-policy-engine.yml",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 4,
+      "fingerprint": "ac804c42fbb13e3c496bcd8c8d7b7502cebb52b311370298a3d55b1bde307684"
+    },
+    {
+      "path": ".github/workflows/genoma-production-ceremony.yml",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 5,
+      "fingerprint": "fa9e9560a8c011ba3d688dc003a24a38a932e199e5edda05b72d5bc205344619"
+    },
+    {
+      "path": ".github/workflows/genoma-production-witness.yml",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 4,
+      "fingerprint": "96e53817845d2536ea0dc714a219010d039bf0f1a645a68c9c83ef9a00279b29"
+    },
+    {
+      "path": ".github/workflows/genoma-reference-foundry.yml",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 5,
+      "fingerprint": "407c0d7f6afef87834a51a4ee007abd8a43efda1f0fe5dd13901865bad55432b"
+    },
+    {
+      "path": ".github/workflows/genoma-sample-runtime-gate.yml",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 9,
+      "fingerprint": "ae7271619f68470d4d58ace732fb4e4906b47a94b677c3df7ca1933a8f7ca9b8"
+    },
+    {
+      "path": ".github/workflows/genoma-snp-array.yml",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 5,
+      "fingerprint": "a69699bd25fab4126d5b75820e60c29568c03a09094a99604cfa5f0c42616792"
+    },
+    {
+      "path": ".github/workflows/genoma-visual-qa-candidates.yml",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 4,
+      "fingerprint": "5dbbc257ad25e9143cae80e62377e9a75390d8e5a260b38e24e42739e5ae8777"
+    },
+    {
+      "path": ".github/workflows/materialize-template-pdfs.yml",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 2,
+      "fingerprint": "39e569b1e521065c9514513f37a04280f5ad9f7dae2a90a15795fd111acb4a85"
+    },
+    {
+      "path": ".gitignore",
+      "category": "compatibility-preserved",
+      "reason": "Safety patterns intentionally match previously used Portuguese genomic filenames and must continue preventing accidental commits.",
+      "count": 3,
+      "fingerprint": "88fa33b9413a0f9e01cf0f9b5d48d00e186083e328d3efe83ba36592d1e44110"
+    },
+    {
+      "path": "README.md",
+      "category": "canonical",
+      "reason": "The canonical ruleset filename is cited as an integrity identifier and must remain exact.",
+      "count": 1,
+      "fingerprint": "c32c36aadeb3865d14d6e56df3a546d3fe557eaf449f8f206aa630b28c2c136d"
+    },
+    {
+      "path": "adapters/README.md",
+      "category": "compatibility-preserved",
+      "reason": "Adapter-facing Portuguese tokens are established wire-status values whose serialization must remain compatible.",
+      "count": 1,
+      "fingerprint": "35e5f7994b73ff9f2330039b101a98b3b77f11e639ec99b6716f9026233efc62"
+    },
+    {
+      "path": "adapters/supabase/optional_projection.sql",
+      "category": "compatibility-preserved",
+      "reason": "Adapter-facing Portuguese tokens are established wire-status values whose serialization must remain compatible.",
+      "count": 1,
+      "fingerprint": "e027dd3d30da02c60736e82990918a8f63fef0b0ad8e9b287fe7e352fd315768"
+    },
+    {
+      "path": "array_pipeline/allele_discrimination.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 81,
+      "fingerprint": "16b3fa8424b34bc99a86c0cae3d8c445073369f1dc5ac281566a515f884eddc7"
+    },
+    {
+      "path": "array_pipeline/ancestry.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 36,
+      "fingerprint": "37d1f28cc7070fcf86ce8f9c920ef7a48adf83d454c1f2440ca6e143c33eb41c"
+    },
+    {
+      "path": "array_pipeline/annotation.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 63,
+      "fingerprint": "5b42357ab4246c196136827b5af8fee6a534434636f0a17a56eb332da6045a27"
+    },
+    {
+      "path": "array_pipeline/assembly.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 1,
+      "fingerprint": "f8754443a3e6041616ad70da2cffb844a12451e168d5446bd937f12478e50e99"
+    },
+    {
+      "path": "array_pipeline/clinical_findings.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 141,
+      "fingerprint": "6d6cd3c6f2dd5879fcbd8de05620a5e1bc8f0794130012df7e97b1b8d9286062"
+    },
+    {
+      "path": "array_pipeline/completeness.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 54,
+      "fingerprint": "db878806169d3c1815ced706532e4fd773adae13155927cc20a02cb4f7cfc359"
+    },
+    {
+      "path": "array_pipeline/homozygosity.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 53,
+      "fingerprint": "7d017119894265c27dc863439b962f68c86e75cec68d163deba5eadb2e8707c1"
+    },
+    {
+      "path": "array_pipeline/pharmacogenomics.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 113,
+      "fingerprint": "c69bd4316aa24a28cc6a24538f27feeb5347c6589e491b04c446dbd89f7a5d2a"
+    },
+    {
+      "path": "array_pipeline/provenance_probe.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 19,
+      "fingerprint": "83919de0a6e53f886166b9abaeb038b155119e6f9ab59d6488fe175d184d690b"
+    },
+    {
+      "path": "array_pipeline/qc.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 63,
+      "fingerprint": "c37726ce9a36be131e82c1639467a365d5f4a9a304282e8ede45b5cb5987ae10"
+    },
+    {
+      "path": "array_pipeline/targets.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 1,
+      "fingerprint": "1cbcfec7f5cbc76a3431db80b6434df3e14b938a55b4eca6d57b1d946bf27115"
+    },
+    {
+      "path": "config/array_provenance_markers.json",
+      "category": "compatibility-preserved",
+      "reason": "Versioned serialized scientific/configuration data preserves established labels, evidence prose, and detection vocabulary; it is not implementation prose.",
+      "count": 7,
+      "fingerprint": "5bf870e3a9db5a6691c435752a100d11812c815e87635b2723181ea20ea76b85"
+    },
+    {
+      "path": "config/assessed_allele_curated_decisions.json",
+      "category": "compatibility-preserved",
+      "reason": "Versioned serialized scientific/configuration data preserves established labels, evidence prose, and detection vocabulary; it is not implementation prose.",
+      "count": 1,
+      "fingerprint": "d6ad1e440773d9b01663948c9366e6871ee777b57f2106a828d116d4dbe9be5b"
+    },
+    {
+      "path": "config/case_dossier.example.json",
+      "category": "localized",
+      "reason": "This example intentionally demonstrates the pt-BR case-dossier vocabulary consumed by localized reporting.",
+      "count": 5,
+      "fingerprint": "7e1511c5b35a8f1b81952032df968289eaddd89452eab995f0b83ce51c65f3f3"
+    },
+    {
+      "path": "config/code_language_policy.json",
+      "category": "compatibility-preserved",
+      "reason": "Versioned serialized scientific/configuration data preserves established labels, evidence prose, and detection vocabulary; it is not implementation prose.",
+      "count": 60,
+      "fingerprint": "68d93dea87c40eeb406698fa0506b2259a9c1f8dadd3886c760799383964a0aa"
+    },
+    {
+      "path": "config/partial_genome_annotation_targets.json",
+      "category": "compatibility-preserved",
+      "reason": "Versioned serialized scientific/configuration data preserves established labels, evidence prose, and detection vocabulary; it is not implementation prose.",
+      "count": 93,
+      "fingerprint": "7f81ad61776b4f0589957b15f480d09beddccd25dfec7033a9db546f6719f83e"
+    },
+    {
+      "path": "config/pgx_allele_definitions.json",
+      "category": "compatibility-preserved",
+      "reason": "Versioned serialized scientific/configuration data preserves established labels, evidence prose, and detection vocabulary; it is not implementation prose.",
+      "count": 5,
+      "fingerprint": "a11880efa52152bae96d2b38c7858ea65f143df37631bca1d91bd0dd4c310e6f"
+    },
+    {
+      "path": "config/pgx_panel_targets.json",
+      "category": "compatibility-preserved",
+      "reason": "Versioned serialized scientific/configuration data preserves established labels, evidence prose, and detection vocabulary; it is not implementation prose.",
+      "count": 1022,
+      "fingerprint": "e408892f0d23f554d7113a268936572d0f46e3df0777289755a792591d5958a6"
+    },
+    {
+      "path": "config/section_attestations_array.json",
+      "category": "compatibility-preserved",
+      "reason": "Versioned serialized scientific/configuration data preserves established labels, evidence prose, and detection vocabulary; it is not implementation prose.",
+      "count": 529,
+      "fingerprint": "aefc2f3e9e4f85147b2ff8f2e77e83eebbd1692baeaccd1e3ca99ee61444bcf8"
+    },
+    {
+      "path": "config/section_attestations_wgs_vcf.json",
+      "category": "compatibility-preserved",
+      "reason": "Versioned serialized scientific/configuration data preserves established labels, evidence prose, and detection vocabulary; it is not implementation prose.",
+      "count": 530,
+      "fingerprint": "da3ee716ec2471bb41a254ee1e9bc8dbbe413eec631639d66a6b40b57a1bb831"
+    },
+    {
+      "path": "config/targets_gwas_traits.json",
+      "category": "compatibility-preserved",
+      "reason": "Versioned serialized scientific/configuration data preserves established labels, evidence prose, and detection vocabulary; it is not implementation prose.",
+      "count": 1508,
+      "fingerprint": "c2b53d4e0aaf764efe3d95f77d99a782e04c1ace61e12be9abad39e967a2ca34"
+    },
+    {
+      "path": "config/trait_scopes.json",
+      "category": "compatibility-preserved",
+      "reason": "Versioned serialized scientific/configuration data preserves established labels, evidence prose, and detection vocabulary; it is not implementation prose.",
+      "count": 9,
+      "fingerprint": "bec1f1b2150aded08b12abee19b062eec72d6f61179c67549c65664dc6dbfdba"
+    },
+    {
+      "path": "deploy/attestations/bootstrap-project-v3.4.json",
+      "category": "canonical",
+      "reason": "Canonical or sealed identity content retains exact identifiers/bytes; translating it would alter an integrity or template contract.",
+      "count": 4,
+      "fingerprint": "63f0f99def784d8a202599dcf5268fc904fafca1dc5d07ddb8285e435ec23743"
+    },
+    {
+      "path": "deploy/attestations/project-instructions-v3.4.example.txt",
+      "category": "canonical",
+      "reason": "Canonical or sealed identity content retains exact identifiers/bytes; translating it would alter an integrity or template contract.",
+      "count": 2,
+      "fingerprint": "df68a64830d773212c3187056c090f97118a964c8bc98a5f2e20481f26235c37"
+    },
+    {
+      "path": "deploy/attestations/project-instructions-v3.4.json",
+      "category": "canonical",
+      "reason": "Canonical or sealed identity content retains exact identifiers/bytes; translating it would alter an integrity or template contract.",
+      "count": 5,
+      "fingerprint": "b77264a92ed874c95311d1a32df9a7f62a14e829715067d7c2b91e1b26948358"
+    },
+    {
+      "path": "deploy/attestations/project-instructions-v3.4.txt",
+      "category": "canonical",
+      "reason": "Canonical or sealed identity content retains exact identifiers/bytes; translating it would alter an integrity or template contract.",
+      "count": 1,
+      "fingerprint": "5c17ad5518afb193f2155577929064ec5a83ef983d16b22532d90cb0d8643e36"
+    },
+    {
+      "path": "docs/ANCESTRY_REFERENCE_PANEL.md",
+      "category": "compatibility-preserved",
+      "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
+      "count": 4,
+      "fingerprint": "02449ed03a2b69bc2bc5b6bfbf860ac4854912f85d83931075b034f4cbc57d27"
+    },
+    {
+      "path": "docs/ARRAY_PROVENANCE_PROBE.md",
+      "category": "compatibility-preserved",
+      "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
+      "count": 11,
+      "fingerprint": "72e3b3b3db76eeedd38bfbf632aa080cc3d07e26f9ee586ffdf9fe7c4d8c24e0"
+    },
+    {
+      "path": "docs/CODE_LANGUAGE_POLICY.md",
+      "category": "compatibility-preserved",
+      "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
+      "count": 1,
+      "fingerprint": "7f5cf2cb75c2a9f602468b8c2b26f6a5f2872d8e709ce3d2b778ce7b17c6c473"
+    },
+    {
+      "path": "docs/DETERMINISTIC_ENGINE.md",
+      "category": "compatibility-preserved",
+      "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
+      "count": 3,
+      "fingerprint": "d68840156f4d2d413f77bac9f5781b4214765c7af9a991e22012c987bcd31a6a"
+    },
+    {
+      "path": "docs/DEVELOPER_DOCUMENTATION_LANGUAGE_INVENTORY.md",
+      "category": "compatibility-preserved",
+      "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
+      "count": 4,
+      "fingerprint": "186d5ac8ddcc3953c0d877187abde9a71d19777b844488f50c4853a8b403469d"
+    },
+    {
+      "path": "docs/EDITORIAL_V3_PIXEL_QA.md",
+      "category": "compatibility-preserved",
+      "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
+      "count": 11,
+      "fingerprint": "ea5a9bff407e41da22d977417306d00d89ce2b56e386123deb6b5ed19c0c27e6"
+    },
+    {
+      "path": "docs/GENOME_COMPLETENESS_MATRIX.md",
+      "category": "compatibility-preserved",
+      "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
+      "count": 14,
+      "fingerprint": "a1b914dc92a30315f11387f1227eb4957b9c2270b7b1490c3445da9f4a09e4c9"
+    },
+    {
+      "path": "docs/GRCH38_COMPUTE_STRATEGY.md",
+      "category": "compatibility-preserved",
+      "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
+      "count": 8,
+      "fingerprint": "3d92f01df3ab995c136ffcc19243faf77b8170c50d920ac142812cad9f3aaba6"
+    },
+    {
+      "path": "docs/INTEGRATION_CODE_LANGUAGE_INVENTORY.md",
+      "category": "compatibility-preserved",
+      "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
+      "count": 4,
+      "fingerprint": "7c56bbb4ec9deddc94769b17e554384b4745d2609b23685372fe2e4a012a1af7"
+    },
+    {
+      "path": "docs/MAGALU_PRIVATE_MCP_SETUP.md",
+      "category": "compatibility-preserved",
+      "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
+      "count": 2,
+      "fingerprint": "5f95edd4b302ca3e9caf9fe692fed92e92fc488865ce0820e1cc2030a20bbf56"
+    },
+    {
+      "path": "docs/PGX_ALLELE_DISCRIMINATION.md",
+      "category": "compatibility-preserved",
+      "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
+      "count": 13,
+      "fingerprint": "bae23b03941a857ce617779d4219496593d30856da8aa600e4cbf08f66f5fc39"
+    },
+    {
+      "path": "docs/PHARMACOGENOMIC_PASSPORT.md",
+      "category": "compatibility-preserved",
+      "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
+      "count": 20,
+      "fingerprint": "cc58c9877c5b77cb62cf5bc43054049009e2d8de4e615c73241e70ab6ddb8bd7"
+    },
+    {
+      "path": "docs/POLICY_CODE_LANGUAGE_INVENTORY.md",
+      "category": "compatibility-preserved",
+      "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
+      "count": 16,
+      "fingerprint": "f9bde318fa8133ecbc2d7386c6d4a33ab686aed5bae359d8fc1e97ed7eed3781"
+    },
+    {
+      "path": "docs/PRE_DEPLOYMENT_VALIDATION_2026-08-15.md",
+      "category": "historical",
+      "reason": "Versioned audit/evidence record preserves the language captured by the original historical execution or review artifact.",
+      "count": 1,
+      "fingerprint": "0241269e3cc623fd8e66dab20cf5932bda2943af5823dcd9cc9e3ce97bad0ea1"
+    },
+    {
+      "path": "docs/PRODUCTION_CEREMONY.md",
+      "category": "compatibility-preserved",
+      "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
+      "count": 5,
+      "fingerprint": "f05b4988624ca09ca5a2b38c8397658b214e71cc67991e3f172f05d68998aa10"
+    },
+    {
+      "path": "docs/PROVENANCE_GATE.md",
+      "category": "compatibility-preserved",
+      "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
+      "count": 11,
+      "fingerprint": "d5904ebab9c72ff0adb5ef08c26ff5727bd98fa928086d6a4e1cbb03a29a9cc0"
+    },
+    {
+      "path": "docs/PR_BODY.md",
+      "category": "compatibility-preserved",
+      "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
+      "count": 3,
+      "fingerprint": "563858d769cecb302ae4dcd84bd28184677e53dde926035b9ecbb7cdf5640544"
+    },
+    {
+      "path": "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md",
+      "category": "compatibility-preserved",
+      "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
+      "count": 1,
+      "fingerprint": "cd191f71eff2805fbe2dad5a74cf538391b734ce32dc62ce442b13db46d9e3f0"
+    },
+    {
+      "path": "docs/REFERENCE_FOUNDRY.md",
+      "category": "compatibility-preserved",
+      "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
+      "count": 1,
+      "fingerprint": "fb55163a7b247e9ec7d31ce992fc2250eccdce00c45751587b81cb4a1bb326a0"
+    },
+    {
+      "path": "docs/SCIENTIFIC_CODE_LANGUAGE_INVENTORY.md",
+      "category": "compatibility-preserved",
+      "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
+      "count": 4,
+      "fingerprint": "c335512f7c971f271f0fad3a575930c00115ca44ab273b0474cb8f2a3b7978fa"
+    },
+    {
+      "path": "docs/SNP_ARRAY_PARTIAL_GENOME.md",
+      "category": "compatibility-preserved",
+      "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
+      "count": 5,
+      "fingerprint": "000a6ebe44ff7f6564923dcf2e841bc781da74b459d0ed6896ce982a67041e15"
+    },
+    {
+      "path": "docs/TARGET_REGISTRY_EXPANSION.md",
+      "category": "compatibility-preserved",
+      "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
+      "count": 23,
+      "fingerprint": "42aeeabeb4c197f512363b717db483370ff01995e34dcf33517d021dfc2f42fb"
+    },
+    {
+      "path": "docs/audits/GENOMA_V0.8_FINAL_AUDIT_2026-08-16.md",
+      "category": "historical",
+      "reason": "Versioned audit/evidence record preserves the language captured by the original historical execution or review artifact.",
+      "count": 10,
+      "fingerprint": "78a1aa182ee3dcaca8bd8e72db2d018df4b81026dbb65ed5c42ea90e8447fd21"
+    },
+    {
+      "path": "docs/audits/GENOMA_V0.8_PREIMPLEMENTATION_AUDIT_2026-08-16.md",
+      "category": "historical",
+      "reason": "Versioned audit/evidence record preserves the language captured by the original historical execution or review artifact.",
+      "count": 8,
+      "fingerprint": "6986f4edd0df11cea6e2bee11d6934199f616c618bffa0ca8a86414e19803ca1"
+    },
+    {
+      "path": "docs/evidence/ANCESTRY_PANEL_VALIDATION.json",
+      "category": "historical",
+      "reason": "Versioned audit/evidence record preserves the language captured by the original historical execution or review artifact.",
+      "count": 19,
+      "fingerprint": "0cebd34b836539d635adc63ccb0f3e9ed41cc6527d5bac36253165244f9c27f4"
+    },
+    {
+      "path": "docs/evidence/ARRAY_PROVENANCE_MARKERS_DBSNP.json",
+      "category": "historical",
+      "reason": "Versioned audit/evidence record preserves the language captured by the original historical execution or review artifact.",
+      "count": 1,
+      "fingerprint": "006c06c143e5ff14d65118f34328f90de76e09214fd1afc0220f8c6194a5264c"
+    },
+    {
+      "path": "docs/evidence/ASSESSED_ALLELES_CLINVAR.json",
+      "category": "historical",
+      "reason": "Versioned audit/evidence record preserves the language captured by the original historical execution or review artifact.",
+      "count": 59,
+      "fingerprint": "575a6c74f24de2f9b9b4696d0d80811143d53b93f044b0876d9046a2e3e1c102"
+    },
+    {
+      "path": "docs/evidence/EDITORIAL_V3_DOCX_PARITY_150DPI_2026-08-18.json",
+      "category": "historical",
+      "reason": "Versioned audit/evidence record preserves the language captured by the original historical execution or review artifact.",
+      "count": 30,
+      "fingerprint": "37f2b7b4158848982e718c995d505f17489661533a215ca79a8cb32ec3e7bcc5"
+    },
+    {
+      "path": "docs/evidence/EDITORIAL_V3_DOCX_PARITY_150DPI_2026-08-20.json",
+      "category": "historical",
+      "reason": "Versioned audit/evidence record preserves the language captured by the original historical execution or review artifact.",
+      "count": 30,
+      "fingerprint": "4988a17c448434f51e8053e280d006ff40184581f90e49fd706372a1e9dda436"
+    },
+    {
+      "path": "docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_2026-08-16.json",
+      "category": "historical",
+      "reason": "Versioned audit/evidence record preserves the language captured by the original historical execution or review artifact.",
+      "count": 10,
+      "fingerprint": "17727e88125d6b06fc7e7feee2dc8a2ed84237c21f6dbcfb5bb2f9e035569d4c"
+    },
+    {
+      "path": "docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_2026-08-18.json",
+      "category": "historical",
+      "reason": "Versioned audit/evidence record preserves the language captured by the original historical execution or review artifact.",
+      "count": 25,
+      "fingerprint": "35027f66dbabd58652035487eafc8d9623ed5e6af53ddf1057492b43a9cdc7f3"
+    },
+    {
+      "path": "docs/evidence/EDITORIAL_V3_STATIC_PIXEL_QA_200DPI_2026-08-20.json",
+      "category": "historical",
+      "reason": "Versioned audit/evidence record preserves the language captured by the original historical execution or review artifact.",
+      "count": 27,
+      "fingerprint": "4869b49a6224d52e489fdf39aacf4218528986032b56e6f3c74a087c6a0a9228"
+    },
+    {
+      "path": "docs/evidence/GENE_DISEASE_VALIDITY.json",
+      "category": "historical",
+      "reason": "Versioned audit/evidence record preserves the language captured by the original historical execution or review artifact.",
+      "count": 340,
+      "fingerprint": "c24d47f1fc0af508f383cfd968e0910c4d37260aa84b124f5895fee493009193"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-08-14-magalu-private-mcp.md",
+      "category": "historical",
+      "reason": "Implementation-plan record is retained as historical development evidence and is not active runtime or user-facing technical documentation.",
+      "count": 8,
+      "fingerprint": "206e34192693280fbf6882c7a0c2676d9f0fbb082afce24055b4df7f77a07508"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-08-16-genoma-array-evidence-template-lock-v0.8.md",
+      "category": "historical",
+      "reason": "Implementation-plan record is retained as historical development evidence and is not active runtime or user-facing technical documentation.",
+      "count": 7,
+      "fingerprint": "49b330580bf938448a627906eed95649e8577f268c257fdedfcaa9e2f66189ce"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-03-language-baseline-guardrails.md",
+      "category": "historical",
+      "reason": "Implementation-plan record is retained as historical development evidence and is not active runtime or user-facing technical documentation.",
+      "count": 77,
+      "fingerprint": "15b4279f18eb95eaa40aba9d9973649706124fc75f24f9870f33f715485a6faa"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-08-scientific-internals-english.md",
+      "category": "historical",
+      "reason": "Implementation-plan record is retained as historical development evidence and is not active runtime or user-facing technical documentation.",
+      "count": 2,
+      "fingerprint": "4c07b4ccd2efd1a6012979ac12487c011f9571c2b2156d87f1d0a044234fff72"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-09-mcp-adapters-ci-tooling-english.md",
+      "category": "historical",
+      "reason": "Implementation-plan record is retained as historical development evidence and is not active runtime or user-facing technical documentation.",
+      "count": 2,
+      "fingerprint": "05dc20e2309754b0ae09d6dc217d8006a331518c67692731f3fa1aa2e7ba7cd1"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-09-policy-evidence-audit-english.md",
+      "category": "historical",
+      "reason": "Implementation-plan record is retained as historical development evidence and is not active runtime or user-facing technical documentation.",
+      "count": 16,
+      "fingerprint": "2fbd102277e741d226ee50ecd2fedfeede7247afe549b7ecd76ea59ee6397926"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-09-reporting-english-locale.md",
+      "category": "historical",
+      "reason": "Implementation-plan record is retained as historical development evidence and is not active runtime or user-facing technical documentation.",
+      "count": 1,
+      "fingerprint": "04c7c44241a20828b2033b9fd7c99caf5004883065403ba5072a7df2e1d720a0"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-10-compatibility-cleanup-residual-audit.md",
+      "category": "compatibility-preserved",
+      "reason": "The Stage 8 plan intentionally contains a Portuguese detector fixture used to specify the regression test.",
+      "count": 1,
+      "fingerprint": "b0469c1193a955f9e5825907789b4037a9b2973d5328729a4fc7bfaf5e8def72"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-09-03-english-codebase-refactor-design.md",
+      "category": "compatibility-preserved",
+      "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
+      "count": 3,
+      "fingerprint": "ef58ef0246f689601f48b14a4aed9c4c6d33c66ff5259e18f3a98319b2ea63ab"
+    },
+    {
+      "path": "evidence_adapters/__init__.py",
+      "category": "compatibility-preserved",
+      "reason": "Adapter-facing Portuguese tokens are established wire-status values whose serialization must remain compatible.",
+      "count": 2,
+      "fingerprint": "fff80fdfc00a82982d5da390625d1419cefcf18d4ea46dae2661933aad2279a2"
+    },
+    {
+      "path": "manifests/RULESET_V3.4.sha256",
+      "category": "canonical",
+      "reason": "Canonical or sealed identity content retains exact identifiers/bytes; translating it would alter an integrity or template contract.",
+      "count": 1,
+      "fingerprint": "e84d7a688b71b7dc93b12c56598f002918bca0c16927747a1b9cd4ef45ddbce6"
+    },
+    {
+      "path": "normative/__init__.py",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 20,
+      "fingerprint": "a32adef8d12c057a429b8b43b48441f4b2d9c1ca6da67bd5c058cdbe16b72139"
+    },
+    {
+      "path": "normative/sealed/MANIFEST.json",
+      "category": "canonical",
+      "reason": "Canonical or sealed identity content retains exact identifiers/bytes; translating it would alter an integrity or template contract.",
+      "count": 2,
+      "fingerprint": "50d2436359d4f6e4fa94bf97cc3334b052972a421bbeb5158baee93f6bd28d2c"
+    },
+    {
+      "path": "normative/sealed/README.md",
+      "category": "canonical",
+      "reason": "Canonical or sealed identity content retains exact identifiers/bytes; translating it would alter an integrity or template contract.",
+      "count": 1,
+      "fingerprint": "83fe077b3409bd7133831b085573bde49a11ba89cdbd610cfa630c0f9216db74"
+    },
+    {
+      "path": "normative/sealed/parts/part-000.b64",
+      "category": "canonical",
+      "reason": "Canonical or sealed identity content retains exact identifiers/bytes; translating it would alter an integrity or template contract.",
+      "count": 1,
+      "fingerprint": "517701a25ee84ef4dae10c76d4659c52ccac46a3c7243585bf5a6ab7f3251a9e"
+    },
+    {
+      "path": "normative/sealed/parts/part-004.b64",
+      "category": "canonical",
+      "reason": "Canonical or sealed identity content retains exact identifiers/bytes; translating it would alter an integrity or template contract.",
+      "count": 1,
+      "fingerprint": "5799966e914768d8c4bae2228694faf894ba466223fb2e9bcc9217aea7083a5f"
+    },
+    {
+      "path": "normative/sealed/parts/part-009.b64",
+      "category": "canonical",
+      "reason": "Canonical or sealed identity content retains exact identifiers/bytes; translating it would alter an integrity or template contract.",
+      "count": 1,
+      "fingerprint": "198b809e304b816f1b04e3e8409899d5b21a752e527ba8723f590f10c81261fc"
+    },
+    {
+      "path": "policy_engine/Dockerfile",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 1,
+      "fingerprint": "2b682d2b20d2bb80290bbfa829a6c1cf885b9aa29454852bc888f1545df2b0c2"
+    },
+    {
+      "path": "policy_engine/README_GENOMA_POLICY.md",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 1,
+      "fingerprint": "267ea5fa122cf673379ef30ab60c1345a03f0e876f0054d0cc15003d8285cf30"
+    },
+    {
+      "path": "policy_engine/docker-compose.yml",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 1,
+      "fingerprint": "27d2d94f19489a2c2064957d923a57ffa22d0ea24ff27222abcd86e706939d70"
+    },
+    {
+      "path": "policy_engine/docs/GENOMA_EXECUTABLE_ARCHITECTURE.md",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 1,
+      "fingerprint": "daf9e142b540ce9fb493b43d6e97636271873d6206c841373397ea0bb63d5075"
+    },
+    {
+      "path": "policy_engine/genoma_policy/gates_audit.py",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 1,
+      "fingerprint": "7a1bf02da538f382a93bf9ddc6ef80e6966be13dcf9828d96fd0bb096e049f9d"
+    },
+    {
+      "path": "policy_engine/genoma_policy/gates_core.py",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 6,
+      "fingerprint": "04f3668d0275ba2e1042216eb79bfbfa537fcdb546002a277e18f364d37d225f"
+    },
+    {
+      "path": "policy_engine/genoma_policy/gates_evidence.py",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 9,
+      "fingerprint": "68d3684fa68c08c2388ce9b96cf6a7b75fb0fbc6eaaec4c9bad08d82921e7478"
+    },
+    {
+      "path": "policy_engine/genoma_policy/models.py",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 22,
+      "fingerprint": "e5d0c5da689dba9ace1b13dc2a5f4450a0b898f3a0c9d0cdbadb3163963d908b"
+    },
+    {
+      "path": "policy_engine/genoma_policy/paths.py",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 3,
+      "fingerprint": "48ac877225f0906810f27152431da5389486eb8b4a740041497c94dd4b7c721a"
+    },
+    {
+      "path": "policy_engine/genoma_policy/ruleset.py",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 9,
+      "fingerprint": "7aa07310e788170a654ef768245075198ae9447f9ae7fa5ff056eee5ff856e58"
+    },
+    {
+      "path": "policy_engine/genoma_policy/scaffold.py",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 2,
+      "fingerprint": "60488a4a918c3c519af4f42c2bab7fceb56dbea6fd38981fc463b83dbaf9037b"
+    },
+    {
+      "path": "policy_engine/genoma_policy/smoke.py",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 10,
+      "fingerprint": "1a2f4a7cc83760f36258b1a43e42735f0a739b05ef7cb867e0f05746ae3adffc"
+    },
+    {
+      "path": "policy_engine/policy/rego/genoma.rego",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 8,
+      "fingerprint": "b01357d4ed56d5fa945d8fe2919b0ffc07e09db751577d5c2712d8dcb86d6b5e"
+    },
+    {
+      "path": "policy_engine/policy/rego/genoma_test.rego",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 11,
+      "fingerprint": "461aebfb956e144aeda91ed5d2f1785b83ca671d9fd906d2f203b7ce7e8af9cf"
+    },
+    {
+      "path": "policy_engine/policy/schema/execution-manifest.schema.json",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 3,
+      "fingerprint": "cb0b7ce8633345d97af0f58115d686cf062021e6ee98c225b9f96d4681329cc3"
+    },
+    {
+      "path": "policy_engine/tests/make_ruleset_fixture.py",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 7,
+      "fingerprint": "8a8ac7abf255bb03efbe6799a220878f90d15197d4c3fb0ff2fbc8e06f5357d8"
+    },
+    {
+      "path": "policy_engine/tests/test_attestation.py",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 3,
+      "fingerprint": "76d74dd139db626d6e25133a3a3472840543ab01e1cca6dc66aba5fef8418c7c"
+    },
+    {
+      "path": "policy_engine/tests/test_cli.py",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 4,
+      "fingerprint": "b49bc1d6e0703edb84f7c6c9ebf9de0b130f4b62940de73302178eb2af6833b3"
+    },
+    {
+      "path": "policy_engine/tests/test_evidence_gate_hardening.py",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 8,
+      "fingerprint": "240966a6c858c6011eadb03954a01e74d4385d491628b6c684da3e5c60b01979"
+    },
+    {
+      "path": "policy_engine/tests/test_policy_engine.py",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 13,
+      "fingerprint": "5ee0a0a04c623df2bf3550e0df9a0d950d025c2abbbeee9b7c45a77ba3e63bf1"
+    },
+    {
+      "path": "policy_engine/tests/test_production_gates.py",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 4,
+      "fingerprint": "c96d1dd2ec0bee89d1fcc834c051f4b46351b50395f1036a54759da7a5b44a7f"
+    },
+    {
+      "path": "policy_engine/tests/test_schema_contract.py",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 3,
+      "fingerprint": "5fadba313dbf10d0f5b4ad2c7e55fea138a3eb2f9adce3da1710552948c01f38"
+    },
+    {
+      "path": "policy_engine/tests/test_server.py",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 1,
+      "fingerprint": "e3fc11841243f1952ffb808d6671edc22701fca2c6d810584c68c62ea32998cb"
+    },
+    {
+      "path": "reporting/assay.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 40,
+      "fingerprint": "ca5ec0d4bd632b8542fc42406db6ebe646c755687ab102e0034fe5efd83a6265"
+    },
+    {
+      "path": "reporting/case_dossier.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 14,
+      "fingerprint": "98f2a32facd75768e07a41a4d9f97e9cc08e436beee8362960ec5ecc60040ef6"
+    },
+    {
+      "path": "reporting/catalog.json",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 11,
+      "fingerprint": "5d818a4f3aa29444c7c1d4074f02bd059317295b12e4948211238fe0b6f7802e"
+    },
+    {
+      "path": "reporting/consent.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 42,
+      "fingerprint": "8dc5969e83662dbd3858a126363a5ff41a2f994432c98aa1a8d266f17b16bb4a"
+    },
+    {
+      "path": "reporting/deployment_target.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 24,
+      "fingerprint": "04a24c509240d2c3fcaad96744c2b16ce87f5332b1826f66e1c5fbc6c0d3bd46"
+    },
+    {
+      "path": "reporting/editorial_v3.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 4,
+      "fingerprint": "82b65572476c00fe32925479f6dc92bc2eecfb10e3a94299acf43323e3c04047"
+    },
+    {
+      "path": "reporting/engine.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 3,
+      "fingerprint": "ad7cb2c2b3556f5925bbae799e8a5c211e379053b0b3632a0289361369e8bffb"
+    },
+    {
+      "path": "reporting/locale_pt_br.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 26,
+      "fingerprint": "be7cf37074bf6df084f1325f74cfdc97c52605ef3e1a589d8ce434237910165e"
+    },
+    {
+      "path": "reporting/post_render_provenance.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 2,
+      "fingerprint": "a0d378c537f42b4f5296c1629af735717b8ef064539bcb18b1bfd1ee032df77d"
+    },
+    {
+      "path": "reporting/provenance.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 81,
+      "fingerprint": "5fd56ead5fb5ff4a91a30dddc6743a34dc55bffba6cff091e4727e9105d1756f"
+    },
+    {
+      "path": "reporting/reference_v3_manifest.json",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 1,
+      "fingerprint": "a3c7312f71aa773b592bf58cea9d2bbee8cf655b8d34ffe173ba8316c1949347"
+    },
+    {
+      "path": "reporting/section_attestations.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 13,
+      "fingerprint": "d7e815adf3c2d72f2c8b802274018b1d1a55569b075c679e701312636a5a5347"
+    },
+    {
+      "path": "reporting/template_fill.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 150,
+      "fingerprint": "48f50451fe82de1cacccb36024565319b1a8a9b486de6f42c90d79390d8eca89"
+    },
+    {
+      "path": "reporting/template_v3.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 14,
+      "fingerprint": "70a91a086ca5cd785b565e0c43e994df6518776fb4e000d33970cd4369e726d3"
+    },
+    {
+      "path": "reporting/wgs_qc_record.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR report/runtime explanatory or serialized output text; implementation identifiers, comments, and docstrings are guarded separately.",
+      "count": 45,
+      "fingerprint": "131b22d975c274b5da44d75bca8798025e2be0957d2966abe6928ff34b5263dc"
+    },
+    {
+      "path": "scripts/annotate_partial_genome.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 3,
+      "fingerprint": "0fd3be5143e2683045fc1ea4ab85cc1a6fc349131dd72c26d34f127d45f3c4d5"
+    },
+    {
+      "path": "scripts/bootstrap_attestation.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 11,
+      "fingerprint": "86a7c37c20f0daea92ff990fd3e574cb1b450cee0d9a3f600a16dc9c83f792cb"
+    },
+    {
+      "path": "scripts/build_adapter_capabilities.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 1,
+      "fingerprint": "da5fc7d4883108d2ed7c51f14521b53c5f18380c26a0dadb9a7f9f42f03cbea0"
+    },
+    {
+      "path": "scripts/build_array_case_manifest.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 20,
+      "fingerprint": "04943fbcb152792a22244bfe0466dd442a901f03fbf2b2ad8c82f5a0602ce5fc"
+    },
+    {
+      "path": "scripts/build_one_page_summary.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 44,
+      "fingerprint": "a88ca84bb0b0b4159afc068f78ccdeddc38769efe17de9c6967ae47dcf5ab1de"
+    },
+    {
+      "path": "scripts/build_pgx_panel.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 14,
+      "fingerprint": "aaa60ad5881a77b06dd8c43e92d2034bc6589f46db9107fcd81a7423985ddd94"
+    },
+    {
+      "path": "scripts/build_pgx_registry.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 27,
+      "fingerprint": "8733a82f423a33a40e376025f046a895c77a8241ea1b5301a2b45d2188a4b763"
+    },
+    {
+      "path": "scripts/build_pharmacogenomic_report.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 91,
+      "fingerprint": "bac49cb55578e4f7d72b7be0eab78986770e8ceb2199a5baa5851a838b81666e"
+    },
+    {
+      "path": "scripts/build_report_coordinate_pack.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 8,
+      "fingerprint": "2b3a4a60901b9e4f399e0cb3882a678c62b6354689d1aeb566e01f8ca0d2c243"
+    },
+    {
+      "path": "scripts/build_trait_targets.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 28,
+      "fingerprint": "b9194c73c8743b1a32b08fe96444ddc5707abff0f8e81d3a5b5e6a0b58a9d010"
+    },
+    {
+      "path": "scripts/build_wgs_curated_manifest.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 18,
+      "fingerprint": "7003e25c2cead2389289c9fe6904fd69f7cd3904cf16194bb588bcff1fd5db25"
+    },
+    {
+      "path": "scripts/curate_assessed_alleles.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 27,
+      "fingerprint": "85f5b7ff8eb301ba15dd58de32ff389b4230da2c8a058c33f9fce53525b31644"
+    },
+    {
+      "path": "scripts/curate_gene_disease.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 46,
+      "fingerprint": "e87863a1b199fad86b440ff1b06b9211be71eab7f671f7b9b70cf9051dc152d8"
+    },
+    {
+      "path": "scripts/expand_clinvar_targets.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 67,
+      "fingerprint": "989c8ff748f85f52d9b466cfdf7cdf80fa025ca9d32ab4a00fa19d3bc7d52287"
+    },
+    {
+      "path": "scripts/freshness_gate.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 3,
+      "fingerprint": "0fd7f9bfd3d304472057da5f9f276082ec0ff58e13372633890f29b3b319dbd4"
+    },
+    {
+      "path": "scripts/generate_all_reports.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 2,
+      "fingerprint": "b145be4e62d6811a133848b7f6c1da09b9b43a62a686878bb218dc92d8fbc04d"
+    },
+    {
+      "path": "scripts/genoma_audit.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 12,
+      "fingerprint": "46ce3706716238ba6892e74749651daa31356e641b3111610c43da6750101ae7"
+    },
+    {
+      "path": "scripts/install_report_templates.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 3,
+      "fingerprint": "8e5c27aa7a4c1b542808f6efb1243d76929d67bdbab3c3c6484bb50f86b50131"
+    },
+    {
+      "path": "scripts/latest_runtime_resource_gate.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 3,
+      "fingerprint": "b304aebfe2d2470314434d81aa4735a68041d14776d5d610f459c0b473b02236"
+    },
+    {
+      "path": "scripts/materialize_reference_image.sh",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 1,
+      "fingerprint": "e76fc6e7ad622c7acf0be75eb7f324eacbce930891b0f52057f5f97a19ff1354"
+    },
+    {
+      "path": "scripts/merge_target_manifests.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 14,
+      "fingerprint": "1cd702db8bf6c5a0212b87e7e4be47a4143adcd9d5b779203b5cd5fb827203b0"
+    },
+    {
+      "path": "scripts/prepare_report_release.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 4,
+      "fingerprint": "37123641904d353a686ffac3b7c3c7280f81ab5da238c0fb74bb666148b34b18"
+    },
+    {
+      "path": "scripts/project_instructions_attestation.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 10,
+      "fingerprint": "e769742dd3d3ae1caa399da661a27dc4d0ad0fe86c749da63b0ee8f16a3e1bfb"
+    },
+    {
+      "path": "scripts/promote_latest_candidate.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 2,
+      "fingerprint": "c0248fb0bb20b983a955f73460f60b0b825e9044f4e5cf183c46c2f499203ccd"
+    },
+    {
+      "path": "scripts/query_evidence.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 1,
+      "fingerprint": "7ced77aa7377f68387b75e4db48a3ec55f698db5f1617fa4d5027ed2dcfb3d24"
+    },
+    {
+      "path": "scripts/refresh_evidence_sources.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 2,
+      "fingerprint": "fc8a0775662b3c9e768e0d1a9a1daa065b52e9a912cfe7f5fe6aa6c08d6f5626"
+    },
+    {
+      "path": "scripts/residual_language_audit.py",
+      "category": "compatibility-preserved",
+      "reason": "The residual-language detector must contain Portuguese vocabulary and contract literals in order to detect them deterministically.",
+      "count": 71,
+      "fingerprint": "94e69bd6007b8944b86fa6edbe6b70a7f2997ff0d801389bde316de4930047ae"
+    },
+    {
+      "path": "scripts/run_live_post_deployment_smoke.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 42,
+      "fingerprint": "91d54032cbc57f2a13957d32a226d2b0130a21e3b68a4b6d3078877954bf04a6"
+    },
+    {
+      "path": "scripts/run_snp_array.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 5,
+      "fingerprint": "c182fb46f5926f368acd895268d01bbd4569e80873e8a62443f830b41d4741ad"
+    },
+    {
+      "path": "scripts/runtime_resource_gate.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 22,
+      "fingerprint": "1b74f3ea760fc9aafd95eeda8ac807c6146914a33b66f13fa7a7741873110fcd"
+    },
+    {
+      "path": "scripts/sealed_ruleset.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 8,
+      "fingerprint": "4681b228f818ed8b09d3f2059bcaee061164b332a30e6de99da1965729d27429"
+    },
+    {
+      "path": "scripts/validate_repo.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 10,
+      "fingerprint": "59d4c75bd4211b761bec81ab69e1c78c13ea4e34f9283bc2d49182fd86e71caf"
+    },
+    {
+      "path": "scripts/verify_prebuilt_bwa_mem2_bundle.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 4,
+      "fingerprint": "19885727b48f644fa94c5906ca4e2dcb52027d354c9c3e753e4800967da694a1"
+    },
+    {
+      "path": "scripts/verify_provenance_markers.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 9,
+      "fingerprint": "4c9804df9503b5073f27f5f607a0f442a5a1410ac3680a68d1ef29060f77a25e"
+    },
+    {
+      "path": "scripts/verify_reporting_language_migration.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 11,
+      "fingerprint": "8472103bc3af50e301f575dbd5e6c0bf171735a4fb208176e559de725813ead3"
+    },
+    {
+      "path": "scripts/verify_ruleset.sh",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 6,
+      "fingerprint": "1deb4f42cb798f0b4662bf7b187791dafed09a3f3b5bf9c26abf203efab54954"
+    },
+    {
+      "path": "scripts/verify_runtime_gate_manifest.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 5,
+      "fingerprint": "1c1cbc902026b3485a702a7a62d3cbcadf163fb6a81b2cdc0d85313647e4bd5d"
+    },
+    {
+      "path": "scripts/verify_template_store.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 7,
+      "fingerprint": "899f442ef270e3000de24c33bd1870ff808e5283a05219dd977665145c91a0c3"
+    },
+    {
+      "path": "scripts/wgs_align_or_stage.sh",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 27,
+      "fingerprint": "a1ccba7c6ee2bdf2fc34ef2203cba5c27cea964c589bdaa0347459bf4b1d94a6"
+    },
+    {
+      "path": "scripts/wgs_consent_gate.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 6,
+      "fingerprint": "a9dbc7bb28973d8c99d110aa45982ff1a3a7f5039e19225a7974078b3adba8d7"
+    },
+    {
+      "path": "scripts/wgs_input_gate.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 5,
+      "fingerprint": "25c6957b036f34731b3306ade783f25061b895dcf44e84fff37909face18c218"
+    },
+    {
+      "path": "scripts/wgs_materialize_verified_input.py",
+      "category": "localized",
+      "reason": "Portuguese here is pt-BR operator/report output or a canonical serialized value; the executable implementation language remains English-first.",
+      "count": 11,
+      "fingerprint": "15261932bec81ea5ad012d006931eeecd10d09263eecf070591deb3399f41325"
+    },
+    {
+      "path": "template_store/v3.0/MANIFEST.json",
+      "category": "canonical",
+      "reason": "Canonical or sealed identity content retains exact identifiers/bytes; translating it would alter an integrity or template contract.",
+      "count": 9,
+      "fingerprint": "8d87614421609321d58044009ad589086b59d13548f69edcf7dc720b23b601dc"
+    },
+    {
+      "path": "template_store/v3.0/README.md",
+      "category": "canonical",
+      "reason": "Canonical or sealed identity content retains exact identifiers/bytes; translating it would alter an integrity or template contract.",
+      "count": 2,
+      "fingerprint": "7725ecb022cdd4028d83753407f6ca385176566e57b345f88c32faccc9f400f6"
+    },
+    {
+      "path": "tests/attestations.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 7,
+      "fingerprint": "36b53a02e5aa3b54be2008a485380848ecda74fa6f4b3fa9016da9f2ce88d195"
+    },
+    {
+      "path": "tests/fixtures/developer_documentation_contract.json",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 59,
+      "fingerprint": "18a138c9aa7bbd452984b4c502e995c580ba41f8d721e5c898a34d67310c439b"
+    },
+    {
+      "path": "tests/fixtures/reporting_language_baseline.json",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 42,
+      "fingerprint": "309a2612155e214f7d1a3055c4e263fc178fc71cca5c1be980b069d59cab9d9c"
+    },
+    {
+      "path": "tests/reporting_language_fixtures.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 8,
+      "fingerprint": "c6aebea578dff603b50a952b0e916a3e6c11e5989b5e94a5139e70a1d2430f06"
+    },
+    {
+      "path": "tests/ruleset_test_support.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 1,
+      "fingerprint": "93b36e454f4229c77f64b37b485cd29989406bac82ea8c372b68924bad3ef5d4"
+    },
+    {
+      "path": "tests/test_allele_discrimination.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 21,
+      "fingerprint": "155e910fac303839f51d4618ab366c4c845860823e96fa1ffae310e111947e93"
+    },
+    {
+      "path": "tests/test_ancestry_resource_and_panel_regressions.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 2,
+      "fingerprint": "56a555c53adcc5d7921c55c733e6f810a8dbf8287532db53422f03ba4e331078"
+    },
+    {
+      "path": "tests/test_annotation_regressions.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 25,
+      "fingerprint": "521f87f4a0765aa166c3fdb5e379f4022319e4126d400568d9cf8e04c7113acc"
+    },
+    {
+      "path": "tests/test_array_provenance_attestation.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 4,
+      "fingerprint": "51d0095776680906ba4bf1bfe85cbd2a6eb9e3e344327361392702fc8b44edc4"
+    },
+    {
+      "path": "tests/test_array_ruleset_identity_contract.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 2,
+      "fingerprint": "7693053cd94a72e017c75febbeee1c9086f2ff7651b990582456f97261e070ec"
+    },
+    {
+      "path": "tests/test_array_scientific_data_plane.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 5,
+      "fingerprint": "29319c9dcce7f2ee47f52794694b0e51a212e6bbf3480170b943f88a4fa3c426"
+    },
+    {
+      "path": "tests/test_assessed_allele_presence.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 26,
+      "fingerprint": "ca22ec8fa510bf96a644225eba6fb925da5e2e881e04ecb7c1ef6cffba83dd46"
+    },
+    {
+      "path": "tests/test_assessed_alleles.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 18,
+      "fingerprint": "b60b8cb9e2a98aef764376e0a677635f900338cdcfa1d19b39b5534a96ddb1c4"
+    },
+    {
+      "path": "tests/test_authority_regressions.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 12,
+      "fingerprint": "0e645109184b762b20a58da6183cc3ed5f4344a363fef9714f4765d2ade4fcbe"
+    },
+    {
+      "path": "tests/test_clinical_findings_regressions.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 4,
+      "fingerprint": "d7074039c1c56678c07158cceb7efda45cddfe42b7575a08b31f03983fb53ef6"
+    },
+    {
+      "path": "tests/test_code_language_guard.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 58,
+      "fingerprint": "c89d458ba3a6cc8ee873a9f365d4b3d273cabf5c5d1898dbd07d28170b3a3b3f"
+    },
+    {
+      "path": "tests/test_completeness_regressions.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 11,
+      "fingerprint": "fa21c6e6eb3b41f7781268995bba20143ce49d3947777a56fe37e3f72f5eadc4"
+    },
+    {
+      "path": "tests/test_consent_required_identity.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 3,
+      "fingerprint": "7d1b64cb812eec4e24f7f7d854377f72a3789dc8bdd7a416365006021eb8730f"
+    },
+    {
+      "path": "tests/test_core_imports_without_optional_adapters.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 6,
+      "fingerprint": "e7badf2547dacc9048a94223bdda6e21995d14a2ce5aac45741af8bd256b4fee"
+    },
+    {
+      "path": "tests/test_developer_documentation_language.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 74,
+      "fingerprint": "0a185ad222a91dc97fe6d76a8fd78a2c6531e60614a248cf96588e90e1516188"
+    },
+    {
+      "path": "tests/test_editorial_renderers.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 13,
+      "fingerprint": "d8b9560fb20fa8ba37e22a14718ab21868f84ca0c6736f09c8de439b6a6d48cb"
+    },
+    {
+      "path": "tests/test_evidence_adapters.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 8,
+      "fingerprint": "5474253cf135379a94697970a0e0def7ab58fd9ecf41cff2ec7e77c959e28399"
+    },
+    {
+      "path": "tests/test_evidence_freshness.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 4,
+      "fingerprint": "23c94c4183e4df43b1fd4a2cf972fa6d21dcb853126b8ded0ebabd51340ffb5b"
+    },
+    {
+      "path": "tests/test_evidence_verdict_coherence.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 13,
+      "fingerprint": "ef6eed47f64fb98a10c19b567f9c2fd0e8fde491aea67483caa67426dad68514"
+    },
+    {
+      "path": "tests/test_execution_manifest_anchoring.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 1,
+      "fingerprint": "be4570b10f2e0af06ac26511b3d1b58baaab0c767e990fa02539d90ffd122c8f"
+    },
+    {
+      "path": "tests/test_freshness_gate.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 5,
+      "fingerprint": "e1fa7789addb58ea74cf66af5c98de12784847cc13f5976e75244c2a6660b28d"
+    },
+    {
+      "path": "tests/test_gene_disease_coordinate_validation.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 8,
+      "fingerprint": "ba6880a8a2f9e044619e2723369bc7c46404c6e2f40630163fb4c26733895588"
+    },
+    {
+      "path": "tests/test_genoma_audit.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 4,
+      "fingerprint": "df94f214a49a4ed400127b418bcf13dcee427f81edd94b05983e66ae0e1aca55"
+    },
+    {
+      "path": "tests/test_grch38_compute_strategy.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 2,
+      "fingerprint": "66c6602e9257362e63c542dddb76d1633dd67f361256ba0b79e4f12175aab15b"
+    },
+    {
+      "path": "tests/test_homozygosity_reader_cleanup.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 6,
+      "fingerprint": "c2529d3bf7e4b39e502590178c16b3d79a69ad9081f5297cddbf892f54586239"
+    },
+    {
+      "path": "tests/test_integration_code_language.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 13,
+      "fingerprint": "7de85ace9b3186f14e3fac95fd0c9ca2afea2c0793b458d8994d4e9fc55428ac"
+    },
+    {
+      "path": "tests/test_manifest_merge_regressions.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 2,
+      "fingerprint": "44076851ed1584977a2389d417ad0516c7b4eb62568bfda149607e280d6b5ef3"
+    },
+    {
+      "path": "tests/test_partial_genome_annotation.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 7,
+      "fingerprint": "289c4780df37430e2aab04d14b64ca34b62fc07b9e8a7b7c9d7ef8440be2ed7d"
+    },
+    {
+      "path": "tests/test_pgx_registry_regressions.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 1,
+      "fingerprint": "ce1f76bdeb219349611bc92136d55676834338ab5a40c74077427540e9fa36ee"
+    },
+    {
+      "path": "tests/test_pharmacogenomics.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 113,
+      "fingerprint": "8d9adb290713a1eac611bf10b53cf75cdac4494c55ab77daa4b25d6e547a1e79"
+    },
+    {
+      "path": "tests/test_policy_evaluation_binding.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 6,
+      "fingerprint": "9e9e60da61872596fd0330baa2814cc35b19f594db30510d6c09e6352c5df17b"
+    },
+    {
+      "path": "tests/test_policy_language_compatibility.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 21,
+      "fingerprint": "3e12d6faf597750a0f3f3f6a5106348564473a908b0e073ddcaabc4880782311"
+    },
+    {
+      "path": "tests/test_post_deployment_target_binding.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 1,
+      "fingerprint": "19aed51ab66b905639fc828de32de8ef376d6b38693c263b7cf975a4e3b6f467"
+    },
+    {
+      "path": "tests/test_post_deployment_witness_contract.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 17,
+      "fingerprint": "8757a44497865a74aa8b4705802ca882144516539caa73d25868e3982a8d7bd9"
+    },
+    {
+      "path": "tests/test_post_merge_bootstrap_governance.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 11,
+      "fingerprint": "23864c2b16622db3670f146ed8959aec9c7ce60145d0781b12744505e50f850e"
+    },
+    {
+      "path": "tests/test_pr30_qodo_regressions.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 5,
+      "fingerprint": "0ac14a9b84134b2dbeb82b6810e4806fb753502fe282fe9174340974a54f83ac"
+    },
+    {
+      "path": "tests/test_pr30_regressions.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 12,
+      "fingerprint": "510a8bda063e275993595fe6e3c4d8720a8b954c404a89a82192d7bb6bbc605b"
+    },
+    {
+      "path": "tests/test_project_instructions_attestation_committed.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 4,
+      "fingerprint": "8c4ea57a79d8ff8dd7076c31e6baaac17b7028b91bd5364af6012e771beccf9e"
+    },
+    {
+      "path": "tests/test_promotion_gate.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 1,
+      "fingerprint": "9734006d6904cad5dd3bc99b74b70535fa159dce01ba36a2ec7875f04c60c941"
+    },
+    {
+      "path": "tests/test_provenance_markers.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 3,
+      "fingerprint": "c9279235785c59ff1bea82a335c4e8c51923f384f01a95292ef7c15962989b02"
+    },
+    {
+      "path": "tests/test_provenance_probe_regressions.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 3,
+      "fingerprint": "f1900378d1c1f50e8f74437744f8a5c4f14d4c6962ebc88dfc7b999fd3eaba51"
+    },
+    {
+      "path": "tests/test_rendered_text_matches_the_document.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 7,
+      "fingerprint": "0f23f07350371abae2527f660f617d06b90bbe7bebcf0b941b08da6d9ca0296d"
+    },
+    {
+      "path": "tests/test_repo_contract.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 1,
+      "fingerprint": "0e9e3a5b5ad7869d023e6d54bd66d824097ba6b65ac032b470947e9652a127d3"
+    },
+    {
+      "path": "tests/test_report_engine.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 8,
+      "fingerprint": "ce7476dedccd404f200d1ab00f0f3fe529381d7b5ec2efbd1c80f8d7bd9538e6"
+    },
+    {
+      "path": "tests/test_report_release_assembly.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 7,
+      "fingerprint": "4f0b86b48d4660dd676729dfc9db7e955ce5a9599d100d06b4d125e1e96e2475"
+    },
+    {
+      "path": "tests/test_reporting_language_compatibility.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 10,
+      "fingerprint": "10549881ff973e50866fe9efbfe4b46a8f5db858da73158c41dae33bac2954ab"
+    },
+    {
+      "path": "tests/test_reporting_migration_verifier.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 3,
+      "fingerprint": "5713f17fe5fdd172da8e5ec803be46003b48c3c4bd6e3ab3048dfc1fd1c0a968"
+    },
+    {
+      "path": "tests/test_reporting_presentation_gate.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 5,
+      "fingerprint": "b9e2c60062dbcea0244796355ed070152740cc718777f09e7f0a6580800c1105"
+    },
+    {
+      "path": "tests/test_reporting_provenance_regressions.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 20,
+      "fingerprint": "ce10b0855613317c316fae8e2d85152f8bea6f561e22eb206b667fec9bec2b60"
+    },
+    {
+      "path": "tests/test_residual_language_audit.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 5,
+      "fingerprint": "63eb70aa1e5386349520f405c7815d5d435c6a44b5386f3faae4a4fb4985ef5a"
+    },
+    {
+      "path": "tests/test_scientific_code_language.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 3,
+      "fingerprint": "c65484a6142be6824339c4f52dd866f1f3380f31690b9e5ec7f98bb62de749e2"
+    },
+    {
+      "path": "tests/test_sealed_ruleset_contract.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 6,
+      "fingerprint": "4bfe291550ba8f7e00091be29e65dc6c86e28efdbc3b06548b38f137102ae86e"
+    },
+    {
+      "path": "tests/test_sealed_ruleset_reuse_hardening.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 1,
+      "fingerprint": "594384257b37a6bea879493acee752144cfb8165be9da3d1d88402da57259d35"
+    },
+    {
+      "path": "tests/test_snp_array_qc.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 12,
+      "fingerprint": "a54390b8b3f246dc3edbd7dbf863c1a1541af07e5d45a47753bb22e0d30ae032"
+    },
+    {
+      "path": "tests/test_superseded_identity_scanner.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 4,
+      "fingerprint": "e71ee572cbaa8dcf6259be577f96c3abc95347911ca619dffcadd96cde9475e2"
+    },
+    {
+      "path": "tests/test_target_expansion.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 26,
+      "fingerprint": "f1ffd5f51337519c540315d833440e96cc6d2ca3ccf89f71672b8d23d1dea8a4"
+    },
+    {
+      "path": "tests/test_template_fill_regressions.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 14,
+      "fingerprint": "6948719958fec85762ed48c5165c7f7537a993391d035a637ba618a9d5efe70a"
+    },
+    {
+      "path": "tests/test_template_store.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 3,
+      "fingerprint": "d64aaf1d0569c025bbc687aac139a9b14f3c0963187130ba540e71705db0e92e"
+    },
+    {
+      "path": "tests/test_template_v3_contract.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 1,
+      "fingerprint": "4348faf3641b8ea333a31741c67d846d3b8436579b0202c06bf8a30709cb5a46"
+    },
+    {
+      "path": "tests/test_v34_activation_contract.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 8,
+      "fingerprint": "03a6bceafaed36fb3c2c882e98177f30ec12365a6b001f2af17504c6fc15e364"
+    },
+    {
+      "path": "tests/test_wgs_align_or_stage.sh",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 7,
+      "fingerprint": "f3e9905cb5009e76d7a8da84649d93b52033a7149c439afbcba1df0d5cee1db8"
+    },
+    {
+      "path": "tests/test_wgs_curated_manifest_ruleset.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 7,
+      "fingerprint": "9519c2fd2952b38661da8dd071ce8288b0a9ab126afbab8350ac19c6e2b725bd"
+    },
+    {
+      "path": "tests/test_wgs_gates.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 18,
+      "fingerprint": "9d8a22a402a91e5dfc72499ee0ef293884efdc5daadb13ac786f37c3f8d6b069"
+    },
+    {
+      "path": "tests/test_wgs_manifest_fail_closed.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 2,
+      "fingerprint": "cd3bc1edb3f7f06fdd67ffc5d00a54c7348e99835d5dbc7099f5a935e48e5fc0"
+    },
+    {
+      "path": "tests/test_wgs_workflow_contract.py",
+      "category": "compatibility-preserved",
+      "reason": "Portuguese is retained as an exact wire/report/fixture expectation so regression tests continue to prove compatibility.",
+      "count": 1,
+      "fingerprint": "5201b4f7cba8f5d53811e35c4c3f3d917f0e36e0d2ebddef74a86d70fe475469"
+    },
+    {
+      "path": "workflows/array.nf",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 4,
+      "fingerprint": "634a4d9ada3784a1687a3a9efd1ba2cffce75f47efecd55d0c1cede036cd7b1a"
+    },
+    {
+      "path": "workflows/wgs.nf",
+      "category": "normative",
+      "reason": "Closed normative taxonomy, canonical runtime identifier, or policy/workflow wire value is intentionally preserved for contract compatibility.",
+      "count": 6,
+      "fingerprint": "90c8ece57cabeee5de42c9e0f4c351fdc2db26bfc061cfb921741e6465396a31"
+    }
+  ]
+}
