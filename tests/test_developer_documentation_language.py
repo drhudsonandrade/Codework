@@ -24,6 +24,9 @@ ACTIVE_DOCUMENTATION_EXCLUDED_PREFIXES = (
     "docs/superpowers/plans/",
     "docs/superpowers/checkpoints/",
     "docs/superpowers/evidence/",
+    "normative/",
+    "template_store/",
+    "vendor/",
 )
 ACTIVE_DOCUMENTATION_EXCLUDED_PARTS = frozenset({
     ".git", "node_modules", "dist", "build", ".venv", "__pycache__"
@@ -318,6 +321,9 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
                 "docs/superpowers/plans/PLAN.md",
                 "docs/superpowers/checkpoints/CHECKPOINT.md",
                 "docs/superpowers/evidence/PROOF.md",
+                "normative/sealed/README.md",
+                "template_store/v3.0/report-01/README.md",
+                "vendor/example/README.md",
             )
             for relative in included + excluded:
                 path = temp / relative
@@ -515,6 +521,8 @@ class DeveloperDocumentationLanguageTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertNotIn("outside fenced code and blockquotes", inventory)
         self.assertIn("Markdown syntax is not an exemption", inventory)
+        for boundary in ("`normative/**`", "`template_store/**`", "`vendor/**`"):
+            self.assertIn(boundary, inventory)
 
     def test_documented_repo_script_entrypoints_exist(self) -> None:
         """Executable doc commands must not call repository scripts absent from HEAD."""
