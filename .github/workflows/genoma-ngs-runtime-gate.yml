@@ -190,7 +190,7 @@ jobs:
           jq -e '.status == "PASS"' results/nextflow-canary/canary/report.json >/dev/null
           python3 scripts/promote_latest_candidate.py --functional-canary results/canary/report.json --orchestration-canary results/nextflow-canary/canary/report.json --inventory results/canary/conda-inventory.json --output results/freshness/state-toolchain.json
           python3 scripts/refresh_evidence_sources.py --input-state results/freshness/state-toolchain.json --output-state results/freshness/state.json --snapshots-output results/evidence-sources/capability-snapshots.json
-          python3 scripts/freshness_gate.py --input results/freshness/state-toolchain.json --output results/freshness/gate.json
+          python3 scripts/freshness_gate.py --input results/freshness/state.json --output results/freshness/gate.json
           jq -e '.ready_for_dna == true and (.evidence_sources | length) == 6' results/freshness/gate.json >/dev/null
       - name: Validate approved GRCh38 bundle and index
         run: |
