@@ -1,6 +1,6 @@
 {
   "base_sha": "4c0e5222248b5f9f2537d627091b80afc9c9e120",
-  "captured_at_utc": "2026-09-11T09:53:23.821983+00:00",
+  "captured_at_utc": "2026-09-11T10:20:28.815412+00:00",
   "changed_paths": [
     ".agents/plugins/coderabbit-cli-checksums.json",
     ".agents/plugins/marketplace.json",
@@ -62,8 +62,8 @@
     "old_package_action": "PRESERVE",
     "status": "PENDING_AFTER_HUMAN_MERGE"
   },
-  "implementation_head_sha": "464fa76d216c3b67ba96183f777a142da00cce00",
-  "implementation_tree_sha": "099d52735daaecd2c7a5506d667d520428af1e6e",
+  "implementation_head_sha": "2808e48fe9492d051a35eb45452131e7d2626b96",
+  "implementation_tree_sha": "ed89a82e2530fa825ef3870a01c4df8f8c0b3b90",
   "legacy_ledger_sha256": "3a4e27b2436a087dd5d457e8bf6bb4018758148c7382af48616daa0cbfd31c3a",
   "legacy_scan": {
     "counts": {
@@ -95,6 +95,15 @@
     },
     "over_budget": [],
     "unclassified": []
+  },
+  "post_evidence_validation": {
+    "commands": [
+      "python -m unittest tests.test_phase2b_evidence_contract -v",
+      "python -m unittest discover -s tests -v",
+      "find scripts -type f -name '*.sh' -exec bash -n {} +",
+      "git diff --check"
+    ],
+    "status": "REQUIRED_AFTER_EVIDENCE_COMMIT"
   },
   "post_merge_requirements": [
     "Fetch clean origin/main and record the human merge SHA.",
@@ -164,17 +173,6 @@
       "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "summary": "PASS with no stdout"
     },
-    "deepsource_python_contracts": {
-      "command": "python AST gate for FLK-D204 class-docstring spacing and PYL-R0201 load_ledger staticmethod",
-      "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python 3.12.3",
-        "requirements_lock": "reporting/requirements.txt",
-        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
-      },
-      "exit_code": 0,
-      "output_sha256": "b7faeec75ea1494db7774c7ace882d47319f06cb104ea4d9eb9a8bef9e112a83",
-      "summary": "DeepSource Python final five findings reproduced and PASS locally"
-    },
     "diff_check": {
       "command": "git diff --check",
       "environment": {
@@ -194,7 +192,7 @@
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
       "exit_code": 0,
-      "output_sha256": "ad69f7df7df6c7def6600b1a93cd5f121dcf959451238e87b5ae40f0d08b232b",
+      "output_sha256": "fb71d8d1e8a94420b7c4dbe2a8ea53a756d4812b3f4e28e736d14edfc26a2e38",
       "summary": "27 tests PASS"
     },
     "identity_guard": {
@@ -216,8 +214,19 @@
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
       "exit_code": 0,
-      "output_sha256": "0ae1e62c717815cf98cb5e04257ae13edcd82758eeb55f980c4ba68df53f3a4d",
+      "output_sha256": "1fa30c2cafbb896d5e117bf263f7288a059db4daedd89956151fc16ea36af861",
       "summary": "7 tests PASS"
+    },
+    "plan_sequence": {
+      "command": "python -m unittest tests.test_phase2b_evidence_contract.Phase2BEvidenceContractTest.test_plan_bootstrap_defers_evidence_contract_and_full_suite -v",
+      "environment": {
+        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      },
+      "exit_code": 0,
+      "output_sha256": "819cc443ea75cec0ab722289b342eae1dbe42a321c5e224037cc159a296c6ed5",
+      "summary": "plan bootstrap defers evidence contract and full root suite"
     },
     "residual_language": {
       "command": "python scripts/residual_language_audit.py --check",
@@ -238,21 +247,8 @@
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
       "exit_code": 0,
-      "output_sha256": "5645c242f0b33d23995933eb2b40f81d94a40409db461948024acd97d303d5ec",
-      "summary": "18 reviewer-focused tests PASS"
-    },
-    "root_suite": {
-      "command": "python /tmp/omnigenis-phase2b-python-review-validation/run_filtered_suite.py",
-      "environment": {
-        "filter_runner_sha256": "b76fd3c5904d8328c614455e91f7643ae574983ef24e573f1618085bd4d62174",
-        "filter_scope": "exclude only test_phase2b_evidence_contract before evidence-only commit",
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python 3.12.3",
-        "requirements_lock": "reporting/requirements.txt",
-        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
-      },
-      "exit_code": 0,
-      "output_sha256": "1c24fcde388937cfaf49a2094ba795eb6797a889b6422b4e650971bb302c5817",
-      "summary": "1082 tests PASS; 1 expected win32-only MCP skip; only evidence-contract module excluded before evidence-only refresh"
+      "output_sha256": "6055885432b9508ed91b5d81b70e8419b6548a42ef96e934c776d6c99cb7ce5b",
+      "summary": "19 reviewer-focused tests PASS, including HOME/.local/bin fallback"
     },
     "shell_syntax": {
       "command": "find scripts -type f -name '*.sh' -exec bash -n {} +",
