@@ -1,9 +1,9 @@
 {
-  "schema": "omnigenis-phase2c-runner-cutover-v1",
+  "schema": "omnigenis-phase2c-runner-cutover-v2",
   "stage": "REPOSITORY_CUTOVER_READY_FOR_REVIEW",
   "base_main_sha": "a1e669dd613f68f4d82ca7f1f565772ec8098cb1",
-  "implementation_head_sha": "69fd295dbd1af3a5e387c0d1882656cd0ccc4cd8",
-  "implementation_tree_sha": "708032f92e542a440b6d4776e8546abbb2452c43",
+  "implementation_head_sha": "58d6d0c5310edd4f73a340062a7142219a7cb97f",
+  "implementation_tree_sha": "f61c1473497126f1673e7bed9a94e367b40eea20",
   "project_identity_sha256": "d6f251a214db5d390a1f933066679c3aed886e4db73573b8a1b785aded0cf3df",
   "legacy_ledger_sha256": "b41f349017f79081b202a7845c6a4642e5b294ffe92e6cc35d3bd2504b009f43",
   "phase2b_prerequisite": {
@@ -119,123 +119,167 @@
     "identity_guard": {
       "command": "python3 scripts/project_identity_guard.py --check",
       "exit_code": 0,
-      "output_sha256": "0c6537c2763c5efb04594bf3441d6e02a721a5f1f220fe4490de707fea3aad2d",
+      "output_sha256": "4488ad810e44b8e8dfcc0809b8041489582b05c12811cdda6fabb64da0b86902",
       "summary": "PASS project_identity_contract",
       "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python3 3.12.3",
+        "python_version": "3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
-      }
+      },
+      "output_kind": "inline_sanitized_summary",
+      "output_locator": "inline:validation_provenance.identity_guard.sanitized_output",
+      "sanitized_output": "gate=identity_guard\nexit_code=0\nstdout:\nPASS\tproject_identity_contract\n",
+      "summary_locator": "inline:validation_provenance.identity_guard.sanitized_output"
     },
     "validate_repo": {
       "command": "python3 scripts/validate_repo.py",
       "exit_code": 0,
-      "output_sha256": "3c0dc015021366a6895ca1777bd4be46995994861b27bb8fcaa7cb47a143f2fd",
+      "output_sha256": "61772a02ece2143408fd28b3ffd477bcde2c59618487b21df5eea28c100ec3e0",
       "summary": "PASS repository_contract and all repository validators",
       "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python3 3.12.3",
+        "python_version": "3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
-      }
+      },
+      "output_kind": "inline_sanitized_summary",
+      "output_locator": "inline:validation_provenance.validate_repo.sanitized_output",
+      "sanitized_output": "gate=validate_repo\nexit_code=0\nstdout:\nPASS\trepository_contract\nPASS\truleset_manifest_contract\tv3.4 raw SHA-256 pinned\nPASS\trepository_active_rulesets\t0\nPASS\tsealed_normative_transport\tshared decoder\nPASS\tgrch38_manifest\t9/9\nPASS\tpre_dna_readiness_contract\tlatest-tested candidate + canaries + freshness + runtime/resource gate\nPASS\twgs_scientific_data_plane_contract\treal SNV/indel path + explicit unsupported classes\nPASS\tarray_scientific_data_plane_contract\tQC + target-first evidence + policy/report handoff\nPASS\tevidence_adapter_contract\tClinVar/ClinGen/CPIC/ClinPGx/gnomAD/PGS Catalog\nPASS\tsupply_chain_contract\tworkflow/action/container lock paths present\nPASS\treporting_contract\t11-model deterministic renderer and reference identities\nPASS\toptional_adapters\tcore has no external runtime dependency\n",
+      "summary_locator": "inline:validation_provenance.validate_repo.sanitized_output"
     },
     "supply_chain": {
       "command": "python3 scripts/verify_supply_chain_lock.py",
       "exit_code": 0,
-      "output_sha256": "3ffbf1e78306655dbb2f214974a4e24c842e6378da0e2d8840d43b2eb4939c7c",
+      "output_sha256": "fcfbf69c6cb289a819d0ff38716ad60e631841a05c25e2aa75844a78dfd680be",
       "summary": "PASS immutable actions, container digest, GitGuardian identity, and runtime pins",
       "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python3 3.12.3",
+        "python_version": "3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
-      }
+      },
+      "output_kind": "inline_sanitized_summary",
+      "output_locator": "inline:validation_provenance.supply_chain.sanitized_output",
+      "sanitized_output": "gate=supply_chain\nexit_code=0\nstdout:\nPASS\tactions_immutable\t10 action identities observed\nPASS\tcontainer_digests\tbase image\nPASS\texternal_secret_scanner\tGitGuardian Security Checks@46505\nPASS\truntime_versions\texact critical conda pins\n",
+      "summary_locator": "inline:validation_provenance.supply_chain.sanitized_output"
     },
     "code_language": {
       "command": "python3 scripts/code_language_guard.py --check",
       "exit_code": 0,
-      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "summary": "PASS with no stdout",
+      "output_sha256": "f961fc3c4b6594df8531c4f5111eeb75c2dff5a975baa1a3c184f76133f00ffa",
+      "summary": "PASS with empty stdout",
       "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python3 3.12.3",
+        "python_version": "3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
-      }
+      },
+      "output_kind": "inline_sanitized_summary",
+      "output_locator": "inline:validation_provenance.code_language.sanitized_output",
+      "sanitized_output": "gate=code_language\nexit_code=0\nstdout=<empty>\n",
+      "summary_locator": "inline:validation_provenance.code_language.sanitized_output"
     },
     "residual_language": {
       "command": "python3 scripts/residual_language_audit.py --check",
       "exit_code": 0,
-      "output_sha256": "3aa068a3ee76de0f29694f99d95a5e14143a3ed1743f142bd60781ef1cdcfc25",
+      "output_sha256": "dc85ba771b3943e852f74e8868d3efaffb177a0498ca6c77d4b38a3fa9b75f02",
       "summary": "clean=true; unclassified=[]; drift=[]; missing=[]",
       "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python3 3.12.3",
+        "python_version": "3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
-      }
+      },
+      "output_kind": "inline_sanitized_summary",
+      "output_locator": "inline:validation_provenance.residual_language.sanitized_output",
+      "sanitized_output": "gate=residual_language\nexit_code=0\nclean=true; unclassified=[]; drift=[]; missing=[]\n",
+      "summary_locator": "inline:validation_provenance.residual_language.sanitized_output"
     },
     "docs_language": {
       "command": "python3 -m unittest tests.test_developer_documentation_language -v",
       "exit_code": 0,
-      "output_sha256": "6855ac21aed935f021bb8ed0b80a3bd47fb54de125a8178ce22e61a9f3e964bf",
+      "output_sha256": "ee38cb2f8d44bdeb73f701a377158e7bd32061d0e10224af706b930a4f4f14d4",
       "summary": "27 tests PASS",
       "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python3 3.12.3",
+        "python_version": "3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
-      }
+      },
+      "output_kind": "inline_sanitized_summary",
+      "output_locator": "inline:validation_provenance.docs_language.sanitized_output",
+      "sanitized_output": "gate=docs_language\nexit_code=0\nRan 27 tests\nOK\n",
+      "summary_locator": "inline:validation_provenance.docs_language.sanitized_output"
     },
     "phase2b_prerequisite": {
       "command": "python3 -m unittest tests.test_phase2b_post_merge_ghcr_evidence tests.test_phase2b_evidence_contract -v",
       "exit_code": 0,
-      "output_sha256": "76b0d9448bd9fd7fca2142fb3f9d82efb27adb2348e15a1540b85c41b9f0eb76",
+      "output_sha256": "1850d617ca5f063ff0c4547b9988f71aba3494baf3c6e4aa3b302e473d88290b",
       "summary": "13 tests PASS",
       "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python3 3.12.3",
+        "python_version": "3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
-      }
+      },
+      "output_kind": "inline_sanitized_summary",
+      "output_locator": "inline:validation_provenance.phase2b_prerequisite.sanitized_output",
+      "sanitized_output": "gate=phase2b_prerequisite\nexit_code=0\nRan 13 tests\nOK\n",
+      "summary_locator": "inline:validation_provenance.phase2b_prerequisite.sanitized_output"
     },
     "runner_contracts": {
       "command": "python3 -m unittest tests.test_phase2c_runner_identity tests.test_ci_optimization_contract tests.test_repository_identity_migration -v",
       "exit_code": 0,
-      "output_sha256": "12d6820850df658e85767c38c95a17a548704e8a77d078d8f66d81b1de79ca5b",
+      "output_sha256": "ca8393d99198ca30d606440d2991d3902d053b5a64004c8e0f9bbddc3174b726",
       "summary": "46 tests PASS",
       "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python3 3.12.3",
+        "python_version": "3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
-      }
+      },
+      "output_kind": "inline_sanitized_summary",
+      "output_locator": "inline:validation_provenance.runner_contracts.sanitized_output",
+      "sanitized_output": "gate=runner_contracts\nexit_code=0\nRan 46 tests\nOK\n",
+      "summary_locator": "inline:validation_provenance.runner_contracts.sanitized_output"
     },
     "evidence_topology": {
       "command": "python3 -m unittest tests.test_phase2c_evidence_contract.Phase2CRunnerEvidenceContractTest.test_binding_survives_merge_then_later_descendant tests.test_phase2c_evidence_contract.Phase2CRunnerEvidenceContractTest.test_binding_rejects_post_evidence_commit_before_merge -v",
       "exit_code": 0,
-      "output_sha256": "8b0d133ec14980816195db60d0cdde99575db48c8d1620cd60132d8405ec714d",
+      "output_sha256": "634cc3e86200728ef75d6fd21d83fdefb795415cb2cc2e2c9d1b7ac57a5873f5",
       "summary": "2 tests PASS",
       "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python3 3.12.3",
+        "python_version": "3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
-      }
+      },
+      "output_kind": "inline_sanitized_summary",
+      "output_locator": "inline:validation_provenance.evidence_topology.sanitized_output",
+      "sanitized_output": "gate=evidence_topology\nexit_code=0\nRan 2 tests\nOK\n",
+      "summary_locator": "inline:validation_provenance.evidence_topology.sanitized_output"
     },
     "shell_syntax": {
       "command": "find scripts -type f -name '*.sh' -exec bash -n {} +",
       "exit_code": 0,
-      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "summary": "all repository shell scripts under scripts/ passed bash -n",
+      "output_sha256": "cda73d05603fb8215a482cfec8392fdd4a1ee23ba81e48c58e0072bd327a75b5",
+      "summary": "recursive bash -n PASS with empty stdout",
       "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python3 3.12.3",
+        "python_version": "3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
-      }
+      },
+      "output_kind": "inline_sanitized_summary",
+      "output_locator": "inline:validation_provenance.shell_syntax.sanitized_output",
+      "sanitized_output": "gate=shell_syntax\nexit_code=0\nstdout=<empty>\n",
+      "summary_locator": "inline:validation_provenance.shell_syntax.sanitized_output"
     },
     "diff_check": {
       "command": "git diff --check",
       "exit_code": 0,
-      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "summary": "PASS with no stdout",
+      "output_sha256": "14b393ca7dd9332ed538cad8e6136f799cf4eb9ecb56b6438ed8471909f847e4",
+      "summary": "PASS with empty stdout",
       "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python3 3.12.3",
+        "python_version": "3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
-      }
+      },
+      "output_kind": "inline_sanitized_summary",
+      "output_locator": "inline:validation_provenance.diff_check.sanitized_output",
+      "sanitized_output": "gate=diff_check\nexit_code=0\nstdout=<empty>\n",
+      "summary_locator": "inline:validation_provenance.diff_check.sanitized_output"
     }
   },
   "post_merge": {
