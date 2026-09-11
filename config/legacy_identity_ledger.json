@@ -1,0 +1,347 @@
+{
+  "baseline_commit": "939dfea5cc7cb2745638168d518d2005e941e9c6",
+  "control_metadata_paths": [
+    "config/legacy_identity_ledger.json"
+  ],
+  "entries": [
+    {
+      "id": "runtime-root",
+      "locations": {
+        ".github/workflows/genoma-ngs-runtime-gate.yml": 10,
+        ".github/workflows/genoma-snp-array.yml": 2,
+        ".github/workflows/scaffold-validation.yml": 1,
+        "Dockerfile": 8,
+        "deploy/docker-compose.yml": 1,
+        "deploy/genome-mcp.service": 1,
+        "docs/MAGALU_PRIVATE_MCP_SETUP.md": 7,
+        "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md": 3,
+        "mcp/test/payloadContracts.test.ts": 1,
+        "mcp/test/server.test.ts": 12,
+        "scripts/validate_repo.py": 1,
+        "tests/test_repository_identity_migration.py": 1,
+        "tests/test_workflow_contracts.py": 2
+      },
+      "matcher": {
+        "kind": "literal",
+        "value": "/opt/codework"
+      },
+      "reason": "Temporary runtime-root compatibility.",
+      "replacement": "/opt/omnigenis",
+      "retire_by": "2B"
+    },
+    {
+      "id": "config-root",
+      "locations": {
+        "deploy/genome-mcp.service": 1,
+        "deploy/tunnel-client.service.example": 1,
+        "docs/MAGALU_PRIVATE_MCP_SETUP.md": 3
+      },
+      "matcher": {
+        "kind": "literal",
+        "value": "/etc/codework"
+      },
+      "reason": "Temporary configuration-root compatibility.",
+      "replacement": "/etc/omnigenis",
+      "retire_by": "2B"
+    },
+    {
+      "id": "runner-pool",
+      "locations": {
+        ".github/workflows/genoma-audit.yml": 1,
+        ".github/workflows/genoma-policy-engine.yml": 1,
+        ".github/workflows/scaffold-validation.yml": 1,
+        "docs/GITHUB_MOBILE_IMPORT.md": 1,
+        "docs/MAGALU_PRIVATE_MCP_SETUP.md": 1,
+        "tests/test_ci_optimization_contract.py": 8,
+        "tests/test_repository_identity_migration.py": 1
+      },
+      "matcher": {
+        "kind": "literal",
+        "value": "codework-isolated"
+      },
+      "reason": "Legacy private-runner pool label retained until dual-label cutover.",
+      "replacement": "omnigenis-isolated",
+      "retire_by": "2C"
+    },
+    {
+      "id": "container-package",
+      "locations": {
+        ".github/workflows/scaffold-validation.yml": 4,
+        "deploy/tunnel-client.service.example": 1,
+        "docs/MAGALU_PRIVATE_MCP_SETUP.md": 9,
+        "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md": 7,
+        "tests/test_ci_optimization_contract.py": 1
+      },
+      "matcher": {
+        "kind": "regex",
+        "value": "(?<![A-Za-z0-9_-])codework-genome(?![A-Za-z0-9_-])"
+      },
+      "reason": "Shared legacy genome runtime token used by container/package and tunnel-profile surfaces.",
+      "replacement": "omnigenis-genome",
+      "retire_by": "2B"
+    },
+    {
+      "id": "cache-namespace",
+      "locations": {
+        ".github/workflows/scaffold-validation.yml": 2,
+        "tests/test_ci_optimization_contract.py": 2
+      },
+      "matcher": {
+        "kind": "literal",
+        "value": "codework-genome-scaffold-v1"
+      },
+      "reason": "Legacy GitHub Actions cache namespace.",
+      "replacement": "omnigenis-genome-scaffold-v2",
+      "retire_by": "2B"
+    },
+    {
+      "id": "mcp-package",
+      "locations": {
+        "mcp/package-lock.json": 2,
+        "mcp/package.json": 1,
+        "tests/test_repository_identity_migration.py": 1
+      },
+      "matcher": {
+        "kind": "literal",
+        "value": "codework-genome-mcp"
+      },
+      "reason": "Legacy MCP package identity.",
+      "replacement": "omnigenis-genome-mcp",
+      "retire_by": "2B"
+    },
+    {
+      "id": "mcp-server",
+      "locations": {
+        "mcp/src/server.ts": 2
+      },
+      "matcher": {
+        "kind": "literal",
+        "value": "codework-private-genome"
+      },
+      "reason": "Legacy MCP server/product identity.",
+      "replacement": "omnigenis-genome-mcp",
+      "retire_by": "2B"
+    },
+    {
+      "id": "conda-environment",
+      "locations": {
+        "environment.yml": 1,
+        "tests/test_repository_identity_migration.py": 1
+      },
+      "matcher": {
+        "kind": "literal",
+        "value": "codework-ngs"
+      },
+      "reason": "Legacy Conda environment identity.",
+      "replacement": "omnigenis-ngs",
+      "retire_by": "2B"
+    },
+    {
+      "id": "nextflow-manifest",
+      "locations": {
+        "tests/test_repository_identity_migration.py": 1
+      },
+      "matcher": {
+        "kind": "literal",
+        "value": "codework/genome-runtime"
+      },
+      "reason": "Legacy Nextflow manifest identity.",
+      "replacement": "omnigenis/genome-runtime",
+      "retire_by": "2B"
+    },
+    {
+      "id": "codex-marketplace",
+      "locations": {
+        ".agents/plugins/marketplace.json": 1,
+        "scripts/codex/setup-coderabbit.sh": 8,
+        "tests/test_coderabbit_guardrails.py": 7
+      },
+      "matcher": {
+        "kind": "regex",
+        "value": "(?<!coderabbit@)(?<![A-Za-z0-9_-])codework-codex(?![A-Za-z0-9_-])"
+      },
+      "reason": "Legacy Codex marketplace identity excluding plugin-qualified references.",
+      "replacement": "omnigenis-codex",
+      "retire_by": "2B"
+    },
+    {
+      "id": "coderabbit-plugin",
+      "locations": {
+        "scripts/codex/setup-coderabbit.sh": 4,
+        "tests/test_coderabbit_guardrails.py": 8
+      },
+      "matcher": {
+        "kind": "literal",
+        "value": "coderabbit@codework-codex"
+      },
+      "reason": "Legacy CodeRabbit plugin reference.",
+      "replacement": "coderabbit@omnigenis-codex",
+      "retire_by": "2B"
+    },
+    {
+      "id": "coderabbit-bin-env",
+      "locations": {
+        "scripts/codex/setup-coderabbit.sh": 1,
+        "tests/test_coderabbit_guardrails.py": 1,
+        "tests/test_repository_identity_migration.py": 1
+      },
+      "matcher": {
+        "kind": "literal",
+        "value": "CODEWORK_CODERABBIT_BIN_DIR"
+      },
+      "reason": "Deprecated CodeRabbit binary-directory environment variable.",
+      "replacement": "OMNIGENIS_CODERABBIT_BIN_DIR",
+      "retire_by": "2D"
+    },
+    {
+      "id": "synthetic-fixture",
+      "locations": {
+        "scripts/generate_canary.py": 1
+      },
+      "matcher": {
+        "kind": "literal",
+        "value": "codework-synthetic-germline-v1"
+      },
+      "reason": "Legacy active synthetic-canary fixture identity.",
+      "replacement": "omnigenis-synthetic-germline-v2",
+      "retire_by": "2B"
+    },
+    {
+      "disposition": "preserve_historical",
+      "id": "historical-runtime-zip",
+      "locations": {
+        "docs/GITHUB_MOBILE_IMPORT.md": 2
+      },
+      "matcher": {
+        "kind": "literal",
+        "value": "codework-genome-runtime-2026-08-15.zip"
+      },
+      "reason": "Historical recovery archive filename; bytes/name are provenance.",
+      "retire_by": "2D"
+    },
+    {
+      "id": "runtime-state-dir",
+      "locations": {
+        "deploy/tunnel-client.service.example": 1,
+        "docs/MAGALU_PRIVATE_MCP_SETUP.md": 1
+      },
+      "matcher": {
+        "kind": "literal",
+        "value": "/var/lib/codework-tunnel"
+      },
+      "reason": "Legacy tunnel state directory.",
+      "replacement": "/var/lib/omnigenis-tunnel",
+      "retire_by": "2B"
+    },
+    {
+      "id": "coderabbit-lock-schema",
+      "locations": {
+        ".agents/plugins/coderabbit-cli-checksums.json": 1,
+        "scripts/codex/setup-coderabbit.sh": 1,
+        "tests/test_coderabbit_guardrails.py": 1
+      },
+      "matcher": {
+        "kind": "literal",
+        "value": "codework-coderabbit-cli-release-lock-v1"
+      },
+      "reason": "Legacy CodeRabbit CLI release-lock schema identity.",
+      "replacement": "omnigenis-coderabbit-cli-release-lock-v2",
+      "retire_by": "2B"
+    },
+    {
+      "id": "mcp-test-temp-prefixes",
+      "locations": {
+        "mcp/test/core.test.ts": 1,
+        "mcp/test/server.test.ts": 28
+      },
+      "matcher": {
+        "kind": "regex",
+        "value": "codework-(?:audit|server|claim|lock|release|budget|timeout|reaped|exit)[A-Za-z0-9_-]*"
+      },
+      "reason": "Legacy temporary-path namespace used by MCP tests.",
+      "replacement": "omnigenis-",
+      "retire_by": "2B"
+    },
+    {
+      "id": "ci-test-function-name",
+      "locations": {
+        "tests/test_ci_optimization_contract.py": 1
+      },
+      "matcher": {
+        "kind": "literal",
+        "value": "private_codework_runners"
+      },
+      "reason": "Legacy runner-pool name embedded in a CI contract test symbol.",
+      "replacement": "private_omnigenis_runners",
+      "retire_by": "2C"
+    },
+    {
+      "id": "repository-old-full-name-test",
+      "locations": {
+        "tests/test_repository_identity_migration.py": 2
+      },
+      "matcher": {
+        "kind": "regex",
+        "value": "drhudsonandrade/Codework(?=[\"\\'])"
+      },
+      "reason": "Phase 1 compatibility assertion for the old repository full name.",
+      "replacement": "drhudsonandrade/OmniGenis",
+      "retire_by": "2D"
+    },
+    {
+      "disposition": "preserve_historical",
+      "id": "historical-repository-pr-urls",
+      "locations": {
+        "docs/POLICY_CODE_LANGUAGE_INVENTORY.md": 1,
+        "docs/REPORTING_CODE_LANGUAGE_INVENTORY.md": 1,
+        "tests/test_repository_identity_migration.py": 2
+      },
+      "matcher": {
+        "kind": "regex",
+        "value": "https://github\\.com/drhudsonandrade/Codework/pull/(?:60|61)(?:#issuecomment-[0-9]+)?"
+      },
+      "reason": "Historical PR evidence URLs retain the repository path used when recorded.",
+      "retire_by": "2D"
+    },
+    {
+      "id": "product-word-active",
+      "locations": {
+        ".agents/plugins/marketplace.json": 1,
+        "deploy/genome-mcp.service": 1,
+        "deploy/tunnel-client.service.example": 1,
+        "mcp/README.md": 1
+      },
+      "matcher": {
+        "kind": "regex",
+        "value": "(?<!drhudsonandrade/)(?<![A-Za-z0-9_-])Codework(?![A-Za-z0-9_-])"
+      },
+      "reason": "Legacy product word in active descriptions and compatibility tests.",
+      "replacement": "OmniGenis",
+      "retire_by": "2B"
+    }
+  ],
+  "historical_prefixes": [
+    "docs/history/",
+    "docs/superpowers/specs/",
+    "docs/superpowers/plans/",
+    "docs/superpowers/evidence/",
+    "docs/superpowers/checkpoints/"
+  ],
+  "phase": "2A",
+  "scan_suffixes": [
+    "",
+    ".example",
+    ".json",
+    ".md",
+    ".nf",
+    ".py",
+    ".service",
+    ".sh",
+    ".toml",
+    ".ts",
+    ".txt",
+    ".yaml",
+    ".yml"
+  ],
+  "schema": "omnigenis-legacy-identity-ledger-v1"
+}

@@ -1,4 +1,5 @@
 import ast
+import hashlib
 import importlib.util
 import json
 import re
@@ -111,6 +112,8 @@ TRUSTED_RUNNER_LINE = (
     "|| 'ubuntu-latest' }}"
 )
 
+NGS_TRIGGER_WORKFLOW_BASELINE_SHA256 = "9f25b7a635ecbbfb76e3eb540dbe83329ef392538312c673ae35de9e1d5ffcfc"
+
 NGS_TRIGGER_SCRIPT_PATHS = (
     "scripts/__init__.py",
     "scripts/annotate_partial_genome.py",
@@ -127,6 +130,7 @@ NGS_TRIGGER_SCRIPT_PATHS = (
     "scripts/materialize_ruleset.py",
     "scripts/prepare_latest_candidate.py",
     "scripts/prepare_report_release.py",
+    "scripts/project_identity_guard.py",
     "scripts/residual_language_audit.py",
     "scripts/promote_latest_candidate.py",
     "scripts/refresh_evidence_sources.py",
@@ -773,6 +777,14 @@ class CIOptimizationContractTest(unittest.TestCase):
         for expected in expected_paths:
             self.assertIn(expected, pull_request)
         self.assertNotIn("'mcp/**'", pull_request)
+
+    def test_ngs_runtime_gate_trigger_only_change_preserves_baseline_semantics(self):
+        workflow = _read("genoma-ngs-runtime-gate.yml")
+        allowed_line = "      - 'scripts/project_identity_guard.py'\n"
+        self.assertEqual(workflow.count(allowed_line), 2)
+        normalized = workflow.replace(allowed_line, "")
+        digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+        self.assertEqual(NGS_TRIGGER_WORKFLOW_BASELINE_SHA256, digest)
 
     def test_ngs_runtime_gate_uses_explicit_ngs_script_paths_instead_of_all_scripts(self):
         workflow = _read("genoma-ngs-runtime-gate.yml")

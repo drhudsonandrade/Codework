@@ -16,6 +16,7 @@ if str(ROOT) not in sys.path:
 
 from scripts.code_language_guard import LanguagePolicyError, validate_code_language  # noqa: E402
 from scripts.residual_language_audit import ResidualLanguageError, audit_repository  # noqa: E402
+from scripts.project_identity_guard import validate_project_identity  # noqa: E402
 from scripts.sealed_ruleset import (  # noqa: E402
     EXPECTED_NAME,
     EXPECTED_SHA,
@@ -36,10 +37,11 @@ REQUIRED_PATHS = (
     "array_pipeline/annotation.py", "array_pipeline/targets.py", "config/partial_genome_annotation_targets.json",
     "config/code_language_policy.json", "config/code_language_legacy_baseline.json",
     "config/residual_language_classification.json",
+    "config/project_identity.json", "config/legacy_identity_ledger.json",
     "manifests/GRCh38.sources.tsv", "manifests/GRCh38.lock.sha256.example", "manifests/RULESET_V3.4.sha256",
     "normative/sealed/MANIFEST.json", "normative/sealed/README.md",
     "scripts/__init__.py", "scripts/sealed_ruleset.py", "scripts/code_language_guard.py",
-    "scripts/residual_language_audit.py",
+    "scripts/residual_language_audit.py", "scripts/project_identity_guard.py",
     "scripts/check_versions.sh", "scripts/fetch_grch38.sh",
     "scripts/build_bwa_mem2_index.sh", "scripts/validate_grch38.sh", "scripts/validate_bwa_mem2_functional.sh",
     "scripts/generate_canary.py", "scripts/score_variants.py", "scripts/run_canary.sh", "scripts/verify_ruleset.sh",
@@ -62,7 +64,7 @@ REQUIRED_PATHS = (
     "mcp/tsconfig.json", "mcp/src/server.ts", "deploy/docker-compose.yml",
     "deploy/attestations/bootstrap-project-v3.4.json", "adapters/README.md", "adapters/config.example.json",
     "docs/CODE_LANGUAGE_POLICY.md", "docs/FALLOW_SECURITY_REVIEW.md", "docs/GITHUB_MOBILE_IMPORT.md",
-    "docs/MAGALU_PRIVATE_MCP_SETUP.md",
+    "docs/MAGALU_PRIVATE_MCP_SETUP.md", "docs/PROJECT_IDENTITY_CONTRACT.md",
     "docs/PRE_DEPLOYMENT_VALIDATION_2026-08-15.md", "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md", "docs/PR_BODY.md",
     "docs/DETERMINISTIC_ENGINE.md", "docs/PRODUCTION_CEREMONY.md", "docs/PORTABILITY_MATRIX.md",
     "docs/GRCH38_COMPUTE_STRATEGY.md", "docs/audits/GENOMA_V0.8_PREIMPLEMENTATION_AUDIT_2026-08-16.md",
@@ -776,6 +778,7 @@ def validate(root: Path) -> list[str]:
         for relative in REQUIRED_PATHS
         if not (root / relative).is_file()
     )
+    errors.extend(validate_project_identity(root))
     errors.extend(
         f"superseded active ruleset path must be archived outside executable surfaces: {relative}"
         for relative in FORBIDDEN_ACTIVE_PATHS
