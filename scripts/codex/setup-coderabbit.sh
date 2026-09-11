@@ -18,7 +18,7 @@ fail() {
 readonly LEGACY_BIN_ENV_NAME="CODEWORK_CODERABBIT_BIN_DIR"
 canonical_bin_dir="${OMNIGENIS_CODERABBIT_BIN_DIR:-}"
 legacy_bin_dir=""
-if [[ -v $LEGACY_BIN_ENV_NAME ]]; then
+if declare -p "$LEGACY_BIN_ENV_NAME" >/dev/null 2>&1; then
   legacy_bin_dir="${!LEGACY_BIN_ENV_NAME}"
 fi
 if [[ -n "$canonical_bin_dir" && -n "$legacy_bin_dir" && "$canonical_bin_dir" != "$legacy_bin_dir" ]]; then

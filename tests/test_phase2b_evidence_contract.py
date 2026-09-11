@@ -1,18 +1,23 @@
 from pathlib import Path
 import hashlib
 import json
+import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-EVIDENCE = ROOT / "docs/superpowers/evidence/2026-09-11-omnigenis-phase2b-runtime-build-identity.json"
+EVIDENCE_RELATIVE = "docs/superpowers/evidence/2026-09-11-omnigenis-phase2b-runtime-build-identity.json"
+EVIDENCE = ROOT / EVIDENCE_RELATIVE
 BASE_SHA = "4c0e5222248b5f9f2537d627091b80afc9c9e120"
 LEGACY_WORD = "code" + "work"
 
 
 class Phase2BEvidenceContractTest(unittest.TestCase):
+    @staticmethod
+    def git(*args: str) -> str:
+        return subprocess.check_output(["git", *args], cwd=ROOT, text=True).strip()
+
     def load(self) -> dict:
-        if not EVIDENCE.is_file():
-            self.skipTest("Phase 2B evidence is generated after the implementation validation cycle")
+        self.assertTrue(EVIDENCE.is_file(), f"missing required Phase 2B evidence: {EVIDENCE_RELATIVE}")
         return json.loads(EVIDENCE.read_text(encoding="utf-8"))
 
     def test_required_top_level_contract_is_complete(self) -> None:
@@ -27,6 +32,26 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
             "post_merge_requirements",
         }
         self.assertTrue(required.issubset(evidence))
+
+    def test_implementation_sha_tree_and_evidence_commit_are_git_bound(self) -> None:
+        evidence = self.load()
+        implementation = evidence["implementation_head_sha"]
+        subprocess.run(
+            ["git", "cat-file", "-e", f"{implementation}^{{commit}}"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+        )
+        self.assertEqual(
+            self.git("rev-parse", f"{implementation}^{{tree}}"),
+            evidence["implementation_tree_sha"],
+        )
+        evidence_head = self.git("rev-parse", "HEAD")
+        self.assertEqual(self.git("rev-parse", "HEAD^"), implementation)
+        changed = self.git(
+            "diff-tree", "--no-commit-id", "--name-only", "-r", evidence_head
+        ).splitlines()
+        self.assertEqual(changed, [EVIDENCE_RELATIVE])
 
     def test_premerge_evidence_cannot_claim_ghcr_publication(self) -> None:
         evidence = self.load()
@@ -65,6 +90,10 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
             self.assertTrue(record["environment"], name)
             self.assertRegex(record["output_sha256"], r"^[0-9a-f]{64}$", name)
             self.assertTrue(record["summary"], name)
+        self.assertEqual(
+            evidence["validation_provenance"]["shell_syntax"]["command"],
+            "find scripts -type f -name '*.sh' -exec bash -n {} +",
+        )
 
     def test_contract_and_ledger_hashes_match_repository_bytes(self) -> None:
         evidence = self.load()

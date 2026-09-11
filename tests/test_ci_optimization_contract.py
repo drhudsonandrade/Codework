@@ -779,6 +779,7 @@ class CIOptimizationContractTest(unittest.TestCase):
         self.assertNotIn("'mcp/**'", pull_request)
 
     def test_ngs_runtime_gate_matches_approved_phase_two_b_semantics(self):
+        """Keep the Phase 2B NGS workflow pinned to its approved semantics."""
         workflow = _read("genoma-ngs-runtime-gate.yml")
         allowed_line = "      - 'scripts/project_identity_guard.py'\n"
         self.assertEqual(workflow.count(allowed_line), 2)

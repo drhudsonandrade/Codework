@@ -366,24 +366,28 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         return result, marker.is_file(), calls
 
     def test_canonical_bin_dir_variable_is_accepted(self) -> None:
+        """Accept the canonical OmniGenis CodeRabbit binary directory variable."""
         result, marker_created, _calls = self._run_setup_with_fakes(bin_env_mode="canonical")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(marker_created)
         self.assertNotIn("deprecated", result.stderr)
 
     def test_legacy_bin_dir_variable_is_accepted_with_warning(self) -> None:
+        """Accept the legacy variable only with an explicit deprecation warning."""
         result, marker_created, _calls = self._run_setup_with_fakes(bin_env_mode="legacy")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(marker_created)
         self.assertIn(f"{LEGACY_BIN_ENV} is deprecated; use {CANONICAL_BIN_ENV}", result.stderr)
 
     def test_same_value_dual_bin_dir_variables_are_accepted(self) -> None:
+        """Accept canonical and legacy variables when their values are identical."""
         result, marker_created, _calls = self._run_setup_with_fakes(bin_env_mode="both-same")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(marker_created)
         self.assertNotIn("conflicting CodeRabbit bin directory variables", result.stderr)
 
     def test_conflicting_bin_dir_variables_fail_closed(self) -> None:
+        """Reject conflicting canonical and legacy binary directory variables."""
         result, marker_created, calls = self._run_setup_with_fakes(bin_env_mode="conflict")
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
         self.assertFalse(marker_created)

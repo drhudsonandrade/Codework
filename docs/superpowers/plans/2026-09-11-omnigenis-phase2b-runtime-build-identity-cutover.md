@@ -598,7 +598,7 @@ git diff --cached --check
 git commit -m "test: define OmniGenis Phase 2B evidence contract"
 ```
 
-No implementation commit may be created after the evidence-bearing validation cycle begins. During this pre-evidence cycle, `tests/test_phase2b_evidence_contract.py` must skip only because the evidence artifact does not yet exist; after final evidence generation, the same tests must PASS without skips. The complete root suite is rerun on the final evidence HEAD before PR readiness.
+No implementation commit may be created after the evidence-bearing validation cycle begins. The final evidence-contract test must fail if the evidence artifact is missing. During the bootstrap pre-evidence cycle, run the complete functional suite while explicitly excluding only `tests.test_phase2b_evidence_contract`; generate and commit the evidence next, then run the complete root suite including the evidence contract on the final evidence HEAD before PR readiness.
 
 - [ ] **Step 4: Execute one fail-fast validation cycle on the exact implementation HEAD**
 
@@ -634,7 +634,7 @@ run_gate phase2b_tests "$VENV/bin/python" -m unittest \
 run_gate root_suite "$VENV/bin/python" -m unittest discover -s tests -v
 ```
 
-Then run `bash -n scripts/*.sh` and `git diff --check` as additional fail-closed gates. Record the exact root-suite count from the log; never copy the earlier 1,070 count by assumption.
+Then run `find scripts -type f -name '*.sh' -exec bash -n {} +` and `git diff --check` as additional fail-closed gates. Record the exact root-suite count from the log; never copy the earlier 1,070 count by assumption.
 - [ ] **Step 5: Capture non-secret external capability state**
 
 Run without printing tokens or environment secrets:
@@ -686,6 +686,9 @@ python3 -m json.tool \
   >/dev/null
 python3 -m unittest tests.test_phase2b_evidence_contract -v
 python3 scripts/project_identity_guard.py --check
+# The evidence contract resolves implementation_head_sha as a commit, compares
+# implementation_tree_sha to that commit tree, requires HEAD^ to equal the
+# implementation commit, and requires the final HEAD to be evidence-only.
 git diff --check
 ```
 
