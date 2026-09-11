@@ -1,6 +1,6 @@
 {
   "base_sha": "4c0e5222248b5f9f2537d627091b80afc9c9e120",
-  "captured_at_utc": "2026-09-11T05:11:46.842423+00:00",
+  "captured_at_utc": "2026-09-11T09:33:14.862975+00:00",
   "changed_paths": [
     ".agents/plugins/coderabbit-cli-checksums.json",
     ".agents/plugins/marketplace.json",
@@ -62,8 +62,8 @@
     "old_package_action": "PRESERVE",
     "status": "PENDING_AFTER_HUMAN_MERGE"
   },
-  "implementation_head_sha": "af6daff3cf3d420a3de08caebec3d12f670546bd",
-  "implementation_tree_sha": "58bfad30a7a8dbdc34726af53475e52373c9ac51",
+  "implementation_head_sha": "01f1ef03af2d12d87d4e48b2e3c6b67476c7d5d3",
+  "implementation_tree_sha": "6140d3e315af477c7c70962146f27f1e3152af8f",
   "legacy_ledger_sha256": "3a4e27b2436a087dd5d457e8bf6bb4018758148c7382af48616daa0cbfd31c3a",
   "legacy_scan": {
     "counts": {
@@ -183,7 +183,7 @@
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
       "exit_code": 0,
-      "output_sha256": "fb71d8d1e8a94420b7c4dbe2a8ea53a756d4812b3f4e28e736d14edfc26a2e38",
+      "output_sha256": "7ede1b58b0cb626fa535e840400004b855484431449ea3cfaa136bf57b2d26f2",
       "summary": "27 tests PASS"
     },
     "identity_guard": {
@@ -197,6 +197,17 @@
       "output_sha256": "0c6537c2763c5efb04594bf3441d6e02a721a5f1f220fe4490de707fea3aad2d",
       "summary": "PASS project_identity_contract"
     },
+    "phase2b_docstrings": {
+      "command": "python AST docstring gate for tests/test_phase2b_{evidence_contract,legacy_seal,mcp_ngs_identity,runtime_build_identity}.py",
+      "environment": {
+        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      },
+      "exit_code": 0,
+      "output_sha256": "77732c02689868daceac437c411730e01715d2c67a3fb55b8175bfa7b0ba27cd",
+      "summary": "all public Phase 2B test classes/helpers/methods documented"
+    },
     "phase2b_tests": {
       "command": "python -m unittest tests.test_phase2b_runtime_build_identity tests.test_phase2b_mcp_ngs_identity tests.test_phase2b_legacy_seal -v",
       "environment": {
@@ -205,7 +216,7 @@
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
       "exit_code": 0,
-      "output_sha256": "5571f8daa549ed635492faa0e41e61b973aa2041accd875fc6966936cbc8191d",
+      "output_sha256": "8b61877a798bb41d5b80f4f81440fd3c5eb7444cefe958c4f36c980cc8aee554",
       "summary": "7 tests PASS"
     },
     "residual_language": {
@@ -227,19 +238,21 @@
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
       "exit_code": 0,
-      "output_sha256": "d050e083a4bf300da8e71e87cd2f827653fa7150656f14b4385d0fc7299b5747",
+      "output_sha256": "d989a547086ac5bdefbc10bb82b08b05d0a00cfe33a2737d6f49f0b031914dcc",
       "summary": "18 reviewer-focused tests PASS"
     },
     "root_suite": {
-      "command": "modules=$(find tests -maxdepth 1 -type f -name 'test_*.py' ! -name 'test_phase2b_evidence_contract.py' -printf '%f\\n' | sed 's/\\.py$//' | sed 's#^#tests.#' | sort); PYTHONPATH=tests python -m unittest $modules -v",
+      "command": "python /tmp/omnigenis-phase2b-doc-validation/run_filtered_suite.py",
       "environment": {
+        "filter_runner_sha256": "d0cd9b4668f3be4509fc1d1da371bfb82de780ff1e017fe69eafff8982659396",
+        "filter_scope": "exclude only test_phase2b_evidence_contract before evidence-only commit",
         "python": "/tmp/codework-ci-artifact-opt-venv/bin/python 3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
       "exit_code": 0,
-      "output_sha256": "f9201825db57d69edc474fb4ccb55e2647a70ae9e30d1f44f71fafc889adacf9",
-      "summary": "1082 tests PASS; 1 expected win32-only MCP skip; evidence-contract module intentionally excluded until evidence commit"
+      "output_sha256": "3f8be21577934558d6cb5abab30ee302c4854e8948d04dea8a198545e9d3fbec",
+      "summary": "1082 tests PASS; 1 expected win32-only MCP skip; only the evidence-contract module excluded before evidence-only refresh"
     },
     "shell_syntax": {
       "command": "find scripts -type f -name '*.sh' -exec bash -n {} +",
