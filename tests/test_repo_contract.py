@@ -30,6 +30,29 @@ class RepoContractTest(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         self.assertEqual(validator.validate(root), [])
 
+
+    def test_validate_repo_invokes_project_identity_guard(self):
+        validator = load_validator()
+        root = Path(__file__).resolve().parents[1]
+        with patch.object(
+            validator,
+            "validate_project_identity",
+            return_value=["project identity sentinel"],
+        ) as guard:
+            errors = validator.validate(root)
+        guard.assert_called_once_with(root)
+        self.assertIn("project identity sentinel", errors)
+
+    def test_identity_contract_paths_are_required(self):
+        validator = load_validator()
+        for relative in (
+            "config/project_identity.json",
+            "config/legacy_identity_ledger.json",
+            "scripts/project_identity_guard.py",
+            "docs/PROJECT_IDENTITY_CONTRACT.md",
+        ):
+            self.assertIn(relative, validator.REQUIRED_PATHS)
+
     def test_json_scan_reads_utf8_explicitly(self):
         validator = load_validator()
         with tempfile.TemporaryDirectory() as directory:
