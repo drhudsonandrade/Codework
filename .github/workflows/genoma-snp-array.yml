@@ -189,7 +189,7 @@ jobs:
           docker run --rm \
             -v "$RUNNER_TEMP/genoma-array/workspace:/workspace" \
             genoma-array:${{ github.sha }} \
-            nextflow run /opt/codework/main.nf \
+            nextflow run /opt/omnigenis/main.nf \
               -work-dir /workspace/work \
               --mode array \
               --array_input /workspace/synthetic.csv.gz \
@@ -199,7 +199,7 @@ jobs:
               --array_build_evidence /workspace/build-attestation.json \
               --array_strand_evidence /workspace/strand-attestation.json \
               --array_evidence_mode plan-only \
-              --array_target_manifest /opt/codework/config/partial_genome_annotation_targets.json \
+              --array_target_manifest /opt/omnigenis/config/partial_genome_annotation_targets.json \
               -ansi-log false
           echo 'integrated Nextflow array lane: PASS'
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
