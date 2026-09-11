@@ -110,7 +110,7 @@ def validate_project_identity(root: Path) -> list[str]:
     try:
         identity = _load_json(root / IDENTITY_PATH)
         ledger = _load_json(root / LEDGER_PATH)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+    except (OSError, ValueError) as exc:
         return [f"project identity contract unreadable: {exc}"]
 
     if identity.get("schema") != "omnigenis-project-identity-v1":
@@ -131,7 +131,7 @@ def validate_project_identity(root: Path) -> list[str]:
 
     try:
         report = scan_legacy_identities(root, ledger)
-    except (OSError, subprocess.CalledProcessError, UnicodeDecodeError, ValueError) as exc:
+    except (OSError, subprocess.CalledProcessError, ValueError) as exc:
         return errors + [f"legacy identity scan failed closed: {exc}"]
     for item in report["unclassified"]:
         errors.append(
@@ -156,7 +156,7 @@ def main() -> None:
         try:
             ledger = _load_json(ROOT / LEDGER_PATH)
             report = scan_legacy_identities(ROOT, ledger)
-        except (OSError, subprocess.CalledProcessError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        except (OSError, subprocess.CalledProcessError, ValueError) as exc:
             raise SystemExit(f"legacy identity inventory failed closed: {exc}") from exc
         print(json.dumps(report, indent=2, sort_keys=True))
         return
