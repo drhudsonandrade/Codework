@@ -673,7 +673,7 @@ Create `docs/PROJECT_IDENTITY_CONTRACT.md` containing these sections with concre
 `config/project_identity.json` is the canonical target identity registry for the Phase 2 internal-name migration. It does not dynamically configure every runtime consumer; repository guards compare active literals against the approved contract during later cutover phases.
 
 ## Phase 2A behavior
-Phase 2A changes no runtime identity. `config/legacy_identity_ledger.json` records reviewed active Codework-derived compatibility occurrences. Counts may decrease but may not increase, and an unclassified occurrence fails `scripts/validate_repo.py`.
+Phase 2A changes no runtime identity. `config/legacy_identity_ledger.json` records reviewed active legacy-identity compatibility occurrences. Counts may decrease but may not increase, and an unclassified occurrence fails `scripts/validate_repo.py`.
 
 ## Transitional historical scope
 During Phase 2A only, migration specifications, implementation plans, evidence, checkpoints, and `docs/history/` are outside the active compatibility ledger. Phase 2D replaces these broad transitional exclusions with an exact final historical/provenance allowlist.
