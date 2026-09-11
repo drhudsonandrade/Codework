@@ -15,6 +15,17 @@ IDENTITY_PATH = Path("config/project_identity.json")
 LEDGER_PATH = Path("config/legacy_identity_ledger.json")
 LEGACY_PATTERN = re.compile("code" + "work", re.IGNORECASE)
 CONTROL_METADATA_PATHS = {LEDGER_PATH}
+PHASE2A_SCAN_SUFFIXES = (
+    "", ".example", ".json", ".md", ".nf", ".py", ".service",
+    ".sh", ".toml", ".ts", ".txt", ".yaml", ".yml",
+)
+PHASE2A_HISTORICAL_PREFIXES = (
+    "docs/history/",
+    "docs/superpowers/specs/",
+    "docs/superpowers/plans/",
+    "docs/superpowers/evidence/",
+    "docs/superpowers/checkpoints/",
+)
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -37,7 +48,7 @@ def _flatten_strings(value: object) -> Iterator[str]:
 
 def _repository_paths(root: Path) -> tuple[Path, ...]:
     proc = subprocess.run(
-        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        ["git", "ls-files", "-z", "--cached"],
         cwd=root,
         check=True,
         capture_output=True,
@@ -60,7 +71,15 @@ def _compile_matcher(entry: dict[str, Any]) -> re.Pattern[str]:
     raise ValueError(f"unsupported matcher kind: {kind}")
 
 
+def _validate_scope_policy(ledger: dict[str, Any]) -> None:
+    if ledger.get("scan_suffixes") != list(PHASE2A_SCAN_SUFFIXES):
+        raise ValueError("legacy identity scan suffix policy mismatch")
+    if ledger.get("historical_prefixes") != list(PHASE2A_HISTORICAL_PREFIXES):
+        raise ValueError("legacy identity historical prefix policy mismatch")
+
+
 def scan_legacy_identities(root: Path, ledger: dict[str, Any]) -> dict[str, Any]:
+    _validate_scope_policy(ledger)
     suffixes = tuple(ledger["scan_suffixes"])
     historical = tuple(ledger["historical_prefixes"])
     entries = ledger["entries"]
@@ -78,10 +97,7 @@ def scan_legacy_identities(root: Path, ledger: dict[str, Any]) -> dict[str, Any]
         path = root / relative
         if not path.is_file():
             continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            continue
+        text = path.read_text(encoding="utf-8")
         covered: list[tuple[int, int]] = []
         for entry in entries:
             allowed = entry["locations"].get(posix)

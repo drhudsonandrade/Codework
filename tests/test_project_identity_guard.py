@@ -13,6 +13,18 @@ LEGACY_WORD = "code" + "work"
 LEGACY_RUNTIME_ROOT = "/opt/" + LEGACY_WORD
 LEGACY_SURPRISE = LEGACY_WORD + "-surprise"
 
+EXPECTED_SCAN_SUFFIXES = [
+    "", ".example", ".json", ".md", ".nf", ".py", ".service",
+    ".sh", ".toml", ".ts", ".txt", ".yaml", ".yml",
+]
+EXPECTED_HISTORICAL_PREFIXES = [
+    "docs/history/",
+    "docs/superpowers/specs/",
+    "docs/superpowers/plans/",
+    "docs/superpowers/evidence/",
+    "docs/superpowers/checkpoints/",
+]
+
 
 IDENTITY = {
     "schema": "omnigenis-project-identity-v1",
@@ -52,7 +64,11 @@ IDENTITY = {
 
 class ProjectIdentityGuardTest(unittest.TestCase):
     def make_repo(
-        self, text: str, max_count: int = 1, scan_suffixes: list[str] | None = None
+        self,
+        text: str,
+        max_count: int = 1,
+        scan_suffixes: list[str] | None = None,
+        historical_prefixes: list[str] | None = None,
     ) -> Path:
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -65,8 +81,12 @@ class ProjectIdentityGuardTest(unittest.TestCase):
             "schema": "omnigenis-legacy-identity-ledger-v1",
             "baseline_commit": "939dfea5cc7cb2745638168d518d2005e941e9c6",
             "phase": "2A",
-            "scan_suffixes": scan_suffixes or [".txt"],
-            "historical_prefixes": [],
+            "scan_suffixes": EXPECTED_SCAN_SUFFIXES if scan_suffixes is None else scan_suffixes,
+            "historical_prefixes": (
+                EXPECTED_HISTORICAL_PREFIXES
+                if historical_prefixes is None
+                else historical_prefixes
+            ),
             "entries": [
                 {
                     "id": "runtime-root",
@@ -128,9 +148,32 @@ class ProjectIdentityGuardTest(unittest.TestCase):
 
 
     def test_control_metadata_ledger_is_not_scanned(self) -> None:
-        root = self.make_repo(LEGACY_RUNTIME_ROOT, scan_suffixes=[".txt", ".json"])
+        root = self.make_repo(LEGACY_RUNTIME_ROOT)
         errors = validate_project_identity(root)
         self.assertEqual(errors, [])
+
+    def test_untracked_file_does_not_affect_official_guard(self) -> None:
+        root = self.make_repo("clean")
+        (root / "local.txt").write_text(LEGACY_SURPRISE, encoding="utf-8")
+        errors = validate_project_identity(root)
+        self.assertEqual(errors, [])
+
+    def test_empty_scan_suffix_policy_fails_closed(self) -> None:
+        root = self.make_repo("clean", scan_suffixes=[])
+        errors = validate_project_identity(root)
+        self.assertTrue(any("scan suffix policy mismatch" in error for error in errors))
+
+    def test_empty_historical_prefix_bypass_fails_closed(self) -> None:
+        root = self.make_repo("clean", historical_prefixes=[""])
+        errors = validate_project_identity(root)
+        self.assertTrue(any("historical prefix policy mismatch" in error for error in errors))
+
+    def test_invalid_utf8_tracked_file_fails_closed(self) -> None:
+        root = self.make_repo("clean")
+        (root / "invalid.txt").write_bytes(b"\xff\xfelegacy")
+        subprocess.run(["git", "add", "invalid.txt"], cwd=root, check=True)
+        errors = validate_project_identity(root)
+        self.assertTrue(any("legacy identity scan failed closed" in error for error in errors))
 
 
     def test_real_repository_has_no_unclassified_legacy_identity(self) -> None:

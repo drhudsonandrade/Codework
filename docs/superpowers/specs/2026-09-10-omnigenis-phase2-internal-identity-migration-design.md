@@ -1,6 +1,6 @@
 # OmniGenis Phase 2 Internal Identity Migration Design
 
-**Status:** Approved conversational design consolidated for written-spec review. Implementation has not started.
+**Status:** Approved design. Phase 2A implementation exists and is under governed PR review; Phases 2B-2D have not started.
 
 **Repository:** `drhudsonandrade/OmniGenis`
 
@@ -32,7 +32,7 @@ Phase 2 does not:
 
 ## 3. Verified baseline
 
-The Phase 1 post-merge baseline was verified before this design was written:
+The Phase 1 post-merge baseline was verified before this design was written. Reproduced baseline commands, exit codes, environment metadata, output summaries, and digests are recorded in `docs/superpowers/evidence/2026-09-10-omnigenis-phase2a-identity-contract.json`; the original rename continuity source is `docs/superpowers/evidence/2026-09-10-omnigenis-repository-identity-migration.json`.
 
 - repository full name: `drhudsonandrade/OmniGenis`;
 - repository ID: `1212760346`;

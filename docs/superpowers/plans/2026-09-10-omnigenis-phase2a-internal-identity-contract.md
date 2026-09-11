@@ -258,8 +258,8 @@ class ProjectIdentityGuardTest(unittest.TestCase):
             "schema": "omnigenis-legacy-identity-ledger-v1",
             "baseline_commit": "939dfea5cc7cb2745638168d518d2005e941e9c6",
             "phase": "2A",
-            "scan_suffixes": [".txt"],
-            "historical_prefixes": [],
+            "scan_suffixes": EXPECTED_SCAN_SUFFIXES,
+            "historical_prefixes": EXPECTED_HISTORICAL_PREFIXES,
             "entries": [
                 {
                     "id": "runtime-root",
@@ -348,6 +348,17 @@ IDENTITY_PATH = Path("config/project_identity.json")
 LEDGER_PATH = Path("config/legacy_identity_ledger.json")
 LEGACY_PATTERN = re.compile("code" + "work", re.IGNORECASE)
 CONTROL_METADATA_PATHS = {LEDGER_PATH}
+PHASE2A_SCAN_SUFFIXES = (
+    "", ".example", ".json", ".md", ".nf", ".py", ".service",
+    ".sh", ".toml", ".ts", ".txt", ".yaml", ".yml",
+)
+PHASE2A_HISTORICAL_PREFIXES = (
+    "docs/history/",
+    "docs/superpowers/specs/",
+    "docs/superpowers/plans/",
+    "docs/superpowers/evidence/",
+    "docs/superpowers/checkpoints/",
+)
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -370,7 +381,7 @@ def _flatten_strings(value: object) -> Iterator[str]:
 
 def _repository_paths(root: Path) -> tuple[Path, ...]:
     proc = subprocess.run(
-        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        ["git", "ls-files", "-z", "--cached"],
         cwd=root,
         check=True,
         capture_output=True,
@@ -393,7 +404,15 @@ def _compile_matcher(entry: dict[str, Any]) -> re.Pattern[str]:
     raise ValueError(f"unsupported matcher kind: {kind}")
 
 
+def _validate_scope_policy(ledger: dict[str, Any]) -> None:
+    if ledger.get("scan_suffixes") != list(PHASE2A_SCAN_SUFFIXES):
+        raise ValueError("legacy identity scan suffix policy mismatch")
+    if ledger.get("historical_prefixes") != list(PHASE2A_HISTORICAL_PREFIXES):
+        raise ValueError("legacy identity historical prefix policy mismatch")
+
+
 def scan_legacy_identities(root: Path, ledger: dict[str, Any]) -> dict[str, Any]:
+    _validate_scope_policy(ledger)
     suffixes = tuple(ledger["scan_suffixes"])
     historical = tuple(ledger["historical_prefixes"])
     entries = ledger["entries"]
@@ -411,10 +430,7 @@ def scan_legacy_identities(root: Path, ledger: dict[str, Any]) -> dict[str, Any]
         path = root / relative
         if not path.is_file():
             continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            continue
+        text = path.read_text(encoding="utf-8")
         covered: list[tuple[int, int]] = []
         for entry in entries:
             allowed = entry["locations"].get(posix)
@@ -443,7 +459,7 @@ def validate_project_identity(root: Path) -> list[str]:
     try:
         identity = _load_json(root / IDENTITY_PATH)
         ledger = _load_json(root / LEDGER_PATH)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+    except (OSError, ValueError) as exc:
         return [f"project identity contract unreadable: {exc}"]
 
     if identity.get("schema") != "omnigenis-project-identity-v1":
@@ -464,7 +480,7 @@ def validate_project_identity(root: Path) -> list[str]:
 
     try:
         report = scan_legacy_identities(root, ledger)
-    except (OSError, subprocess.CalledProcessError, UnicodeDecodeError, ValueError) as exc:
+    except (OSError, subprocess.CalledProcessError, ValueError) as exc:
         return errors + [f"legacy identity scan failed closed: {exc}"]
     for item in report["unclassified"]:
         errors.append(
@@ -488,7 +504,7 @@ Run:
 python3 -m unittest tests.test_project_identity_guard -v
 ```
 
-Expected: the original six behavioral tests plus the control-metadata exclusion test PASS once temporary-test fixtures satisfy the contract. Test source constructs legacy tokens from string fragments so the test file itself does not add active legacy occurrences.
+Expected: all guard tests PASS, including tracked-only scanning, exact Phase 2A scope enforcement, control-metadata exclusion, fail-closed UTF-8 handling, monotonic counts, and unclassified-identity rejection. Test source constructs legacy tokens from string fragments so the test file itself does not add active legacy occurrences.
 
 - [ ] **Step 5: Create the reviewed real-repository ledger**
 
@@ -839,7 +855,24 @@ Path("/tmp/omnigenis-phase2a-validation-state.json").write_text(
 PY
 ```
 
-Expected: the state file exists only after all commands complete successfully and records the exact implementation HEAD plus the observed root-suite count.
+Expected: the state file exists only after all commands complete successfully and records the exact implementation HEAD plus the observed root-suite count. This temporary state is not the durable evidence artifact; its boolean PASS map is only an input to the provenance-enriched evidence record.
+
+### Reviewer-remediation evidence requirements
+
+The durable evidence schema is `omnigenis-phase2a-identity-contract-evidence-v2`. For every validation gate, `validation_provenance` records `status`, the exact `command`, `exit_code`, an `environment` key, and an inline output summary with its SHA-256. When a full raw log is ephemeral, also retain its SHA-256 and explicitly state that only the digest is durable. `baseline_provenance` uses the same record shape for repository metadata, rulesets, Git endpoint continuity, baseline `validate_repo.py`, and the baseline root suite. `provenance_sources.phase1_migration_evidence` pins the Phase 1 evidence path and SHA-256. The executable schema is enforced by `tests/test_phase2a_evidence_contract.py`.
+
+Baseline verification commands are exactly:
+
+```bash
+gh api repos/drhudsonandrade/OmniGenis --jq '{id,full_name,visibility,default_branch}'
+gh api repos/drhudsonandrade/OmniGenis/rulesets/21303100 --jq '{id,name,enforcement,conditions,rules,bypass_actors}'
+gh api repos/drhudsonandrade/OmniGenis/rulesets/22347095 --jq '{id,name,enforcement,conditions,rules,bypass_actors}'
+git ls-remote https://github.com/drhudsonandrade/Codework.git refs/heads/main
+git ls-remote https://github.com/drhudsonandrade/OmniGenis.git refs/heads/main
+# In a detached worktree at baseline SHA 939dfea5cc7cb2745638168d518d2005e941e9c6:
+/tmp/codework-ci-artifact-opt-venv/bin/python scripts/validate_repo.py
+/tmp/codework-ci-artifact-opt-venv/bin/python -m unittest discover -s tests -v
+```
 
 - [ ] **Step 5: Generate the non-secret evidence artifact from verified state**
 
@@ -916,8 +949,12 @@ scientific_paths = changed_paths(
 if runtime_paths or normative_paths or scientific_paths:
     raise SystemExit("Phase 2A protected surface changed")
 
+# Build `environments`, `validation_provenance`, `baseline_provenance`, and
+# `provenance_sources` from the exact commands and output digests specified above.
+# `tests/test_phase2a_evidence_contract.py` validates their complete record shape.
+
 evidence = {
-    "schema": "omnigenis-phase2a-identity-contract-evidence-v1",
+    "schema": "omnigenis-phase2a-identity-contract-evidence-v2",
     "base_sha": BASE_SHA,
     "implementation_head_sha": implementation_head,
     "identity_contract_sha256": sha256(identity_path),
@@ -928,7 +965,11 @@ evidence = {
     "trigger_only_workflow_changed_paths": trigger_workflow_paths,
     "normative_surface_changed_paths": normative_paths,
     "scientific_surface_changed_paths": scientific_paths,
-    "validation": state["validation"],
+    "validation_state": state["validation"],
+    "validation_provenance": validation_provenance,
+    "baseline_provenance": baseline_provenance,
+    "environments": environments,
+    "provenance_sources": provenance_sources,
 }
 OUT.parent.mkdir(parents=True, exist_ok=True)
 OUT.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -964,7 +1005,11 @@ assert evidence["trigger_only_workflow_changed_paths"] == [
 ]
 assert evidence["normative_surface_changed_paths"] == []
 assert evidence["scientific_surface_changed_paths"] == []
-assert all(value == "PASS" for value in evidence["validation"].values())
+assert all(record["status"] == "PASS" for record in evidence["validation_provenance"].values())
+assert all(record["exit_code"] == 0 for record in evidence["validation_provenance"].values())
+assert set(evidence["baseline_provenance"]) == {
+    "repository_metadata", "rulesets", "git_endpoint_continuity", "validate_repo", "root_suite"
+}
 assert evidence["root_test_count"] > 0
 PY
 git diff --check
