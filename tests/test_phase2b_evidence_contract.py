@@ -101,25 +101,25 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
         self.assertTrue(required.issubset(provenance))
         self.assertNotIn("root_suite", provenance)
         expected_commands = {
-            "identity_guard": "python scripts/project_identity_guard.py --check",
-            "validate_repo": "python scripts/validate_repo.py",
-            "supply_chain": "python scripts/verify_supply_chain_lock.py",
-            "code_language": "python scripts/code_language_guard.py --check",
-            "residual_language": "python scripts/residual_language_audit.py --check",
-            "docs_language": "python -m unittest tests.test_developer_documentation_language -v",
+            "identity_guard": "python3 scripts/project_identity_guard.py --check",
+            "validate_repo": "python3 scripts/validate_repo.py",
+            "supply_chain": "python3 scripts/verify_supply_chain_lock.py",
+            "code_language": "python3 scripts/code_language_guard.py --check",
+            "residual_language": "python3 scripts/residual_language_audit.py --check",
+            "docs_language": "python3 -m unittest tests.test_developer_documentation_language -v",
             "phase2b_tests": (
-                "python -m unittest tests.test_phase2b_runtime_build_identity "
+                "python3 -m unittest tests.test_phase2b_runtime_build_identity "
                 "tests.test_phase2b_mcp_ngs_identity tests.test_phase2b_legacy_seal -v"
             ),
             "reviewer_tests": (
-                "python -m unittest tests.test_coderabbit_guardrails "
+                "python3 -m unittest tests.test_coderabbit_guardrails "
                 "tests.test_integration_code_language.IntegrationCodeLanguageTest."
                 "test_coderabbit_setup_diagnostics_are_english "
                 "tests.test_ci_optimization_contract.CIOptimizationContractTest."
                 "test_ngs_runtime_gate_matches_approved_phase_two_b_semantics -v"
             ),
             "plan_sequence": (
-                "python -m unittest tests.test_phase2b_evidence_contract."
+                "python3 -m unittest tests.test_phase2b_evidence_contract."
                 "Phase2BEvidenceContractTest."
                 "test_plan_bootstrap_defers_evidence_contract_and_full_suite -v"
             ),
@@ -135,7 +135,7 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
             self.assertNotIn("AST gate", command, name)
             argv = shlex.split(command)
             self.assertTrue(argv, name)
-            self.assertIn(argv[0], {"python", "find", "git"}, name)
+            self.assertIn(argv[0], {"python3", "find", "git"}, name)
             self.assertIsNotNone(shutil.which(argv[0]), name)
             self.assertTrue(record["environment"], name)
             self.assertRegex(record["output_sha256"], r"^[0-9a-f]{64}$", name)
@@ -157,8 +157,8 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
         self.assertEqual(
             post["commands"],
             [
-                "python -m unittest tests.test_phase2b_evidence_contract -v",
-                "python -m unittest discover -s tests -v",
+                "python3 -m unittest tests.test_phase2b_evidence_contract -v",
+                "python3 -m unittest discover -s tests -v",
                 "find scripts -type f -name '*.sh' -exec bash -n {} +",
                 "git diff --check",
             ],

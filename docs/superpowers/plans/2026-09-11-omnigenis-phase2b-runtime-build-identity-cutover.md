@@ -608,6 +608,7 @@ Run under the pinned project environment and capture one log per gate:
 ```bash
 set -euo pipefail
 VENV=/tmp/codework-ci-artifact-opt-venv
+export PATH="$VENV/bin:$PATH"
 LOG_ROOT=/tmp/omnigenis-phase2b-validation
 rm -rf "$LOG_ROOT"
 mkdir -p "$LOG_ROOT"
@@ -623,13 +624,13 @@ run_gate() {
   test "$rc" -eq 0
 }
 
-run_gate identity_guard "$VENV/bin/python" scripts/project_identity_guard.py --check
-run_gate validate_repo "$VENV/bin/python" scripts/validate_repo.py
-run_gate supply_chain "$VENV/bin/python" scripts/verify_supply_chain_lock.py
-run_gate code_language "$VENV/bin/python" scripts/code_language_guard.py --check
-run_gate residual_language "$VENV/bin/python" scripts/residual_language_audit.py --check
-run_gate docs_language "$VENV/bin/python" -m unittest tests.test_developer_documentation_language -v
-run_gate phase2b_tests "$VENV/bin/python" -m unittest \
+run_gate identity_guard python3 scripts/project_identity_guard.py --check
+run_gate validate_repo python3 scripts/validate_repo.py
+run_gate supply_chain python3 scripts/verify_supply_chain_lock.py
+run_gate code_language python3 scripts/code_language_guard.py --check
+run_gate residual_language python3 scripts/residual_language_audit.py --check
+run_gate docs_language python3 -m unittest tests.test_developer_documentation_language -v
+run_gate phase2b_tests python3 -m unittest \
   tests.test_phase2b_runtime_build_identity tests.test_phase2b_mcp_ngs_identity \
   tests.test_phase2b_legacy_seal -v
 ```
