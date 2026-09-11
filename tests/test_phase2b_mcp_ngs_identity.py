@@ -11,6 +11,7 @@ LEGACY_WORD = "code" + "work"
 
 class Phase2BMcpNgsIdentityTest(unittest.TestCase):
     """Enforce Phase 2B MCP and NGS identity cutover contracts."""
+
     @staticmethod
     def read(path: str) -> str:
         """Read a repository text file as UTF-8."""

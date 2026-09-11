@@ -15,6 +15,7 @@ LEGACY_WORD = "code" + "work"
 
 class Phase2BEvidenceContractTest(unittest.TestCase):
     """Enforce the committed Phase 2B evidence contract."""
+
     @staticmethod
     def git(*args: str) -> str:
         """Run a read-only Git query from the repository root."""

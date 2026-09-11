@@ -11,7 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class Phase2BLegacySealTest(unittest.TestCase):
     """Seal the Phase 2B legacy-identity boundary."""
-    def load_ledger(self) -> dict:
+
+    @staticmethod
+    def load_ledger() -> dict:
         """Load the reviewed migration ledger from the repository."""
         return json.loads((ROOT / "config/legacy_identity_ledger.json").read_text(encoding="utf-8"))
 

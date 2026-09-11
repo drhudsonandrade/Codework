@@ -11,6 +11,7 @@ LEGACY_WORD = "code" + "work"
 
 class Phase2BRuntimeBuildIdentityTest(unittest.TestCase):
     """Enforce canonical runtime/build identities and preserve runner boundaries."""
+
     @staticmethod
     def read(path: str) -> str:
         """Read a repository text file as UTF-8."""
