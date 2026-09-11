@@ -21,6 +21,7 @@ PLAN_RELATIVE = (
 )
 PLAN = ROOT / PLAN_RELATIVE
 BASE_SHA = "4c0e5222248b5f9f2537d627091b80afc9c9e120"
+PHASE2B_MERGE_COMMIT = "a1e669dd613f68f4d82ca7f1f565772ec8098cb1"
 LEGACY_WORD = "code" + "work"
 
 
@@ -129,11 +130,11 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
         self.assertTrue(required.issubset(evidence))
 
     def test_implementation_sha_tree_and_evidence_commit_are_git_bound(self) -> None:
-        """Bind implementation SHA/tree and the evidence-only commit through Git."""
+        """Bind merged Phase 2B evidence to its historical implementation commit."""
         evidence = self.load()
         implementation = evidence["implementation_head_sha"]
         subprocess.run(
-            ["git", "cat-file", "-e", f"{implementation}^{{commit}}"],
+            [GIT_EXECUTABLE, "cat-file", "-e", f"{implementation}^{{commit}}"],
             cwd=ROOT,
             check=True,
             capture_output=True,
@@ -142,15 +143,28 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
             self.git("rev-parse", f"{implementation}^{{tree}}"),
             evidence["implementation_tree_sha"],
         )
-        evidence_commit = _find_evidence_commit(
-            ROOT,
-            implementation,
-            EVIDENCE_RELATIVE,
+        merge_fields = self.git(
+            "rev-list", "--parents", "-n", "1", PHASE2B_MERGE_COMMIT
+        ).split()
+        self.assertEqual(len(merge_fields), 3)
+        evidence_commit = merge_fields[2]
+        self.assertEqual(self.git("rev-parse", f"{evidence_commit}^"), implementation)
+        changed = self.git(
+            "diff-tree", "--no-commit-id", "--name-only", "-r", evidence_commit
+        ).splitlines()
+        self.assertEqual(changed, [EVIDENCE_RELATIVE])
+        committed_evidence = subprocess.check_output(
+            [GIT_EXECUTABLE, "show", f"{evidence_commit}:{EVIDENCE_RELATIVE}"],
+            cwd=ROOT,
         )
-        self.assertEqual(
-            self.git("rev-parse", f"{evidence_commit}^"),
-            implementation,
+        self.assertEqual(committed_evidence, EVIDENCE.read_bytes())
+        ancestry = subprocess.run(
+            [GIT_EXECUTABLE, "merge-base", "--is-ancestor", PHASE2B_MERGE_COMMIT, "HEAD"],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
         )
+        self.assertEqual(ancestry.returncode, 0)
 
     def test_evidence_commit_binding_survives_github_merge_ref_topology(self) -> None:
         """Resolve the evidence-only child when HEAD is a synthetic merge commit."""
@@ -348,14 +362,19 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
         ):
             self.assertIn(command, final_gate)
 
-    def test_contract_and_ledger_hashes_match_repository_bytes(self) -> None:
-        """Match evidence digests to the committed identity contract and ledger."""
+    def test_contract_and_ledger_hashes_match_historical_implementation_bytes(self) -> None:
+        """Match evidence digests to bytes from the attested Phase 2B commit."""
         evidence = self.load()
+        implementation = evidence["implementation_head_sha"]
         for key, relative in (
             ("project_identity_sha256", "config/project_identity.json"),
             ("legacy_ledger_sha256", "config/legacy_identity_ledger.json"),
         ):
-            digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+            committed = subprocess.check_output(
+                [GIT_EXECUTABLE, "show", f"{implementation}:{relative}"],
+                cwd=ROOT,
+            )
+            digest = hashlib.sha256(committed).hexdigest()
             self.assertEqual(evidence[key], digest)
 
 

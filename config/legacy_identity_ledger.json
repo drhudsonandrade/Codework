@@ -28,14 +28,7 @@
     },
     {
       "id": "runner-pool",
-      "locations": {
-        ".github/workflows/genoma-audit.yml": 1,
-        ".github/workflows/genoma-policy-engine.yml": 1,
-        ".github/workflows/scaffold-validation.yml": 1,
-        "docs/GITHUB_MOBILE_IMPORT.md": 1,
-        "docs/MAGALU_PRIVATE_MCP_SETUP.md": 1,
-        "tests/test_ci_optimization_contract.py": 8
-      },
+      "locations": {},
       "matcher": {
         "kind": "literal",
         "value": "codework-isolated"
@@ -204,9 +197,7 @@
     },
     {
       "id": "ci-test-function-name",
-      "locations": {
-        "tests/test_ci_optimization_contract.py": 1
-      },
+      "locations": {},
       "matcher": {
         "kind": "literal",
         "value": "private_codework_runners"

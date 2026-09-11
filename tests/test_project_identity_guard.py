@@ -13,6 +13,7 @@ LEGACY_WORD = "code" + "work"
 LEGACY_RUNTIME_ROOT = "/opt/" + LEGACY_WORD
 LEGACY_SURPRISE = LEGACY_WORD + "-surprise"
 LEGACY_RUNNER_POOL = LEGACY_WORD + "-isolated"
+LEGACY_CODERABBIT_BIN_ENV = LEGACY_WORD.upper() + "_CODERABBIT_BIN_DIR"
 
 EXPECTED_SCAN_SUFFIXES = [
     "", ".example", ".json", ".md", ".nf", ".py", ".service",
@@ -188,10 +189,10 @@ class ProjectIdentityGuardTest(unittest.TestCase):
         self.assertTrue(any("unclassified legacy identity" in error for error in errors))
 
     def test_real_ledger_rejects_increased_reviewed_count(self) -> None:
-        root = self.make_real_repo_subset([".github/workflows/genoma-audit.yml"])
-        workflow = root / ".github/workflows/genoma-audit.yml"
-        workflow.write_text(
-            workflow.read_text(encoding="utf-8") + f"\n# {LEGACY_RUNNER_POOL}\n",
+        root = self.make_real_repo_subset(["scripts/codex/setup-coderabbit.sh"])
+        script = root / "scripts/codex/setup-coderabbit.sh"
+        script.write_text(
+            script.read_text(encoding="utf-8") + f"\n# {LEGACY_CODERABBIT_BIN_ENV}\n",
             encoding="utf-8",
         )
         errors = validate_project_identity(root)

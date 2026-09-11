@@ -1,0 +1,247 @@
+{
+  "schema": "omnigenis-phase2c-runner-cutover-v1",
+  "stage": "REPOSITORY_CUTOVER_READY_FOR_REVIEW",
+  "base_main_sha": "a1e669dd613f68f4d82ca7f1f565772ec8098cb1",
+  "implementation_head_sha": "b2ed4fede5b22a5b95f4421484b865afb3999070",
+  "implementation_tree_sha": "058d7e067920f474388be060bcfbd1005fa96233",
+  "project_identity_sha256": "d6f251a214db5d390a1f933066679c3aed886e4db73573b8a1b785aded0cf3df",
+  "legacy_ledger_sha256": "b41f349017f79081b202a7845c6a4642e5b294ffe92e6cc35d3bd2504b009f43",
+  "phase2b_prerequisite": {
+    "status": "VERIFIED",
+    "evidence": "docs/superpowers/evidence/2026-09-11-omnigenis-phase2b-post-merge-ghcr.json",
+    "workflow_run_id": 34617560951,
+    "successful_attempt": 2,
+    "publish_job_id": 103363105798,
+    "image_reference": "ghcr.io/drhudsonandrade/omnigenis-genome@sha256:b34cddd157132f0b039bebb1674abb4957e024fd0332568fc3ae9c2ca0fa8454",
+    "artifact_id": 10276395379
+  },
+  "runner_snapshot_before": [
+    {
+      "id": 21,
+      "name": "drhudson-codework-01",
+      "status": "online",
+      "busy": false,
+      "labels": [
+        "self-hosted",
+        "Linux",
+        "X64",
+        "codework-isolated",
+        "codework-01"
+      ]
+    },
+    {
+      "id": 22,
+      "name": "drhudson-codework-02",
+      "status": "online",
+      "busy": false,
+      "labels": [
+        "self-hosted",
+        "Linux",
+        "X64",
+        "codework-isolated",
+        "codework-02"
+      ]
+    }
+  ],
+  "runner_snapshot_after": [
+    {
+      "id": 21,
+      "name": "drhudson-codework-01",
+      "status": "online",
+      "busy": false,
+      "labels": [
+        "self-hosted",
+        "Linux",
+        "X64",
+        "codework-isolated",
+        "codework-01",
+        "omnigenis-isolated",
+        "omnigenis-01"
+      ]
+    },
+    {
+      "id": 22,
+      "name": "drhudson-codework-02",
+      "status": "online",
+      "busy": false,
+      "labels": [
+        "self-hosted",
+        "Linux",
+        "X64",
+        "codework-isolated",
+        "codework-02",
+        "omnigenis-isolated",
+        "omnigenis-02"
+      ]
+    }
+  ],
+  "repository_selector_cutover": "NOT_MERGED",
+  "mutation": "ADDITIVE_LABEL_POST_ONLY",
+  "removed_labels": [],
+  "changed_paths": [
+    ".github/workflows/genoma-audit.yml",
+    ".github/workflows/genoma-policy-engine.yml",
+    ".github/workflows/scaffold-validation.yml",
+    "config/legacy_identity_ledger.json",
+    "docs/GITHUB_MOBILE_IMPORT.md",
+    "docs/MAGALU_PRIVATE_MCP_SETUP.md",
+    "docs/PROJECT_IDENTITY_CONTRACT.md",
+    "docs/superpowers/evidence/2026-09-11-omnigenis-phase2b-post-merge-ghcr.json",
+    "docs/superpowers/evidence/2026-09-11-omnigenis-phase2c-runner-cutover.json",
+    "docs/superpowers/plans/2026-09-11-omnigenis-phase2c-runner-identity-cutover.md",
+    "tests/test_ci_optimization_contract.py",
+    "tests/test_phase2b_evidence_contract.py",
+    "tests/test_phase2b_post_merge_ghcr_evidence.py",
+    "tests/test_phase2c_evidence_contract.py",
+    "tests/test_phase2c_runner_identity.py",
+    "tests/test_project_identity_guard.py",
+    "tests/test_repository_identity_migration.py"
+  ],
+  "protected_boundaries": {
+    "untrusted_pull_requests": "GITHUB_HOSTED",
+    "hosted_write_capability_jobs": "UNCHANGED",
+    "scientific_surface_changes": [],
+    "normative_surface_changes": []
+  },
+  "rulesets": {
+    "21303100": {
+      "name": "GENOMA protected main",
+      "enforcement": "active",
+      "semantic_sha256": "99030300194f5104d67acfb8dccfad8d8f30c36659e91818c3f1a5f3b3c7ac2c"
+    },
+    "22347095": {
+      "name": "GENOMA approval gate",
+      "enforcement": "active",
+      "semantic_sha256": "b2aea46f725986f95814aa52efaed6d280b0e8217a3f7f5d9f1665c1fdba2d48"
+    }
+  },
+  "validation_provenance": {
+    "identity_guard": {
+      "command": "python3 scripts/project_identity_guard.py --check",
+      "exit_code": 0,
+      "output_sha256": "0c6537c2763c5efb04594bf3441d6e02a721a5f1f220fe4490de707fea3aad2d",
+      "summary": "PASS project_identity_contract",
+      "environment": {
+        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python3 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      }
+    },
+    "validate_repo": {
+      "command": "python3 scripts/validate_repo.py",
+      "exit_code": 0,
+      "output_sha256": "3c0dc015021366a6895ca1777bd4be46995994861b27bb8fcaa7cb47a143f2fd",
+      "summary": "PASS repository_contract and all repository validators",
+      "environment": {
+        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python3 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      }
+    },
+    "supply_chain": {
+      "command": "python3 scripts/verify_supply_chain_lock.py",
+      "exit_code": 0,
+      "output_sha256": "3ffbf1e78306655dbb2f214974a4e24c842e6378da0e2d8840d43b2eb4939c7c",
+      "summary": "PASS immutable actions, container digest, GitGuardian identity, and runtime pins",
+      "environment": {
+        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python3 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      }
+    },
+    "code_language": {
+      "command": "python3 scripts/code_language_guard.py --check",
+      "exit_code": 0,
+      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": "PASS with no stdout",
+      "environment": {
+        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python3 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      }
+    },
+    "residual_language": {
+      "command": "python3 scripts/residual_language_audit.py --check",
+      "exit_code": 0,
+      "output_sha256": "3aa068a3ee76de0f29694f99d95a5e14143a3ed1743f142bd60781ef1cdcfc25",
+      "summary": "clean=true; unclassified=[]; drift=[]; missing=[]",
+      "environment": {
+        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python3 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      }
+    },
+    "docs_language": {
+      "command": "python3 -m unittest tests.test_developer_documentation_language -v",
+      "exit_code": 0,
+      "output_sha256": "de3647b566b45870883a8ba56a5c64943e3771d093c78ec486afed6e01da63ed",
+      "summary": "27 tests PASS",
+      "environment": {
+        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python3 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      }
+    },
+    "phase2b_prerequisite": {
+      "command": "python3 -m unittest tests.test_phase2b_post_merge_ghcr_evidence tests.test_phase2b_evidence_contract -v",
+      "exit_code": 0,
+      "output_sha256": "9f66c4b15a14349c278f56538d13024b09efd8bc9c4b2ea10a78f0afaab566e3",
+      "summary": "13 tests PASS",
+      "environment": {
+        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python3 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      }
+    },
+    "runner_contracts": {
+      "command": "python3 -m unittest tests.test_phase2c_runner_identity tests.test_ci_optimization_contract tests.test_repository_identity_migration -v",
+      "exit_code": 0,
+      "output_sha256": "425ed678fd428298159316ec62c335fe83e746436622039d1844f18c5d27b84d",
+      "summary": "46 tests PASS",
+      "environment": {
+        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python3 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      }
+    },
+    "evidence_topology": {
+      "command": "python3 -m unittest tests.test_phase2c_evidence_contract.Phase2CRunnerEvidenceContractTest.test_binding_survives_merge_then_later_descendant tests.test_phase2c_evidence_contract.Phase2CRunnerEvidenceContractTest.test_binding_rejects_post_evidence_commit_before_merge -v",
+      "exit_code": 0,
+      "output_sha256": "ce4d16e93c2d812f901c31b1c3e86718213303051d9f26d52851d650b2a9a3d6",
+      "summary": "2 tests PASS",
+      "environment": {
+        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python3 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      }
+    },
+    "shell_syntax": {
+      "command": "find scripts -type f -name '*.sh' -exec bash -n {} +",
+      "exit_code": 0,
+      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": "all repository shell scripts under scripts/ passed bash -n",
+      "environment": {
+        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python3 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      }
+    },
+    "diff_check": {
+      "command": "git diff --check",
+      "exit_code": 0,
+      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": "PASS with no stdout",
+      "environment": {
+        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python3 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      }
+    }
+  },
+  "post_merge": {
+    "protected_main_canary": "PENDING_AFTER_HUMAN_MERGE",
+    "legacy_runner_label_removal": "BLOCKED_UNTIL_CANARY_PASS",
+    "runner_name_reregistration": "BLOCKED_UNTIL_RUNTIME_RESOURCE_GATE"
+  },
+  "secret_material_recorded": false
+}
