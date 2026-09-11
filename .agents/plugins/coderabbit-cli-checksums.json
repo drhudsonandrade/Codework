@@ -1,5 +1,5 @@
 {
-  "schema": "codework-coderabbit-cli-release-lock-v1",
+  "schema": "omnigenis-coderabbit-cli-release-lock-v2",
   "version": "0.7.5",
   "url_template": "https://cli.coderabbit.ai/releases/{version}/coderabbit-{platform}.zip",
   "platforms": {

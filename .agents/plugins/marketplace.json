@@ -1,7 +1,7 @@
 {
-  "name": "codework-codex",
+  "name": "omnigenis-codex",
   "interface": {
-    "displayName": "Codework Codex Plugins"
+    "displayName": "OmniGenis Codex Plugins"
   },
   "plugins": [
     {

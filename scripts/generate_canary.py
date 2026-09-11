@@ -95,7 +95,7 @@ def generate(output_dir: Path) -> None:
             handle.write(f"chrSynthetic\t{position}\t.\t{ref}\t{alt}\t100\tPASS\t.\tGT\t0/1\n")
 
     fixture = {
-        "fixture": "codework-synthetic-germline-v1",
+        "fixture": "omnigenis-synthetic-germline-v2",
         "fragment_length": FRAGMENT_LENGTH,
         "nominal_fragment_coverage": round(READ_PAIRS * FRAGMENT_LENGTH / REFERENCE_LENGTH, 6),
         "read_length": READ_LENGTH,

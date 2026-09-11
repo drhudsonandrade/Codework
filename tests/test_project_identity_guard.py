@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 LEGACY_WORD = "code" + "work"
 LEGACY_RUNTIME_ROOT = "/opt/" + LEGACY_WORD
 LEGACY_SURPRISE = LEGACY_WORD + "-surprise"
+LEGACY_RUNNER_POOL = LEGACY_WORD + "-isolated"
 
 EXPECTED_SCAN_SUFFIXES = [
     "", ".example", ".json", ".md", ".nf", ".py", ".service",
@@ -187,10 +188,10 @@ class ProjectIdentityGuardTest(unittest.TestCase):
         self.assertTrue(any("unclassified legacy identity" in error for error in errors))
 
     def test_real_ledger_rejects_increased_reviewed_count(self) -> None:
-        root = self.make_real_repo_subset(["Dockerfile"])
-        dockerfile = root / "Dockerfile"
-        dockerfile.write_text(
-            dockerfile.read_text(encoding="utf-8") + f"\n# {LEGACY_RUNTIME_ROOT}\n",
+        root = self.make_real_repo_subset([".github/workflows/genoma-audit.yml"])
+        workflow = root / ".github/workflows/genoma-audit.yml"
+        workflow.write_text(
+            workflow.read_text(encoding="utf-8") + f"\n# {LEGACY_RUNNER_POOL}\n",
             encoding="utf-8",
         )
         errors = validate_project_identity(root)

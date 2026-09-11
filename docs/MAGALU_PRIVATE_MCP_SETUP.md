@@ -45,7 +45,7 @@ Create a dedicated `genome` system user and persistent directories:
 sudo useradd --system --create-home --shell /usr/sbin/nologin genome
 sudo install -d -o genome -g genome -m 0750 \
   /srv/genome/refs /srv/genome/data /srv/genome/work \
-  /srv/genome/results /srv/genome/audit /var/lib/codework-tunnel
+  /srv/genome/results /srv/genome/audit /var/lib/omnigenis-tunnel
 ```
 
 Enable disk encryption and restrict SSH/firewall access before copying any personal data.
@@ -56,16 +56,16 @@ Clone the public repository on the VM and build or pull an immutable image. Set 
 
 ```bash
 export GITHUB_REPOSITORY_OWNER='<github-owner>'
-sudo install -d -o genome -g genome -m 0750 /opt/codework
-sudo -u genome git clone "https://github.com/${GITHUB_REPOSITORY_OWNER}/OmniGenis.git" /opt/codework
-cd /opt/codework
-docker build --tag codework-genome:local .
+sudo install -d -o genome -g genome -m 0750 /opt/omnigenis
+sudo -u genome git clone "https://github.com/${GITHUB_REPOSITORY_OWNER}/OmniGenis.git" /opt/omnigenis
+cd /opt/omnigenis
+docker build --tag omnigenis-genome:local .
 ```
 
-After the main-branch workflow publishes GHCR, prefer a digest-pinned image in `/etc/codework/genome-mcp.env`:
+After the main-branch workflow publishes GHCR, prefer a digest-pinned image in `/etc/omnigenis/genome-mcp.env`:
 
 ```text
-GENOME_IMAGE=ghcr.io/<github-owner>/codework-genome@sha256:REPLACE_WITH_VERIFIED_DIGEST
+GENOME_IMAGE=ghcr.io/<github-owner>/omnigenis-genome@sha256:REPLACE_WITH_VERIFIED_DIGEST
 MCP_MEMORY_LIMIT=12g
 MCP_CPU_LIMIT=4
 ```
@@ -80,8 +80,8 @@ Run acquisition in the container with the persistent reference mount. It creates
 docker run --rm -it \
   -e REF_ROOT=/refs \
   -v /srv/genome/refs:/refs \
-  codework-genome:local \
-  /opt/codework/scripts/fetch_grch38.sh
+  omnigenis-genome:local \
+  /opt/omnigenis/scripts/fetch_grch38.sh
 ```
 
 Do not override the image entrypoint. The upstream micromamba entrypoint activates the pinned
@@ -106,13 +106,13 @@ docker run --rm -it \
   --memory=110g --cpus=16 \
   -e REF_ROOT=/refs \
   -v /srv/genome/refs:/refs \
-  codework-genome:local \
-  /opt/codework/scripts/build_bwa_mem2_index.sh
+  omnigenis-genome:local \
+  /opt/omnigenis/scripts/build_bwa_mem2_index.sh
 docker run --rm -it \
   -e REF_ROOT=/refs \
   -v /srv/genome/refs:/refs:ro \
-  codework-genome:local \
-  /opt/codework/scripts/validate_grch38.sh
+  omnigenis-genome:local \
+  /opt/omnigenis/scripts/validate_grch38.sh
 ```
 
 Both commands must exit 0. The second command verifies 9/9 artifacts, the approved checksum lock, primary contigs, five BWA index files, a 101-base `samtools faidx` query and a functional dbSNP `bcftools query`.
@@ -122,8 +122,8 @@ Both commands must exit 0. The second command verifies 9/9 artifacts, the approv
 ```bash
 docker run --rm -it \
   -v /srv/genome/results:/results \
-  codework-genome:local \
-  /opt/codework/scripts/run_canary.sh /results/canary-initial
+  omnigenis-genome:local \
+  /opt/omnigenis/scripts/run_canary.sh /results/canary-initial
 ```
 
 A pass requires real alignment, BAM validation, GATK HaplotypeCaller and bcftools calling, plus exact comparison with the three-SNP truth set. It proves only executability, not clinical validity.
@@ -131,7 +131,7 @@ A pass requires real alignment, BAM validation, GATK HaplotypeCaller and bcftool
 ## 7. Start the private MCP
 
 ```bash
-sudo install -d -m 0750 /etc/codework
+sudo install -d -m 0750 /etc/omnigenis
 sudo cp deploy/genome-mcp.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now genome-mcp.service
@@ -145,18 +145,18 @@ Inspect `http://127.0.0.1:3000/mcp` with MCP Inspector before connecting ChatGPT
 1. In OpenAI Platform tunnel settings, create a tunnel and associate both the Platform organization and the target ChatGPT workspace.
 2. Grant the operator **Tunnels Read + Use**; creating or editing the tunnel also needs **Read + Manage**.
 3. Download the current public `tunnel-client` release from the Platform page; do not hard-code a floating binary URL in automation.
-4. Enter the runtime API key directly in the VM secret store or `/etc/codework/tunnel-client.env` with mode `0600`. Never paste it into ChatGPT, GitHub, logs or command arguments.
+4. Enter the runtime API key directly in the VM secret store or `/etc/omnigenis/tunnel-client.env` with mode `0600`. Never paste it into ChatGPT, GitHub, logs or command arguments.
 5. Initialize the HTTP profile using the real tunnel id and local MCP URL:
 
 ```bash
 tunnel-client init \
-  --profile codework-genome \
+  --profile omnigenis-genome \
   --tunnel-id tunnel_REPLACE \
   --mcp-server-url http://127.0.0.1:3000/mcp
-tunnel-client doctor --profile codework-genome --explain
+tunnel-client doctor --profile omnigenis-genome --explain
 ```
 
-6. Install `deploy/tunnel-client.service.example` as a reviewed systemd service and keep `tunnel-client run --profile codework-genome` healthy.
+6. Install `deploy/tunnel-client.service.example` as a reviewed systemd service and keep `tunnel-client run --profile omnigenis-genome` healthy.
 7. In ChatGPT web, enable **Settings → Security and login → Developer mode**. Go to ChatGPT Plugins, choose **+**, select **Tunnel**, and select or paste the `tunnel_id`.
 8. Review the four discovered tools and keep confirmation enabled for `run_synthetic_canary`.
 

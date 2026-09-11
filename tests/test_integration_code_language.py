@@ -67,7 +67,7 @@ class IntegrationCodeLanguageTest(unittest.TestCase):
     def test_coderabbit_setup_diagnostics_are_english(self) -> None:
         """The stage-six inventoried developer diagnostics must not return in Portuguese."""
         diagnostics = _setup_diagnostics(SETUP_SCRIPT.read_text(encoding="utf-8"))
-        self.assertEqual(len(diagnostics), 35)
+        self.assertEqual(len(diagnostics), 37)
         self.assertEqual(_tooling_terms("\n".join(diagnostics)), set())
 
     def test_diagnostic_extraction_ignores_comments_and_contract_values(self) -> None:

@@ -43,25 +43,19 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
             self.read("docs/REPORTING_CODE_LANGUAGE_INVENTORY.md"),
         )
 
-    def test_phase_two_internal_contracts_are_unchanged(self):
-        self.assertIn("WORKDIR /opt/codework", self.read("Dockerfile"))
-        self.assertIn(
-            "codework-isolated",
-            self.read(".github/workflows/scaffold-validation.yml"),
-        )
-        self.assertIn(
-            '"name": "codework-genome-mcp"',
-            self.read("mcp/package.json"),
-        )
-        self.assertIn("name: codework-ngs", self.read("environment.yml"))
-        self.assertIn(
-            "name = 'codework/genome-runtime'",
-            self.read("nextflow.config"),
-        )
-        self.assertIn(
-            "CODEWORK_CODERABBIT_BIN_DIR",
-            self.read("scripts/codex/setup-coderabbit.sh"),
-        )
+    def test_phase_two_b_runtime_contract_uses_omnigenis(self) -> None:
+        self.assertIn("WORKDIR /opt/omnigenis", self.read("Dockerfile"))
+
+    def test_phase_two_c_runner_contract_is_not_started(self) -> None:
+        legacy_runner_pool = "code" + "work" + "-isolated"
+        for path in (
+            ".github/workflows/genoma-audit.yml",
+            ".github/workflows/genoma-policy-engine.yml",
+            ".github/workflows/scaffold-validation.yml",
+        ):
+            text = self.read(path)
+            self.assertIn(legacy_runner_pool, text)
+            self.assertNotIn("omnigenis-isolated", text)
 
 
     def test_recovery_doc_requires_live_verification_of_app_and_legacy_pr(self):

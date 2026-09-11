@@ -1088,7 +1088,7 @@ export async function runAudited<T>(
 
 export function createGenomeMcpServer(options: GenomeServerOptions): McpServer {
   const server = new McpServer(
-    { name: "codework-private-genome", version: "0.1.0" },
+    { name: "omnigenis-genome-mcp", version: "0.1.0" },
     {
       instructions:
         "Use status tools before any genomic workflow. Only the synthetic canary can execute in this version. Never request or return raw genomic data. External GRCh38 lock approval and live post-deployment gates remain human-controlled.",
@@ -1219,6 +1219,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       process.exitCode = 1;
       return;
     }
-    process.stdout.write(`codework-private-genome listening on ${host}:${port}\n`);
+    process.stdout.write(`omnigenis-genome-mcp listening on ${host}:${port}\n`);
   });
 }

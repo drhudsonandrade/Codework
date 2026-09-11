@@ -112,7 +112,7 @@ TRUSTED_RUNNER_LINE = (
     "|| 'ubuntu-latest' }}"
 )
 
-NGS_TRIGGER_WORKFLOW_BASELINE_SHA256 = "9f25b7a635ecbbfb76e3eb540dbe83329ef392538312c673ae35de9e1d5ffcfc"
+NGS_RUNTIME_WORKFLOW_APPROVED_SHA256 = "a34f45d4d4279dd33d2700cf688af805ac1bfa670d2c0c0436ed19f0e0bb4d63"
 
 NGS_TRIGGER_SCRIPT_PATHS = (
     "scripts/__init__.py",
@@ -778,13 +778,13 @@ class CIOptimizationContractTest(unittest.TestCase):
             self.assertIn(expected, pull_request)
         self.assertNotIn("'mcp/**'", pull_request)
 
-    def test_ngs_runtime_gate_trigger_only_change_preserves_baseline_semantics(self):
+    def test_ngs_runtime_gate_matches_approved_phase_two_b_semantics(self):
         workflow = _read("genoma-ngs-runtime-gate.yml")
         allowed_line = "      - 'scripts/project_identity_guard.py'\n"
         self.assertEqual(workflow.count(allowed_line), 2)
         normalized = workflow.replace(allowed_line, "")
         digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-        self.assertEqual(NGS_TRIGGER_WORKFLOW_BASELINE_SHA256, digest)
+        self.assertEqual(NGS_RUNTIME_WORKFLOW_APPROVED_SHA256, digest)
 
     def test_ngs_runtime_gate_uses_explicit_ngs_script_paths_instead_of_all_scripts(self):
         workflow = _read("genoma-ngs-runtime-gate.yml")
@@ -1035,10 +1035,10 @@ class CIOptimizationContractTest(unittest.TestCase):
         lock = json.loads((ROOT / "locks" / "actions-lock.json").read_text(encoding="utf-8"))
         buildx = "docker/setup-buildx-action@" + lock["actions"]["docker/setup-buildx-action"]["sha"]
         builder = "docker/build-push-action@" + lock["actions"]["docker/build-push-action"]["sha"]
-        cache_from = "cache-from: type=gha,scope=codework-genome-scaffold-v1"
-        cache_to = "cache-to: type=gha,mode=min,scope=codework-genome-scaffold-v1,ignore-error=true"
+        cache_from = "cache-from: type=gha,scope=omnigenis-genome-scaffold-v2"
+        cache_to = "cache-to: type=gha,mode=min,scope=omnigenis-genome-scaffold-v2,ignore-error=true"
 
-        self.assertIn("docker build --tag codework-genome:${{ github.sha }} .", canary)
+        self.assertIn("docker build --tag omnigenis-genome:${{ github.sha }} .", canary)
         self.assertNotIn(buildx, canary)
         self.assertNotIn(builder, canary)
         self.assertNotIn("cache-from:", canary)

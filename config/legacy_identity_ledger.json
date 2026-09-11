@@ -6,21 +6,7 @@
   "entries": [
     {
       "id": "runtime-root",
-      "locations": {
-        ".github/workflows/genoma-ngs-runtime-gate.yml": 10,
-        ".github/workflows/genoma-snp-array.yml": 2,
-        ".github/workflows/scaffold-validation.yml": 1,
-        "Dockerfile": 8,
-        "deploy/docker-compose.yml": 1,
-        "deploy/genome-mcp.service": 1,
-        "docs/MAGALU_PRIVATE_MCP_SETUP.md": 7,
-        "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md": 3,
-        "mcp/test/payloadContracts.test.ts": 1,
-        "mcp/test/server.test.ts": 12,
-        "scripts/validate_repo.py": 1,
-        "tests/test_repository_identity_migration.py": 1,
-        "tests/test_workflow_contracts.py": 2
-      },
+      "locations": {},
       "matcher": {
         "kind": "literal",
         "value": "/opt/codework"
@@ -31,11 +17,7 @@
     },
     {
       "id": "config-root",
-      "locations": {
-        "deploy/genome-mcp.service": 1,
-        "deploy/tunnel-client.service.example": 1,
-        "docs/MAGALU_PRIVATE_MCP_SETUP.md": 3
-      },
+      "locations": {},
       "matcher": {
         "kind": "literal",
         "value": "/etc/codework"
@@ -52,8 +34,7 @@
         ".github/workflows/scaffold-validation.yml": 1,
         "docs/GITHUB_MOBILE_IMPORT.md": 1,
         "docs/MAGALU_PRIVATE_MCP_SETUP.md": 1,
-        "tests/test_ci_optimization_contract.py": 8,
-        "tests/test_repository_identity_migration.py": 1
+        "tests/test_ci_optimization_contract.py": 8
       },
       "matcher": {
         "kind": "literal",
@@ -65,13 +46,7 @@
     },
     {
       "id": "container-package",
-      "locations": {
-        ".github/workflows/scaffold-validation.yml": 4,
-        "deploy/tunnel-client.service.example": 1,
-        "docs/MAGALU_PRIVATE_MCP_SETUP.md": 9,
-        "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md": 7,
-        "tests/test_ci_optimization_contract.py": 1
-      },
+      "locations": {},
       "matcher": {
         "kind": "regex",
         "value": "(?<![A-Za-z0-9_-])codework-genome(?![A-Za-z0-9_-])"
@@ -82,10 +57,7 @@
     },
     {
       "id": "cache-namespace",
-      "locations": {
-        ".github/workflows/scaffold-validation.yml": 2,
-        "tests/test_ci_optimization_contract.py": 2
-      },
+      "locations": {},
       "matcher": {
         "kind": "literal",
         "value": "codework-genome-scaffold-v1"
@@ -96,11 +68,7 @@
     },
     {
       "id": "mcp-package",
-      "locations": {
-        "mcp/package-lock.json": 2,
-        "mcp/package.json": 1,
-        "tests/test_repository_identity_migration.py": 1
-      },
+      "locations": {},
       "matcher": {
         "kind": "literal",
         "value": "codework-genome-mcp"
@@ -111,9 +79,7 @@
     },
     {
       "id": "mcp-server",
-      "locations": {
-        "mcp/src/server.ts": 2
-      },
+      "locations": {},
       "matcher": {
         "kind": "literal",
         "value": "codework-private-genome"
@@ -124,10 +90,7 @@
     },
     {
       "id": "conda-environment",
-      "locations": {
-        "environment.yml": 1,
-        "tests/test_repository_identity_migration.py": 1
-      },
+      "locations": {},
       "matcher": {
         "kind": "literal",
         "value": "codework-ngs"
@@ -138,9 +101,7 @@
     },
     {
       "id": "nextflow-manifest",
-      "locations": {
-        "tests/test_repository_identity_migration.py": 1
-      },
+      "locations": {},
       "matcher": {
         "kind": "literal",
         "value": "codework/genome-runtime"
@@ -151,11 +112,7 @@
     },
     {
       "id": "codex-marketplace",
-      "locations": {
-        ".agents/plugins/marketplace.json": 1,
-        "scripts/codex/setup-coderabbit.sh": 8,
-        "tests/test_coderabbit_guardrails.py": 7
-      },
+      "locations": {},
       "matcher": {
         "kind": "regex",
         "value": "(?<!coderabbit@)(?<![A-Za-z0-9_-])codework-codex(?![A-Za-z0-9_-])"
@@ -166,10 +123,7 @@
     },
     {
       "id": "coderabbit-plugin",
-      "locations": {
-        "scripts/codex/setup-coderabbit.sh": 4,
-        "tests/test_coderabbit_guardrails.py": 8
-      },
+      "locations": {},
       "matcher": {
         "kind": "literal",
         "value": "coderabbit@codework-codex"
@@ -181,9 +135,7 @@
     {
       "id": "coderabbit-bin-env",
       "locations": {
-        "scripts/codex/setup-coderabbit.sh": 1,
-        "tests/test_coderabbit_guardrails.py": 1,
-        "tests/test_repository_identity_migration.py": 1
+        "scripts/codex/setup-coderabbit.sh": 1
       },
       "matcher": {
         "kind": "literal",
@@ -195,9 +147,7 @@
     },
     {
       "id": "synthetic-fixture",
-      "locations": {
-        "scripts/generate_canary.py": 1
-      },
+      "locations": {},
       "matcher": {
         "kind": "literal",
         "value": "codework-synthetic-germline-v1"
@@ -221,10 +171,7 @@
     },
     {
       "id": "runtime-state-dir",
-      "locations": {
-        "deploy/tunnel-client.service.example": 1,
-        "docs/MAGALU_PRIVATE_MCP_SETUP.md": 1
-      },
+      "locations": {},
       "matcher": {
         "kind": "literal",
         "value": "/var/lib/codework-tunnel"
@@ -235,11 +182,7 @@
     },
     {
       "id": "coderabbit-lock-schema",
-      "locations": {
-        ".agents/plugins/coderabbit-cli-checksums.json": 1,
-        "scripts/codex/setup-coderabbit.sh": 1,
-        "tests/test_coderabbit_guardrails.py": 1
-      },
+      "locations": {},
       "matcher": {
         "kind": "literal",
         "value": "codework-coderabbit-cli-release-lock-v1"
@@ -250,10 +193,7 @@
     },
     {
       "id": "mcp-test-temp-prefixes",
-      "locations": {
-        "mcp/test/core.test.ts": 1,
-        "mcp/test/server.test.ts": 28
-      },
+      "locations": {},
       "matcher": {
         "kind": "regex",
         "value": "codework-(?:audit|server|claim|lock|release|budget|timeout|reaped|exit)[A-Za-z0-9_-]*"
@@ -305,12 +245,7 @@
     },
     {
       "id": "product-word-active",
-      "locations": {
-        ".agents/plugins/marketplace.json": 1,
-        "deploy/genome-mcp.service": 1,
-        "deploy/tunnel-client.service.example": 1,
-        "mcp/README.md": 1
-      },
+      "locations": {},
       "matcher": {
         "kind": "regex",
         "value": "(?<!drhudsonandrade/)(?<![A-Za-z0-9_-])Codework(?![A-Za-z0-9_-])"

@@ -1,5 +1,5 @@
 [Unit]
-Description=Codework private genome MCP container
+Description=OmniGenis private genome MCP container
 Wants=network-online.target
 After=network-online.target docker.service
 Requires=docker.service
@@ -7,8 +7,8 @@ Requires=docker.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-WorkingDirectory=/opt/codework/deploy
-EnvironmentFile=/etc/codework/genome-mcp.env
+WorkingDirectory=/opt/omnigenis/deploy
+EnvironmentFile=/etc/omnigenis/genome-mcp.env
 ExecStart=/usr/bin/docker compose up --detach --remove-orphans
 ExecStop=/usr/bin/docker compose down
 TimeoutStartSec=0
