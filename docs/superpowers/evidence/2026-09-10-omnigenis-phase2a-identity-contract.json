@@ -7,10 +7,12 @@
       "exit_code": 0,
       "output": {
         "locator": "inline:baseline_provenance.git_endpoint_continuity.output.summary",
+        "raw_output_retention": "ephemeral local execution artifact; digest retained here",
+        "raw_output_sha256": "02beb0acd93a9e932c4ae8293d5c01dc6f957333cc7347389bc48ae79b1bf9e2",
         "sha256": "a436f690db5b7a3cff0e20929d433a0e2936ec940620f58bcd2d23380a7f63d1",
         "summary": "old_url_main=939dfea5cc7cb2745638168d518d2005e941e9c6; new_url_main=939dfea5cc7cb2745638168d518d2005e941e9c6; same_main_history=true"
       },
-      "raw_output_sha256": {
+      "source_output_sha256": {
         "new": "51b499c0c1e69aec509280447fc5f7471d7e6f220c483fa21ca81dd75112c2c4",
         "old": "51b499c0c1e69aec509280447fc5f7471d7e6f220c483fa21ca81dd75112c2c4"
       },
@@ -48,10 +50,12 @@
       "exit_code": 0,
       "output": {
         "locator": "inline:baseline_provenance.rulesets.output.summary",
+        "raw_output_retention": "ephemeral local execution artifact; digest retained here",
+        "raw_output_sha256": "3d503173bf8fd7db94e327c3eee8568aab357189a5f05363c5a2952f6ca4354f",
         "sha256": "9dd6f9751d20d160d6a8d7eabb196fa5598b147708ccbf445b1c49e59d4186ed",
         "summary": "[{\"enforcement\":\"active\",\"id\":21303100,\"name\":\"GENOMA protected main\"},{\"enforcement\":\"active\",\"id\":22347095,\"name\":\"GENOMA approval gate\"}]"
       },
-      "raw_output_sha256": {
+      "source_output_sha256": {
         "21303100": "34f59e68e7f1fe6f15f805ec34ba0b422bfc0ed82bac21fb5c470fbd777c43b8",
         "22347095": "0b5168721a16d2eb51a9f1c196d1d8062da91f451098773035ece3f89b5d7ce0"
       },
@@ -65,8 +69,8 @@
         "locator": "inline:baseline_provenance.validate_repo.output.summary",
         "raw_output_retention": "ephemeral local execution artifact; digest retained here",
         "raw_output_sha256": "3c0dc015021366a6895ca1777bd4be46995994861b27bb8fcaa7cb47a143f2fd",
-        "sha256": "51a68c5375ea35f1ff372ddb490e49f6f4944762443e6a73dff74674421f15d2",
-        "summary": "scripts/validate_repo.py exited 0 at baseline 939dfea5cc7cb2745638168d518d2005e941e9c6; repository validator emitted its PASS banner."
+        "sha256": "6ddac34a8e408ef9cca965f59f759941b33b20a18291a4680fffd75aec297b2b",
+        "summary": "PASS\trepository_contract\nPASS\truleset_manifest_contract\tv3.4 raw SHA-256 pinned\nPASS\trepository_active_rulesets\t0\nPASS\tsealed_normative_transport\tshared decoder\nPASS\tgrch38_manifest\t9/9\nPASS\tpre_dna_readiness_contract\tlatest-tested candidate + canaries + freshness + runtime/resource gate\nPASS\twgs_scientific_data_plane_contract\treal SNV/indel path + explicit unsupported classes\nPASS\tarray_scientific_data_plane_contract\tQC + target-first evidence + policy/report handoff\nPASS\tevidence_adapter_contract\tClinVar/ClinGen/CPIC/ClinPGx/gnomAD/PGS Catalog\nPASS\tsupply_chain_contract\tworkflow/action/container lock paths present\nPASS\treporting_contract\t11-model deterministic renderer and reference identities\nPASS\toptional_adapters\tcore has no external runtime dependency"
       },
       "status": "PASS"
     }
@@ -83,6 +87,7 @@
     "github_cli_live": {
       "authentication": "authenticated CLI; no credential material recorded",
       "gh_version": "2.100.0 (2026-09-03)",
+      "git_version": "2.43.0",
       "repository": "drhudsonandrade/OmniGenis"
     },
     "implementation_pinned_python_3_12_3": {
@@ -94,8 +99,8 @@
     }
   },
   "identity_contract_sha256": "d6f251a214db5d390a1f933066679c3aed886e4db73573b8a1b785aded0cf3df",
-  "implementation_head_sha": "e6b75d8d61af93bbefa9c74c40b72acd1b2460eb",
-  "implementation_tree_sha": "5594ba41d7c1bf941dca73ccfd9d6abd1350664b",
+  "implementation_head_sha": "ecc1d0c5d4c16f03273a17269a2a35035566a0fe",
+  "implementation_tree_sha": "73e5f310f6a7825498206c0460a9a62591a250de",
   "legacy_ledger_sha256": "f08bf3a97afe20bc0e389b495bb2e25c1cf6f4e13d230daf9a35872f326b7cf3",
   "legacy_scan": {
     "counts": {
@@ -217,9 +222,14 @@
     }
   },
   "reviewer_remediation": {
+    "coderabbit_evidence_provenance_v2": "PASS",
+    "coderabbit_exact_scope_policy": "PASS",
+    "coderabbit_spec_status_current": "PASS",
+    "coderabbit_tracked_files_only": "PASS",
+    "coderabbit_utf8_fail_closed": "PASS",
     "deepsource_overlapping_exception_handlers": "PASS"
   },
-  "root_test_count": 1063,
+  "root_test_count": 1070,
   "runtime_surface_changed_paths": [],
   "schema": "omnigenis-phase2a-identity-contract-evidence-v2",
   "scientific_surface_changed_paths": [],
@@ -227,24 +237,10 @@
     ".github/workflows/genoma-ngs-runtime-gate.yml"
   ],
   "trigger_only_workflow_normalized_sha256": "9f25b7a635ecbbfb76e3eb540dbe83329ef392538312c673ae35de9e1d5ffcfc",
-  "validation": {
-    "ci_trigger_closure": "PASS",
-    "code_language": "PASS",
-    "developer_documentation_tests": "PASS",
-    "diff_check": "PASS",
-    "project_identity_guard": "PASS",
-    "residual_language": "PASS",
-    "root_suite": "PASS",
-    "shell_syntax": "PASS",
-    "supply_chain": "PASS",
-    "validate_repo": "PASS"
-  },
   "validation_cycle_attestation": {
-    "cycle_log_sha256": "4508f2af03568fb8353878282cdb09c3f0e6f295ac7b15b731a27e543b198f5f",
-    "implementation_head_sha": "e6b75d8d61af93bbefa9c74c40b72acd1b2460eb",
-    "raw_artifacts": "ephemeral; durable summaries and digests are stored in this JSON",
-    "root_suite_log_sha256": "28a2867664ada7efecf5d15d597ba4c723f2e1bef3bae1d76ee672f98ae89205",
-    "validation_state_sha256": "1c22baaf5427ccb2556c80131ab3954e8aac49dde32fc402378e6375f5069e8d"
+    "implementation_head_sha": "ecc1d0c5d4c16f03273a17269a2a35035566a0fe",
+    "log_manifest_sha256": "35f01be03f486aa7c227a9b2a249d6537da9b8037d2133ec6f8088a78a5043ad",
+    "raw_artifacts": "ephemeral; each raw log digest plus durable inline summary is stored in validation_provenance"
   },
   "validation_provenance": {
     "ci_trigger_closure": {
@@ -254,9 +250,9 @@
       "output": {
         "locator": "inline:validation_provenance.ci_trigger_closure.output.summary",
         "raw_output_retention": "ephemeral local execution artifact; digest retained here",
-        "raw_output_sha256": "4508f2af03568fb8353878282cdb09c3f0e6f295ac7b15b731a27e543b198f5f",
-        "sha256": "c5194de9746b4c6cb0321c9023eb566ae3bd0ed675f52c642d34ee6e2c26760f",
-        "summary": "tests.test_ci_optimization_contract passed within the focused validation suite; trigger-only fingerprint gate passed."
+        "raw_output_sha256": "a664ffd8995d4e580fee64554d6eed5b326875866b14b6a48bdc251e70c25f7c",
+        "sha256": "542a9424891f6f19df7743aaad5daa1fe23350af56cf6c1f3dbf7b9ad980e285",
+        "summary": "Ran 33 tests in 0.131s\nOK"
       },
       "status": "PASS"
     },
@@ -267,9 +263,9 @@
       "output": {
         "locator": "inline:validation_provenance.code_language.output.summary",
         "raw_output_retention": "ephemeral local execution artifact; digest retained here",
-        "raw_output_sha256": "4508f2af03568fb8353878282cdb09c3f0e6f295ac7b15b731a27e543b198f5f",
-        "sha256": "49d568494ea142695c0600013c301b7888d5aed874971e3efb56f7fab690b2aa",
-        "summary": "scripts/code_language_guard.py --check exited 0."
+        "raw_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "sha256": "0e26edf3953096a32d82cf77ee72f6328295e3da57583484f935f16ae0b46ccb",
+        "summary": "exit 0; no stdout/stderr"
       },
       "status": "PASS"
     },
@@ -280,9 +276,9 @@
       "output": {
         "locator": "inline:validation_provenance.developer_documentation_tests.output.summary",
         "raw_output_retention": "ephemeral local execution artifact; digest retained here",
-        "raw_output_sha256": "4508f2af03568fb8353878282cdb09c3f0e6f295ac7b15b731a27e543b198f5f",
-        "sha256": "8dd34d7b87dc63279776d35edb70b269754adec5a6461a9b4407e253c6b04930",
-        "summary": "Ran 27 tests\nOK"
+        "raw_output_sha256": "5091f54f26c55d1d08ee581d713496ea12fc852edb59fbd7565b6baab4385a3e",
+        "sha256": "2ae95ffadfeaac02f0da47c5697748f3efda86c0d4995cb7eedcf9c9cc9c438d",
+        "summary": "Ran 27 tests in 0.204s\nOK"
       },
       "status": "PASS"
     },
@@ -293,14 +289,14 @@
       "output": {
         "locator": "inline:validation_provenance.diff_check.output.summary",
         "raw_output_retention": "ephemeral local execution artifact; digest retained here",
-        "raw_output_sha256": "4508f2af03568fb8353878282cdb09c3f0e6f295ac7b15b731a27e543b198f5f",
-        "sha256": "16f9af771a108f0d70ace5afc295b564e2f5d93cc484f43dd08fda35f5180a3c",
-        "summary": "git diff --check exited 0 with no output."
+        "raw_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "sha256": "0e26edf3953096a32d82cf77ee72f6328295e3da57583484f935f16ae0b46ccb",
+        "summary": "exit 0; no stdout/stderr"
       },
       "status": "PASS"
     },
     "evidence_contract": {
-      "command": "python3 -m unittest tests.test_phase2a_evidence_contract -v",
+      "command": "/tmp/codework-ci-artifact-opt-venv/bin/python -m unittest tests.test_phase2a_evidence_contract -v",
       "environment": "implementation_pinned_python_3_12_3",
       "exit_code": 0,
       "output": {
@@ -312,6 +308,19 @@
       },
       "status": "PASS"
     },
+    "focused_identity_suite": {
+      "command": "/tmp/codework-ci-artifact-opt-venv/bin/python -m unittest tests.test_project_identity_contract tests.test_project_identity_guard tests.test_repo_contract -v",
+      "environment": "implementation_pinned_python_3_12_3",
+      "exit_code": 0,
+      "output": {
+        "locator": "inline:validation_provenance.focused_identity_suite.output.summary",
+        "raw_output_retention": "ephemeral local execution artifact; digest retained here",
+        "raw_output_sha256": "3093235eeb74c4d6da9c41b5e0f814d5c54089e18cd7922d604936eaf799906e",
+        "sha256": "f8b8fa9dc1f141faac252b85b74fa5715e5c36096fbb03b2dd87c0b74bb98352",
+        "summary": "Ran 24 tests in 59.160s\nOK"
+      },
+      "status": "PASS"
+    },
     "project_identity_guard": {
       "command": "/tmp/codework-ci-artifact-opt-venv/bin/python scripts/project_identity_guard.py --check",
       "environment": "implementation_pinned_python_3_12_3",
@@ -319,7 +328,7 @@
       "output": {
         "locator": "inline:validation_provenance.project_identity_guard.output.summary",
         "raw_output_retention": "ephemeral local execution artifact; digest retained here",
-        "raw_output_sha256": "4508f2af03568fb8353878282cdb09c3f0e6f295ac7b15b731a27e543b198f5f",
+        "raw_output_sha256": "0c6537c2763c5efb04594bf3441d6e02a721a5f1f220fe4490de707fea3aad2d",
         "sha256": "d1d3244b47b629fa234395fb714c7cfedebc00720c86ce5f906802c40ef9cb04",
         "summary": "PASS\tproject_identity_contract"
       },
@@ -332,9 +341,9 @@
       "output": {
         "locator": "inline:validation_provenance.residual_language.output.summary",
         "raw_output_retention": "ephemeral local execution artifact; digest retained here",
-        "raw_output_sha256": "4508f2af03568fb8353878282cdb09c3f0e6f295ac7b15b731a27e543b198f5f",
-        "sha256": "71f8d313613959c859af513581b211e2304ff226ac44f2e3638dc388f6e1814d",
-        "summary": "scripts/residual_language_audit.py --check exited 0 with clean=true, unclassified=[], missing=[], drift=[]."
+        "raw_output_sha256": "3aa068a3ee76de0f29694f99d95a5e14143a3ed1743f142bd60781ef1cdcfc25",
+        "sha256": "f054391cca06b7d9e7ddda1c384d78c8c677990e717c9620250c77688c63740a",
+        "summary": "{\"category_files\": {\"canonical\": 13, \"compatibility-preserved\": 108, \"historical\": 27, \"localized\": 68, \"normative\": 36}, \"category_lines\": {\"canonical\": 31, \"compatibility-preserved\": 4861, \"historical\": 766, \"localized\": 1740, \"normative\": 204}, \"clean\": true, \"detected_lines\": 7602, \"drift\": [], \"missing\": [], \"schema\": \"genoma-residual-language-audit-v1\", \"tracked_files_with_residuals\": 252, \"unclassified\": []}"
       },
       "status": "PASS"
     },
@@ -345,9 +354,9 @@
       "output": {
         "locator": "inline:validation_provenance.root_suite.output.summary",
         "raw_output_retention": "ephemeral local execution artifact; digest retained here",
-        "raw_output_sha256": "28a2867664ada7efecf5d15d597ba4c723f2e1bef3bae1d76ee672f98ae89205",
-        "sha256": "23e0e5962237c5592fed2dc39f569ed652e88245338f1dd70090244477adbd74",
-        "summary": "Ran 1063 tests in 147.433s\nOK (skipped=1)"
+        "raw_output_sha256": "55d815faa5d74114c81e6e2429d4572eddbe94d929fe00f9cb31fb45f9d93a3b",
+        "sha256": "b5f7d37fa0061eda059915b9fdd7f7868eb0e55dde0084fcd91862ed0c3d6148",
+        "summary": "Ran 1070 tests in 148.967s\nOK (skipped=1)"
       },
       "status": "PASS"
     },
@@ -358,9 +367,9 @@
       "output": {
         "locator": "inline:validation_provenance.shell_syntax.output.summary",
         "raw_output_retention": "ephemeral local execution artifact; digest retained here",
-        "raw_output_sha256": "4508f2af03568fb8353878282cdb09c3f0e6f295ac7b15b731a27e543b198f5f",
-        "sha256": "04b0d7f746701475772f657cc0ed069a0c4b9ba23d2fbb734ce4bfcc1f06c254",
-        "summary": "bash -n scripts/*.sh exited 0."
+        "raw_output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "sha256": "0e26edf3953096a32d82cf77ee72f6328295e3da57583484f935f16ae0b46ccb",
+        "summary": "exit 0; no stdout/stderr"
       },
       "status": "PASS"
     },
@@ -371,9 +380,9 @@
       "output": {
         "locator": "inline:validation_provenance.supply_chain.output.summary",
         "raw_output_retention": "ephemeral local execution artifact; digest retained here",
-        "raw_output_sha256": "4508f2af03568fb8353878282cdb09c3f0e6f295ac7b15b731a27e543b198f5f",
-        "sha256": "be912111b62040deec4d25fea6e7eb0e39c66d42dd33cad9e17fef50e0aaf7bc",
-        "summary": "scripts/verify_supply_chain_lock.py exited 0; immutable actions/container/runtime checks passed."
+        "raw_output_sha256": "3ffbf1e78306655dbb2f214974a4e24c842e6378da0e2d8840d43b2eb4939c7c",
+        "sha256": "b1fe049eb21d2b07f83ad9a3acf48cfe04346f3c1dbce53229079f189e907a8f",
+        "summary": "PASS\tactions_immutable\t10 action identities observed\nPASS\tcontainer_digests\tbase image\nPASS\texternal_secret_scanner\tGitGuardian Security Checks@46505\nPASS\truntime_versions\texact critical conda pins"
       },
       "status": "PASS"
     },
@@ -384,9 +393,9 @@
       "output": {
         "locator": "inline:validation_provenance.validate_repo.output.summary",
         "raw_output_retention": "ephemeral local execution artifact; digest retained here",
-        "raw_output_sha256": "4508f2af03568fb8353878282cdb09c3f0e6f295ac7b15b731a27e543b198f5f",
-        "sha256": "a577e98989364c003406c52196527bbdfa428b3539117a774ddbfc4f75aa847a",
-        "summary": "scripts/validate_repo.py exited 0; repository validator emitted its PASS banner."
+        "raw_output_sha256": "3c0dc015021366a6895ca1777bd4be46995994861b27bb8fcaa7cb47a143f2fd",
+        "sha256": "6ddac34a8e408ef9cca965f59f759941b33b20a18291a4680fffd75aec297b2b",
+        "summary": "PASS\trepository_contract\nPASS\truleset_manifest_contract\tv3.4 raw SHA-256 pinned\nPASS\trepository_active_rulesets\t0\nPASS\tsealed_normative_transport\tshared decoder\nPASS\tgrch38_manifest\t9/9\nPASS\tpre_dna_readiness_contract\tlatest-tested candidate + canaries + freshness + runtime/resource gate\nPASS\twgs_scientific_data_plane_contract\treal SNV/indel path + explicit unsupported classes\nPASS\tarray_scientific_data_plane_contract\tQC + target-first evidence + policy/report handoff\nPASS\tevidence_adapter_contract\tClinVar/ClinGen/CPIC/ClinPGx/gnomAD/PGS Catalog\nPASS\tsupply_chain_contract\tworkflow/action/container lock paths present\nPASS\treporting_contract\t11-model deterministic renderer and reference identities\nPASS\toptional_adapters\tcore has no external runtime dependency"
       },
       "status": "PASS"
     }
