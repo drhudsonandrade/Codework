@@ -1,8 +1,8 @@
 {
   "base_sha": "939dfea5cc7cb2745638168d518d2005e941e9c6",
   "identity_contract_sha256": "d6f251a214db5d390a1f933066679c3aed886e4db73573b8a1b785aded0cf3df",
-  "implementation_head_sha": "9aa49aae9301f4a7b347ae88329f64a7ce465e7a",
-  "implementation_tree_sha": "97c884a3fb19962ce0cac005ad2250975fea1b0d",
+  "implementation_head_sha": "e6b75d8d61af93bbefa9c74c40b72acd1b2460eb",
+  "implementation_tree_sha": "5594ba41d7c1bf941dca73ccfd9d6abd1350664b",
   "legacy_ledger_sha256": "f08bf3a97afe20bc0e389b495bb2e25c1cf6f4e13d230daf9a35872f326b7cf3",
   "legacy_scan": {
     "counts": {
@@ -116,6 +116,9 @@
     "unclassified": []
   },
   "normative_surface_changed_paths": [],
+  "reviewer_remediation": {
+    "deepsource_overlapping_exception_handlers": "PASS"
+  },
   "root_test_count": 1063,
   "runtime_surface_changed_paths": [],
   "schema": "omnigenis-phase2a-identity-contract-evidence-v1",
