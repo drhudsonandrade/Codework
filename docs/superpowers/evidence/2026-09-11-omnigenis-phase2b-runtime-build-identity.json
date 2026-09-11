@@ -1,6 +1,6 @@
 {
   "base_sha": "4c0e5222248b5f9f2537d627091b80afc9c9e120",
-  "captured_at_utc": "2026-09-11T10:20:28.815412+00:00",
+  "captured_at_utc": "2026-09-11T14:50:23.637036+00:00",
   "changed_paths": [
     ".agents/plugins/coderabbit-cli-checksums.json",
     ".agents/plugins/marketplace.json",
@@ -62,8 +62,8 @@
     "old_package_action": "PRESERVE",
     "status": "PENDING_AFTER_HUMAN_MERGE"
   },
-  "implementation_head_sha": "2808e48fe9492d051a35eb45452131e7d2626b96",
-  "implementation_tree_sha": "ed89a82e2530fa825ef3870a01c4df8f8c0b3b90",
+  "implementation_head_sha": "7c73ba892d62c65333eb8786540d4e16ad82b105",
+  "implementation_tree_sha": "06943da9dd54da157298dd7a2b99a1c9485073d0",
   "legacy_ledger_sha256": "3a4e27b2436a087dd5d457e8bf6bb4018758148c7382af48616daa0cbfd31c3a",
   "legacy_scan": {
     "counts": {
@@ -97,9 +97,10 @@
     "unclassified": []
   },
   "post_evidence_validation": {
+    "claim": "No post-evidence PASS is asserted by this pre-merge artifact; results must be verified on the final evidence HEAD.",
     "commands": [
-      "python -m unittest tests.test_phase2b_evidence_contract -v",
-      "python -m unittest discover -s tests -v",
+      "python3 -m unittest tests.test_phase2b_evidence_contract -v",
+      "python3 -m unittest discover -s tests -v",
       "find scripts -type f -name '*.sh' -exec bash -n {} +",
       "git diff --check"
     ],
@@ -163,9 +164,11 @@
   "schema": "omnigenis-phase2b-runtime-build-evidence-v1",
   "validation_provenance": {
     "code_language": {
-      "command": "python scripts/code_language_guard.py --check",
+      "command": "python3 scripts/code_language_guard.py --check",
       "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python 3.12.3",
+        "python_launcher": "python3",
+        "python_resolved_path": "/tmp/codework-ci-artifact-opt-venv/bin/python3",
+        "python_version": "Python 3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
@@ -176,7 +179,9 @@
     "diff_check": {
       "command": "git diff --check",
       "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python 3.12.3",
+        "python_launcher": "python3",
+        "python_resolved_path": "/tmp/codework-ci-artifact-opt-venv/bin/python3",
+        "python_version": "Python 3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
@@ -185,20 +190,24 @@
       "summary": "PASS with no stdout"
     },
     "docs_language": {
-      "command": "python -m unittest tests.test_developer_documentation_language -v",
+      "command": "python3 -m unittest tests.test_developer_documentation_language -v",
       "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python 3.12.3",
+        "python_launcher": "python3",
+        "python_resolved_path": "/tmp/codework-ci-artifact-opt-venv/bin/python3",
+        "python_version": "Python 3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
       "exit_code": 0,
-      "output_sha256": "fb71d8d1e8a94420b7c4dbe2a8ea53a756d4812b3f4e28e736d14edfc26a2e38",
+      "output_sha256": "b286b900f01b84112385f6be5c03ed2bf1ab79c40cea1986d53de88b84b77a33",
       "summary": "27 tests PASS"
     },
     "identity_guard": {
-      "command": "python scripts/project_identity_guard.py --check",
+      "command": "python3 scripts/project_identity_guard.py --check",
       "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python 3.12.3",
+        "python_launcher": "python3",
+        "python_resolved_path": "/tmp/codework-ci-artifact-opt-venv/bin/python3",
+        "python_version": "Python 3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
@@ -207,31 +216,37 @@
       "summary": "PASS project_identity_contract"
     },
     "phase2b_tests": {
-      "command": "python -m unittest tests.test_phase2b_runtime_build_identity tests.test_phase2b_mcp_ngs_identity tests.test_phase2b_legacy_seal -v",
+      "command": "python3 -m unittest tests.test_phase2b_runtime_build_identity tests.test_phase2b_mcp_ngs_identity tests.test_phase2b_legacy_seal -v",
       "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python 3.12.3",
+        "python_launcher": "python3",
+        "python_resolved_path": "/tmp/codework-ci-artifact-opt-venv/bin/python3",
+        "python_version": "Python 3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
       "exit_code": 0,
-      "output_sha256": "1fa30c2cafbb896d5e117bf263f7288a059db4daedd89956151fc16ea36af861",
+      "output_sha256": "3e9395ee899f8156a67b7f2de92fa0121316c03b27af6921a952823c019ef4cc",
       "summary": "7 tests PASS"
     },
     "plan_sequence": {
-      "command": "python -m unittest tests.test_phase2b_evidence_contract.Phase2BEvidenceContractTest.test_plan_bootstrap_defers_evidence_contract_and_full_suite -v",
+      "command": "python3 -m unittest tests.test_phase2b_evidence_contract.Phase2BEvidenceContractTest.test_plan_bootstrap_defers_evidence_contract_and_full_suite -v",
       "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python 3.12.3",
+        "python_launcher": "python3",
+        "python_resolved_path": "/tmp/codework-ci-artifact-opt-venv/bin/python3",
+        "python_version": "Python 3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
       "exit_code": 0,
       "output_sha256": "819cc443ea75cec0ab722289b342eae1dbe42a321c5e224037cc159a296c6ed5",
-      "summary": "plan bootstrap defers evidence contract and full root suite"
+      "summary": "bootstrap/final evidence sequence regression test PASS"
     },
     "residual_language": {
-      "command": "python scripts/residual_language_audit.py --check",
+      "command": "python3 scripts/residual_language_audit.py --check",
       "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python 3.12.3",
+        "python_launcher": "python3",
+        "python_resolved_path": "/tmp/codework-ci-artifact-opt-venv/bin/python3",
+        "python_version": "Python 3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
@@ -240,20 +255,24 @@
       "summary": "clean=true; unclassified=[]; drift=[]; missing=[]"
     },
     "reviewer_tests": {
-      "command": "python -m unittest tests.test_coderabbit_guardrails tests.test_integration_code_language.IntegrationCodeLanguageTest.test_coderabbit_setup_diagnostics_are_english tests.test_ci_optimization_contract.CIOptimizationContractTest.test_ngs_runtime_gate_matches_approved_phase_two_b_semantics -v",
+      "command": "python3 -m unittest tests.test_coderabbit_guardrails tests.test_integration_code_language.IntegrationCodeLanguageTest.test_coderabbit_setup_diagnostics_are_english tests.test_ci_optimization_contract.CIOptimizationContractTest.test_ngs_runtime_gate_matches_approved_phase_two_b_semantics -v",
       "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python 3.12.3",
+        "python_launcher": "python3",
+        "python_resolved_path": "/tmp/codework-ci-artifact-opt-venv/bin/python3",
+        "python_version": "Python 3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
       "exit_code": 0,
-      "output_sha256": "6055885432b9508ed91b5d81b70e8419b6548a42ef96e934c776d6c99cb7ce5b",
+      "output_sha256": "d1eab31b163c85aa3d25258ec546b0b143b5305afc1c9a464a0778879ac12cb2",
       "summary": "19 reviewer-focused tests PASS, including HOME/.local/bin fallback"
     },
     "shell_syntax": {
       "command": "find scripts -type f -name '*.sh' -exec bash -n {} +",
       "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python 3.12.3",
+        "python_launcher": "python3",
+        "python_resolved_path": "/tmp/codework-ci-artifact-opt-venv/bin/python3",
+        "python_version": "Python 3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
@@ -262,9 +281,11 @@
       "summary": "all repository shell scripts under scripts/ passed bash -n"
     },
     "supply_chain": {
-      "command": "python scripts/verify_supply_chain_lock.py",
+      "command": "python3 scripts/verify_supply_chain_lock.py",
       "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python 3.12.3",
+        "python_launcher": "python3",
+        "python_resolved_path": "/tmp/codework-ci-artifact-opt-venv/bin/python3",
+        "python_version": "Python 3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
@@ -273,9 +294,11 @@
       "summary": "PASS immutable actions, container digest, GitGuardian identity, runtime pins"
     },
     "validate_repo": {
-      "command": "python scripts/validate_repo.py",
+      "command": "python3 scripts/validate_repo.py",
       "environment": {
-        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python 3.12.3",
+        "python_launcher": "python3",
+        "python_resolved_path": "/tmp/codework-ci-artifact-opt-venv/bin/python3",
+        "python_version": "Python 3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
