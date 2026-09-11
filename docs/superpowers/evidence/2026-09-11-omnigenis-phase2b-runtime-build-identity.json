@@ -1,6 +1,6 @@
 {
   "base_sha": "4c0e5222248b5f9f2537d627091b80afc9c9e120",
-  "captured_at_utc": "2026-09-11T14:50:23.637036+00:00",
+  "captured_at_utc": "2026-09-11T15:23:03.451375+00:00",
   "changed_paths": [
     ".agents/plugins/coderabbit-cli-checksums.json",
     ".agents/plugins/marketplace.json",
@@ -62,8 +62,8 @@
     "old_package_action": "PRESERVE",
     "status": "PENDING_AFTER_HUMAN_MERGE"
   },
-  "implementation_head_sha": "7c73ba892d62c65333eb8786540d4e16ad82b105",
-  "implementation_tree_sha": "06943da9dd54da157298dd7a2b99a1c9485073d0",
+  "implementation_head_sha": "698e459d25c239465f7e54fc9d3f9a67a74d0320",
+  "implementation_tree_sha": "6a163077cc1219370bac5579e897e8713bff4865",
   "legacy_ledger_sha256": "3a4e27b2436a087dd5d457e8bf6bb4018758148c7382af48616daa0cbfd31c3a",
   "legacy_scan": {
     "counts": {
@@ -199,7 +199,7 @@
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
       "exit_code": 0,
-      "output_sha256": "b286b900f01b84112385f6be5c03ed2bf1ab79c40cea1986d53de88b84b77a33",
+      "output_sha256": "86516573d7bb972920d2b5c578dcf40816baa35d374707c8ed5c2c7bbd2dc277",
       "summary": "27 tests PASS"
     },
     "identity_guard": {
@@ -225,7 +225,7 @@
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
       "exit_code": 0,
-      "output_sha256": "3e9395ee899f8156a67b7f2de92fa0121316c03b27af6921a952823c019ef4cc",
+      "output_sha256": "4f3c007e2d8dff19f3b6bb58fbeba912b9d1f6bfb7a731488b8ec08130b21d15",
       "summary": "7 tests PASS"
     },
     "plan_sequence": {
@@ -264,7 +264,7 @@
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
       "exit_code": 0,
-      "output_sha256": "d1eab31b163c85aa3d25258ec546b0b143b5305afc1c9a464a0778879ac12cb2",
+      "output_sha256": "7fab07f662f0cb314dbf62d63e8c32bd866acef15fe1db91cd529c4e093f41e5",
       "summary": "19 reviewer-focused tests PASS, including HOME/.local/bin fallback"
     },
     "shell_syntax": {
