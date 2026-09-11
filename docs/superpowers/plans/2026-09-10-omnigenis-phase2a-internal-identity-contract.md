@@ -1078,6 +1078,7 @@ scripts/project_identity_guard.py
 scripts/validate_repo.py
 tests/test_project_identity_contract.py
 tests/test_project_identity_guard.py
+tests/test_phase2a_evidence_contract.py
 tests/test_repo_contract.py
 tests/test_ci_optimization_contract.py
 .github/workflows/genoma-ngs-runtime-gate.yml
