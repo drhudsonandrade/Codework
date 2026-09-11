@@ -44,9 +44,11 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
         )
 
     def test_phase_two_b_runtime_contract_uses_omnigenis(self) -> None:
+        """Require the Phase 2B runtime root to use the OmniGenis identity."""
         self.assertIn("WORKDIR /opt/omnigenis", self.read("Dockerfile"))
 
     def test_phase_two_c_runner_contract_is_not_started(self) -> None:
+        """Preserve the legacy runner pool until the separately governed Phase 2C."""
         legacy_runner_pool = "code" + "work" + "-isolated"
         for path in (
             ".github/workflows/genoma-audit.yml",
