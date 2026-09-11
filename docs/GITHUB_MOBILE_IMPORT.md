@@ -50,4 +50,4 @@ If the connector still returns `Unknown tool`, close and start a new ChatGPT con
 
 Open **Repository Settings → Actions → General**. Allow GitHub-authored actions and `fallow-rs/fallow@v3.16.0` (or allow all actions if that policy is acceptable). Keep the default restricted token posture; the workflow grants `packages: write` only to the GHCR publishing job.
 
-Never route untrusted pull-request or fork code to a self-hosted genomic runner. Reserve the private `codework-isolated` runner for trusted protected-`main` execution under the repository workflow gates.
+Never route untrusted pull-request or fork code to a self-hosted genomic runner. Reserve the private `omnigenis-isolated` runner for trusted protected-`main` execution under the repository workflow gates.

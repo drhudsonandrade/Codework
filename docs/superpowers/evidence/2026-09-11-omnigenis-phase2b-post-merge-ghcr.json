@@ -1,0 +1,20 @@
+{
+  "schema": "omnigenis-phase2b-post-merge-ghcr-v1",
+  "merge_commit": "a1e669dd613f68f4d82ca7f1f565772ec8098cb1",
+  "workflow_run_id": 34617560951,
+  "successful_attempt": 2,
+  "publish_job_id": 103363105798,
+  "status": "VERIFIED",
+  "image_reference": "ghcr.io/drhudsonandrade/omnigenis-genome@sha256:b34cddd157132f0b039bebb1674abb4957e024fd0332568fc3ae9c2ca0fa8454",
+  "artifact_name": "ghcr-image-reference-a1e669dd613f68f4d82ca7f1f565772ec8098cb1",
+  "artifact_id": 10276395379,
+  "attempt_1_conclusion": "failure",
+  "attempt_1_failure_class": "UPSTREAM_DOCKER_HUB_502",
+  "attempt_1_failure_detail": "Docker Hub returned HTTP 502 while resolving the digest-pinned mambaorg/micromamba base image before the build started.",
+  "attempt_2_conclusion": "success",
+  "attempt_2_proof_source": "GitHub Actions protected-main workflow output plus uploaded immutable image-reference artifact",
+  "package_read_verification": "NOT_AVAILABLE",
+  "package_read_limitation": "The current local GitHub CLI credential does not include read:packages; no package-read claim is made.",
+  "old_package_action": "PRESERVE",
+  "phase2c_prerequisite": "SATISFIED"
+}

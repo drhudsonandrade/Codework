@@ -25,7 +25,7 @@ You do not need to create folders in advance. Git creates paths such as `.github
 3. Under repository access, choose **Only select repositories** and select `OmniGenis`, or choose all repositories if that broader scope is intentional.
 4. Confirm the requested permissions include repository contents and pull requests. GitHub App permissions are defined by the app; if write permissions are not requested, reconnecting cannot upgrade them.
 5. Open the repository's **Settings → Actions** page and allow Actions for the repository.
-6. The repository is public. Never route untrusted pull-request or fork code to the genomic VM; reserve the private `codework-isolated` runner for trusted protected-`main` execution under the existing workflow gates.
+6. The repository is public. Never route untrusted pull-request or fork code to the genomic VM; reserve the private `omnigenis-isolated` runner for trusted protected-`main` execution under the existing workflow gates.
 
 If ChatGPT still shows the repository but calls return `Unknown tool`, start a new ChatGPT conversation after reconnecting. If GitHub returns `403 Resource not accessible by integration`, re-open the installation page and verify that `OmniGenis` is selected; this is an installation-scope problem, not a missing repository folder.
 

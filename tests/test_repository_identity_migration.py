@@ -47,8 +47,8 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
         """Require the Phase 2B runtime root to use the OmniGenis identity."""
         self.assertIn("WORKDIR /opt/omnigenis", self.read("Dockerfile"))
 
-    def test_phase_two_c_runner_contract_is_not_started(self) -> None:
-        """Preserve the legacy runner pool until the separately governed Phase 2C."""
+    def test_phase_two_c_runner_contract_uses_omnigenis(self) -> None:
+        """Require canonical runner routing while legacy labels remain rollback-only."""
         legacy_runner_pool = "code" + "work" + "-isolated"
         for path in (
             ".github/workflows/genoma-audit.yml",
@@ -56,8 +56,8 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
             ".github/workflows/scaffold-validation.yml",
         ):
             text = self.read(path)
-            self.assertIn(legacy_runner_pool, text)
-            self.assertNotIn("omnigenis-isolated", text)
+            self.assertNotIn(legacy_runner_pool, text)
+            self.assertIn("omnigenis-isolated", text)
 
 
     def test_recovery_doc_requires_live_verification_of_app_and_legacy_pr(self):
