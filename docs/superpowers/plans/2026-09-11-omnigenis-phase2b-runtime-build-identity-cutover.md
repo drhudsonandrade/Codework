@@ -578,6 +578,7 @@ ghcr_premerge_state
 changed_paths
 protected_boundaries
 validation_provenance
+post_evidence_validation
 post_merge_requirements
 ```
 
@@ -630,11 +631,10 @@ run_gate residual_language "$VENV/bin/python" scripts/residual_language_audit.py
 run_gate docs_language "$VENV/bin/python" -m unittest tests.test_developer_documentation_language -v
 run_gate phase2b_tests "$VENV/bin/python" -m unittest \
   tests.test_phase2b_runtime_build_identity tests.test_phase2b_mcp_ngs_identity \
-  tests.test_phase2b_legacy_seal tests.test_phase2b_evidence_contract -v
-run_gate root_suite "$VENV/bin/python" -m unittest discover -s tests -v
+  tests.test_phase2b_legacy_seal -v
 ```
 
-Then run `find scripts -type f -name '*.sh' -exec bash -n {} +` and `git diff --check` as additional fail-closed gates. Record the exact root-suite count from the log; never copy the earlier 1,070 count by assumption.
+Then run `find scripts -type f -name '*.sh' -exec bash -n {} +` and `git diff --check` as additional fail-closed gates. Do **not** run `tests.test_phase2b_evidence_contract` or the complete root suite before the evidence artifact exists. The committed evidence records only commands that were actually executable and reproducible at the implementation HEAD; the raw complete root suite is a mandatory post-evidence gate.
 - [ ] **Step 5: Capture non-secret external capability state**
 
 Run without printing tokens or environment secrets:
@@ -673,30 +673,37 @@ Use this structure:
     "runner_cutover": "NOT_STARTED_PHASE_2C",
     "scientific_surface_changes": [],
     "normative_surface_changes": []
+  },
+  "post_evidence_validation": {
+    "status": "REQUIRED_AFTER_EVIDENCE_COMMIT",
+    "commands": [
+      "python -m unittest tests.test_phase2b_evidence_contract -v",
+      "python -m unittest discover -s tests -v",
+      "find scripts -type f -name '*.sh' -exec bash -n {} +",
+      "git diff --check"
+    ]
   }
 }
 ```
 
 Do not put placeholder angle-bracket values into the committed artifact; the generator must substitute actual hashes/SHAs before writing it.
-- [ ] **Step 7: Verify the evidence contract and bind it to the implementation HEAD**
+- [ ] **Step 7: Validate the generated artifact before commit**
+
+Before committing the evidence, validate only properties that can truthfully be proven at the implementation HEAD:
 
 ```bash
 python3 -m json.tool \
   docs/superpowers/evidence/2026-09-11-omnigenis-phase2b-runtime-build-identity.json \
   >/dev/null
-python3 -m unittest tests.test_phase2b_evidence_contract -v
 python3 scripts/project_identity_guard.py --check
-# The evidence contract resolves implementation_head_sha as a commit, compares
-# implementation_tree_sha to that commit tree, requires HEAD^ to equal the
-# implementation commit, and requires the final HEAD to be evidence-only.
 git diff --check
 ```
 
-Expected: PASS. The committed evidence must bind the implementation commit immediately before the evidence-only commit, not claim to attest its own containing commit.
+The artifact must contain only executable/reproducible pre-evidence commands in `validation_provenance`. It must not claim a pre-evidence `root_suite` result or depend on an unversioned `/tmp` runner. `post_evidence_validation` must explicitly require the evidence-contract test and raw complete root suite after the evidence-only commit exists.
 
 - [ ] **Step 8: Commit the implementation evidence separately**
 
-The evidence-contract test is already part of the validated implementation HEAD. Commit only the evidence artifact after all assertions pass:
+Commit only the evidence artifact:
 
 ```bash
 git add docs/superpowers/evidence/2026-09-11-omnigenis-phase2b-runtime-build-identity.json
@@ -704,9 +711,20 @@ git diff --cached --check
 git commit -m "docs: record OmniGenis Phase 2B evidence"
 ```
 
-- [ ] **Step 8: Revalidate the final evidence HEAD**
+The final evidence-contract test resolves `implementation_head_sha` as a commit, compares its tree with `implementation_tree_sha`, requires `HEAD^` to equal that implementation commit, and requires the evidence commit to change only the evidence JSON.
 
-Run the evidence-contract test, identity guard, repository validator, `git diff --check`, and the full root suite again on the final PR HEAD. The final worktree must be clean.
+- [ ] **Step 9: Execute the final post-evidence gate**
+
+Run the raw final commands named by `post_evidence_validation` on the evidence HEAD:
+
+```bash
+python3 -m unittest tests.test_phase2b_evidence_contract -v
+python3 -m unittest discover -s tests -v
+find scripts -type f -name '*.sh' -exec bash -n {} +
+git diff --check
+```
+
+Also rerun the identity guard, repository validator, supply-chain gate, code-language gate, residual-language audit, and developer-documentation-language tests. Record the exact root-suite count in the PR body from this final run; do not backfill that result into the pre-evidence artifact. The final worktree must be clean.
 
 ---
 ### Task 6: Publish one governed draft PR and satisfy exact-head external review

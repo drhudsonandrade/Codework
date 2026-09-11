@@ -3,12 +3,16 @@
 from pathlib import Path
 import hashlib
 import json
+import shlex
+import shutil
 import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE_RELATIVE = "docs/superpowers/evidence/2026-09-11-omnigenis-phase2b-runtime-build-identity.json"
 EVIDENCE = ROOT / EVIDENCE_RELATIVE
+PLAN_RELATIVE = "docs/superpowers/plans/2026-09-11-omnigenis-phase2b-runtime-build-identity-cutover.md"
+PLAN = ROOT / PLAN_RELATIVE
 BASE_SHA = "4c0e5222248b5f9f2537d627091b80afc9c9e120"
 LEGACY_WORD = "code" + "work"
 
@@ -36,7 +40,7 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
             "project_identity_sha256", "legacy_ledger_sha256", "legacy_scan",
             "runtime_resource_gate", "external_capabilities", "ghcr_premerge_state",
             "changed_paths", "protected_boundaries", "validation_provenance",
-            "post_merge_requirements",
+            "post_evidence_validation", "post_merge_requirements",
         }
         self.assertTrue(required.issubset(evidence))
 
@@ -90,21 +94,96 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
         evidence = self.load()
         required = {
             "identity_guard", "validate_repo", "supply_chain", "code_language",
-            "residual_language", "docs_language", "phase2b_tests", "root_suite",
-            "shell_syntax", "diff_check",
+            "residual_language", "docs_language", "phase2b_tests", "reviewer_tests",
+            "plan_sequence", "shell_syntax", "diff_check",
         }
-        self.assertTrue(required.issubset(evidence["validation_provenance"]))
+        provenance = evidence["validation_provenance"]
+        self.assertTrue(required.issubset(provenance))
+        self.assertNotIn("root_suite", provenance)
+        expected_commands = {
+            "identity_guard": "python scripts/project_identity_guard.py --check",
+            "validate_repo": "python scripts/validate_repo.py",
+            "supply_chain": "python scripts/verify_supply_chain_lock.py",
+            "code_language": "python scripts/code_language_guard.py --check",
+            "residual_language": "python scripts/residual_language_audit.py --check",
+            "docs_language": "python -m unittest tests.test_developer_documentation_language -v",
+            "phase2b_tests": (
+                "python -m unittest tests.test_phase2b_runtime_build_identity "
+                "tests.test_phase2b_mcp_ngs_identity tests.test_phase2b_legacy_seal -v"
+            ),
+            "reviewer_tests": (
+                "python -m unittest tests.test_coderabbit_guardrails "
+                "tests.test_integration_code_language.IntegrationCodeLanguageTest."
+                "test_coderabbit_setup_diagnostics_are_english "
+                "tests.test_ci_optimization_contract.CIOptimizationContractTest."
+                "test_ngs_runtime_gate_matches_approved_phase_two_b_semantics -v"
+            ),
+            "plan_sequence": (
+                "python -m unittest tests.test_phase2b_evidence_contract."
+                "Phase2BEvidenceContractTest."
+                "test_plan_bootstrap_defers_evidence_contract_and_full_suite -v"
+            ),
+            "shell_syntax": "find scripts -type f -name '*.sh' -exec bash -n {} +",
+            "diff_check": "git diff --check",
+        }
         for name in required:
-            record = evidence["validation_provenance"][name]
+            record = provenance[name]
             self.assertEqual(record["exit_code"], 0, name)
-            self.assertTrue(record["command"], name)
+            command = record["command"]
+            self.assertEqual(command, expected_commands[name], name)
+            self.assertNotIn("/tmp/", command, name)
+            self.assertNotIn("AST gate", command, name)
+            argv = shlex.split(command)
+            self.assertTrue(argv, name)
+            self.assertIn(argv[0], {"python", "find", "git"}, name)
+            self.assertIsNotNone(shutil.which(argv[0]), name)
             self.assertTrue(record["environment"], name)
             self.assertRegex(record["output_sha256"], r"^[0-9a-f]{64}$", name)
             self.assertTrue(record["summary"], name)
+        self.assertNotIn(
+            "test_phase2b_evidence_contract",
+            provenance["phase2b_tests"]["command"],
+        )
         self.assertEqual(
-            evidence["validation_provenance"]["shell_syntax"]["command"],
+            provenance["shell_syntax"]["command"],
             "find scripts -type f -name '*.sh' -exec bash -n {} +",
         )
+
+    def test_post_evidence_validation_requires_raw_final_gates(self) -> None:
+        """Require the full suite only after the evidence-only commit exists."""
+        evidence = self.load()
+        post = evidence["post_evidence_validation"]
+        self.assertEqual(post["status"], "REQUIRED_AFTER_EVIDENCE_COMMIT")
+        self.assertEqual(
+            post["commands"],
+            [
+                "python -m unittest tests.test_phase2b_evidence_contract -v",
+                "python -m unittest discover -s tests -v",
+                "find scripts -type f -name '*.sh' -exec bash -n {} +",
+                "git diff --check",
+            ],
+        )
+
+    def test_plan_bootstrap_defers_evidence_contract_and_full_suite(self) -> None:
+        """Keep evidence-dependent gates out of the pre-evidence bootstrap cycle."""
+        plan = PLAN.read_text(encoding="utf-8")
+        bootstrap = plan.split(
+            "**Step 4: Execute one fail-fast validation cycle on the exact implementation HEAD**",
+            1,
+        )[1].split("**Step 5: Capture non-secret external capability state**", 1)[0]
+        bootstrap_commands = bootstrap.split("```bash", 1)[1].split("```", 1)[0]
+        self.assertNotIn("tests.test_phase2b_evidence_contract", bootstrap_commands)
+        self.assertNotIn("run_gate root_suite", bootstrap_commands)
+        final_gate = plan.split("**Step 9: Execute the final post-evidence gate**", 1)[1].split(
+            "### Task 6:", 1
+        )[0]
+        for command in (
+            "python3 -m unittest tests.test_phase2b_evidence_contract -v",
+            "python3 -m unittest discover -s tests -v",
+            "find scripts -type f -name '*.sh' -exec bash -n {} +",
+            "git diff --check",
+        ):
+            self.assertIn(command, final_gate)
 
     def test_contract_and_ledger_hashes_match_repository_bytes(self) -> None:
         """Match evidence digests to the committed identity contract and ledger."""

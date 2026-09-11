@@ -157,7 +157,7 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         installed_enabled: bool = True,
         already_installed: bool = False,
         bin_env_mode: str = "legacy",
-    ) -> tuple[subprocess.CompletedProcess[str], bool, str]:
+    ) -> tuple[subprocess.CompletedProcess[str], bool, str, Path]:
         self.assertIsNotNone(shutil.which("jq"), "jq is required by the setup contract")
         self.assertIsNotNone(shutil.which("unzip"), "unzip is required by the setup contract")
         setup_script = ROOT / "scripts" / "codex" / "setup-coderabbit.sh"
@@ -170,6 +170,8 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         repo = sandbox / "repo"
         fake_bin = sandbox / "bin"
         install_bin = sandbox / "installed-bin"
+        home_dir = sandbox / "home"
+        home_dir.mkdir()
         marker = sandbox / "plugin-installed"
         codex_log = sandbox / "codex-calls.log"
         (repo / ".agents" / "plugins").mkdir(parents=True)
@@ -340,6 +342,7 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
                 "FAKE_CODEX_LOG": str(codex_log),
                 "FAKE_CODERABBIT_ARCHIVE": str(archive_to_serve),
                 "FAKE_CODERABBIT_URL": expected_release_url,
+                "HOME": str(home_dir),
             }
         )
         if bin_env_mode == "legacy":
@@ -352,6 +355,8 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         elif bin_env_mode == "conflict":
             env[CANONICAL_BIN_ENV] = str(install_bin)
             env[LEGACY_BIN_ENV] = str(sandbox / "conflicting-bin")
+        elif bin_env_mode == "none":
+            pass
         else:
             raise AssertionError(f"unknown bin_env_mode: {bin_env_mode}")
         result = subprocess.run(
@@ -363,46 +368,63 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
             check=False,
         )
         calls = codex_log.read_text(encoding="utf-8") if codex_log.is_file() else ""
-        return result, marker.is_file(), calls
+        installed_path = (
+            home_dir / ".local" / "bin" / "coderabbit"
+            if bin_env_mode == "none"
+            else install_bin / "coderabbit"
+        )
+        return result, marker.is_file(), calls, installed_path
+
+    def test_default_bin_dir_uses_home_local_bin_when_variables_are_absent(self) -> None:
+        """Install under HOME when neither binary-directory variable is configured."""
+        result, marker_created, _calls, installed_path = self._run_setup_with_fakes(
+            bin_env_mode="none"
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(marker_created)
+        self.assertTrue(installed_path.is_file())
+        self.assertEqual(installed_path.parent.name, "bin")
+        self.assertEqual(installed_path.parent.parent.name, ".local")
+        self.assertNotIn("deprecated", result.stderr)
 
     def test_canonical_bin_dir_variable_is_accepted(self) -> None:
         """Accept the canonical OmniGenis CodeRabbit binary directory variable."""
-        result, marker_created, _calls = self._run_setup_with_fakes(bin_env_mode="canonical")
+        result, marker_created, _calls, _installed_path = self._run_setup_with_fakes(bin_env_mode="canonical")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(marker_created)
         self.assertNotIn("deprecated", result.stderr)
 
     def test_legacy_bin_dir_variable_is_accepted_with_warning(self) -> None:
         """Accept the legacy variable only with an explicit deprecation warning."""
-        result, marker_created, _calls = self._run_setup_with_fakes(bin_env_mode="legacy")
+        result, marker_created, _calls, _installed_path = self._run_setup_with_fakes(bin_env_mode="legacy")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(marker_created)
         self.assertIn(f"{LEGACY_BIN_ENV} is deprecated; use {CANONICAL_BIN_ENV}", result.stderr)
 
     def test_same_value_dual_bin_dir_variables_are_accepted(self) -> None:
         """Accept canonical and legacy variables when their values are identical."""
-        result, marker_created, _calls = self._run_setup_with_fakes(bin_env_mode="both-same")
+        result, marker_created, _calls, _installed_path = self._run_setup_with_fakes(bin_env_mode="both-same")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(marker_created)
         self.assertNotIn("conflicting CodeRabbit bin directory variables", result.stderr)
 
     def test_conflicting_bin_dir_variables_fail_closed(self) -> None:
         """Reject conflicting canonical and legacy binary directory variables."""
-        result, marker_created, calls = self._run_setup_with_fakes(bin_env_mode="conflict")
+        result, marker_created, calls, _installed_path = self._run_setup_with_fakes(bin_env_mode="conflict")
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
         self.assertFalse(marker_created)
         self.assertEqual(calls, "")
         self.assertIn("conflicting CodeRabbit bin directory variables", result.stderr)
 
     def test_available_plugin_is_installed_before_success(self) -> None:
-        result, marker_created, calls = self._run_setup_with_fakes()
+        result, marker_created, calls, _installed_path = self._run_setup_with_fakes()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(marker_created, "available-only plugin must be installed before success")
         self.assertIn("plugin add coderabbit@omnigenis-codex --json", calls)
         self.assertIn("configured from a checksum-locked release", result.stdout)
 
     def test_already_installed_plugin_is_not_added_again(self) -> None:
-        result, _marker_created, calls = self._run_setup_with_fakes(already_installed=True)
+        result, _marker_created, calls, _installed_path = self._run_setup_with_fakes(already_installed=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("plugin marketplace list --json", calls)
         self.assertIn("plugin list --marketplace omnigenis-codex --json --available", calls)
@@ -411,7 +433,7 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         self.assertIn("configured from a checksum-locked release", result.stdout)
 
     def test_tampered_release_archive_fails_before_plugin_installation(self) -> None:
-        result, marker_created, calls = self._run_setup_with_fakes(tamper_archive=True)
+        result, marker_created, calls, _installed_path = self._run_setup_with_fakes(tamper_archive=True)
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertFalse(marker_created)
         self.assertNotIn("plugin add coderabbit@omnigenis-codex --json", calls)
@@ -419,7 +441,7 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         self.assertNotIn("configured from a checksum-locked release", result.stdout)
 
     def test_adulterated_marketplace_source_is_rejected(self) -> None:
-        result, marker_created, calls = self._run_setup_with_fakes(adulterated_marketplace=True)
+        result, marker_created, calls, _installed_path = self._run_setup_with_fakes(adulterated_marketplace=True)
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertFalse(marker_created)
         self.assertNotIn("plugin add coderabbit@omnigenis-codex --json", calls)
@@ -431,7 +453,7 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         self.assertNotIn("configured from a checksum-locked release", result.stdout)
 
     def test_disabled_installed_plugin_is_rejected(self) -> None:
-        result, _marker_created, calls = self._run_setup_with_fakes(
+        result, _marker_created, calls, _installed_path = self._run_setup_with_fakes(
             already_installed=True,
             installed_enabled=False,
         )
@@ -441,7 +463,7 @@ class CodeRabbitGuardrailTests(unittest.TestCase):
         self.assertNotIn("configured from a checksum-locked release", result.stdout)
 
     def test_version_prefix_does_not_satisfy_exact_cli_pin(self) -> None:
-        result, marker_created, _calls = self._run_setup_with_fakes(
+        result, marker_created, _calls, _installed_path = self._run_setup_with_fakes(
             version_output="coderabbit 0.7.50",
         )
         self.assertEqual(result.returncode, 5, result.stdout + result.stderr)
