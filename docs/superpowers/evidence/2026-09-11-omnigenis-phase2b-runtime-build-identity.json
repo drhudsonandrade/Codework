@@ -1,6 +1,6 @@
 {
   "base_sha": "4c0e5222248b5f9f2537d627091b80afc9c9e120",
-  "captured_at_utc": "2026-09-11T04:41:37.609383+00:00",
+  "captured_at_utc": "2026-09-11T05:11:46.842423+00:00",
   "changed_paths": [
     ".agents/plugins/coderabbit-cli-checksums.json",
     ".agents/plugins/marketplace.json",
@@ -15,6 +15,7 @@
     "docs/MAGALU_PRIVATE_MCP_SETUP.md",
     "docs/PROJECT_IDENTITY_CONTRACT.md",
     "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md",
+    "docs/superpowers/evidence/2026-09-11-omnigenis-phase2b-runtime-build-identity.json",
     "docs/superpowers/plans/2026-09-11-omnigenis-phase2b-runtime-build-identity-cutover.md",
     "environment.yml",
     "mcp/README.md",
@@ -61,8 +62,8 @@
     "old_package_action": "PRESERVE",
     "status": "PENDING_AFTER_HUMAN_MERGE"
   },
-  "implementation_head_sha": "787e2a812ef282453d4f3d358bd71f409336d11a",
-  "implementation_tree_sha": "1cd616c8ad8a83aad5921ab10025c2c694f66cce",
+  "implementation_head_sha": "af6daff3cf3d420a3de08caebec3d12f670546bd",
+  "implementation_tree_sha": "58bfad30a7a8dbdc34726af53475e52373c9ac51",
   "legacy_ledger_sha256": "3a4e27b2436a087dd5d457e8bf6bb4018758148c7382af48616daa0cbfd31c3a",
   "legacy_scan": {
     "counts": {
@@ -97,7 +98,7 @@
   },
   "post_merge_requirements": [
     "Fetch clean origin/main and record the human merge SHA.",
-    "Run identity guard, validate_repo, supply-chain, language, residual-language, and complete root suite on merged main.",
+    "Run identity guard, validate_repo, supply-chain, language, residual-language, recursive shell syntax, and complete root suite on merged main.",
     "Verify repository ID 1212760346 and both active rulesets retain normalized semantics.",
     "Verify protected-main publish-ghcr produced ghcr-image-reference-<merge-sha> artifact containing ghcr.io/<owner>/omnigenis-genome@sha256:<64-hex-digest>.",
     "Do not delete or rewrite historical codework-genome package artifacts.",
@@ -182,7 +183,7 @@
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
       "exit_code": 0,
-      "output_sha256": "24c2ae5cd89a87a394272e856c0ad22b11743801275ffa3a9e300cad22ec608d",
+      "output_sha256": "fb71d8d1e8a94420b7c4dbe2a8ea53a756d4812b3f4e28e736d14edfc26a2e38",
       "summary": "27 tests PASS"
     },
     "identity_guard": {
@@ -197,15 +198,15 @@
       "summary": "PASS project_identity_contract"
     },
     "phase2b_tests": {
-      "command": "python -m unittest tests.test_phase2b_runtime_build_identity tests.test_phase2b_mcp_ngs_identity tests.test_phase2b_legacy_seal tests.test_phase2b_evidence_contract -v",
+      "command": "python -m unittest tests.test_phase2b_runtime_build_identity tests.test_phase2b_mcp_ngs_identity tests.test_phase2b_legacy_seal -v",
       "environment": {
         "python": "/tmp/codework-ci-artifact-opt-venv/bin/python 3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
       "exit_code": 0,
-      "output_sha256": "98a59c23a2372452ca91b6d382a71fbde467e0ceb746e84ba551d23020abe39a",
-      "summary": "12 tests OK; 5 explicit pre-evidence skips"
+      "output_sha256": "5571f8daa549ed635492faa0e41e61b973aa2041accd875fc6966936cbc8191d",
+      "summary": "7 tests PASS"
     },
     "residual_language": {
       "command": "python scripts/residual_language_audit.py --check",
@@ -218,19 +219,30 @@
       "output_sha256": "3aa068a3ee76de0f29694f99d95a5e14143a3ed1743f142bd60781ef1cdcfc25",
       "summary": "clean=true; unclassified=[]; drift=[]; missing=[]"
     },
-    "root_suite": {
-      "command": "python -m unittest discover -s tests -v",
+    "reviewer_tests": {
+      "command": "python -m unittest tests.test_coderabbit_guardrails tests.test_integration_code_language.IntegrationCodeLanguageTest.test_coderabbit_setup_diagnostics_are_english tests.test_ci_optimization_contract.CIOptimizationContractTest.test_ngs_runtime_gate_matches_approved_phase_two_b_semantics -v",
       "environment": {
         "python": "/tmp/codework-ci-artifact-opt-venv/bin/python 3.12.3",
         "requirements_lock": "reporting/requirements.txt",
         "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
       },
       "exit_code": 0,
-      "output_sha256": "37971a147ea392c3d3393d208f2e4b285e8c4630001faeeaaba16b0d9dc76990",
-      "summary": "1087 tests OK; 6 skips (5 pre-evidence contract, 1 win32-only MCP)"
+      "output_sha256": "d050e083a4bf300da8e71e87cd2f827653fa7150656f14b4385d0fc7299b5747",
+      "summary": "18 reviewer-focused tests PASS"
+    },
+    "root_suite": {
+      "command": "modules=$(find tests -maxdepth 1 -type f -name 'test_*.py' ! -name 'test_phase2b_evidence_contract.py' -printf '%f\\n' | sed 's/\\.py$//' | sed 's#^#tests.#' | sort); PYTHONPATH=tests python -m unittest $modules -v",
+      "environment": {
+        "python": "/tmp/codework-ci-artifact-opt-venv/bin/python 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      },
+      "exit_code": 0,
+      "output_sha256": "f9201825db57d69edc474fb4ccb55e2647a70ae9e30d1f44f71fafc889adacf9",
+      "summary": "1082 tests PASS; 1 expected win32-only MCP skip; evidence-contract module intentionally excluded until evidence commit"
     },
     "shell_syntax": {
-      "command": "bash -n scripts/*.sh",
+      "command": "find scripts -type f -name '*.sh' -exec bash -n {} +",
       "environment": {
         "python": "/tmp/codework-ci-artifact-opt-venv/bin/python 3.12.3",
         "requirements_lock": "reporting/requirements.txt",
@@ -238,7 +250,7 @@
       },
       "exit_code": 0,
       "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "summary": "PASS with no stdout"
+      "summary": "all repository shell scripts under scripts/ passed bash -n"
     },
     "supply_chain": {
       "command": "python scripts/verify_supply_chain_lock.py",
