@@ -137,7 +137,7 @@ test("sanitizeError removes bearer tokens and absolute paths", () => {
 });
 
 test("audit records are written once with restrictive permissions", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "codework-audit-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "omnigenis-audit-"));
   const record = {
     requestId: "canary-1",
     tool: "run_synthetic_canary",

@@ -1,5 +1,5 @@
 [Unit]
-Description=OpenAI Secure MCP Tunnel client for Codework genome MCP
+Description=OpenAI Secure MCP Tunnel client for OmniGenis genome MCP
 Wants=network-online.target genome-mcp.service
 After=network-online.target genome-mcp.service
 
@@ -7,15 +7,15 @@ After=network-online.target genome-mcp.service
 Type=simple
 User=genome
 Group=genome
-EnvironmentFile=/etc/codework/tunnel-client.env
-ExecStart=/usr/local/bin/tunnel-client run --profile codework-genome
+EnvironmentFile=/etc/omnigenis/tunnel-client.env
+ExecStart=/usr/local/bin/tunnel-client run --profile omnigenis-genome
 Restart=on-failure
 RestartSec=5s
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/var/lib/codework-tunnel
+ReadWritePaths=/var/lib/omnigenis-tunnel
 
 [Install]
 WantedBy=multi-user.target

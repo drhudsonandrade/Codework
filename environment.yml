@@ -1,4 +1,4 @@
-name: codework-ngs
+name: omnigenis-ngs
 channels:
   - conda-forge
   - bioconda

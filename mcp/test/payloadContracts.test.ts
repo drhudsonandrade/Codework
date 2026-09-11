@@ -11,7 +11,7 @@ type InputContract = {
 
 async function listToolInputContracts(): Promise<Record<string, InputContract>> {
   const server = createGenomeMcpServer({
-    projectRoot: "/opt/codework",
+    projectRoot: "/opt/omnigenis",
     referenceRoot: "/refs",
     resultsRoot: "/results",
     auditRoot: "/audit",

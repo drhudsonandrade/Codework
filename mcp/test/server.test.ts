@@ -27,7 +27,7 @@ const observe = <T>(promise: Promise<T>) =>
 
 test("MCP initialization lists only approved tools with annotations", async () => {
   const server = createGenomeMcpServer({
-    projectRoot: "/opt/codework",
+    projectRoot: "/opt/omnigenis",
     referenceRoot: "/refs",
     resultsRoot: "/results",
     auditRoot: "/audit",
@@ -48,9 +48,9 @@ test("MCP initialization lists only approved tools with annotations", async () =
 });
 
 test("runAudited replays a successful request id without re-executing", async () => {
-  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-audit-"));
+  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "omnigenis-server-audit-"));
   const options = {
-    projectRoot: "/opt/codework",
+    projectRoot: "/opt/omnigenis",
     referenceRoot: "/refs",
     resultsRoot: "/results",
     auditRoot,
@@ -68,9 +68,9 @@ test("runAudited replays a successful request id without re-executing", async ()
 });
 
 test("runAudited atomically prevents concurrent duplicate execution", async () => {
-  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-race-"));
+  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "omnigenis-server-race-"));
   const options = {
-    projectRoot: "/opt/codework",
+    projectRoot: "/opt/omnigenis",
     referenceRoot: "/refs",
     resultsRoot: "/results",
     auditRoot,
@@ -106,9 +106,9 @@ test("runAudited atomically prevents concurrent duplicate execution", async () =
 });
 
 test("runAudited recovers an expired request lease without PID liveness", async () => {
-  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-stale-"));
+  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "omnigenis-server-stale-"));
   const options = {
-    projectRoot: "/opt/codework",
+    projectRoot: "/opt/omnigenis",
     referenceRoot: "/refs",
     resultsRoot: "/results",
     auditRoot,
@@ -138,9 +138,9 @@ test("runAudited recovers an expired request lease without PID liveness", async 
 });
 
 test("an unexpired request lease blocks recovery even when claimedAt is old", async () => {
-  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-live-lease-"));
+  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "omnigenis-server-live-lease-"));
   const options = {
-    projectRoot: "/opt/codework",
+    projectRoot: "/opt/omnigenis",
     referenceRoot: "/refs",
     resultsRoot: "/results",
     auditRoot,
@@ -172,9 +172,9 @@ test("an unexpired request lease blocks recovery even when claimedAt is old", as
 });
 
 test("two concurrent stale-claim recoverers allow only one operation to proceed", async () => {
-  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-stale-race-"));
+  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "omnigenis-server-stale-race-"));
   const options = {
-    projectRoot: "/opt/codework",
+    projectRoot: "/opt/omnigenis",
     referenceRoot: "/refs",
     resultsRoot: "/results",
     auditRoot,
@@ -227,9 +227,9 @@ test("two concurrent stale-claim recoverers allow only one operation to proceed"
 });
 
 test("stale recovery fences an older owner before audit persistence", async () => {
-  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-fence-"));
+  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "omnigenis-server-fence-"));
   const options = {
-    projectRoot: "/opt/codework",
+    projectRoot: "/opt/omnigenis",
     referenceRoot: "/refs",
     resultsRoot: "/results",
     auditRoot,
@@ -276,9 +276,9 @@ test("stale recovery fences an older owner before audit persistence", async () =
 });
 
 test("a lease that lapses during a long operation still persists the owner's PASS", async () => {
-  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-lease-boundary-"));
+  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "omnigenis-server-lease-boundary-"));
   const options = {
-    projectRoot: "/opt/codework",
+    projectRoot: "/opt/omnigenis",
     referenceRoot: "/refs",
     resultsRoot: "/results",
     auditRoot,
@@ -305,7 +305,7 @@ test("a lease that lapses during a long operation still persists the owner's PAS
 });
 
 test("renewRequestClaimLease extends a held claim and refuses a superseded one", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-claim-renew-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "omnigenis-claim-renew-"));
   const claimPath = path.join(dir, "claim");
   const claimedAt = pastIso(30 * 60 * 1000);
   await writeFile(
@@ -343,9 +343,9 @@ test("renewRequestClaimLease extends a held claim and refuses a superseded one",
 });
 
 test("audit persistence failure cannot replace the operation error", async () => {
-  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-persist-fail-"));
+  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "omnigenis-server-persist-fail-"));
   const options = {
-    projectRoot: "/opt/codework",
+    projectRoot: "/opt/omnigenis",
     referenceRoot: "/refs",
     resultsRoot: "/results",
     auditRoot,
@@ -376,9 +376,9 @@ test("audit persistence failure cannot replace the operation error", async () =>
 });
 
 test("runAudited recovers an expired interprocess mutation-lock lease", async () => {
-  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-lock-orphan-"));
+  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "omnigenis-server-lock-orphan-"));
   const options = {
-    projectRoot: "/opt/codework",
+    projectRoot: "/opt/omnigenis",
     referenceRoot: "/refs",
     resultsRoot: "/results",
     auditRoot,
@@ -408,7 +408,7 @@ test("runAudited recovers an expired interprocess mutation-lock lease", async ()
 });
 
 test("an unexpired mutation-lock lease is never recovered", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-live-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "omnigenis-lock-live-"));
   const claimPath = path.join(dir, "claim");
   const lockPath = `${claimPath}.lock`;
   await mkdir(lockPath, { mode: 0o700 });
@@ -435,7 +435,7 @@ test("an unexpired mutation-lock lease is never recovered", async () => {
 });
 
 test("invalid owner.json blocks mutation-lock recovery fail-closed", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-invalid-owner-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "omnigenis-lock-invalid-owner-"));
   const claimPath = path.join(dir, "claim");
   const lockPath = `${claimPath}.lock`;
   await mkdir(lockPath, { mode: 0o700 });
@@ -453,7 +453,7 @@ test("invalid owner.json blocks mutation-lock recovery fail-closed", async () =>
 });
 
 test("an empty lock directory left by a half-finished release is absorbed", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-empty-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "omnigenis-lock-empty-"));
   const claimPath = path.join(dir, "claim");
   const lockPath = `${claimPath}.lock`;
   await mkdir(lockPath, { mode: 0o700 });
@@ -470,7 +470,7 @@ test("an empty lock directory left by a half-finished release is absorbed", asyn
 });
 
 test("a concurrent observer never sees the lock path without its owner", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-atomic-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "omnigenis-lock-atomic-"));
   const claimPath = path.join(dir, "claim");
   const lockPath = `${claimPath}.lock`;
   const ACQUISITIONS = 40;
@@ -524,7 +524,7 @@ test("a concurrent observer never sees the lock path without its owner", async (
 });
 
 test("a staging failure keeps its own errno instead of reading as lock contention", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-staging-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "omnigenis-lock-staging-"));
   const occupied = path.join(dir, "occupied");
   await writeFile(occupied, "not a directory\n", { mode: 0o600 });
   // Staging is created next to the claim, so a file where its parent should be fails the
@@ -554,7 +554,7 @@ test("recovery clears an ownerless lock directory without touching a live one", 
   // On POSIX the staged rename absorbs an empty lock directory before recovery is ever
   // consulted; on Windows that rename is refused, and acquisition falls back to exactly
   // this contract. Driving it directly keeps the win32 path covered on every platform.
-  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-recovery-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "omnigenis-lock-recovery-"));
   const ownerless = path.join(dir, "ownerless.lock");
   await mkdir(ownerless, { mode: 0o700 });
 
@@ -582,7 +582,7 @@ test(
   "win32 acquisition recovers an empty lock directory the rename cannot replace",
   { skip: process.platform === "win32" ? false : "win32-only rename semantics" },
   async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-win32-"));
+    const dir = await mkdtemp(path.join(os.tmpdir(), "omnigenis-lock-win32-"));
     const claimPath = path.join(dir, "claim");
     const lockPath = `${claimPath}.lock`;
     await mkdir(lockPath, { mode: 0o700 });
@@ -595,7 +595,7 @@ test(
 );
 
 test("a lock directory with unexpected entries stays fail-closed", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-unexpected-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "omnigenis-lock-unexpected-"));
   const claimPath = path.join(dir, "claim");
   const lockPath = `${claimPath}.lock`;
   await mkdir(lockPath, { mode: 0o700 });
@@ -614,7 +614,7 @@ test("a lock directory with unexpected entries stays fail-closed", async () => {
 });
 
 test("mutation-lock release never removes a replacement lockId", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-replacement-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "omnigenis-lock-replacement-"));
   const claimPath = path.join(dir, "claim");
   const lockPath = `${claimPath}.lock`;
   const ownerPath = path.join(lockPath, "owner.json");
@@ -640,7 +640,7 @@ test("mutation-lock release never removes a replacement lockId", async () => {
 });
 
 test("mutation-lock cleanup failure cannot replace the primary operation error", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-lock-cleanup-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "omnigenis-lock-cleanup-"));
   const claimPath = path.join(dir, "claim");
   const lockPath = `${claimPath}.lock`;
   const ownerPath = path.join(lockPath, "owner.json");
@@ -665,9 +665,9 @@ test("mutation-lock cleanup failure cannot replace the primary operation error",
 });
 
 test("runAudited rejects malformed request claim metadata without executing", async () => {
-  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-invalid-claim-"));
+  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "omnigenis-server-invalid-claim-"));
   const options = {
-    projectRoot: "/opt/codework",
+    projectRoot: "/opt/omnigenis",
     referenceRoot: "/refs",
     resultsRoot: "/results",
     auditRoot,
@@ -689,9 +689,9 @@ test("runAudited rejects malformed request claim metadata without executing", as
 });
 
 test("runAudited stores and replays a sanitized failure", async () => {
-  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "codework-server-fail-"));
+  const auditRoot = await mkdtemp(path.join(os.tmpdir(), "omnigenis-server-fail-"));
   const options = {
-    projectRoot: "/opt/codework",
+    projectRoot: "/opt/omnigenis",
     referenceRoot: "/refs",
     resultsRoot: "/results",
     auditRoot,
@@ -710,7 +710,7 @@ test("runAudited stores and replays a sanitized failure", async () => {
 });
 
 test("releaseRequestClaim still unlinks when handle close fails", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-release-close-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "omnigenis-release-close-"));
   const claimPath = path.join(dir, "claim");
   await writeFile(
     claimPath,
@@ -745,7 +745,7 @@ test("releaseRequestClaim still unlinks when handle close fails", async () => {
 });
 
 test("releaseRequestClaim never removes a replacement claim", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-release-owner-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "omnigenis-release-owner-"));
   const claimPath = path.join(dir, "claim");
   await writeFile(
     claimPath,
@@ -779,7 +779,7 @@ test("releaseRequestClaim never removes a replacement claim", async () => {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 test("runFixedScript rejects a script that exceeds the output budget", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-budget-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "omnigenis-budget-"));
   const loud = path.join(dir, "loud.sh");
   await writeFile(
     loud,
@@ -801,7 +801,7 @@ test(
   "a timed-out script takes its whole process group down with it",
   { skip: process.platform === "win32" ? "POSIX process groups only" : false },
   async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), "codework-timeout-"));
+    const dir = await mkdtemp(path.join(os.tmpdir(), "omnigenis-timeout-"));
     const script = path.join(dir, "spawner.sh");
     const marker = path.join(dir, "descendant.marker");
     await writeFile(
@@ -820,7 +820,7 @@ test(
 );
 
 test("a script that has already exited is never signalled again", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-reaped-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "omnigenis-reaped-"));
   const ok = path.join(dir, "ok.sh");
   await writeFile(ok, ["#!/bin/sh", "echo done", ""].join("\n"), { mode: 0o755 });
 
@@ -841,7 +841,7 @@ test("a script that has already exited is never signalled again", async () => {
 });
 
 test("runFixedScript returns stdout and sanitizes retained stderr on failure", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "codework-exit-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "omnigenis-exit-"));
   const ok = path.join(dir, "ok.sh");
   const bad = path.join(dir, "bad.sh");
   await writeFile(ok, ["#!/bin/sh", "echo '  hello  '", ""].join("\n"), { mode: 0o755 });

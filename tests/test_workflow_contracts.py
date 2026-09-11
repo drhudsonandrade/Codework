@@ -680,12 +680,12 @@ class WorkflowContractTest(unittest.TestCase):
 
     def test_ngs_canary_does_not_bypass_micromamba_entrypoint_with_login_shell(self):
         workflow = (ROOT / ".github/workflows/genoma-ngs-runtime-gate.yml").read_text(encoding="utf-8")
-        self.assertIn("/opt/codework/scripts/run_canary.sh /workspace/results/canary", workflow)
+        self.assertIn("/opt/omnigenis/scripts/run_canary.sh /workspace/results/canary", workflow)
         self.assertNotIn("bash -lc './scripts/run_canary.sh", workflow)
 
     def test_latest_candidate_must_execute_nextflow_orchestration_before_promotion(self):
         workflow = (ROOT / ".github/workflows/genoma-ngs-runtime-gate.yml").read_text(encoding="utf-8")
-        self.assertIn("nextflow run /opt/codework/main.nf --mode canary", workflow)
+        self.assertIn("nextflow run /opt/omnigenis/main.nf --mode canary", workflow)
         self.assertIn("results/nextflow-canary/canary/report.json", workflow)
         self.assertIn("--functional-canary results/canary/report.json", workflow)
         self.assertIn("--orchestration-canary results/nextflow-canary/canary/report.json", workflow)

@@ -1,4 +1,4 @@
-# Codework private genome MCP
+# OmniGenis private genome MCP
 
 This is a tool-only, streamable-HTTP MCP server. It exposes no arbitrary command, file upload, file read or deletion tool.
 

@@ -23,14 +23,17 @@ COMPLEMENT = str.maketrans("ACGT", "TGCA")
 
 
 def reverse_complement(sequence: str) -> str:
+    """Return the reverse complement of a DNA sequence."""
     return sequence.translate(COMPLEMENT)[::-1]
 
 
 def alternate_base(reference: str) -> str:
+    """Choose a deterministic non-reference nucleotide."""
     return BASES[(BASES.index(reference) + 1) % len(BASES)]
 
 
 def write_fasta(path: Path, sequence: str) -> None:
+    """Write the synthetic reference sequence as deterministic FASTA."""
     with path.open("w", encoding="ascii", newline="\n") as handle:
         handle.write(">chrSynthetic\n")
         for offset in range(0, len(sequence), 60):
@@ -38,6 +41,7 @@ def write_fasta(path: Path, sequence: str) -> None:
 
 
 def write_fastq_gzip(path: Path, records: list[tuple[str, str]]) -> None:
+    """Write deterministic gzip-compressed FASTQ records."""
     with path.open("wb") as raw:
         with gzip.GzipFile(filename="", fileobj=raw, mode="wb", mtime=0) as compressed:
             with io.TextIOWrapper(compressed, encoding="ascii", newline="\n") as handle:
@@ -46,6 +50,7 @@ def write_fastq_gzip(path: Path, records: list[tuple[str, str]]) -> None:
 
 
 def sha256(path: Path) -> str:
+    """Return the SHA-256 digest of a file."""
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
@@ -54,6 +59,7 @@ def sha256(path: Path) -> str:
 
 
 def generate(output_dir: Path) -> None:
+    """Generate the complete deterministic synthetic sequencing fixture."""
     output_dir.mkdir(parents=True, exist_ok=True)
     rng = random.Random(SEED)
     reference = "".join(rng.choice(BASES) for _ in range(REFERENCE_LENGTH))
@@ -95,19 +101,28 @@ def generate(output_dir: Path) -> None:
             handle.write(f"chrSynthetic\t{position}\t.\t{ref}\t{alt}\t100\tPASS\t.\tGT\t0/1\n")
 
     fixture = {
-        "fixture": "codework-synthetic-germline-v1",
+        "fixture": "omnigenis-synthetic-germline-v2",
         "fragment_length": FRAGMENT_LENGTH,
-        "nominal_fragment_coverage": round(READ_PAIRS * FRAGMENT_LENGTH / REFERENCE_LENGTH, 6),
+        "nominal_fragment_coverage": round(
+            READ_PAIRS * FRAGMENT_LENGTH / REFERENCE_LENGTH, 6
+        ),
         "read_length": READ_LENGTH,
         "read_pairs": READ_PAIRS,
         "reference_length": REFERENCE_LENGTH,
         "seed": SEED,
         "variants": [
-            {"alt": alt, "chrom": "chrSynthetic", "genotype": "0/1", "position": position, "ref": ref}
+            {
+                "alt": alt,
+                "chrom": "chrSynthetic",
+                "genotype": "0/1",
+                "position": position,
+                "ref": ref,
+            }
             for position, ref, alt in variants
         ],
     }
-    fixture_path.write_text(json.dumps(fixture, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+    fixture_text = json.dumps(fixture, sort_keys=True, separators=(",", ":")) + "\n"
+    fixture_path.write_text(fixture_text, encoding="utf-8")
 
     central_files = (reference_path, r1_path, r2_path, truth_path, fixture_path)
     checksum_text = "".join(f"{sha256(path)}  {path.name}\n" for path in central_files)
@@ -115,6 +130,7 @@ def generate(output_dir: Path) -> None:
 
 
 def main() -> None:
+    """Parse CLI arguments and generate the synthetic fixture."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output_dir", type=Path)
     args = parser.parse_args()

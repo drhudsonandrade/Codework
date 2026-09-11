@@ -6,7 +6,6 @@ readonly CODERABBIT_PLUGIN_SOURCE_SHA="11c74d6ba24d3a6d48f54a194cd00ef3beea18f9"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 MARKETPLACE_MANIFEST="$REPO_ROOT/.agents/plugins/marketplace.json"
 CLI_LOCK="$REPO_ROOT/.agents/plugins/coderabbit-cli-checksums.json"
-INSTALL_BIN_DIR="${CODEWORK_CODERABBIT_BIN_DIR:-$HOME/.local/bin}"
 expected_marketplace_source="$REPO_ROOT"
 TEMP_DIR=""
 cd "$REPO_ROOT"
@@ -15,6 +14,24 @@ fail() {
   echo "ERROR: $*" >&2
   exit 2
 }
+
+readonly LEGACY_BIN_ENV_NAME="CODEWORK_CODERABBIT_BIN_DIR"
+canonical_bin_dir="${OMNIGENIS_CODERABBIT_BIN_DIR:-}"
+legacy_bin_dir=""
+if declare -p "$LEGACY_BIN_ENV_NAME" >/dev/null 2>&1; then
+  legacy_bin_dir="${!LEGACY_BIN_ENV_NAME}"
+fi
+if [[ -n "$canonical_bin_dir" && -n "$legacy_bin_dir" && "$canonical_bin_dir" != "$legacy_bin_dir" ]]; then
+  fail "conflicting CodeRabbit bin directory variables"
+fi
+if [[ -n "$canonical_bin_dir" ]]; then
+  INSTALL_BIN_DIR="$canonical_bin_dir"
+elif [[ -n "$legacy_bin_dir" ]]; then
+  INSTALL_BIN_DIR="$legacy_bin_dir"
+  echo "WARNING: ${LEGACY_BIN_ENV_NAME} is deprecated; use OMNIGENIS_CODERABBIT_BIN_DIR." >&2
+else
+  INSTALL_BIN_DIR="$HOME/.local/bin"
+fi
 
 cleanup() {
   if [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]]; then
@@ -44,7 +61,7 @@ command -v unzip >/dev/null 2>&1 || fail "unzip is required to install the pinne
 lock_version="$(jq -er '.version' "$CLI_LOCK")" || fail "version is missing from the CodeRabbit CLI lock."
 lock_schema="$(jq -er '.schema' "$CLI_LOCK")" || fail "schema is missing from the CodeRabbit CLI lock."
 lock_template="$(jq -er '.url_template' "$CLI_LOCK")" || fail "URL template is missing from the CodeRabbit CLI lock."
-[[ "$lock_schema" == "codework-coderabbit-cli-release-lock-v1" ]] || fail "CodeRabbit CLI lock schema is not recognized."
+[[ "$lock_schema" == "omnigenis-coderabbit-cli-release-lock-v2" ]] || fail "CodeRabbit CLI lock schema is not recognized."
 [[ "$lock_version" == "$CODERABBIT_VERSION" ]] || fail "lock version does not match CODERABBIT_VERSION."
 [[ "$lock_template" == 'https://cli.coderabbit.ai/releases/{version}/coderabbit-{platform}.zip' ]] || fail "CodeRabbit CLI URL template is not the expected official source."
 
@@ -114,7 +131,7 @@ marketplace_present() {
   jq -e --arg expected_marketplace_source "$expected_marketplace_source" '[
     .marketplaces[]?
     | select(
-        .name == "codework-codex"
+        .name == "omnigenis-codex"
         and .root == $expected_marketplace_source
         and .marketplaceSource.sourceType == "local"
         and .marketplaceSource.source == $expected_marketplace_source
@@ -126,9 +143,9 @@ plugin_available() {
   jq -e --arg expected_sha "$CODERABBIT_PLUGIN_SOURCE_SHA" --arg expected_marketplace_source "$expected_marketplace_source" '[
     .available[]?
     | select(
-        .pluginId == "coderabbit@codework-codex"
+        .pluginId == "coderabbit@omnigenis-codex"
         and .name == "coderabbit"
-        and .marketplaceName == "codework-codex"
+        and .marketplaceName == "omnigenis-codex"
         and .installed == false
         and .marketplaceSource.sourceType == "local"
         and .marketplaceSource.source == $expected_marketplace_source
@@ -144,9 +161,9 @@ plugin_present() {
   jq -e --arg expected_sha "$CODERABBIT_PLUGIN_SOURCE_SHA" --arg expected_marketplace_source "$expected_marketplace_source" '[
     .installed[]?
     | select(
-        .pluginId == "coderabbit@codework-codex"
+        .pluginId == "coderabbit@omnigenis-codex"
         and .name == "coderabbit"
-        and .marketplaceName == "codework-codex"
+        and .marketplaceName == "omnigenis-codex"
         and .installed == true
         and .marketplaceSource.sourceType == "local"
         and .marketplaceSource.source == $expected_marketplace_source
@@ -162,9 +179,9 @@ plugin_installed() {
   jq -e --arg expected_sha "$CODERABBIT_PLUGIN_SOURCE_SHA" --arg expected_marketplace_source "$expected_marketplace_source" '[
     .installed[]?
     | select(
-        .pluginId == "coderabbit@codework-codex"
+        .pluginId == "coderabbit@omnigenis-codex"
         and .name == "coderabbit"
-        and .marketplaceName == "codework-codex"
+        and .marketplaceName == "omnigenis-codex"
         and .installed == true
         and .enabled == true
         and .marketplaceSource.sourceType == "local"
@@ -182,18 +199,18 @@ if ! marketplace_present <<<"$marketplaces_json"; then
   codex plugin marketplace add "$REPO_ROOT" --json >/dev/null
 fi
 marketplaces_json="$(codex plugin marketplace list --json)"
-marketplace_present <<<"$marketplaces_json" || fail "codework-codex marketplace was not confirmed against the reviewed local root after registration."
+marketplace_present <<<"$marketplaces_json" || fail "omnigenis-codex marketplace was not confirmed against the reviewed local root after registration."
 
 # Availability is discovery only. An already-installed plugin is never re-added;
 # success still requires that exact installed plugin to be enabled and provenance-bound.
-plugins_json="$(codex plugin list --marketplace codework-codex --json --available)"
+plugins_json="$(codex plugin list --marketplace omnigenis-codex --json --available)"
 if plugin_present <<<"$plugins_json"; then
   plugin_installed <<<"$plugins_json" || fail "coderabbit plugin was not confirmed as installed, enabled, and bound to the reviewed marketplace/root and source SHA."
 elif ! plugin_installed <<<"$plugins_json"; then
   plugin_available <<<"$plugins_json" || fail "coderabbit plugin is not available from the reviewed marketplace/root and source SHA."
-  codex plugin add coderabbit@codework-codex --json >/dev/null
+  codex plugin add coderabbit@omnigenis-codex --json >/dev/null
 fi
-plugins_json="$(codex plugin list --marketplace codework-codex --json)"
+plugins_json="$(codex plugin list --marketplace omnigenis-codex --json)"
 plugin_installed <<<"$plugins_json" || fail "coderabbit plugin was not confirmed as installed, enabled, and bound to the reviewed marketplace/root and source SHA."
 
 if ! "$installed_path" auth status --agent >/dev/null 2>&1; then
@@ -209,7 +226,7 @@ fi
 
 # Final confirmation repeats the installed-only, source-bound predicates.
 marketplaces_json="$(codex plugin marketplace list --json)"
-plugins_json="$(codex plugin list --marketplace codework-codex --json)"
+plugins_json="$(codex plugin list --marketplace omnigenis-codex --json)"
 marketplace_present <<<"$marketplaces_json" || fail "marketplace lost the expected local root/provenance before final confirmation."
 plugin_installed <<<"$plugins_json" || fail "plugin lost installed/enabled state, marketplace provenance, or the expected source SHA before final confirmation."
 

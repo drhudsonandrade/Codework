@@ -17,7 +17,7 @@ suite proves `passed == 15`, `total == 15`, `critical_failures == 0` and
 | Layer | Source of truth | Retention rule | Recovery role |
 |---|---|---|---|
 | Source and configuration | Public GitHub repository, protected `main`, with no personal genomic data or credentials | No fixed workflow-artifact expiry; retained while the repository/account is retained | Rebuild every component from reviewed source |
-| Executable environment | `ghcr.io/<github-owner>/codework-genome` pinned by digest | Retained under the repository owner's package policy | Pull the exact tested container without resolving packages again |
+| Executable environment | `ghcr.io/<github-owner>/omnigenis-genome` pinned by digest | Retained under the repository owner's package policy | Pull the exact tested container without resolving packages again |
 | Build/test evidence | Recovery bundle in the project's persistent document store | Retained until the owner deletes it or an account/workspace policy removes it | Preserve the synthetic canary ZIP, checksums and release evidence beyond Actions retention |
 | GitHub Actions artifacts | `synthetic-canary-*` and `ghcr-image-reference-*` | Disposable canary evidence: 7 days; immutable image references: 90 days, both capped by repository/org policy | Convenient CI evidence only; never the sole backup |
 | Future genomic data | Encrypted VM block/object storage plus an independent encrypted backup | Provider lifecycle policy controlled by the owner | Store FASTQ/BAM/CRAM/VCF and GRCh38; never commit or upload them through ChatGPT |
@@ -51,10 +51,10 @@ python3 -m unittest discover -s tests -v
 npm ci --prefix mcp --ignore-scripts
 npm test --prefix mcp
 
-docker pull "ghcr.io/${GITHUB_REPOSITORY_OWNER}/codework-genome@sha256:REPLACE_WITH_VERIFIED_DIGEST"
+docker pull "ghcr.io/${GITHUB_REPOSITORY_OWNER}/omnigenis-genome@sha256:REPLACE_WITH_VERIFIED_DIGEST"
 docker run --rm \
-  "ghcr.io/${GITHUB_REPOSITORY_OWNER}/codework-genome@sha256:REPLACE_WITH_VERIFIED_DIGEST" \
-  /opt/codework/scripts/check_versions.sh
+  "ghcr.io/${GITHUB_REPOSITORY_OWNER}/omnigenis-genome@sha256:REPLACE_WITH_VERIFIED_DIGEST" \
+  /opt/omnigenis/scripts/check_versions.sh
 ```
 
 If GHCR is unavailable, rebuild from the pinned source and immediately capture the resulting image
@@ -62,8 +62,8 @@ digest. A rebuild is a new artifact and must pass the same gates; it must not in
 digest or approval.
 
 ```bash
-docker build --tag codework-genome:recovered .
-docker run --rm codework-genome:recovered /opt/codework/scripts/check_versions.sh
+docker build --tag omnigenis-genome:recovered .
+docker run --rm omnigenis-genome:recovered /opt/omnigenis/scripts/check_versions.sh
 ```
 
 ## Non-sensitive recovery canary
@@ -75,8 +75,8 @@ mkdir -p recovery-canary
 chmod 0777 recovery-canary
 docker run --rm \
   --volume "$PWD/recovery-canary:/results" \
-  codework-genome:recovered \
-  /opt/codework/scripts/run_canary.sh /results/canary
+  omnigenis-genome:recovered \
+  /opt/omnigenis/scripts/run_canary.sh /results/canary
 jq -e '.status == "PASS"' recovery-canary/canary/report.json
 ```
 
@@ -100,7 +100,7 @@ After the target VM exists:
 2. Verify `GET http://127.0.0.1:3000/healthz` and inspect `/mcp` locally.
 3. Create the OpenAI Secure MCP Tunnel and associate the correct Platform organization and ChatGPT
    workspace.
-4. Run `tunnel-client doctor --profile codework-genome --explain`.
+4. Run `tunnel-client doctor --profile omnigenis-genome --explain`.
 5. In ChatGPT developer mode, add a Tunnel connection and review exactly four tools.
 6. Run a canary with a bounded request id and record tool, redacted arguments, result and sanitized
    error in `/srv/genome/audit`.

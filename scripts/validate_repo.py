@@ -870,7 +870,14 @@ def validate(root: Path) -> list[str]:
         text = ngs_gate.read_text(encoding="utf-8")
         if "bash -lc './scripts/run_canary.sh" in text:
             errors.append("NGS gate must not bypass micromamba environment with a login-shell canary")
-        for token in ("freshness_gate.py", "GRCh38.lock.sha256.approved", "[self-hosted, linux, x64, genoma-production, highmem]", "nextflow run /opt/codework/main.nf --mode canary", "validate_bwa_mem2_functional.sh", "verify_supply_chain_lock.py"):
+        for token in (
+            "freshness_gate.py",
+            "GRCh38.lock.sha256.approved",
+            "[self-hosted, linux, x64, genoma-production, highmem]",
+            "nextflow run /opt/omnigenis/main.nf --mode canary",
+            "validate_bwa_mem2_functional.sh",
+            "verify_supply_chain_lock.py",
+        ):
             if token not in text:
                 errors.append(f"NGS gate missing current-session readiness contract: {token}")
 

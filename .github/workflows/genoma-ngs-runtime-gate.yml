@@ -134,9 +134,9 @@ jobs:
           docker image inspect genoma-ngs-latest:${{ github.sha }} --format '{{.Id}}' | tee results/freshness/image-id.txt
       - name: Execute direct and Nextflow functional canaries
         run: |
-          docker run --rm -e CANARY_VERSION_POLICY=INVENTORY -v "$PWD/results:/workspace/results" genoma-ngs-latest:${{ github.sha }} /opt/codework/scripts/run_canary.sh /workspace/results/canary
+          docker run --rm -e CANARY_VERSION_POLICY=INVENTORY -v "$PWD/results:/workspace/results" genoma-ngs-latest:${{ github.sha }} /opt/omnigenis/scripts/run_canary.sh /workspace/results/canary
           jq -e '.status == "PASS"' results/canary/report.json >/dev/null
-          docker run --rm -e CANARY_VERSION_POLICY=INVENTORY -v "$PWD/results:/workspace/results" genoma-ngs-latest:${{ github.sha }} nextflow run /opt/codework/main.nf --mode canary --outdir /workspace/results/nextflow-canary -ansi-log false
+          docker run --rm -e CANARY_VERSION_POLICY=INVENTORY -v "$PWD/results:/workspace/results" genoma-ngs-latest:${{ github.sha }} nextflow run /opt/omnigenis/main.nf --mode canary --outdir /workspace/results/nextflow-canary -ansi-log false
           jq -e '.status == "PASS"' results/nextflow-canary/canary/report.json >/dev/null
       - name: Session-promote candidate and refresh evidence sources
         run: |
@@ -147,7 +147,7 @@ jobs:
           jq -e '.ready_for_dna == true and (.evidence_sources | length) == 6' results/freshness/gate.json >/dev/null
       - name: Execute current-session Runtime/Resource Gate
         run: |
-          docker run --rm -v "$PWD/results:/workspace/results" genoma-ngs-latest:${{ github.sha }} python3 /opt/codework/scripts/latest_runtime_resource_gate.py --freshness-gate /workspace/results/freshness/gate.json --ref-root /refs --bam /workspace/results/canary/work/CANARY.sorted.bam --output /workspace/results/runtime-gate/preflight.json
+          docker run --rm -v "$PWD/results:/workspace/results" genoma-ngs-latest:${{ github.sha }} python3 /opt/omnigenis/scripts/latest_runtime_resource_gate.py --freshness-gate /workspace/results/freshness/gate.json --ref-root /refs --bam /workspace/results/canary/work/CANARY.sorted.bam --output /workspace/results/runtime-gate/preflight.json
           jq -e '.checks.executables_and_versions.status == "EXECUTADO" and .ready_for_real_calling == false' results/runtime-gate/preflight.json >/dev/null
           echo 'Hosted preflight does not claim full GRCh38 readiness.'
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -184,8 +184,8 @@ jobs:
           python3 scripts/prepare_latest_candidate.py --source environment.yml --output results/freshness/environment.latest-candidate.yml --evidence results/freshness/candidate-preparation.json
           cp results/freshness/environment.latest-candidate.yml environment.yml
           docker build --tag genoma-ngs-latest:${{ github.sha }} .
-          docker run --rm -e CANARY_VERSION_POLICY=INVENTORY -v "$PWD/results:/workspace/results" genoma-ngs-latest:${{ github.sha }} /opt/codework/scripts/run_canary.sh /workspace/results/canary
-          docker run --rm -e CANARY_VERSION_POLICY=INVENTORY -v "$PWD/results:/workspace/results" genoma-ngs-latest:${{ github.sha }} nextflow run /opt/codework/main.nf --mode canary --outdir /workspace/results/nextflow-canary -ansi-log false
+          docker run --rm -e CANARY_VERSION_POLICY=INVENTORY -v "$PWD/results:/workspace/results" genoma-ngs-latest:${{ github.sha }} /opt/omnigenis/scripts/run_canary.sh /workspace/results/canary
+          docker run --rm -e CANARY_VERSION_POLICY=INVENTORY -v "$PWD/results:/workspace/results" genoma-ngs-latest:${{ github.sha }} nextflow run /opt/omnigenis/main.nf --mode canary --outdir /workspace/results/nextflow-canary -ansi-log false
           jq -e '.status == "PASS"' results/canary/report.json >/dev/null
           jq -e '.status == "PASS"' results/nextflow-canary/canary/report.json >/dev/null
           python3 scripts/promote_latest_candidate.py --functional-canary results/canary/report.json --orchestration-canary results/nextflow-canary/canary/report.json --inventory results/canary/conda-inventory.json --output results/freshness/state-toolchain.json
@@ -195,18 +195,18 @@ jobs:
       - name: Validate approved GRCh38 bundle and index
         run: |
           test -s "$REF_ROOT/GRCh38.lock.sha256.approved" || { echo 'NÃO DISPONÍVEL: approved GRCh38 lock missing'; exit 2; }
-          docker run --rm -e REF_ROOT=/refs -e REQUIRE_BWA_INDEX=0 -v "$REF_ROOT:/refs:ro" genoma-ngs-latest:${{ github.sha }} /opt/codework/scripts/validate_grch38.sh | tee results/grch38/source-validation.txt
+          docker run --rm -e REF_ROOT=/refs -e REQUIRE_BWA_INDEX=0 -v "$REF_ROOT:/refs:ro" genoma-ngs-latest:${{ github.sha }} /opt/omnigenis/scripts/validate_grch38.sh | tee results/grch38/source-validation.txt
           fasta="$REF_ROOT/Homo_sapiens_assembly38.fasta"
           if [ ! -s "${fasta}.0123" ] || [ ! -s "${fasta}.amb" ] || [ ! -s "${fasta}.ann" ] || [ ! -s "${fasta}.bwt.2bit.64" ] || [ ! -s "${fasta}.pac" ]; then
-            docker run --rm -e REF_ROOT=/refs -v "$REF_ROOT:/refs" genoma-ngs-latest:${{ github.sha }} /opt/codework/scripts/build_bwa_mem2_index.sh
+            docker run --rm -e REF_ROOT=/refs -v "$REF_ROOT:/refs" genoma-ngs-latest:${{ github.sha }} /opt/omnigenis/scripts/build_bwa_mem2_index.sh
           fi
-          docker run --rm -e REF_ROOT=/refs -e REQUIRE_BWA_INDEX=1 -v "$REF_ROOT:/refs:ro" genoma-ngs-latest:${{ github.sha }} /opt/codework/scripts/validate_grch38.sh | tee results/grch38/final-validation.txt
-          docker run --rm -e REF_ROOT=/refs -v "$REF_ROOT:/refs:ro" genoma-ngs-latest:${{ github.sha }} /opt/codework/scripts/validate_bwa_mem2_functional.sh | tee results/grch38/bwa-functional.txt
+          docker run --rm -e REF_ROOT=/refs -e REQUIRE_BWA_INDEX=1 -v "$REF_ROOT:/refs:ro" genoma-ngs-latest:${{ github.sha }} /opt/omnigenis/scripts/validate_grch38.sh | tee results/grch38/final-validation.txt
+          docker run --rm -e REF_ROOT=/refs -v "$REF_ROOT:/refs:ro" genoma-ngs-latest:${{ github.sha }} /opt/omnigenis/scripts/validate_bwa_mem2_functional.sh | tee results/grch38/bwa-functional.txt
       - name: Re-run freshness and full Runtime/Resource Gate
         run: |
           python3 scripts/refresh_evidence_sources.py --input-state results/freshness/state-toolchain.json --output-state results/freshness/state-pre-runtime.json --snapshots-output results/evidence-sources/capability-snapshots-pre-runtime.json
           python3 scripts/freshness_gate.py --input results/freshness/state-pre-runtime.json --output results/freshness/gate-pre-runtime.json
-          docker run --rm -e REF_ROOT=/refs -v "$REF_ROOT:/refs:ro" -v "$PWD/results:/workspace/results" genoma-ngs-latest:${{ github.sha }} python3 /opt/codework/scripts/latest_runtime_resource_gate.py --freshness-gate /workspace/results/freshness/gate-pre-runtime.json --ref-root /refs --output /workspace/results/runtime-gate/full-grch38.json
+          docker run --rm -e REF_ROOT=/refs -v "$REF_ROOT:/refs:ro" -v "$PWD/results:/workspace/results" genoma-ngs-latest:${{ github.sha }} python3 /opt/omnigenis/scripts/latest_runtime_resource_gate.py --freshness-gate /workspace/results/freshness/gate-pre-runtime.json --ref-root /refs --output /workspace/results/runtime-gate/full-grch38.json
           jq -e '.checks.executables_and_versions.status == "EXECUTADO" and .checks.reference_build_and_contigs.status == "EXECUTADO" and .checks.aligner_indexes.status == "EXECUTADO" and .checks.required_resources_checksums.status == "EXECUTADO"' results/runtime-gate/full-grch38.json >/dev/null
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()

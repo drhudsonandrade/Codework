@@ -24,3 +24,11 @@ Do not update the ledger to make a failing new legacy occurrence pass. First det
 ## Phase boundaries
 
 2A defines and guards identities. 2B cuts repository-controlled runtime/build identities over. 2C migrates live self-hosted runners. 2D removes temporary compatibility and seals zero active legacy identity.
+
+## Phase 2B status
+
+Phase 2B retires repository-controlled runtime and build identities to their canonical OmniGenis values. The self-hosted runner pool intentionally remains on its reviewed Phase 2C legacy labels until the runner cutover is separately executed and verified.
+
+`OMNIGENIS_CODERABBIT_BIN_DIR` is canonical. The legacy CodeRabbit bin-directory variable remains a deprecated compatibility fallback through Phase 2D; conflicting canonical and legacy values fail closed.
+
+Historical repository URLs and archived runtime bundle names remain provenance records. Historical GHCR package state is not claimed as inspected when package-read capability is unavailable.

@@ -1,0 +1,310 @@
+{
+  "base_sha": "4c0e5222248b5f9f2537d627091b80afc9c9e120",
+  "captured_at_utc": "2026-09-11T15:23:03.451375+00:00",
+  "changed_paths": [
+    ".agents/plugins/coderabbit-cli-checksums.json",
+    ".agents/plugins/marketplace.json",
+    ".github/workflows/genoma-ngs-runtime-gate.yml",
+    ".github/workflows/genoma-snp-array.yml",
+    ".github/workflows/scaffold-validation.yml",
+    "Dockerfile",
+    "config/legacy_identity_ledger.json",
+    "deploy/docker-compose.yml",
+    "deploy/genome-mcp.service",
+    "deploy/tunnel-client.service.example",
+    "docs/MAGALU_PRIVATE_MCP_SETUP.md",
+    "docs/PROJECT_IDENTITY_CONTRACT.md",
+    "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md",
+    "docs/superpowers/evidence/2026-09-11-omnigenis-phase2b-runtime-build-identity.json",
+    "docs/superpowers/plans/2026-09-11-omnigenis-phase2b-runtime-build-identity-cutover.md",
+    "environment.yml",
+    "mcp/README.md",
+    "mcp/package-lock.json",
+    "mcp/package.json",
+    "mcp/src/server.ts",
+    "mcp/test/core.test.ts",
+    "mcp/test/payloadContracts.test.ts",
+    "mcp/test/server.test.ts",
+    "nextflow.config",
+    "scripts/codex/setup-coderabbit.sh",
+    "scripts/generate_canary.py",
+    "scripts/validate_repo.py",
+    "tests/test_ci_optimization_contract.py",
+    "tests/test_coderabbit_guardrails.py",
+    "tests/test_integration_code_language.py",
+    "tests/test_phase2b_evidence_contract.py",
+    "tests/test_phase2b_legacy_seal.py",
+    "tests/test_phase2b_mcp_ngs_identity.py",
+    "tests/test_phase2b_runtime_build_identity.py",
+    "tests/test_project_identity_guard.py",
+    "tests/test_repository_identity_migration.py",
+    "tests/test_workflow_contracts.py"
+  ],
+  "external_capabilities": {
+    "codex_cli": {
+      "reason": "codex executable not present on authorized host during Phase 2B capture.",
+      "status": "NOT_AVAILABLE"
+    },
+    "ghcr_new_package_premerge": {
+      "observed_http_status": 404,
+      "reason": "Observed 404 is not treated as proof of absence under insufficient package-read capability; publication proof is deferred to protected main after human merge.",
+      "status": "NOT_AVAILABLE_PREMERGE"
+    },
+    "ghcr_old_package": {
+      "observed_http_status": 403,
+      "reason": "GitHub CLI credential lacks read:packages; historical package state was not inferred or modified.",
+      "status": "NOT_AVAILABLE"
+    }
+  },
+  "ghcr_premerge_state": {
+    "expected_package": "omnigenis-genome",
+    "expected_reference_pattern": "ghcr.io/<repository-owner>/omnigenis-genome@sha256:<64-hex-digest>",
+    "old_package_action": "PRESERVE",
+    "status": "PENDING_AFTER_HUMAN_MERGE"
+  },
+  "implementation_head_sha": "698e459d25c239465f7e54fc9d3f9a67a74d0320",
+  "implementation_tree_sha": "6a163077cc1219370bac5579e897e8713bff4865",
+  "legacy_ledger_sha256": "3a4e27b2436a087dd5d457e8bf6bb4018758148c7382af48616daa0cbfd31c3a",
+  "legacy_scan": {
+    "counts": {
+      "ci-test-function-name": {
+        "tests/test_ci_optimization_contract.py": 1
+      },
+      "coderabbit-bin-env": {
+        "scripts/codex/setup-coderabbit.sh": 1
+      },
+      "historical-repository-pr-urls": {
+        "docs/POLICY_CODE_LANGUAGE_INVENTORY.md": 1,
+        "docs/REPORTING_CODE_LANGUAGE_INVENTORY.md": 1,
+        "tests/test_repository_identity_migration.py": 2
+      },
+      "historical-runtime-zip": {
+        "docs/GITHUB_MOBILE_IMPORT.md": 2
+      },
+      "repository-old-full-name-test": {
+        "tests/test_repository_identity_migration.py": 2
+      },
+      "runner-pool": {
+        ".github/workflows/genoma-audit.yml": 1,
+        ".github/workflows/genoma-policy-engine.yml": 1,
+        ".github/workflows/scaffold-validation.yml": 1,
+        "docs/GITHUB_MOBILE_IMPORT.md": 1,
+        "docs/MAGALU_PRIVATE_MCP_SETUP.md": 1,
+        "tests/test_ci_optimization_contract.py": 8
+      }
+    },
+    "over_budget": [],
+    "unclassified": []
+  },
+  "post_evidence_validation": {
+    "claim": "No post-evidence PASS is asserted by this pre-merge artifact; results must be verified on the final evidence HEAD.",
+    "commands": [
+      "python3 -m unittest tests.test_phase2b_evidence_contract -v",
+      "python3 -m unittest discover -s tests -v",
+      "find scripts -type f -name '*.sh' -exec bash -n {} +",
+      "git diff --check"
+    ],
+    "status": "REQUIRED_AFTER_EVIDENCE_COMMIT"
+  },
+  "post_merge_requirements": [
+    "Fetch clean origin/main and record the human merge SHA.",
+    "Run identity guard, validate_repo, supply-chain, language, residual-language, recursive shell syntax, and complete root suite on merged main.",
+    "Verify repository ID 1212760346 and both active rulesets retain normalized semantics.",
+    "Verify protected-main publish-ghcr produced ghcr-image-reference-<merge-sha> artifact containing ghcr.io/<owner>/omnigenis-genome@sha256:<64-hex-digest>.",
+    "Do not delete or rewrite historical codework-genome package artifacts.",
+    "Verify runner names and labels remain unchanged; Phase 2C must not start before this gate passes."
+  ],
+  "project_identity_sha256": "d6f251a214db5d390a1f933066679c3aed886e4db73573b8a1b785aded0cf3df",
+  "protected_boundaries": {
+    "normative_surface_changes": [],
+    "repository_id": 1212760346,
+    "runner_cutover": "NOT_STARTED_PHASE_2C",
+    "runner_snapshot": [
+      {
+        "busy": false,
+        "id": 21,
+        "labels": [
+          "self-hosted",
+          "Linux",
+          "X64",
+          "codework-isolated",
+          "codework-01"
+        ],
+        "name": "drhudson-codework-01",
+        "status": "online"
+      },
+      {
+        "busy": false,
+        "id": 22,
+        "labels": [
+          "self-hosted",
+          "Linux",
+          "X64",
+          "codework-isolated",
+          "codework-02"
+        ],
+        "name": "drhudson-codework-02",
+        "status": "online"
+      }
+    ],
+    "scientific_surface_changes": []
+  },
+  "runtime_resource_gate": {
+    "host_mutation_performed": false,
+    "host_paths": {
+      "/etc/codework": "ABSENT",
+      "/etc/omnigenis": "ABSENT",
+      "/opt/codework": "ABSENT",
+      "/opt/omnigenis": "ABSENT"
+    },
+    "loaded_identity_environment_variable_names": [],
+    "matching_systemd_units": [],
+    "status": "EXECUTED"
+  },
+  "schema": "omnigenis-phase2b-runtime-build-evidence-v1",
+  "validation_provenance": {
+    "code_language": {
+      "command": "python3 scripts/code_language_guard.py --check",
+      "environment": {
+        "python_launcher": "python3",
+        "python_resolved_path": "/tmp/codework-ci-artifact-opt-venv/bin/python3",
+        "python_version": "Python 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      },
+      "exit_code": 0,
+      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": "PASS with no stdout"
+    },
+    "diff_check": {
+      "command": "git diff --check",
+      "environment": {
+        "python_launcher": "python3",
+        "python_resolved_path": "/tmp/codework-ci-artifact-opt-venv/bin/python3",
+        "python_version": "Python 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      },
+      "exit_code": 0,
+      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": "PASS with no stdout"
+    },
+    "docs_language": {
+      "command": "python3 -m unittest tests.test_developer_documentation_language -v",
+      "environment": {
+        "python_launcher": "python3",
+        "python_resolved_path": "/tmp/codework-ci-artifact-opt-venv/bin/python3",
+        "python_version": "Python 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      },
+      "exit_code": 0,
+      "output_sha256": "86516573d7bb972920d2b5c578dcf40816baa35d374707c8ed5c2c7bbd2dc277",
+      "summary": "27 tests PASS"
+    },
+    "identity_guard": {
+      "command": "python3 scripts/project_identity_guard.py --check",
+      "environment": {
+        "python_launcher": "python3",
+        "python_resolved_path": "/tmp/codework-ci-artifact-opt-venv/bin/python3",
+        "python_version": "Python 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      },
+      "exit_code": 0,
+      "output_sha256": "0c6537c2763c5efb04594bf3441d6e02a721a5f1f220fe4490de707fea3aad2d",
+      "summary": "PASS project_identity_contract"
+    },
+    "phase2b_tests": {
+      "command": "python3 -m unittest tests.test_phase2b_runtime_build_identity tests.test_phase2b_mcp_ngs_identity tests.test_phase2b_legacy_seal -v",
+      "environment": {
+        "python_launcher": "python3",
+        "python_resolved_path": "/tmp/codework-ci-artifact-opt-venv/bin/python3",
+        "python_version": "Python 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      },
+      "exit_code": 0,
+      "output_sha256": "4f3c007e2d8dff19f3b6bb58fbeba912b9d1f6bfb7a731488b8ec08130b21d15",
+      "summary": "7 tests PASS"
+    },
+    "plan_sequence": {
+      "command": "python3 -m unittest tests.test_phase2b_evidence_contract.Phase2BEvidenceContractTest.test_plan_bootstrap_defers_evidence_contract_and_full_suite -v",
+      "environment": {
+        "python_launcher": "python3",
+        "python_resolved_path": "/tmp/codework-ci-artifact-opt-venv/bin/python3",
+        "python_version": "Python 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      },
+      "exit_code": 0,
+      "output_sha256": "819cc443ea75cec0ab722289b342eae1dbe42a321c5e224037cc159a296c6ed5",
+      "summary": "bootstrap/final evidence sequence regression test PASS"
+    },
+    "residual_language": {
+      "command": "python3 scripts/residual_language_audit.py --check",
+      "environment": {
+        "python_launcher": "python3",
+        "python_resolved_path": "/tmp/codework-ci-artifact-opt-venv/bin/python3",
+        "python_version": "Python 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      },
+      "exit_code": 0,
+      "output_sha256": "3aa068a3ee76de0f29694f99d95a5e14143a3ed1743f142bd60781ef1cdcfc25",
+      "summary": "clean=true; unclassified=[]; drift=[]; missing=[]"
+    },
+    "reviewer_tests": {
+      "command": "python3 -m unittest tests.test_coderabbit_guardrails tests.test_integration_code_language.IntegrationCodeLanguageTest.test_coderabbit_setup_diagnostics_are_english tests.test_ci_optimization_contract.CIOptimizationContractTest.test_ngs_runtime_gate_matches_approved_phase_two_b_semantics -v",
+      "environment": {
+        "python_launcher": "python3",
+        "python_resolved_path": "/tmp/codework-ci-artifact-opt-venv/bin/python3",
+        "python_version": "Python 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      },
+      "exit_code": 0,
+      "output_sha256": "7fab07f662f0cb314dbf62d63e8c32bd866acef15fe1db91cd529c4e093f41e5",
+      "summary": "19 reviewer-focused tests PASS, including HOME/.local/bin fallback"
+    },
+    "shell_syntax": {
+      "command": "find scripts -type f -name '*.sh' -exec bash -n {} +",
+      "environment": {
+        "python_launcher": "python3",
+        "python_resolved_path": "/tmp/codework-ci-artifact-opt-venv/bin/python3",
+        "python_version": "Python 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      },
+      "exit_code": 0,
+      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": "all repository shell scripts under scripts/ passed bash -n"
+    },
+    "supply_chain": {
+      "command": "python3 scripts/verify_supply_chain_lock.py",
+      "environment": {
+        "python_launcher": "python3",
+        "python_resolved_path": "/tmp/codework-ci-artifact-opt-venv/bin/python3",
+        "python_version": "Python 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      },
+      "exit_code": 0,
+      "output_sha256": "3ffbf1e78306655dbb2f214974a4e24c842e6378da0e2d8840d43b2eb4939c7c",
+      "summary": "PASS immutable actions, container digest, GitGuardian identity, runtime pins"
+    },
+    "validate_repo": {
+      "command": "python3 scripts/validate_repo.py",
+      "environment": {
+        "python_launcher": "python3",
+        "python_resolved_path": "/tmp/codework-ci-artifact-opt-venv/bin/python3",
+        "python_version": "Python 3.12.3",
+        "requirements_lock": "reporting/requirements.txt",
+        "requirements_sha256": "416b942d5eaaa9b7d24d0a0c684018cd4d3b335b827a916fe762a9479a549277"
+      },
+      "exit_code": 0,
+      "output_sha256": "3c0dc015021366a6895ca1777bd4be46995994861b27bb8fcaa7cb47a143f2fd",
+      "summary": "PASS repository_contract and all repository validators"
+    }
+  }
+}
