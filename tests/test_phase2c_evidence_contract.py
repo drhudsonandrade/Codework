@@ -97,6 +97,21 @@ class Phase2CRunnerEvidenceContractTest(unittest.TestCase):
         """Index a runner snapshot by stable runner ID."""
         return {int(item["id"]): item for item in snapshot}
 
+    def assert_additive_snapshot(
+        self, before_snapshot: list[dict], after_snapshot: list[dict]
+    ) -> None:
+        """Require unique stable IDs and additive-only runner labels."""
+        before = self.by_id(before_snapshot)
+        after = self.by_id(after_snapshot)
+        self.assertEqual(len(before_snapshot), len(before))
+        self.assertEqual(len(after_snapshot), len(after))
+        self.assertEqual(set(before), set(after))
+        for runner_id in before:
+            self.assertLessEqual(
+                set(before[runner_id]["labels"]),
+                set(after[runner_id]["labels"]),
+            )
+
     def test_exact_head_identity_and_evidence_only_commit_are_git_bound(self) -> None:
         """Bind the evidence-only commit to the exact implementation SHA and tree."""
         evidence = self.load()
@@ -128,17 +143,39 @@ class Phase2CRunnerEvidenceContractTest(unittest.TestCase):
     def test_dual_label_expansion_preserves_runner_identity(self) -> None:
         """Require canonical labels without changing IDs or runner names."""
         evidence = self.load()
-        self.assertEqual(evidence["schema"], "omnigenis-phase2c-runner-cutover-v1")
+        self.assertEqual(evidence["schema"], "omnigenis-phase2c-runner-cutover-v2")
         self.assertEqual(evidence["stage"], "REPOSITORY_CUTOVER_READY_FOR_REVIEW")
         self.assertEqual(evidence["base_main_sha"], BASE_MAIN_SHA)
-        before = self.by_id(evidence["runner_snapshot_before"])
-        after = self.by_id(evidence["runner_snapshot_after"])
+        before_snapshot = evidence["runner_snapshot_before"]
+        after_snapshot = evidence["runner_snapshot_after"]
+        self.assert_additive_snapshot(before_snapshot, after_snapshot)
+        before = self.by_id(before_snapshot)
+        after = self.by_id(after_snapshot)
         self.assertEqual(set(before), {21, 22})
         self.assertEqual(set(after), {21, 22})
         for runner_id in (21, 22):
             self.assertEqual(after[runner_id]["name"], before[runner_id]["name"])
             self.assertEqual(after[runner_id]["status"], "online")
             self.assertFalse(after[runner_id]["busy"])
+
+    def test_duplicate_runner_id_snapshot_is_rejected(self) -> None:
+        """Reject snapshots where duplicate runner IDs would collapse under indexing."""
+        evidence = self.load()
+        before = list(evidence["runner_snapshot_before"])
+        after = list(evidence["runner_snapshot_after"])
+        before.append(dict(before[0]))
+        with self.assertRaises(AssertionError):
+            self.assert_additive_snapshot(before, after)
+
+    def test_removed_legacy_label_snapshot_is_rejected(self) -> None:
+        """Reject a post snapshot that silently removes any pre-existing label."""
+        evidence = self.load()
+        before = json.loads(json.dumps(evidence["runner_snapshot_before"]))
+        after = json.loads(json.dumps(evidence["runner_snapshot_after"]))
+        removed = after[0]["labels"].pop(0)
+        self.assertIn(removed, before[0]["labels"])
+        with self.assertRaises(AssertionError):
+            self.assert_additive_snapshot(before, after)
 
     def test_canonical_and_legacy_labels_coexist_until_merge_canary(self) -> None:
         """Keep rollback labels while exposing the canonical routing labels."""
@@ -225,7 +262,22 @@ class Phase2CRunnerEvidenceContractTest(unittest.TestCase):
             self.assertEqual(record["command"], command, name)
             self.assertEqual(record["exit_code"], 0, name)
             self.assertRegex(record["output_sha256"], r"^[0-9a-f]{64}$", name)
+            self.assertEqual(record["output_kind"], "inline_sanitized_summary", name)
+            locator = f"inline:validation_provenance.{name}.sanitized_output"
+            self.assertEqual(record["output_locator"], locator, name)
+            sanitized = record["sanitized_output"]
+            self.assertTrue(sanitized, name)
+            self.assertNotIn("/tmp/", sanitized, name)
+            self.assertEqual(
+                record["output_sha256"],
+                hashlib.sha256(sanitized.encode("utf-8")).hexdigest(),
+                name,
+            )
             self.assertTrue(record["summary"], name)
+            self.assertEqual(record["summary_locator"], locator, name)
+            for value in record.get("environment", {}).values():
+                if isinstance(value, str):
+                    self.assertNotIn("/tmp/", value, name)
             argv = shlex.split(command)
             self.assertTrue(argv, name)
             self.assertIn(argv[0], {"python3", "find", "git"}, name)

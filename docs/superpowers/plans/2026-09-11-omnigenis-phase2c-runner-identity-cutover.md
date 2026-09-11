@@ -334,6 +334,12 @@ Require:
 ```
 
 Bind implementation SHA/tree and preserve the verified dual-label snapshot.
+Use schema `omnigenis-phase2c-runner-cutover-v2`. Every validation record must
+store an inline sanitized output summary, an inline locator, and a SHA-256 that
+is recomputed from those versioned bytes. Do not use `/tmp` paths as durable
+evidence locators or Python environment identifiers; retain only the Python
+version plus the versioned requirements lock path/hash. The sanitized output
+must contain no secrets or sensitive genomic data.
 
 - [ ] **Step 4: Commit evidence-only**
 
