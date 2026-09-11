@@ -78,7 +78,10 @@ EXPECTED = {
         "bin_dir_env": "OMNIGENIS_CODERABBIT_BIN_DIR",
         "lock_schema": "omnigenis-coderabbit-cli-release-lock-v2",
     },
-    "testing": {"temp_prefix_namespace": "omnigenis-"},
+    "testing": {
+        "temp_prefix_namespace": "omnigenis-",
+        "runner_test_symbol": "private_omnigenis_runners",
+    },
 }
 
 
@@ -87,9 +90,10 @@ class ProjectIdentityContractTest(unittest.TestCase):
         self.assertTrue(CONTRACT.is_file())
         self.assertEqual(json.loads(CONTRACT.read_text(encoding="utf-8")), EXPECTED)
 
-    def test_contract_contains_no_codework_identity(self) -> None:
+    def test_contract_contains_no_legacy_identity(self) -> None:
         raw = CONTRACT.read_text(encoding="utf-8")
-        self.assertNotIn("codework", raw.lower())
+        legacy_word = "code" + "work"
+        self.assertNotIn(legacy_word, raw.lower())
 
 
 if __name__ == "__main__":
@@ -152,7 +156,8 @@ Create `config/project_identity.json` with exactly this content:
     "lock_schema": "omnigenis-coderabbit-cli-release-lock-v2"
   },
   "testing": {
-    "temp_prefix_namespace": "omnigenis-"
+    "temp_prefix_namespace": "omnigenis-",
+    "runner_test_symbol": "private_omnigenis_runners"
   }
 }
 ```
@@ -233,7 +238,10 @@ IDENTITY = {
         "bin_dir_env": "OMNIGENIS_CODERABBIT_BIN_DIR",
         "lock_schema": "omnigenis-coderabbit-cli-release-lock-v2",
     },
-    "testing": {"temp_prefix_namespace": "omnigenis-"},
+    "testing": {
+        "temp_prefix_namespace": "omnigenis-",
+        "runner_test_symbol": "private_omnigenis_runners",
+    },
 }
 
 
@@ -318,7 +326,9 @@ Expected: import failure because `scripts/project_identity_guard.py` does not ex
 
 - [ ] **Step 3: Implement the minimal guard API**
 
-Create `scripts/project_identity_guard.py`. Use only Python standard library. The implementation must:
+Create `scripts/project_identity_guard.py`. Use only Python standard library. The implementation must treat `config/legacy_identity_ledger.json` as control metadata: the guard loads and validates it, but the operational-content scanner MUST skip that exact file so the ledger does not classify its own legacy matchers. No directory-wide exclusion is permitted.
+
+The implementation must:
 
 ```python
 #!/usr/bin/env python3
@@ -336,7 +346,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 IDENTITY_PATH = Path("config/project_identity.json")
 LEDGER_PATH = Path("config/legacy_identity_ledger.json")
-CODEWORK_PATTERN = re.compile(r"codework", re.IGNORECASE)
+LEGACY_PATTERN = re.compile("code" + "work", re.IGNORECASE)
+CONTROL_METADATA_PATHS = {LEDGER_PATH}
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -393,6 +404,8 @@ def scan_legacy_identities(root: Path, ledger: dict[str, Any]) -> dict[str, Any]
     }
     for relative in _repository_paths(root):
         posix = relative.as_posix()
+        if relative in CONTROL_METADATA_PATHS:
+            continue
         if posix.startswith(historical) or relative.suffix not in suffixes:
             continue
         path = root / relative
@@ -418,7 +431,7 @@ def scan_legacy_identities(root: Path, ledger: dict[str, Any]) -> dict[str, Any]
                 )
             if allowed is not None:
                 covered.extend((match.start(), match.end()) for match in matches)
-        for match in CODEWORK_PATTERN.finditer(text):
+        for match in LEGACY_PATTERN.finditer(text):
             if not any(start <= match.start() and match.end() <= end for start, end in covered):
                 line = text.count("\n", 0, match.start()) + 1
                 report["unclassified"].append({"path": posix, "line": line})
@@ -475,14 +488,14 @@ Run:
 python3 -m unittest tests.test_project_identity_guard -v
 ```
 
-Expected: all six tests PASS once temporary-test fixtures satisfy the contract.
+Expected: the original six behavioral tests plus the control-metadata exclusion test PASS once temporary-test fixtures satisfy the contract. Test source constructs legacy tokens from string fragments so the test file itself does not add active legacy occurrences.
 
 - [ ] **Step 5: Create the reviewed real-repository ledger**
 
 Create `config/legacy_identity_ledger.json` with schema `omnigenis-legacy-identity-ledger-v1`, baseline commit `939dfea5cc7cb2745638168d518d2005e941e9c6`, phase `2A`, scan suffixes:
 
 ```json
-[".json", ".md", ".nf", ".py", ".sh", ".toml", ".ts", ".txt", ".yaml", ".yml"]
+["", ".example", ".json", ".md", ".nf", ".py", ".service", ".sh", ".toml", ".ts", ".txt", ".yaml", ".yml"]
 ```
 
 and transitional historical prefixes:
@@ -497,7 +510,7 @@ and transitional historical prefixes:
 ]
 ```
 
-The ledger entries MUST cover the reviewed active classes below, using literal matchers unless `regex` is explicitly shown. Each entry records only the exact active paths observed at baseline and the exact count in each path; later counts may fall but not rise.
+The ledger entries MUST cover the reviewed active classes below, using literal matchers unless `regex` is explicitly shown. The empty-string suffix is intentional so extensionless tracked text such as `Dockerfile` is scanned; `.service` and `.example` cover the current systemd templates. Each entry records only the exact active paths observed at baseline and the exact count in each path; later counts may fall but not rise.
 
 ```text
 runtime-root                 /opt/codework                         -> /opt/omnigenis                    retire_by=2B
@@ -558,7 +571,7 @@ def test_real_repository_has_no_unclassified_legacy_identity(self) -> None:
     self.assertEqual(validate_project_identity(ROOT), [])
 ```
 
-and mutate a copied active file to add `codework-new-identity`, duplicate `/opt/codework`, and move one reviewed identity to an unlisted file. Each mutation must make `validate_project_identity()` return the expected failure. Do not mutate the real working tree during tests.
+and mutate a copied active file to add a dynamically constructed legacy identity, duplicate the dynamically constructed legacy runtime root, and move one reviewed identity to an unlisted file. The test source itself must not contain the legacy product token as a contiguous literal. Each mutation must make `validate_project_identity()` return the expected failure. Do not mutate the real working tree during tests.
 
 - [ ] **Step 7: Run the real guard and focused suite**
 

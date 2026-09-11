@@ -37,7 +37,10 @@ EXPECTED = {
         "bin_dir_env": "OMNIGENIS_CODERABBIT_BIN_DIR",
         "lock_schema": "omnigenis-coderabbit-cli-release-lock-v2",
     },
-    "testing": {"temp_prefix_namespace": "omnigenis-"},
+    "testing": {
+        "temp_prefix_namespace": "omnigenis-",
+        "runner_test_symbol": "private_omnigenis_runners",
+    },
 }
 
 
@@ -46,9 +49,10 @@ class ProjectIdentityContractTest(unittest.TestCase):
         self.assertTrue(CONTRACT.is_file())
         self.assertEqual(json.loads(CONTRACT.read_text(encoding="utf-8")), EXPECTED)
 
-    def test_contract_contains_no_codework_identity(self) -> None:
+    def test_contract_contains_no_legacy_identity(self) -> None:
         raw = CONTRACT.read_text(encoding="utf-8")
-        self.assertNotIn("codework", raw.lower())
+        legacy_word = "code" + "work"
+        self.assertNotIn(legacy_word, raw.lower())
 
 
 if __name__ == "__main__":

@@ -39,6 +39,7 @@
     "lock_schema": "omnigenis-coderabbit-cli-release-lock-v2"
   },
   "testing": {
-    "temp_prefix_namespace": "omnigenis-"
+    "temp_prefix_namespace": "omnigenis-",
+    "runner_test_symbol": "private_omnigenis_runners"
   }
 }
