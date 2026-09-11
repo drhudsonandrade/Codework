@@ -1,0 +1,139 @@
+{
+  "base_sha": "939dfea5cc7cb2745638168d518d2005e941e9c6",
+  "identity_contract_sha256": "d6f251a214db5d390a1f933066679c3aed886e4db73573b8a1b785aded0cf3df",
+  "implementation_head_sha": "9aa49aae9301f4a7b347ae88329f64a7ce465e7a",
+  "implementation_tree_sha": "97c884a3fb19962ce0cac005ad2250975fea1b0d",
+  "legacy_ledger_sha256": "f08bf3a97afe20bc0e389b495bb2e25c1cf6f4e13d230daf9a35872f326b7cf3",
+  "legacy_scan": {
+    "counts": {
+      "cache-namespace": {
+        ".github/workflows/scaffold-validation.yml": 2,
+        "tests/test_ci_optimization_contract.py": 2
+      },
+      "ci-test-function-name": {
+        "tests/test_ci_optimization_contract.py": 1
+      },
+      "coderabbit-bin-env": {
+        "scripts/codex/setup-coderabbit.sh": 1,
+        "tests/test_coderabbit_guardrails.py": 1,
+        "tests/test_repository_identity_migration.py": 1
+      },
+      "coderabbit-lock-schema": {
+        ".agents/plugins/coderabbit-cli-checksums.json": 1,
+        "scripts/codex/setup-coderabbit.sh": 1,
+        "tests/test_coderabbit_guardrails.py": 1
+      },
+      "coderabbit-plugin": {
+        "scripts/codex/setup-coderabbit.sh": 4,
+        "tests/test_coderabbit_guardrails.py": 8
+      },
+      "codex-marketplace": {
+        ".agents/plugins/marketplace.json": 1,
+        "scripts/codex/setup-coderabbit.sh": 8,
+        "tests/test_coderabbit_guardrails.py": 7
+      },
+      "conda-environment": {
+        "environment.yml": 1,
+        "tests/test_repository_identity_migration.py": 1
+      },
+      "config-root": {
+        "deploy/genome-mcp.service": 1,
+        "deploy/tunnel-client.service.example": 1,
+        "docs/MAGALU_PRIVATE_MCP_SETUP.md": 3
+      },
+      "container-package": {
+        ".github/workflows/scaffold-validation.yml": 4,
+        "deploy/tunnel-client.service.example": 1,
+        "docs/MAGALU_PRIVATE_MCP_SETUP.md": 9,
+        "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md": 7,
+        "tests/test_ci_optimization_contract.py": 1
+      },
+      "historical-repository-pr-urls": {
+        "docs/POLICY_CODE_LANGUAGE_INVENTORY.md": 1,
+        "docs/REPORTING_CODE_LANGUAGE_INVENTORY.md": 1,
+        "tests/test_repository_identity_migration.py": 2
+      },
+      "historical-runtime-zip": {
+        "docs/GITHUB_MOBILE_IMPORT.md": 2
+      },
+      "mcp-package": {
+        "mcp/package-lock.json": 2,
+        "mcp/package.json": 1,
+        "tests/test_repository_identity_migration.py": 1
+      },
+      "mcp-server": {
+        "mcp/src/server.ts": 2
+      },
+      "mcp-test-temp-prefixes": {
+        "mcp/test/core.test.ts": 1,
+        "mcp/test/server.test.ts": 28
+      },
+      "nextflow-manifest": {
+        "tests/test_repository_identity_migration.py": 1
+      },
+      "product-word-active": {
+        ".agents/plugins/marketplace.json": 1,
+        "deploy/genome-mcp.service": 1,
+        "deploy/tunnel-client.service.example": 1,
+        "mcp/README.md": 1
+      },
+      "repository-old-full-name-test": {
+        "tests/test_repository_identity_migration.py": 2
+      },
+      "runner-pool": {
+        ".github/workflows/genoma-audit.yml": 1,
+        ".github/workflows/genoma-policy-engine.yml": 1,
+        ".github/workflows/scaffold-validation.yml": 1,
+        "docs/GITHUB_MOBILE_IMPORT.md": 1,
+        "docs/MAGALU_PRIVATE_MCP_SETUP.md": 1,
+        "tests/test_ci_optimization_contract.py": 8,
+        "tests/test_repository_identity_migration.py": 1
+      },
+      "runtime-root": {
+        ".github/workflows/genoma-ngs-runtime-gate.yml": 10,
+        ".github/workflows/genoma-snp-array.yml": 2,
+        ".github/workflows/scaffold-validation.yml": 1,
+        "Dockerfile": 8,
+        "deploy/docker-compose.yml": 1,
+        "deploy/genome-mcp.service": 1,
+        "docs/MAGALU_PRIVATE_MCP_SETUP.md": 7,
+        "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md": 3,
+        "mcp/test/payloadContracts.test.ts": 1,
+        "mcp/test/server.test.ts": 12,
+        "scripts/validate_repo.py": 1,
+        "tests/test_repository_identity_migration.py": 1,
+        "tests/test_workflow_contracts.py": 2
+      },
+      "runtime-state-dir": {
+        "deploy/tunnel-client.service.example": 1,
+        "docs/MAGALU_PRIVATE_MCP_SETUP.md": 1
+      },
+      "synthetic-fixture": {
+        "scripts/generate_canary.py": 1
+      }
+    },
+    "over_budget": [],
+    "unclassified": []
+  },
+  "normative_surface_changed_paths": [],
+  "root_test_count": 1063,
+  "runtime_surface_changed_paths": [],
+  "schema": "omnigenis-phase2a-identity-contract-evidence-v1",
+  "scientific_surface_changed_paths": [],
+  "trigger_only_workflow_changed_paths": [
+    ".github/workflows/genoma-ngs-runtime-gate.yml"
+  ],
+  "trigger_only_workflow_normalized_sha256": "9f25b7a635ecbbfb76e3eb540dbe83329ef392538312c673ae35de9e1d5ffcfc",
+  "validation": {
+    "ci_trigger_closure": "PASS",
+    "code_language": "PASS",
+    "developer_documentation_tests": "PASS",
+    "diff_check": "PASS",
+    "project_identity_guard": "PASS",
+    "residual_language": "PASS",
+    "root_suite": "PASS",
+    "shell_syntax": "PASS",
+    "supply_chain": "PASS",
+    "validate_repo": "PASS"
+  }
+}
