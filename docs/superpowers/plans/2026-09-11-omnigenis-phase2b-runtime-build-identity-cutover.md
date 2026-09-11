@@ -599,7 +599,7 @@ git diff --cached --check
 git commit -m "test: define OmniGenis Phase 2B evidence contract"
 ```
 
-No implementation commit may be created after the evidence-bearing validation cycle begins. The final evidence-contract test must fail if the evidence artifact is missing. During the bootstrap pre-evidence cycle, run the complete functional suite while explicitly excluding only `tests.test_phase2b_evidence_contract`; generate and commit the evidence next, then run the complete root suite including the evidence contract on the final evidence HEAD before PR readiness.
+No implementation commit may be created after the evidence-bearing validation cycle begins. The final evidence-contract test must fail if the evidence artifact is missing. During the bootstrap pre-evidence cycle, run only gates that are independent of the evidence artifact. Generate and commit the evidence next, then run the complete root suite including the evidence contract on the final evidence HEAD before PR readiness.
 
 - [ ] **Step 4: Execute one fail-fast validation cycle on the exact implementation HEAD**
 
@@ -678,8 +678,8 @@ Use this structure:
   "post_evidence_validation": {
     "status": "REQUIRED_AFTER_EVIDENCE_COMMIT",
     "commands": [
-      "python -m unittest tests.test_phase2b_evidence_contract -v",
-      "python -m unittest discover -s tests -v",
+      "python3 -m unittest tests.test_phase2b_evidence_contract -v",
+      "python3 -m unittest discover -s tests -v",
       "find scripts -type f -name '*.sh' -exec bash -n {} +",
       "git diff --check"
     ]
@@ -712,7 +712,7 @@ git diff --cached --check
 git commit -m "docs: record OmniGenis Phase 2B evidence"
 ```
 
-The final evidence-contract test resolves `implementation_head_sha` as a commit, compares its tree with `implementation_tree_sha`, requires `HEAD^` to equal that implementation commit, and requires the evidence commit to change only the evidence JSON.
+The final evidence-contract test resolves `implementation_head_sha` as a commit, compares its tree with `implementation_tree_sha`, and finds exactly one reachable direct child whose diff changes only the evidence JSON and whose committed bytes match the checked-out artifact. On a direct feature-branch checkout that evidence commit must be `HEAD`; on a GitHub pull-request synthetic merge checkout, `HEAD` must have exactly two parents and the evidence commit must be the second parent. Any later branch commit after the evidence-only commit is rejected.
 
 - [ ] **Step 9: Execute the final post-evidence gate**
 

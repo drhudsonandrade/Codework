@@ -6,15 +6,96 @@ import json
 import shlex
 import shutil
 import subprocess
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-EVIDENCE_RELATIVE = "docs/superpowers/evidence/2026-09-11-omnigenis-phase2b-runtime-build-identity.json"
+EVIDENCE_RELATIVE = (
+    "docs/superpowers/evidence/"
+    "2026-09-11-omnigenis-phase2b-runtime-build-identity.json"
+)
 EVIDENCE = ROOT / EVIDENCE_RELATIVE
-PLAN_RELATIVE = "docs/superpowers/plans/2026-09-11-omnigenis-phase2b-runtime-build-identity-cutover.md"
+PLAN_RELATIVE = (
+    "docs/superpowers/plans/"
+    "2026-09-11-omnigenis-phase2b-runtime-build-identity-cutover.md"
+)
 PLAN = ROOT / PLAN_RELATIVE
 BASE_SHA = "4c0e5222248b5f9f2537d627091b80afc9c9e120"
 LEGACY_WORD = "code" + "work"
+
+
+GIT_EXECUTABLE = shutil.which("git")
+if GIT_EXECUTABLE is None:
+    raise RuntimeError("git executable is required by the Phase 2B evidence contract")
+
+
+def _git_output(repo: Path, *args: str) -> str:
+    """Run a read-only Git command with the resolved executable."""
+    return subprocess.check_output(
+        [GIT_EXECUTABLE, *args],
+        cwd=repo,
+        text=True,
+    ).strip()
+
+
+def _run_git(repo: Path, *args: str) -> None:
+    """Run a Git command in an isolated test repository."""
+    subprocess.run(
+        [GIT_EXECUTABLE, *args],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
+
+
+def _find_evidence_commit(repo: Path, implementation: str, evidence_relative: str) -> str:
+    """Find the unique evidence-only child of implementation reachable from HEAD."""
+    evidence_bytes = (repo / evidence_relative).read_bytes()
+    candidates: list[str] = []
+    for line in _git_output(repo, "rev-list", "--parents", "HEAD").splitlines():
+        fields = line.split()
+        commit, parents = fields[0], fields[1:]
+        if parents != [implementation]:
+            continue
+        changed = _git_output(
+            repo,
+            "diff-tree",
+            "--no-commit-id",
+            "--name-only",
+            "-r",
+            commit,
+        ).splitlines()
+        if changed != [evidence_relative]:
+            continue
+        committed_bytes = subprocess.check_output(
+            [GIT_EXECUTABLE, "show", f"{commit}:{evidence_relative}"],
+            cwd=repo,
+        )
+        if committed_bytes == evidence_bytes:
+            candidates.append(commit)
+    if len(candidates) != 1:
+        raise AssertionError(
+            "expected exactly one reachable evidence-only child of the implementation "
+            f"commit, found {len(candidates)}"
+        )
+    evidence_commit = candidates[0]
+    head = _git_output(repo, "rev-parse", "HEAD")
+    if head != evidence_commit:
+        head_fields = _git_output(
+            repo,
+            "rev-list",
+            "--parents",
+            "-n",
+            "1",
+            "HEAD",
+        ).split()
+        head_parents = head_fields[1:]
+        if len(head_parents) != 2 or head_parents[1] != evidence_commit:
+            raise AssertionError(
+                "evidence commit must be HEAD or the second parent of a two-parent "
+                "synthetic merge checkout"
+            )
+    return evidence_commit
 
 
 class Phase2BEvidenceContractTest(unittest.TestCase):
@@ -23,11 +104,14 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
     @staticmethod
     def git(*args: str) -> str:
         """Run a read-only Git query from the repository root."""
-        return subprocess.check_output(["git", *args], cwd=ROOT, text=True).strip()
+        return _git_output(ROOT, *args)
 
     def load(self) -> dict:
         """Load the required committed Phase 2B evidence artifact."""
-        self.assertTrue(EVIDENCE.is_file(), f"missing required Phase 2B evidence: {EVIDENCE_RELATIVE}")
+        self.assertTrue(
+            EVIDENCE.is_file(),
+            f"missing required Phase 2B evidence: {EVIDENCE_RELATIVE}",
+        )
         return json.loads(EVIDENCE.read_text(encoding="utf-8"))
 
     def test_required_top_level_contract_is_complete(self) -> None:
@@ -58,12 +142,91 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
             self.git("rev-parse", f"{implementation}^{{tree}}"),
             evidence["implementation_tree_sha"],
         )
-        evidence_head = self.git("rev-parse", "HEAD")
-        self.assertEqual(self.git("rev-parse", "HEAD^"), implementation)
-        changed = self.git(
-            "diff-tree", "--no-commit-id", "--name-only", "-r", evidence_head
-        ).splitlines()
-        self.assertEqual(changed, [EVIDENCE_RELATIVE])
+        evidence_commit = _find_evidence_commit(
+            ROOT,
+            implementation,
+            EVIDENCE_RELATIVE,
+        )
+        self.assertEqual(
+            self.git("rev-parse", f"{evidence_commit}^"),
+            implementation,
+        )
+
+    def test_evidence_commit_binding_survives_github_merge_ref_topology(self) -> None:
+        """Resolve the evidence-only child when HEAD is a synthetic merge commit."""
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td)
+            _run_git(repo, "init", "-b", "main")
+            _run_git(repo, "config", "user.email", "test@example.invalid")
+            _run_git(repo, "config", "user.name", "Phase2B Test")
+            (repo / "base.txt").write_text("base\n", encoding="utf-8")
+            _run_git(repo, "add", "base.txt")
+            _run_git(repo, "commit", "-m", "base")
+            _run_git(repo, "checkout", "-b", "feature")
+            (repo / "implementation.txt").write_text("implementation\n", encoding="utf-8")
+            _run_git(repo, "add", "implementation.txt")
+            _run_git(repo, "commit", "-m", "implementation")
+            implementation = _git_output(repo, "rev-parse", "HEAD")
+            evidence_rel = "docs/evidence.json"
+            evidence_path = repo / evidence_rel
+            evidence_path.parent.mkdir(parents=True)
+            evidence_path.write_text('{"status":"verified"}\n', encoding="utf-8")
+            _run_git(repo, "add", evidence_rel)
+            _run_git(repo, "commit", "-m", "evidence")
+            evidence_commit = _git_output(repo, "rev-parse", "HEAD")
+            _run_git(repo, "checkout", "main")
+            _run_git(repo, "merge", "--no-ff", "feature", "-m", "synthetic merge")
+            self.assertEqual(
+                _find_evidence_commit(repo, implementation, evidence_rel),
+                evidence_commit,
+            )
+
+    def test_evidence_commit_binding_rejects_post_evidence_branch_commits(self) -> None:
+        """Reject branch commits created after the evidence-only child."""
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td)
+            _run_git(repo, "init", "-b", "main")
+            _run_git(repo, "config", "user.email", "test@example.invalid")
+            _run_git(repo, "config", "user.name", "Phase2B Test")
+            (repo / "implementation.txt").write_text(
+                "implementation\n",
+                encoding="utf-8",
+            )
+            _run_git(repo, "add", "implementation.txt")
+            _run_git(repo, "commit", "-m", "implementation")
+            implementation = _git_output(repo, "rev-parse", "HEAD")
+            evidence_rel = "docs/evidence.json"
+            evidence_path = repo / evidence_rel
+            evidence_path.parent.mkdir(parents=True)
+            evidence_path.write_text('{"status":"verified"}\n', encoding="utf-8")
+            _run_git(repo, "add", evidence_rel)
+            _run_git(repo, "commit", "-m", "evidence")
+            (repo / "late.txt").write_text("late change\n", encoding="utf-8")
+            _run_git(repo, "add", "late.txt")
+            _run_git(repo, "commit", "-m", "late implementation")
+            with self.assertRaises(AssertionError):
+                _find_evidence_commit(repo, implementation, evidence_rel)
+
+    def test_evidence_commit_binding_rejects_extra_changed_paths(self) -> None:
+        """Reject an implementation child that changes more than the evidence artifact."""
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td)
+            _run_git(repo, "init", "-b", "main")
+            _run_git(repo, "config", "user.email", "test@example.invalid")
+            _run_git(repo, "config", "user.name", "Phase2B Test")
+            (repo / "implementation.txt").write_text("implementation\n", encoding="utf-8")
+            _run_git(repo, "add", "implementation.txt")
+            _run_git(repo, "commit", "-m", "implementation")
+            implementation = _git_output(repo, "rev-parse", "HEAD")
+            evidence_rel = "docs/evidence.json"
+            evidence_path = repo / evidence_rel
+            evidence_path.parent.mkdir(parents=True)
+            evidence_path.write_text('{"status":"verified"}\n', encoding="utf-8")
+            (repo / "extra.txt").write_text("not evidence-only\n", encoding="utf-8")
+            _run_git(repo, "add", evidence_rel, "extra.txt")
+            _run_git(repo, "commit", "-m", "bad evidence")
+            with self.assertRaises(AssertionError):
+                _find_evidence_commit(repo, implementation, evidence_rel)
 
     def test_premerge_evidence_cannot_claim_ghcr_publication(self) -> None:
         """Prevent pre-merge evidence from claiming GHCR publication success."""
