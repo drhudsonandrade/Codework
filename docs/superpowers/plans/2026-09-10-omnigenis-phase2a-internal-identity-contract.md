@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Phase 2A MUST NOT modify runtime behavior, runner metadata, GitHub Actions routing, Docker image names, GHCR publication, MCP runtime identity, Conda identity, Nextflow identity, filesystem deployment paths, or external resources.
+- Phase 2A MUST NOT modify runtime behavior, runner metadata, GitHub Actions routing semantics, Docker image names, GHCR publication, MCP runtime identity, Conda identity, Nextflow identity, filesystem deployment paths, or external resources. The only workflow-file change allowed is adding `scripts/project_identity_guard.py` to the existing NGS runtime-gate `pull_request` and `push` path filters so dependency-closure validation remains complete.
 - Repository ID remains `1212760346`; canonical GitHub identity remains `drhudsonandrade/OmniGenis`.
 - Canonical GENOMA v3.4 identity, sealed normative bytes, scientific thresholds, report taxonomy, evidence semantics, and genomic interpretation remain unchanged.
 - All newly added or modified code, tests, comments, docstrings, technical messages, configuration descriptions, and developer-facing documentation are written in English.
@@ -703,9 +703,14 @@ Run:
 
 ```bash
 changed_runtime="$(git diff --name-only origin/main -- \
-  Dockerfile environment.yml nextflow.config .github/workflows deploy mcp \
+  Dockerfile environment.yml nextflow.config deploy mcp \
   scripts/codex/setup-coderabbit.sh scripts/generate_canary.py)"
 test -z "$changed_runtime"
+workflow_changed="$(git diff --name-only origin/main -- .github/workflows)"
+test "$workflow_changed" = ".github/workflows/genoma-ngs-runtime-gate.yml"
+python3 -m unittest \
+  tests.test_ci_optimization_contract.CIOptimizationContractTest.test_ngs_runtime_gate_trigger_only_change_preserves_baseline_semantics \
+  tests.test_ci_optimization_contract.CIOptimizationContractTest.test_ngs_runtime_gate_uses_explicit_ngs_script_paths_instead_of_all_scripts -v
 printf '%s\n' 'PHASE2A_RUNTIME_BOUNDARY=PASS'
 ```
 
@@ -890,12 +895,15 @@ runtime_paths = changed_paths(
     "Dockerfile",
     "environment.yml",
     "nextflow.config",
-    ".github/workflows",
     "deploy",
     "mcp",
     "scripts/codex/setup-coderabbit.sh",
     "scripts/generate_canary.py",
 )
+trigger_workflow_paths = changed_paths(".github/workflows")
+expected_trigger_workflow_paths = [".github/workflows/genoma-ngs-runtime-gate.yml"]
+if trigger_workflow_paths != expected_trigger_workflow_paths:
+    raise SystemExit("unexpected GitHub Actions workflow changed during Phase 2A")
 normative_paths = changed_paths("normative", "manifests/RULESET_V3.4.sha256")
 scientific_paths = changed_paths(
     "array_pipeline",
@@ -917,6 +925,7 @@ evidence = {
     "legacy_scan": legacy_scan,
     "root_test_count": state["root_test_count"],
     "runtime_surface_changed_paths": runtime_paths,
+    "trigger_only_workflow_changed_paths": trigger_workflow_paths,
     "normative_surface_changed_paths": normative_paths,
     "scientific_surface_changed_paths": scientific_paths,
     "validation": state["validation"],
@@ -950,6 +959,9 @@ assert evidence["implementation_head_sha"] == current
 assert evidence["legacy_scan"]["unclassified"] == []
 assert evidence["legacy_scan"]["over_budget"] == []
 assert evidence["runtime_surface_changed_paths"] == []
+assert evidence["trigger_only_workflow_changed_paths"] == [
+    ".github/workflows/genoma-ngs-runtime-gate.yml"
+]
 assert evidence["normative_surface_changed_paths"] == []
 assert evidence["scientific_surface_changed_paths"] == []
 assert all(value == "PASS" for value in evidence["validation"].values())
@@ -1022,11 +1034,13 @@ scripts/validate_repo.py
 tests/test_project_identity_contract.py
 tests/test_project_identity_guard.py
 tests/test_repo_contract.py
+tests/test_ci_optimization_contract.py
+.github/workflows/genoma-ngs-runtime-gate.yml
 docs/PROJECT_IDENTITY_CONTRACT.md
 docs/superpowers/evidence/2026-09-10-omnigenis-phase2a-identity-contract.json
 ```
 
-The already-approved design spec and this implementation plan may also be present if they are being merged through the same documentation branch. No runtime/workflow surface may appear in the 2A implementation diff.
+The already-approved design spec and this implementation plan may also be present if they are being merged through the same documentation branch. No runtime surface may appear in the 2A implementation diff. The only workflow diff allowed is the two path-filter lines for `scripts/project_identity_guard.py` in `.github/workflows/genoma-ngs-runtime-gate.yml`, guarded by the normalized workflow fingerprint test.
 
 - [ ] **Step 2: Push and create the PR as draft**
 
