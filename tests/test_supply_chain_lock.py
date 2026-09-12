@@ -65,8 +65,22 @@ class SupplyChainLockTest(unittest.TestCase):
         ruleset = json.loads((ROOT / ".github/governance/main-ruleset.json").read_text())
         verify_supply_chain_lock._verify_required_check_schema(ruleset)
         mutated = copy.deepcopy(ruleset)
-        status = next(rule for rule in mutated["rules"] if rule["type"] == "required_status_checks")
-        fingerprinted = next(item for item in status["parameters"]["required_status_checks"] if "context_fingerprint" in item)
+        status = next(
+            (rule for rule in mutated["rules"] if rule["type"] == "required_status_checks"),
+            None,
+        )
+        self.assertIsNotNone(status)
+        assert status is not None
+        fingerprinted = next(
+            (
+                item
+                for item in status["parameters"]["required_status_checks"]
+                if "context_fingerprint" in item
+            ),
+            None,
+        )
+        self.assertIsNotNone(fingerprinted)
+        assert fingerprinted is not None
         fingerprinted["context_fingerprint"]["digest"] = "0" * 63
         with self.assertRaises(SystemExit):
             verify_supply_chain_lock._verify_required_check_schema(mutated)

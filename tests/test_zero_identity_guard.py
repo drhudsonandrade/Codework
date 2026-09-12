@@ -35,13 +35,15 @@ class ZeroIdentityGuardTest(unittest.TestCase):
         subprocess.run(["git", "add", "config/zero_identity_policy.json"], cwd=root, check=True)
         return root
 
-    def track(self, root: Path, relative: str, data: bytes) -> None:
+    @staticmethod
+    def track(root: Path, relative: str, data: bytes) -> None:
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
         subprocess.run(["git", "add", "--", relative], cwd=root, check=True)
 
-    def findings(self, root: Path):
+    @staticmethod
+    def findings(root: Path):
         return scan_repository(root)
 
     def test_each_class_is_detected_in_blob_content(self) -> None:

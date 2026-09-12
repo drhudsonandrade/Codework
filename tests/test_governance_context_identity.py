@@ -41,7 +41,12 @@ class GovernanceContextIdentityTest(unittest.TestCase):
 
     def test_tracked_ruleset_uses_digest_for_account_derived_check(self) -> None:
         payload = json.loads((ROOT / ".github/governance/main-ruleset.json").read_text(encoding="utf-8"))
-        status = next(rule for rule in payload["rules"] if rule["type"] == "required_status_checks")
+        status = next(
+            (rule for rule in payload["rules"] if rule["type"] == "required_status_checks"),
+            None,
+        )
+        self.assertIsNotNone(status)
+        assert status is not None
         fingerprinted = [
             item for item in status["parameters"]["required_status_checks"]
             if "context_fingerprint" in item

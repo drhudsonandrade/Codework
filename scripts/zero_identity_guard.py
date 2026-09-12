@@ -154,12 +154,10 @@ def scan_repository(root: Path, policy_path: Path | None = None) -> list[Finding
         for class_id, offset in _find_matches(path_bytes, classes):
             findings.append(Finding(class_id, path, offset))
         target = root / path
+        if target.is_symlink():
+            raise RepositoryScanError(f"tracked symlink is not allowed: {path}")
         try:
-            if target.is_symlink():
-                raise RepositoryScanError(f"tracked symlink is not allowed: {path}")
             blob = target.read_bytes()
-        except RepositoryScanError:
-            raise
         except OSError as exc:
             raise RepositoryScanError(f"tracked blob read failed for {path}: {exc}") from exc
         for class_id, offset in _find_matches(blob, classes):
