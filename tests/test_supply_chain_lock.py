@@ -88,8 +88,15 @@ class SupplyChainLockTest(unittest.TestCase):
     def test_required_check_schema_rejects_duplicate_status_rules(self):
         ruleset = json.loads((ROOT / ".github/governance/main-ruleset.json").read_text())
         status = next(
-            rule for rule in ruleset["rules"] if rule["type"] == "required_status_checks"
+            (
+                rule
+                for rule in ruleset["rules"]
+                if rule["type"] == "required_status_checks"
+            ),
+            None,
         )
+        self.assertIsNotNone(status)
+        assert status is not None
         mutated = copy.deepcopy(ruleset)
         mutated["rules"].append(copy.deepcopy(status))
         with self.assertRaises(SystemExit):
