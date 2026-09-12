@@ -175,7 +175,7 @@ jobs:
               'workflow_run_attempt':os.environ['GITHUB_RUN_ATTEMPT'],
               'created_at':datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),
               'evidence_files':files,
-              'limitations':['The owner-exported Project Instructions snapshot is verified, but it is not an authenticated read of the persistent ChatGPT Project configuration. POST-DEPLOYMENT remains FAIL until authoritative installation evidence is available.']
+              'limitations':['The owner-exported Project Instructions snapshot is verified, but it is not an authenticated read of the persistent persistent project configuration. POST-DEPLOYMENT remains FAIL until authoritative installation evidence is available.']
           }
           target='witness.json' if passed else 'failure.json'
           root.joinpath(target).write_text(json.dumps(record,ensure_ascii=False,indent=2)+'\n')
