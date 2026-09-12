@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Baseline `main`: `fe0c91c99fe4cd57e14c69cc3b3c58edcb4e8be8`.
-- Current baseline suite: 1,112 tests PASS, 0 failures/errors, 1 expected skip.
+- Planning baseline requirement: the full root suite must pass before implementation; no immutable test-count artifact was bound to the planning commit.
 - P1-P4 plaintext is forbidden in tracked path names and tracked blob bytes, case-insensitively.
 - The enforcement implementation stores only fingerprints, lengths, class IDs, and non-plaintext numeric/hex mutation fixtures.
 - There are no history/evidence/spec/plan exemptions.
@@ -27,16 +27,7 @@
 
 ## Baseline Inventory
 
-The approved fingerprint scan against the baseline tracked tree reports:
-
-| Class | Content files | Content matches | Path matches |
-| --- | ---: | ---: | ---: |
-| P1 | 38 | 219 | 0 |
-| P2 | 43 | 240 | 0 |
-| P3 | 25 | 54 | 0 |
-| P4 | 0 | 0 | 0 |
-
-P1 is structurally contained by P2 in many current strings, so overlapping counts are expected. The final gate requires all four classes to be zero independently.
+The pre-migration inventory was used only as an execution checklist and was not persisted as an attested artifact. Exact baseline match counts are therefore intentionally omitted from this plan rather than presented as verified evidence. The authoritative completion condition is the final seal: every required class P1-P4 must have zero tracked-path and zero tracked-blob findings independently.
 
 ---
 

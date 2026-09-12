@@ -46,6 +46,11 @@ SYSTEM_REPLACEMENTS = {
 }
 
 
+def _is_genoma_ruleset_marker(source_text: str) -> bool:
+    """Return whether text claims any GENOMA ruleset namespace."""
+    return source_text.startswith("GENOMA-") and "RULESET-v" in source_text
+
+
 class TemplateV3Error(RuntimeError):
     """The approved v3 template pack is absent, altered, or cannot be rendered from.
 
@@ -121,7 +126,7 @@ def _validate_controlled_span_sources(payload: dict[str, Any]) -> None:
     for report_id, meta in payload.get("reports", {}).items():
         for item in meta.get("controlled_spans", []):
             source = str(item.get("source_text", ""))
-            if source.startswith(RULESET_TEMPLATE_PREFIX) and source != CURRENT_RULESET_TEMPLATE_SOURCE:
+            if _is_genoma_ruleset_marker(source) and source != CURRENT_RULESET_TEMPLATE_SOURCE:
                 raise TemplateV3Error(
                     f"noncanonical ruleset marker in v3 reference manifest for report {report_id}: {source}"
                 )
@@ -501,7 +506,7 @@ def _system_value_for_source(source_text: str, systems: dict[str, Any]) -> Any |
     """
     if source_text == CURRENT_RULESET_TEMPLATE_SOURCE:
         return CURRENT_RULESET_TEMPLATE_LABEL
-    if source_text.startswith(RULESET_TEMPLATE_PREFIX):
+    if _is_genoma_ruleset_marker(source_text):
         raise TemplateV3Error(f"noncanonical ruleset marker in template source: {source_text}")
     return systems.get(source_text)
 

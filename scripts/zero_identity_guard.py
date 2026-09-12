@@ -13,6 +13,7 @@ from typing import Iterable
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_POLICY = ROOT / "config/zero_identity_policy.json"
 _SCHEMA = "omnigenis-zero-identity-policy-v1"
+_REQUIRED_CLASS_IDS = frozenset({"P1", "P2", "P3", "P4"})
 _DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -73,6 +74,8 @@ def load_policy(path: Path = DEFAULT_POLICY) -> tuple[FingerprintClass, ...]:
         seen_ids.add(class_id)
         seen_pairs.add(pair)
         classes.append(FingerprintClass(class_id, length, digest))
+    if seen_ids != _REQUIRED_CLASS_IDS:
+        raise PolicyError("zero-identity policy must define exactly P1, P2, P3, and P4")
     return tuple(classes)
 
 
@@ -144,6 +147,58 @@ def _tracked_paths(root: Path) -> list[bytes]:
     return paths
 
 
+def _read_index_blob(
+    root: Path, path_bytes: bytes, classes: tuple[FingerprintClass, ...]
+) -> bytes:
+    """Read the exact stage-0 blob and mode recorded in the Git index."""
+    path = path_bytes.decode("utf-8", "surrogateescape")
+    safe_path = _safe_diagnostic_path(path, classes)
+    try:
+        indexed = subprocess.run(
+            ["git", "ls-files", "-s", "-z", "--", path],
+            cwd=root,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise RepositoryScanError(f"tracked index lookup failed for {safe_path}: {exc}") from exc
+    entries = [part for part in indexed.stdout.split(b"\0") if part]
+    if len(entries) != 1 or b"\t" not in entries[0]:
+        raise RepositoryScanError(f"tracked index entry is ambiguous for {safe_path}")
+    metadata, indexed_path = entries[0].split(b"\t", 1)
+    fields = metadata.split()
+    if len(fields) != 3 or indexed_path != path_bytes or fields[2] != b"0":
+        raise RepositoryScanError(f"tracked index entry is invalid for {safe_path}")
+    mode, object_id, _stage = fields
+    if mode == b"120000":
+        raise RepositoryScanError(f"tracked symlink is not allowed: {safe_path}")
+    try:
+        blob = subprocess.run(
+            ["git", "cat-file", "blob", object_id.decode("ascii")],
+            cwd=root,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except (OSError, UnicodeDecodeError, subprocess.CalledProcessError) as exc:
+        raise RepositoryScanError(f"tracked blob read failed for {safe_path}: {exc}") from exc
+    return blob.stdout
+
+
+def _safe_diagnostic_path(path: str, classes: tuple[FingerprintClass, ...]) -> str:
+    """Redact only path components that themselves contain prohibited fingerprints."""
+    raw = path.encode("utf-8", "surrogateescape")
+    safe: list[bytes] = []
+    for component in raw.split(b"/"):
+        if _find_matches(component, classes):
+            digest = hashlib.sha256(component).hexdigest()[:12]
+            safe.append(f"[redacted-{digest}]".encode("ascii"))
+        else:
+            safe.append(component)
+    return b"/".join(safe).decode("utf-8", "surrogateescape")
+
+
 def scan_repository(root: Path, policy_path: Path | None = None) -> list[Finding]:
     """Scan every tracked path and blob for fingerprint matches."""
     root = root.resolve()
@@ -153,38 +208,40 @@ def scan_repository(root: Path, policy_path: Path | None = None) -> list[Finding
         path = path_bytes.decode("utf-8", "surrogateescape")
         for class_id, offset in _find_matches(path_bytes, classes):
             findings.append(Finding(class_id, path, offset))
-        target = root / path
-        if target.is_symlink():
-            raise RepositoryScanError(f"tracked symlink is not allowed: {path}")
-        try:
-            blob = target.read_bytes()
-        except OSError as exc:
-            raise RepositoryScanError(f"tracked blob read failed for {path}: {exc}") from exc
+        blob = _read_index_blob(root, path_bytes, classes)
         for class_id, offset in _find_matches(blob, classes):
             findings.append(Finding(class_id, path, offset))
     return sorted(findings, key=lambda item: (item.path, item.offset, item.class_id))
 
 
 def validate_zero_identity(root: Path) -> list[str]:
-    """Return stable, non-sensitive diagnostics for all findings."""
-    return [f"{item.class_id}\t{item.path}\tbyte_offset={item.offset}" for item in scan_repository(root)]
+    """Return stable diagnostics without echoing prohibited path components."""
+    classes = load_policy(root.resolve() / "config/zero_identity_policy.json")
+    return [
+        f"{item.class_id}\t{_safe_diagnostic_path(item.path, classes)}\tbyte_offset={item.offset}"
+        for item in scan_repository(root)
+    ]
 
 
-def _inventory(findings: list[Finding]) -> dict[str, object]:
-    """Build a non-sensitive machine-readable inventory."""
-    classes: dict[str, dict[str, object]] = {}
+def _inventory(
+    findings: list[Finding],
+    classes: tuple[FingerprintClass, ...],
+) -> dict[str, object]:
+    """Build a machine-readable inventory without prohibited path components."""
+    records: dict[str, dict[str, object]] = {}
     for finding in findings:
-        record = classes.setdefault(finding.class_id, {"count": 0, "paths": []})
+        record = records.setdefault(finding.class_id, {"count": 0, "paths": []})
         record["count"] = int(record["count"]) + 1
         paths = record["paths"]
         assert isinstance(paths, list)
-        if finding.path not in paths:
-            paths.append(finding.path)
-    for record in classes.values():
+        safe_path = _safe_diagnostic_path(finding.path, classes)
+        if safe_path not in paths:
+            paths.append(safe_path)
+    for record in records.values():
         paths = record["paths"]
         assert isinstance(paths, list)
         paths.sort()
-    return {"schema": "omnigenis-zero-identity-inventory-v1", "classes": classes}
+    return {"schema": "omnigenis-zero-identity-inventory-v1", "classes": records}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -200,7 +257,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"FAIL\tzero_identity_guard\t{exc}", file=sys.stderr)
         return 2
     if args.inventory_json:
-        print(json.dumps(_inventory(findings), indent=2, sort_keys=True))
+        print(json.dumps(_inventory(findings, load_policy()), indent=2, sort_keys=True))
         return 0
     if findings:
         print(f"FAIL\tzero_identity_guard\tfindings={len(findings)}", file=sys.stderr)

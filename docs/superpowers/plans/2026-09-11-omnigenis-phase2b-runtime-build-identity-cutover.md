@@ -809,7 +809,7 @@ Expected: complete post-merge regression PASS and no active Phase 2B legacy iden
 
 - [ ] **Step 2: Revalidate repository identity and complete ruleset semantics**
 
-Confirm repository ID `1212760346`, full name `repository_id=1212760346; repository_name=OmniGenis`, public visibility, default branch `main`, and exact semantic equality of rulesets `21303100` and `22347095` against the pinned Phase 1/2A evidence. Any semantic drift blocks Phase 2C.
+Confirm canonical repository identity (`repository_id=1212760346`, `repository_name=OmniGenis`), public visibility, default branch `main`, and exact semantic equality of rulesets `21303100` and `22347095` against the pinned Phase 1/2A evidence. Resolve provider `full_name` only at runtime when an API address is required. Any semantic drift blocks Phase 2C.
 - [ ] **Step 3: Prove real protected-main publication of the new GHCR identity**
 
 Locate the `scaffold-validation` run for the exact merge SHA:

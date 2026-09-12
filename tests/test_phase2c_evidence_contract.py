@@ -15,6 +15,10 @@ EVIDENCE_RELATIVE = (
 )
 EVIDENCE = ROOT / EVIDENCE_RELATIVE
 BASE_MAIN_SHA = "a1e669dd613f68f4d82ca7f1f565772ec8098cb1"
+PHASE2C_MERGE_COMMIT = "fe0c91c99fe4cd57e14c69cc3b3c58edcb4e8be8"
+PHASE2C_EVIDENCE_COMMIT = "0c2c1649355cd998210baacdecb24681a18030ad"
+PHASE2C_CURRENT_EVIDENCE_SHA256 = "1c0639f1f050cde7f7c845b33a091dd2c08073cffe8dbedb12a40dea4e9c7a7d"
+PHASE2C_HISTORICAL_EVIDENCE_SHA256 = "0bc5dce4319e1ed8bef878c7a18f1bf7b4e24ace7b04a9d68fb7a7edd622d67a"
 LEGACY = "code" + "work"
 GIT_EXECUTABLE = shutil.which("git")
 if GIT_EXECUTABLE is None:
@@ -36,18 +40,12 @@ def _run_git(repo: Path, *args: str) -> None:
 
 
 def _resolve_evidence_commit(
-    repo: Path, implementation: str, evidence_relative: str
+    repo: Path,
+    implementation: str,
+    evidence_relative: str,
+    expected_blob_sha256: str,
 ) -> str:
-    """Resolve the unique evidence-only child under PR or merged-history topology."""
-    evidence_bytes = (repo / evidence_relative).read_bytes()
-    historical_digest = None
-    try:
-        payload = json.loads(evidence_bytes.decode("utf-8"))
-        historical_digest = payload.get("deidentification_provenance", {}).get(
-            "historical_blob_sha256"
-        )
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        pass
+    """Resolve the unique evidence-only child using an independent blob digest."""
     candidates: list[str] = []
     for line in _git_output(repo, "rev-list", "--parents", "HEAD").splitlines():
         fields = line.split()
@@ -62,10 +60,7 @@ def _resolve_evidence_commit(
         committed = subprocess.check_output(
             [GIT_EXECUTABLE, "show", f"{commit}:{evidence_relative}"], cwd=repo
         )
-        if historical_digest is not None:
-            if hashlib.sha256(committed).hexdigest() == historical_digest:
-                candidates.append(commit)
-        elif committed == evidence_bytes:
+        if hashlib.sha256(committed).hexdigest() == expected_blob_sha256:
             candidates.append(commit)
     if len(candidates) != 1:
         raise AssertionError(
@@ -123,6 +118,13 @@ class Phase2CRunnerEvidenceContractTest(unittest.TestCase):
                 set(after[runner_id]["labels"]),
             )
 
+    def test_current_deidentified_evidence_bytes_are_independently_pinned(self) -> None:
+        """Pin the current deidentified evidence independently of its own fields."""
+        self.assertEqual(
+            hashlib.sha256(EVIDENCE.read_bytes()).hexdigest(),
+            PHASE2C_CURRENT_EVIDENCE_SHA256,
+        )
+
     def test_exact_head_identity_and_evidence_only_commit_are_git_bound(self) -> None:
         """Bind the evidence-only commit to the exact implementation SHA and tree."""
         evidence = self.load()
@@ -132,13 +134,26 @@ class Phase2CRunnerEvidenceContractTest(unittest.TestCase):
             evidence["implementation_tree_sha"],
         )
         evidence_commit = _resolve_evidence_commit(
-            ROOT, implementation, EVIDENCE_RELATIVE
+            ROOT,
+            implementation,
+            EVIDENCE_RELATIVE,
+            PHASE2C_HISTORICAL_EVIDENCE_SHA256,
         )
+        self.assertEqual(evidence_commit, PHASE2C_EVIDENCE_COMMIT)
         provenance = evidence["deidentification_provenance"]
         committed = subprocess.check_output(
             [GIT_EXECUTABLE, "show", f"{evidence_commit}:{EVIDENCE_RELATIVE}"], cwd=ROOT
         )
-        self.assertEqual(hashlib.sha256(committed).hexdigest(), provenance["historical_blob_sha256"])
+        self.assertEqual(
+            hashlib.sha256(committed).hexdigest(),
+            PHASE2C_HISTORICAL_EVIDENCE_SHA256,
+        )
+        self.assertEqual(
+            provenance["historical_blob_sha256"],
+            PHASE2C_HISTORICAL_EVIDENCE_SHA256,
+        )
+        self.assertEqual(provenance["evidence_commit"], PHASE2C_EVIDENCE_COMMIT)
+        self.assertEqual(provenance["merge_commit"], PHASE2C_MERGE_COMMIT)
         self.assertEqual(
             _git_output(ROOT, "rev-parse", f"{evidence_commit}^"), implementation
         )
@@ -336,6 +351,7 @@ class Phase2CRunnerEvidenceContractTest(unittest.TestCase):
             evidence_path = repo / evidence_rel
             evidence_path.parent.mkdir(parents=True)
             evidence_path.write_text('{"status":"verified"}\n', encoding="utf-8")
+            expected_evidence_sha = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
             _run_git(repo, "add", evidence_rel)
             _run_git(repo, "commit", "-m", "evidence")
             evidence_commit = _git_output(repo, "rev-parse", "HEAD")
@@ -345,7 +361,9 @@ class Phase2CRunnerEvidenceContractTest(unittest.TestCase):
             _run_git(repo, "add", "later.txt")
             _run_git(repo, "commit", "-m", "later phase")
             self.assertEqual(
-                _resolve_evidence_commit(repo, implementation, evidence_rel),
+                _resolve_evidence_commit(
+                    repo, implementation, evidence_rel, expected_evidence_sha
+                ),
                 evidence_commit,
             )
 
@@ -364,13 +382,16 @@ class Phase2CRunnerEvidenceContractTest(unittest.TestCase):
             evidence_path = repo / evidence_rel
             evidence_path.parent.mkdir(parents=True)
             evidence_path.write_text('{"status":"verified"}\n', encoding="utf-8")
+            expected_evidence_sha = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
             _run_git(repo, "add", evidence_rel)
             _run_git(repo, "commit", "-m", "evidence")
             (repo / "late.txt").write_text("late\n", encoding="utf-8")
             _run_git(repo, "add", "late.txt")
             _run_git(repo, "commit", "-m", "late")
             with self.assertRaises(AssertionError):
-                _resolve_evidence_commit(repo, implementation, evidence_rel)
+                _resolve_evidence_commit(
+                    repo, implementation, evidence_rel, expected_evidence_sha
+                )
 
 
 if __name__ == "__main__":

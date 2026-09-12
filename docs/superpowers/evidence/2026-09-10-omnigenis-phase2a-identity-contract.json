@@ -2,15 +2,15 @@
   "base_sha": "939dfea5cc7cb2745638168d518d2005e941e9c6",
   "baseline_provenance": {
     "git_endpoint_continuity": {
-      "command": "git ls-remote https://github.com/repository_id=1212760346; historical_repository_name=Codework.git refs/heads/main && git ls-remote https://github.com/repository_id=1212760346; repository_name=OmniGenis.git refs/heads/main",
+      "command": "repo=\"$(gh api repositories/1212760346 --jq .full_name)\"; owner=\"${repo%%/*}\"; git ls-remote \"https://github.com/$owner/Codework.git\" refs/heads/main && git ls-remote \"https://github.com/$repo.git\" refs/heads/main",
       "environment": "github_cli_live",
       "exit_code": 0,
       "output": {
         "locator": "inline:baseline_provenance.git_endpoint_continuity.output.summary",
         "raw_output_retention": "ephemeral local execution artifact; digest retained here",
         "raw_output_sha256": "02beb0acd93a9e932c4ae8293d5c01dc6f957333cc7347389bc48ae79b1bf9e2",
-        "sha256": "a436f690db5b7a3cff0e20929d433a0e2936ec940620f58bcd2d23380a7f63d1",
-        "summary": "old_url_main=939dfea5cc7cb2745638168d518d2005e941e9c6; new_url_main=939dfea5cc7cb2745638168d518d2005e941e9c6; same_main_history=true"
+        "sha256": "800dcd25363f547f800d541333e1da28b61ad90576f49f36008b7731cfe463bf",
+        "summary": "old_endpoint_locator=runtime-owner/Codework.git; new_endpoint_locator=repository_id:1212760346; old_main=939dfea5cc7cb2745638168d518d2005e941e9c6; new_main=939dfea5cc7cb2745638168d518d2005e941e9c6; same_main_history=true"
       },
       "source_output_sha256": {
         "new": "51b499c0c1e69aec509280447fc5f7471d7e6f220c483fa21ca81dd75112c2c4",
@@ -19,15 +19,15 @@
       "status": "PASS"
     },
     "repository_metadata": {
-      "command": "gh api repos/$repo --jq {id,full_name,visibility,default_branch}",
+      "command": "repo=\"$(gh api repositories/1212760346 --jq .full_name)\"; gh api \"repos/$repo\" --jq '{id,full_name,visibility,default_branch}'",
       "environment": "github_cli_live",
       "exit_code": 0,
       "output": {
         "locator": "inline:baseline_provenance.repository_metadata.output.summary",
         "raw_output_retention": "ephemeral local execution artifact; digest retained here",
         "raw_output_sha256": "0a85c68dfdbb0c63b6d00a353564755658bdf304bfe074e3aa1ddf8904133bb9",
-        "sha256": "5082ab06a29dbf89570cf86bcaae683f606e018516187f469676fb403ff9ae4e",
-        "summary": "{\"default_branch\":\"main\",\"full_name\":\"repository_id=1212760346; repository_name=OmniGenis\",\"id\":1212760346,\"visibility\":\"public\"}"
+        "sha256": "e7ce2a8a62d315365c6e73c4328550789c9bf5d783159a4fc58455e24b2f96ff",
+        "summary": "{\"default_branch\":\"main\",\"repository_id\":1212760346,\"repository_name\":\"OmniGenis\",\"visibility\":\"public\"}"
       },
       "status": "PASS"
     },
@@ -45,7 +45,7 @@
       "status": "PASS"
     },
     "rulesets": {
-      "command": "gh api repos/$repo/rulesets/21303100 && gh api repos/$repo/rulesets/22347095",
+      "command": "repo=\"$(gh api repositories/1212760346 --jq .full_name)\"; gh api \"repos/$repo/rulesets/21303100\" && gh api \"repos/$repo/rulesets/22347095\"",
       "environment": "github_cli_live",
       "exit_code": 0,
       "output": {
@@ -88,7 +88,8 @@
       "authentication": "authenticated CLI; no credential material recorded",
       "gh_version": "2.100.0 (2026-09-03)",
       "git_version": "2.43.0",
-      "repository": "repository_id=1212760346; repository_name=OmniGenis"
+      "repository_id": 1212760346,
+      "repository_name": "OmniGenis"
     },
     "implementation_pinned_python_3_12_3": {
       "git_version": "2.43.0",
@@ -219,7 +220,7 @@
       "path": "docs/superpowers/evidence/2026-09-10-omnigenis-repository-identity-migration.json",
       "pre_deidentification_sha256": "e514dcfdbe477df340a07da8812d7157cdb36e34bef763b52622b7c64ca0aecc",
       "role": "repository rename, repository identity, ruleset and endpoint continuity source",
-      "sha256": "1eadaf7b41a40eb5176f5f3449b668b724693bc37eaf016488d0b19dc5b6d8e9"
+      "sha256": "69acc58796bc1aeb019d28dcf0d8ad9a5915a9b17aa529d5ff54f1940a60deaf"
     }
   },
   "reviewer_remediation": {

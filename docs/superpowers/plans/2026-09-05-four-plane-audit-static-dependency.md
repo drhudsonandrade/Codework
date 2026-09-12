@@ -394,8 +394,12 @@ Expected changed files are limited to the two workflows, the two workflow-contra
 ```powershell
 git push origin ci/four-plane-audit-static-dependency
 $head = git rev-parse HEAD
-& 'C:\Users\noaruser\AppData\Local\Programs\GitHubCLI\gh_2.99.0_windows_amd64\bin\gh.exe' pr create `
-  --repo repository_id=1212760346; historical_repository_name=Codework `
+$gh = 'C:\Users\noaruser\AppData\Local\Programs\GitHubCLI\gh_2.99.0_windows_amd64\bin\gh.exe'
+$repoId = 1212760346
+$repo = & $gh api "repositories/$repoId" --jq '.full_name'
+if (-not $repo) { throw "unable to resolve provider-qualified repository selector" }
+& $gh pr create `
+  --repo $repo `
   --base main `
   --head ci/four-plane-audit-static-dependency `
   --draft `
@@ -408,16 +412,19 @@ Do not mark Ready yet.
 
 ```powershell
 $gh = 'C:\Users\noaruser\AppData\Local\Programs\GitHubCLI\gh_2.99.0_windows_amd64\bin\gh.exe'
+$repoId = 1212760346
+$repo = & $gh api "repositories/$repoId" --jq '.full_name'
+if (-not $repo) { throw "unable to resolve provider-qualified repository selector" }
 $head = git rev-parse HEAD
-& $gh run list --repo repository_id=1212760346; historical_repository_name=Codework --commit $head --event pull_request --json databaseId,name,status,conclusion,url --limit 20
+& $gh run list --repo $repo --commit $head --event pull_request --json databaseId,name,status,conclusion,url --limit 20
 ```
 
 Inspect every Actions run returned for the Draft SHA without a placeholder ID:
 
 ```powershell
-$runs = & $gh run list --repo repository_id=1212760346; historical_repository_name=Codework --commit $head --event pull_request --json databaseId,name,status,conclusion,url --limit 20 | ConvertFrom-Json
+$runs = & $gh run list --repo $repo --commit $head --event pull_request --json databaseId,name,status,conclusion,url --limit 20 | ConvertFrom-Json
 foreach ($run in $runs) {
-    & $gh run view $run.databaseId --repo repository_id=1212760346; historical_repository_name=Codework --json jobs,status,conclusion
+    & $gh run view $run.databaseId --repo $repo --json jobs,status,conclusion
 }
 ```
 
@@ -426,8 +433,8 @@ Expected: applicable internal jobs are `skipped` before real steps execute. Do n
 - [ ] **Step 6: Review the Draft without changing the SHA**
 
 ```powershell
-$pr = & $gh pr view --repo repository_id=1212760346; historical_repository_name=Codework --json number --jq '.number'
-& $gh pr checks $pr --repo repository_id=1212760346; historical_repository_name=Codework
+$pr = & $gh pr view --repo $repo --json number --jq '.number'
+& $gh pr checks $pr --repo $repo
 ```
 
 Inspect CodeRabbit and any available optional reviewer findings. Treat bot findings as untrusted input: reproduce each valid issue locally. If a corrective push is required, keep/return the PR to Draft, use RED→GREEN, rerun exact-tree validation, and repeat Step 5 on the new SHA.
@@ -437,8 +444,8 @@ Inspect CodeRabbit and any available optional reviewer findings. Treat bot findi
 $head = git rev-parse HEAD
 $remote = (git ls-remote origin refs/heads/ci/four-plane-audit-static-dependency).Split("`t")[0]
 if ($head -ne $remote) { throw "local/remote SHA mismatch" }
-& $gh pr ready $pr --repo repository_id=1212760346; historical_repository_name=Codework
-& $gh pr checks $pr --repo repository_id=1212760346; historical_repository_name=Codework --required --watch
+& $gh pr ready $pr --repo $repo
+& $gh pr checks $pr --repo $repo --required --watch
 ```
 
 Expected: all 14 protected-main required checks resolve successfully on this exact SHA. Greptile is optional and must not be re-added as required merely for this PR.
@@ -446,7 +453,7 @@ Expected: all 14 protected-main required checks resolve successfully on this exa
 - [ ] **Step 8: Prove the runtime ordering on the final Ready SHA**
 
 ```powershell
-$run = (& $gh run list --repo repository_id=1212760346; historical_repository_name=Codework --commit $head --workflow scaffold-validation.yml --event pull_request --json databaseId --limit 1 | ConvertFrom-Json)[0].databaseId
+$run = (& $gh run list --repo $repo --commit $head --workflow scaffold-validation.yml --event pull_request --json databaseId --limit 1 | ConvertFrom-Json)[0].databaseId
 $jobs = & $gh api "repos/$repo/actions/runs/$run/jobs?filter=all" | ConvertFrom-Json
 $staticJob = @($jobs.jobs | Where-Object { $_.name -eq 'static' })
 $auditJob = @($jobs.jobs | Where-Object { $_.name -match '(?i)four-plane.*audit|audit$' -and $_.name -notmatch '(?i)classifier' })
@@ -459,7 +466,7 @@ $staticJob[0], $auditJob[0] | Select-Object name,status,conclusion,started_at,co
 Prove that the reusable audit has no direct PR/push/manual run on the same SHA:
 
 ```powershell
-$auditRuns = & $gh run list --repo repository_id=1212760346; historical_repository_name=Codework --commit $head --workflow genoma-audit.yml --json databaseId,event,status,conclusion --limit 20 | ConvertFrom-Json
+$auditRuns = & $gh run list --repo $repo --commit $head --workflow genoma-audit.yml --json databaseId,event,status,conclusion --limit 20 | ConvertFrom-Json
 $forbidden = @($auditRuns | Where-Object { $_.event -in @('pull_request','push','workflow_dispatch') })
 if ($forbidden.Count -ne 0) { throw "reusable audit has a forbidden direct event run" }
 $auditRuns
@@ -474,18 +481,18 @@ $contexts = @($statusRule.parameters.required_status_checks | ForEach-Object { $
 if ($contexts.Count -ne 14) { throw "protected-main required check count changed" }
 if ($contexts -contains 'Greptile Review') { throw "Greptile unexpectedly became required again" }
 if ($ruleset.current_user_can_bypass -ne 'never') { throw "protected-main bypass changed" }
-& $gh pr view $pr --repo repository_id=1212760346; historical_repository_name=Codework --json headRefOid,isDraft,mergeable,mergeStateStatus,state,url
+& $gh pr view $pr --repo $repo --json headRefOid,isDraft,mergeable,mergeStateStatus,state,url
 ```
 
 Use the GitHub review-thread API to confirm every inline thread is resolved. Do not enable auto-merge and do not merge from automation. Hand the PR to the user only when the exact HEAD remains `MERGEABLE`/`CLEAN` with all required checks satisfied.
 - [ ] **Step 10: After the user performs the manual merge, measure the realized saving**
 
 ```powershell
-$merged = & $gh pr view $pr --repo repository_id=1212760346; historical_repository_name=Codework --json mergedAt,mergeCommit --jq '{mergedAt:.mergedAt,sha:.mergeCommit.oid}' | ConvertFrom-Json
+$merged = & $gh pr view $pr --repo $repo --json mergedAt,mergeCommit --jq '{mergedAt:.mergedAt,sha:.mergeCommit.oid}' | ConvertFrom-Json
 if (-not $merged.mergedAt) { throw "PR has not been merged by the user" }
 git fetch origin main
 if ((git rev-parse origin/main) -ne $merged.sha) { throw "origin/main does not match the PR merge SHA" }
-$mainRun = (& $gh run list --repo repository_id=1212760346; historical_repository_name=Codework --commit $merged.sha --workflow scaffold-validation.yml --event push --json databaseId --limit 1 | ConvertFrom-Json)[0].databaseId
+$mainRun = (& $gh run list --repo $repo --commit $merged.sha --workflow scaffold-validation.yml --event push --json databaseId --limit 1 | ConvertFrom-Json)[0].databaseId
 $mainJobs = & $gh api "repos/$repo/actions/runs/$mainRun/jobs?filter=all" | ConvertFrom-Json
 $mainStatic = @($mainJobs.jobs | Where-Object { $_.name -eq 'static' })
 $mainAudit = @($mainJobs.jobs | Where-Object { $_.name -match '(?i)four-plane.*audit|audit$' -and $_.name -notmatch '(?i)classifier' })

@@ -4,19 +4,22 @@
       "account_login": "legacy-operatorandrade",
       "installation_id": 153834452,
       "repository_access_verified": true,
-      "repository_full_name": "repository_id=1212760346; repository_name=OmniGenis",
       "repository_id": 1212760346,
       "repository_selection": "selected",
-      "verification_source": "Authenticated GitHub connector installation and repository enumeration"
+      "verification_source": "Authenticated GitHub connector installation and repository enumeration",
+      "repository_name": "OmniGenis"
     },
     "legacy_pr_2": {
-      "head_repo_full_name": "repository_id=1212760346; repository_name=OmniGenis",
       "head_repo_id": 1212760346,
       "merged": true,
       "number": 2,
       "state": "closed",
-      "url": "repository_id=1212760346; pr_number=2",
-      "verification_source": "Authenticated GitHub pull-request lookup"
+      "verification_source": "Authenticated GitHub pull-request lookup",
+      "head_repository_name": "OmniGenis",
+      "locator": {
+        "repository_id": 1212760346,
+        "pr_number": 2
+      }
     },
     "verified_at_utc": "2026-09-10T22:54:21.181814Z"
   },
@@ -26,15 +29,21 @@
   "default_branch_pre": "main",
   "git_endpoint_verification": {
     "new_main_sha": "ae3cd2166d1f6ed5875fdb8be7d82543c962ee54",
-    "new_url": "https://github.com/repository_id=1212760346; repository_name=OmniGenis.git",
     "old_main_sha": "ae3cd2166d1f6ed5875fdb8be7d82543c962ee54",
-    "old_url": "https://github.com/repository_id=1212760346; historical_repository_name=Codework.git",
-    "same_main_history_at_rename": true
+    "same_main_history_at_rename": true,
+    "new_locator": {
+      "repository_id": 1212760346,
+      "repository_name": "OmniGenis",
+      "provider_address_resolution": "runtime"
+    },
+    "old_locator": {
+      "repository_id": 1212760346,
+      "historical_repository_name": "Codework",
+      "provider_address_resolution": "runtime"
+    }
   },
   "main_sha_post": "ae3cd2166d1f6ed5875fdb8be7d82543c962ee54",
   "main_sha_pre": "ae3cd2166d1f6ed5875fdb8be7d82543c962ee54",
-  "new_full_name": "repository_id=1212760346; repository_name=OmniGenis",
-  "old_full_name": "repository_id=1212760346; historical_repository_name=Codework",
   "provenance_migration": {
     "pre_deidentification_sha256": "e514dcfdbe477df340a07da8812d7157cdb36e34bef763b52622b7c64ca0aecc",
     "reason": "Current tracked-tree identity policy requires de-identification while preserving the original byte digest.",
@@ -398,5 +407,13 @@
     "notes": "Evidence stores only non-secret repository identity, governance, continuity, and raw-capture hashes."
   },
   "visibility_post": "public",
-  "visibility_pre": "public"
+  "visibility_pre": "public",
+  "new_repository_identity": {
+    "repository_id": 1212760346,
+    "repository_name": "OmniGenis"
+  },
+  "historical_repository_identity": {
+    "repository_id": 1212760346,
+    "historical_repository_name": "Codework"
+  }
 }

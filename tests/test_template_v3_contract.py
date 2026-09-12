@@ -148,6 +148,7 @@ class TemplateV3ContractTest(unittest.TestCase):
             CURRENT_RULESET_TEMPLATE_SOURCE,
             TemplateV3Error,
             _system_value_for_source,
+            _validate_controlled_span_sources,
         )
 
         self.assertEqual(CURRENT_RULESET_TEMPLATE_LABEL, "GENOMA-RULESET-v3.4")
@@ -158,6 +159,20 @@ class TemplateV3ContractTest(unittest.TestCase):
         )
         with self.assertRaises(TemplateV3Error):
             _system_value_for_source("GENOMA-RULESET-v2.8", systems)
+        with self.assertRaises(TemplateV3Error):
+            _system_value_for_source("GENOMA-ALT-RULESET-v3.4", systems)
+        with self.assertRaises(TemplateV3Error):
+            _validate_controlled_span_sources(
+                {
+                    "reports": {
+                        "01": {
+                            "controlled_spans": [
+                                {"source_text": "GENOMA-ALT-RULESET-v3.4"}
+                            ]
+                        }
+                    }
+                }
+            )
         self.assertEqual(_system_value_for_source("OTHER", systems), "value")
         self.assertIsNone(_system_value_for_source("UNKNOWN", systems))
 

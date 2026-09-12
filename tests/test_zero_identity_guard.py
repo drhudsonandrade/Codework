@@ -11,6 +11,7 @@ from scripts.zero_identity_guard import (
     RepositoryScanError,
     load_policy,
     scan_repository,
+    validate_zero_identity,
 )
 
 MUTATIONS = {
@@ -92,6 +93,18 @@ class ZeroIdentityGuardTest(unittest.TestCase):
         with self.assertRaises(RepositoryScanError):
             self.findings(root)
 
+    def test_symlink_error_does_not_echo_prohibited_path_component(self) -> None:
+        root = self.make_repo()
+        token = MUTATIONS["P1"]
+        relative = (b"link-" + token).decode("ascii")
+        (root / "target.txt").write_text("safe", encoding="utf-8")
+        (root / relative).symlink_to("target.txt")
+        subprocess.run(["git", "add", "--", relative], cwd=root, check=True)
+        with self.assertRaises(RepositoryScanError) as ctx:
+            self.findings(root)
+        rendered = str(ctx.exception).encode("utf-8").lower()
+        self.assertNotIn(token, rendered)
+
     def test_git_enumeration_failure_fails_closed(self) -> None:
         td = tempfile.TemporaryDirectory()
         self.addCleanup(td.cleanup)
@@ -106,12 +119,33 @@ class ZeroIdentityGuardTest(unittest.TestCase):
         dup_pair = json.loads(json.dumps(valid)); dup_pair["classes"][1]["length"] = dup_pair["classes"][0]["length"]; dup_pair["classes"][1]["sha256"] = dup_pair["classes"][0]["sha256"]; mutations.append(dup_pair)
         bad_digest = json.loads(json.dumps(valid)); bad_digest["classes"][0]["sha256"] = "xyz"; mutations.append(bad_digest)
         zero_length = json.loads(json.dumps(valid)); zero_length["classes"][0]["length"] = 0; mutations.append(zero_length)
+        missing_class = json.loads(json.dumps(valid)); missing_class["classes"].pop(); mutations.append(missing_class)
+        extra_class = json.loads(json.dumps(valid)); extra_class["classes"].append({"id": "P5", "length": 5, "sha256": "a" * 64}); mutations.append(extra_class)
         for payload in mutations:
             with self.subTest(payload=payload):
                 td = tempfile.TemporaryDirectory(); self.addCleanup(td.cleanup)
                 path = Path(td.name) / "policy.json"; path.write_text(json.dumps(payload), encoding="utf-8")
                 with self.assertRaises(PolicyError):
                     load_policy(path)
+
+    def test_scan_uses_index_blob_not_worktree_bytes(self) -> None:
+        root = self.make_repo()
+        self.track(root, "staged.bin", b"aa" + MUTATIONS["P2"] + b"zz")
+        (root / "staged.bin").write_bytes(b"safe-working-tree")
+        findings = self.findings(root)
+        self.assertTrue(
+            any(f.class_id == "P2" and f.path == "staged.bin" and f.offset == 2 for f in findings),
+            findings,
+        )
+
+    def test_diagnostic_redacts_prohibited_token_from_tracked_path(self) -> None:
+        root = self.make_repo()
+        relative = (b"x-" + MUTATIONS["P1"] + b".txt").decode("ascii")
+        self.track(root, relative, b"safe")
+        diagnostics = validate_zero_identity(root)
+        rendered = "\n".join(diagnostics).encode("utf-8").lower()
+        self.assertNotIn(MUTATIONS["P1"], rendered)
+        self.assertTrue(any(line.startswith("P1\t") and "byte_offset=2" in line for line in diagnostics))
 
     def test_findings_do_not_expose_matched_bytes(self) -> None:
         root = self.make_repo()

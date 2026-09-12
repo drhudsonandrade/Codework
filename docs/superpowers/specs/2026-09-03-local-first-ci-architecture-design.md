@@ -4,7 +4,7 @@
 **Status:** Implementation tracked in PR #36; final human merge approval pending
 **Repository:** `repository_id=1212760346; historical_repository_name=Codework`
 **Branch:** `ci/local-first-actions-optimization-impl`
-**Governance verification:** before merge, re-read `.github/governance/main-ruleset.json` and query `GET /repos/$repo/rulesets` plus every active ruleset returned by that endpoint. Treat the live GitHub response as authoritative for currently enforced checks and the tracked file as desired-state documentation; record any divergence in the PR before merge.
+**Governance verification:** before merge, re-read `.github/governance/main-ruleset.json`, resolve the provider-qualified selector at runtime with `repo=$(gh api repositories/1212760346 --jq .full_name)`, then query `GET /repos/$repo/rulesets` plus every active ruleset returned by that endpoint. Treat the live GitHub response as authoritative for currently enforced checks and the tracked file as desired-state documentation; record any divergence in the PR before merge.
 
 ## 1. Objective
 

@@ -20,6 +20,33 @@ def _git(*args: str) -> str:
     return subprocess.check_output([GIT, *args], cwd=ROOT, text=True).strip()
 
 
+def _resolve_evidence_commit(implementation: str) -> str:
+    """Locate the unique evidence-only child of the attested implementation."""
+    expected = EVIDENCE.read_bytes()
+    candidates: list[str] = []
+    for line in _git("rev-list", "--parents", "HEAD").splitlines():
+        fields = line.split()
+        commit, parents = fields[0], fields[1:]
+        if parents != [implementation]:
+            continue
+        changed = _git(
+            "diff-tree", "--no-commit-id", "--name-only", "-r", commit
+        ).splitlines()
+        if changed != [EVIDENCE_RELATIVE]:
+            continue
+        committed = subprocess.check_output(
+            [GIT, "show", f"{commit}:{EVIDENCE_RELATIVE}"],
+            cwd=ROOT,
+        )
+        if committed == expected:
+            candidates.append(commit)
+    if len(candidates) != 1:
+        raise AssertionError(
+            "expected exactly one reachable evidence-only child of the implementation"
+        )
+    return candidates[0]
+
+
 class ZeroIdentitySealTest(unittest.TestCase):
     """Bind the seal evidence to the exact implementation and zero inventory."""
 
@@ -38,9 +65,15 @@ class ZeroIdentitySealTest(unittest.TestCase):
     def test_implementation_sha_tree_and_evidence_only_commit_are_bound(self) -> None:
         evidence = self.load()
         implementation = evidence["implementation_head_sha"]
-        self.assertEqual(_git("rev-parse", f"{implementation}^{{tree}}"), evidence["implementation_tree_sha"])
-        self.assertEqual(_git("rev-parse", "HEAD^"), implementation)
-        changed = _git("diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD").splitlines()
+        self.assertEqual(
+            _git("rev-parse", f"{implementation}^{{tree}}"),
+            evidence["implementation_tree_sha"],
+        )
+        evidence_commit = _resolve_evidence_commit(implementation)
+        self.assertEqual(_git("rev-parse", f"{evidence_commit}^"), implementation)
+        changed = _git(
+            "diff-tree", "--no-commit-id", "--name-only", "-r", evidence_commit
+        ).splitlines()
         self.assertEqual(changed, [EVIDENCE_RELATIVE])
 
     def test_all_fingerprint_classes_are_zero(self) -> None:

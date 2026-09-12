@@ -85,6 +85,16 @@ class SupplyChainLockTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             verify_supply_chain_lock._verify_required_check_schema(mutated)
 
+    def test_required_check_schema_rejects_duplicate_status_rules(self):
+        ruleset = json.loads((ROOT / ".github/governance/main-ruleset.json").read_text())
+        status = next(
+            rule for rule in ruleset["rules"] if rule["type"] == "required_status_checks"
+        )
+        mutated = copy.deepcopy(ruleset)
+        mutated["rules"].append(copy.deepcopy(status))
+        with self.assertRaises(SystemExit):
+            verify_supply_chain_lock._verify_required_check_schema(mutated)
+
     def test_supply_chain_verifier_does_not_reference_retired_gitleaks(self):
         verifier = (ROOT / "scripts/verify_supply_chain_lock.py").read_text(encoding="utf-8")
         self.assertNotIn("gitleaks", verifier.casefold())

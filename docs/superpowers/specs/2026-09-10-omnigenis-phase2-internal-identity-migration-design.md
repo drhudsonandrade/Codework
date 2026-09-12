@@ -34,7 +34,7 @@ Phase 2 does not:
 
 The Phase 1 post-merge baseline was verified before this design was written. Reproduced baseline commands, exit codes, environment metadata, output summaries, and digests are recorded in `docs/superpowers/evidence/2026-09-10-omnigenis-phase2a-identity-contract.json`; the original rename continuity source is `docs/superpowers/evidence/2026-09-10-omnigenis-repository-identity-migration.json`.
 
-- repository full name: `repository_id=1212760346; repository_name=OmniGenis`;
+- canonical repository identity: `repository_id=1212760346` and `repository_name=OmniGenis`;
 - repository ID: `1212760346`;
 - visibility: `public`;
 - default branch: `main`;
@@ -386,7 +386,7 @@ After each human merge:
 - fetch `origin/main` and record the merge SHA;
 - rerun the identity/legacy gate from clean `main`;
 - re-read both active GitHub rulesets and compare their normalized semantics with the pre-merge evidence;
-- verify repository ID `1212760346`, full name `repository_id=1212760346; repository_name=OmniGenis`, visibility `public`, and default branch `main`;
+- verify canonical repository identity (`repository_id=1212760346`, `repository_name=OmniGenis`), visibility `public`, and default branch `main`; resolve provider `full_name` only at runtime when an API address is required;
 - verify any external resource changed by that subphase from the authoritative external API;
 - record a post-merge checkpoint before starting the next subphase.
 

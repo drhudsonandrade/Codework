@@ -47,6 +47,9 @@
 ```bash
 cd /srv/remote-desktop-commander-workspace/codework-audit/Codework/.worktrees/omnigenis-repository-rename-design
 git fetch origin --prune
+repo_id=1212760346
+repo="$(gh api "repositories/$repo_id" --jq .full_name)"
+test -n "$repo"
 test "$(git rev-parse origin/main)" = "ae3cd2166d1f6ed5875fdb8be7d82543c962ee54"
 ```
 
@@ -60,8 +63,8 @@ gh api repos/$repo/commits/main > /tmp/omnigenis-rename-pre/main.json
 gh api repos/$repo/rulesets > /tmp/omnigenis-rename-pre/rulesets.json
 gh api repos/$repo/rulesets/22347095 > /tmp/omnigenis-rename-pre/ruleset-22347095.json
 gh api repos/$repo/rulesets/21303100 > /tmp/omnigenis-rename-pre/ruleset-21303100.json
-gh api 'repos/$repo/pulls?state=open&per_page=100' > /tmp/omnigenis-rename-pre/open-pulls.json
-gh api --paginate --slurp 'repos/$repo/branches?per_page=100' > /tmp/omnigenis-rename-pre/branches.json
+gh api "repos/$repo/pulls?state=open&per_page=100" > /tmp/omnigenis-rename-pre/open-pulls.json
+gh api --paginate --slurp "repos/$repo/branches?per_page=100" > /tmp/omnigenis-rename-pre/branches.json
 (cd /tmp/omnigenis-rename-pre && sha256sum *.json | sort > manifest.sha256)
 ```
 
@@ -110,7 +113,7 @@ Expected: `PRE_RENAME_GATE=PASS`.
 ```bash
 test "$(gh api repos/$repo --jq .id)" = "1212760346"
 test "$(gh api repos/$repo/commits/main --jq .sha)" = "ae3cd2166d1f6ed5875fdb8be7d82543c962ee54"
-test "$(gh api 'repos/$repo/pulls?state=open&per_page=100' --jq 'length')" = "0"
+test "$(gh api "repos/$repo/pulls?state=open&per_page=100" --jq 'length')" = "0"
 ```
 
 Expected: exit `0`; otherwise stop.
@@ -126,7 +129,9 @@ Expected: response field `name` is `OmniGenis` and `id` remains `1212760346`.- [
 ```bash
 rm -rf /tmp/omnigenis-rename-post
 mkdir -p /tmp/omnigenis-rename-post
-gh api repos/$repo > /tmp/omnigenis-rename-post/repository.json
+repo="$(gh api "repositories/$repo_id" --jq .full_name)"
+test -n "$repo"
+gh api "repos/$repo" > /tmp/omnigenis-rename-post/repository.json
 gh api repos/$repo/commits/main > /tmp/omnigenis-rename-post/main.json
 gh api repos/$repo/rulesets > /tmp/omnigenis-rename-post/rulesets.json
 gh api repos/$repo/rulesets/22347095 > /tmp/omnigenis-rename-post/ruleset-22347095.json
@@ -172,7 +177,7 @@ ruleset_semantics_post = {
 
 assert repo['id'] == 1212760346
 assert repo['name'] == 'OmniGenis'
-assert repo['full_name'] == 'repository_id=1212760346; repository_name=OmniGenis'
+assert repo['full_name'] == f"{repo['owner']['login']}/OmniGenis"
 assert repo['visibility'] == 'public'
 assert repo['default_branch'] == 'main'
 assert main['sha'] == 'ae3cd2166d1f6ed5875fdb8be7d82543c962ee54'
@@ -187,8 +192,10 @@ PY
 Expected: `POST_RENAME_GATE=PASS`.- [ ] **Step 4: Verify old and new Git endpoints resolve to the same `main` SHA**
 
 ```bash
-old_sha="$(git ls-remote https://github.com/repository_id=1212760346; historical_repository_name=Codework.git refs/heads/main | cut -f1)"
-new_sha="$(git ls-remote https://github.com/repository_id=1212760346; repository_name=OmniGenis.git refs/heads/main | cut -f1)"
+repo="$(gh api repositories/1212760346 --jq .full_name)"
+owner="${repo%%/*}"
+old_sha="$(git ls-remote "https://github.com/$owner/Codework.git" refs/heads/main | cut -f1)"
+new_sha="$(git ls-remote "https://github.com/$repo.git" refs/heads/main | cut -f1)"
 test "$old_sha" = "$new_sha"
 test "$new_sha" = "ae3cd2166d1f6ed5875fdb8be7d82543c962ee54"
 printf 'OLD_URL_MAIN=%s\nNEW_URL_MAIN=%s\n' "$old_sha" "$new_sha"
@@ -220,9 +227,11 @@ Then verify repository ID `1212760346` and the pre-rename `main` SHA before repo
 
 ```bash
 cd /srv/remote-desktop-commander-workspace/codework-audit/Codework
-git remote set-url origin https://github.com/repository_id=1212760346; repository_name=OmniGenis.git
+repo="$(gh api repositories/1212760346 --jq .full_name)"
+test -n "$repo"
+git remote set-url origin "https://github.com/$repo.git"
 git fetch origin --prune
-test "$(git remote get-url origin)" = "https://github.com/repository_id=1212760346; repository_name=OmniGenis.git"
+test "$(git remote get-url origin)" = "https://github.com/$repo.git"
 test "$(git rev-parse origin/main)" = "ae3cd2166d1f6ed5875fdb8be7d82543c962ee54"
 ```
 
@@ -600,7 +609,7 @@ Expected: either an actual review result or an explicit unavailable status; neve
 git push -u origin chore/omnigenis-repository-identity
 ```
 
-Expected: push target is `https://github.com/repository_id=1212760346; repository_name=OmniGenis.git`.
+Expected: push target is the runtime-resolved `https://github.com/$repo.git`, with `$repo` obtained from repository ID `1212760346`.
 
 - [ ] **Step 3: Create the pull request as draft**
 
@@ -692,8 +701,10 @@ git remote get-url origin
 git log -1 --oneline origin/main
 gh api repos/$repo --jq '[.id,.full_name,.visibility,.default_branch] | @tsv'
 gh api repos/$repo/rulesets --jq '.[] | [.id,.name,.enforcement] | @tsv'
-git ls-remote https://github.com/repository_id=1212760346; historical_repository_name=Codework.git refs/heads/main
-git ls-remote https://github.com/repository_id=1212760346; repository_name=OmniGenis.git refs/heads/main
+repo="$(gh api repositories/1212760346 --jq .full_name)"
+owner="${repo%%/*}"
+git ls-remote "https://github.com/$owner/Codework.git" refs/heads/main
+git ls-remote "https://github.com/$repo.git" refs/heads/main
 ```
 
 Expected: canonical repository identity is `repository_id=1212760346; repository_name=OmniGenis`, repository ID remains `1212760346`, visibility remains public, `origin` uses the new URL, rulesets remain active, and old/new Git endpoints resolve to the same current `main` history.

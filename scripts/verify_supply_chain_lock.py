@@ -22,14 +22,21 @@ def fail(message: str) -> None:
 
 
 
+def _required_status_rule(ruleset: dict[str, object]) -> dict[str, object]:
+    """Return the unique required-status-checks rule or fail closed."""
+    status_rules = [
+        rule
+        for rule in ruleset.get("rules", [])
+        if isinstance(rule, dict) and rule.get("type") == "required_status_checks"
+    ]
+    if len(status_rules) != 1:
+        fail("main ruleset must contain exactly one required_status_checks rule")
+    return status_rules[0]
+
+
 def _verify_required_check_schema(ruleset: dict[str, object]) -> None:
     """Require every tracked required check to use one supported identity form."""
-    status_rule = next(
-        (rule for rule in ruleset.get("rules", []) if isinstance(rule, dict) and rule.get("type") == "required_status_checks"),
-        None,
-    )
-    if not isinstance(status_rule, dict):
-        fail("main ruleset required_status_checks rule missing")
+    status_rule = _required_status_rule(ruleset)
     parameters = status_rule.get("parameters")
     checks = parameters.get("required_status_checks") if isinstance(parameters, dict) else None
     if not isinstance(checks, list) or not checks:
@@ -48,16 +55,7 @@ def _verify_external_secret_scanner(runtime: dict[str, object], ruleset: dict[st
     if not isinstance(context, str) or not isinstance(integration_id, int):
         fail("secret scanner context/integration_id identity invalid")
 
-    status_rule = next(
-        (
-            rule
-            for rule in ruleset.get("rules", [])
-            if isinstance(rule, dict) and rule.get("type") == "required_status_checks"
-        ),
-        None,
-    )
-    if not isinstance(status_rule, dict):
-        fail("main ruleset required_status_checks rule missing")
+    status_rule = _required_status_rule(ruleset)
     parameters = status_rule.get("parameters")
     if not isinstance(parameters, dict):
         fail("main ruleset required_status_checks parameters missing")

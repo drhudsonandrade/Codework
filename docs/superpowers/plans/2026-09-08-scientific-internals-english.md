@@ -93,8 +93,8 @@ Host: `legacy-operator` (Ubuntu). The retained evidence directory is:
 
 These local filesystem locators are **not public download URLs**. SHA-256 values
 bind the retained files; the commands and portable comparison below let another
-checkout reproduce the checks without access to this host. CI results are linked
-from [PR #59 checks](repository_id=1212760346; pr_number=59/checks).
+checkout reproduce the checks without access to this host. Retrieve PR #59 checks
+at runtime with `repo=$(gh api repositories/1212760346 --jq .full_name); gh pr checks 59 --repo "$repo"`.
 
 | File beneath that directory | SHA-256 | Recorded scope |
 | --- | --- | --- |

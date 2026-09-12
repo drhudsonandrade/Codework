@@ -22,6 +22,9 @@ PLAN_RELATIVE = (
 PLAN = ROOT / PLAN_RELATIVE
 BASE_SHA = "4c0e5222248b5f9f2537d627091b80afc9c9e120"
 PHASE2B_MERGE_COMMIT = "a1e669dd613f68f4d82ca7f1f565772ec8098cb1"
+PHASE2B_EVIDENCE_COMMIT = "87edc2c958150736884ad37297f96a8eb7a7464f"
+PHASE2B_CURRENT_EVIDENCE_SHA256 = "b829c61985b7738ae1790ea9455bd475afaa3ca4b7c8d5b99feb59b37911a9f3"
+PHASE2B_HISTORICAL_EVIDENCE_SHA256 = "36e2d0e9bd719e5c1691bc4e9f0a62095dd9f44958cfd5705214d4018a1c8378"
 LEGACY_WORD = "code" + "work"
 
 
@@ -129,6 +132,13 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
         }
         self.assertTrue(required.issubset(evidence))
 
+    def test_current_deidentified_evidence_bytes_are_independently_pinned(self) -> None:
+        """Pin the current deidentified evidence independently of its own fields."""
+        self.assertEqual(
+            hashlib.sha256(EVIDENCE.read_bytes()).hexdigest(),
+            PHASE2B_CURRENT_EVIDENCE_SHA256,
+        )
+
     def test_implementation_sha_tree_and_evidence_commit_are_git_bound(self) -> None:
         """Bind merged Phase 2B evidence to its historical implementation commit."""
         evidence = self.load()
@@ -148,6 +158,7 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
         ).split()
         self.assertEqual(len(merge_fields), 3)
         evidence_commit = merge_fields[2]
+        self.assertEqual(evidence_commit, PHASE2B_EVIDENCE_COMMIT)
         self.assertEqual(self.git("rev-parse", f"{evidence_commit}^"), implementation)
         changed = self.git(
             "diff-tree", "--no-commit-id", "--name-only", "-r", evidence_commit
@@ -160,9 +171,13 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
         provenance = evidence["deidentification_provenance"]
         self.assertEqual(
             hashlib.sha256(committed_evidence).hexdigest(),
-            provenance["historical_blob_sha256"],
+            PHASE2B_HISTORICAL_EVIDENCE_SHA256,
         )
-        self.assertEqual(provenance["evidence_commit"], evidence_commit)
+        self.assertEqual(
+            provenance["historical_blob_sha256"],
+            PHASE2B_HISTORICAL_EVIDENCE_SHA256,
+        )
+        self.assertEqual(provenance["evidence_commit"], PHASE2B_EVIDENCE_COMMIT)
         self.assertEqual(provenance["merge_commit"], PHASE2B_MERGE_COMMIT)
         ancestry = subprocess.run(
             [GIT_EXECUTABLE, "merge-base", "--is-ancestor", PHASE2B_MERGE_COMMIT, "HEAD"],

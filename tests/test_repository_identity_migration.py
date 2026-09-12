@@ -85,6 +85,37 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
             ):
                 self.assertIn(key, ruleset)
 
+    def test_deidentified_evidence_references_are_runtime_resolvable(self) -> None:
+        """Require migrated evidence references to resolve without persisted owner identity."""
+        records = {
+            "docs/POLICY_CODE_LANGUAGE_INVENTORY.md": "5596016415",
+            "docs/REPORTING_CODE_LANGUAGE_INVENTORY.md": "5601896618",
+            "docs/superpowers/plans/2026-09-09-policy-evidence-audit-english.md": "5596016415",
+            "docs/superpowers/plans/2026-09-09-reporting-english-locale.md": "5601896618",
+        }
+        for path, comment_id in records.items():
+            with self.subTest(path=path):
+                text = self.read(path)
+                self.assertIn("gh api repositories/1212760346 --jq .full_name", text)
+                self.assertIn(f"issues/comments/{comment_id}", text)
+                self.assertNotIn("](repository_id=", text)
+
+    def test_phase_one_evidence_uses_typed_repository_locators(self) -> None:
+        """Keep deidentified provenance typed instead of masquerading as URLs/full_name."""
+        evidence = json.loads(
+            self.read(
+                "docs/superpowers/evidence/"
+                "2026-09-10-omnigenis-repository-identity-migration.json"
+            )
+        )
+        endpoint = evidence["git_endpoint_verification"]
+        self.assertNotIn("new_url", endpoint)
+        self.assertNotIn("old_url", endpoint)
+        self.assertEqual(endpoint["new_locator"]["repository_id"], 1212760346)
+        self.assertEqual(endpoint["new_locator"]["repository_name"], "OmniGenis")
+        self.assertEqual(endpoint["old_locator"]["repository_id"], 1212760346)
+        self.assertIn("historical_repository_name", endpoint["old_locator"])
+
     def test_migration_plan_uses_fail_closed_reference_and_phase_two_gates(self):
         plan = self.read(
             "docs/superpowers/plans/"
@@ -93,7 +124,7 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
         self.assertIn("unexpected_old_references", plan)
         self.assertIn("allowed_historical_old_references", plan)
         self.assertIn("phase2_changed_paths", plan)
-        self.assertIn("phase2_changed_paths", plan)
+        self.assertIn("PHASE2_PRESERVATION_GATE=PASS", plan)
 
     def test_migration_plan_compares_complete_ruleset_semantics(self):
         plan = self.read(
