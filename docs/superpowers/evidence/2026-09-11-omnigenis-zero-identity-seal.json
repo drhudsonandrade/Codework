@@ -18,8 +18,8 @@
       "path": 0
     }
   },
-  "implementation_head_sha": "f35f6213d7373be5bd3084dbdaf629574ea77eaf",
-  "implementation_tree_sha": "ace35aefd8b6d24f4958067f4c5802f4f520ddf0",
+  "implementation_head_sha": "7cf52c4b96a5f9ec32ea1f7d2e62770ca2450a99",
+  "implementation_tree_sha": "e442d48ad0b1dd3ba8a4a7c1351ae707d39b5b2c",
   "policy_sha256": "46ff364a66718b4390cbbc38caea586124b637663183d4c33d370086ea6c4a07",
   "post_merge": {
     "canonical_runner_names": [
@@ -86,14 +86,29 @@
       "output_sha256": "ac4870668612777d42f3eef5aad8b6eb29b40c76452f29090f57c2cdabef68c9",
       "sanitized_output": "Ran 27 tests\nOK\n"
     },
-    "full_suite": {
-      "command": "PYTHONPATH=tests python3 -m unittest discover -s tests -v",
+    "implementation_suite_without_seal": {
+      "command": "PYTHONPATH=tests python3 -m unittest $(find tests -maxdepth 1 -name 'test_*.py' ! -name 'test_zero_identity_seal.py' -printf '%f\\n' | sort | sed 's/\\.py$//' | tr '\\n' ' ') -v",
       "environment": "python-3.12.3-reporting-lock",
+      "execution_basis": "exact implementation commit; excludes only the evidence-topology test module that requires the evidence child",
       "exit_code": 0,
       "output_kind": "sanitized_summary_plus_raw_log_digest",
-      "output_sha256": "85d2ca1d761affe3776d5f83d786c933d0eb672df42c14061b8f3918f0e54ba4",
-      "raw_output_sha256": "e7408ceac2c58c0d1c196906700a124045a0fc99e720a758b3d82fdfb976d8b3",
-      "sanitized_output": "Ran 1145 tests in 326.342s\nOK (skipped=1)\n"
+      "output_sha256": "b59c96fe27df343d2eac19ac42cbcbe9fbfd5f3a4d340a537157b06458254da9",
+      "raw_output_sha256": "1fc6e5f277e4182cf0075349dbcb8fc967f326491d47dca3516929e5abeb03fb",
+      "sanitized_output": "Ran 1141 tests in 322.162s\nOK (skipped=1)\n",
+      "validated_head_sha": "7cf52c4b96a5f9ec32ea1f7d2e62770ca2450a99",
+      "validated_tree_sha": "e442d48ad0b1dd3ba8a4a7c1351ae707d39b5b2c"
+    },
+    "pre_evidence_full_suite": {
+      "command": "PYTHONPATH=tests python3 -m unittest discover -s tests -v",
+      "environment": "python-3.12.3-reporting-lock",
+      "execution_basis": "staged prospective implementation tree before the evidence-only child; exact tree later committed as implementation",
+      "exit_code": 0,
+      "git_head_during_execution": "41191845bcee3267c5480b1b56f360f7504d9ec2",
+      "output_kind": "sanitized_summary_plus_raw_log_digest",
+      "output_sha256": "4babe9c02f2bde0bd469a4b950a4a153e15945604c2ec77a27e36f1e66337677",
+      "raw_output_sha256": "a712d5bd27ffaa6549821306f96fd6dda18d6dc7319f5d2d9bb3e0db2115f9d5",
+      "sanitized_output": "Ran 1149 tests in 324.453s\nOK (skipped=1)\n",
+      "validated_tree_sha": "e442d48ad0b1dd3ba8a4a7c1351ae707d39b5b2c"
     },
     "project_identity": {
       "command": "python3 scripts/project_identity_guard.py --check",
