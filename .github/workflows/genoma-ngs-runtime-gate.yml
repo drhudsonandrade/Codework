@@ -26,6 +26,8 @@ on:
       - 'scripts/prepare_latest_candidate.py'
       - 'scripts/prepare_report_release.py'
       - 'scripts/project_identity_guard.py'
+      - 'scripts/governance_context_identity.py'
+      - 'scripts/zero_identity_guard.py'
       - 'scripts/residual_language_audit.py'
       - 'scripts/promote_latest_candidate.py'
       - 'scripts/refresh_evidence_sources.py'
@@ -70,6 +72,8 @@ on:
       - 'scripts/prepare_latest_candidate.py'
       - 'scripts/prepare_report_release.py'
       - 'scripts/project_identity_guard.py'
+      - 'scripts/governance_context_identity.py'
+      - 'scripts/zero_identity_guard.py'
       - 'scripts/residual_language_audit.py'
       - 'scripts/promote_latest_candidate.py'
       - 'scripts/refresh_evidence_sources.py'
@@ -184,8 +188,8 @@ jobs:
           python3 scripts/prepare_latest_candidate.py --source environment.yml --output results/freshness/environment.latest-candidate.yml --evidence results/freshness/candidate-preparation.json
           cp results/freshness/environment.latest-candidate.yml environment.yml
           docker build --tag genoma-ngs-latest:${{ github.sha }} .
-          docker run --rm -e CANARY_VERSION_POLICY=INVENTORY -v "$PWD/results:/workspace/results" genoma-ngs-latest:${{ github.sha }} /opt/omnigenis/scripts/run_canary.sh /workspace/results/canary
-          docker run --rm -e CANARY_VERSION_POLICY=INVENTORY -v "$PWD/results:/workspace/results" genoma-ngs-latest:${{ github.sha }} nextflow run /opt/omnigenis/main.nf --mode canary --outdir /workspace/results/nextflow-canary -ansi-log false
+          docker run --rm -e CANARY_VERSION_POLICY=INVENTORY -v "$REF_ROOT:/refs:ro" -v "$PWD/results:/workspace/results" genoma-ngs-latest:${{ github.sha }} /opt/omnigenis/scripts/run_canary.sh /workspace/results/canary
+          docker run --rm -e CANARY_VERSION_POLICY=INVENTORY -v "$REF_ROOT:/refs:ro" -v "$PWD/results:/workspace/results" genoma-ngs-latest:${{ github.sha }} nextflow run /opt/omnigenis/main.nf --mode canary --outdir /workspace/results/nextflow-canary -ansi-log false
           jq -e '.status == "PASS"' results/canary/report.json >/dev/null
           jq -e '.status == "PASS"' results/nextflow-canary/canary/report.json >/dev/null
           python3 scripts/promote_latest_candidate.py --functional-canary results/canary/report.json --orchestration-canary results/nextflow-canary/canary/report.json --inventory results/canary/conda-inventory.json --output results/freshness/state-toolchain.json
