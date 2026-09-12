@@ -18,8 +18,8 @@
       "path": 0
     }
   },
-  "implementation_head_sha": "c2f3fa3756b63eda15e86d472b54c077e7ed08c8",
-  "implementation_tree_sha": "af3af9fbf1fd6f5e2417b8d7e964c448faa01710",
+  "implementation_head_sha": "2b146895aae1d8f3cff09e00061a8017b559a311",
+  "implementation_tree_sha": "77251cd85db4468c082837377bb3b05478d7e60e",
   "policy_sha256": "46ff364a66718b4390cbbc38caea586124b637663183d4c33d370086ea6c4a07",
   "post_merge": {
     "canonical_runner_names": [
@@ -80,11 +80,20 @@
       "sanitized_output": ""
     },
     "docs_language": {
-      "command": "python3 -m unittest tests.test_developer_documentation_language -v",
+      "command": "PYTHONPATH=tests python3 -m unittest tests.test_developer_documentation_language -v",
       "exit_code": 0,
       "output_kind": "inline_sanitized_output",
       "output_sha256": "ac4870668612777d42f3eef5aad8b6eb29b40c76452f29090f57c2cdabef68c9",
       "sanitized_output": "Ran 27 tests\nOK\n"
+    },
+    "full_suite": {
+      "command": "PYTHONPATH=tests python3 -m unittest discover -s tests -v",
+      "environment": "python-3.12.3-reporting-lock",
+      "exit_code": 0,
+      "output_kind": "sanitized_summary_plus_raw_log_digest",
+      "output_sha256": "83f0683f33608010338c1145cd0f3904f638e717e83495643514b6cb95edf469",
+      "raw_output_sha256": "3d8821ddf51d86c31c7c5dc4846b9bb5e7f32a0f36d797fc5049d40cd4016f86",
+      "sanitized_output": "Ran 1145 tests in 324.969s\nOK (skipped=1)\n"
     },
     "project_identity": {
       "command": "python3 scripts/project_identity_guard.py --check",
