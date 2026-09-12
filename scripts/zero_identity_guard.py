@@ -161,8 +161,14 @@ def _read_index_blob(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-    except (OSError, subprocess.CalledProcessError) as exc:
-        raise RepositoryScanError(f"tracked index lookup failed for {safe_path}: {exc}") from exc
+    except subprocess.CalledProcessError as exc:
+        raise RepositoryScanError(
+            f"tracked index lookup failed for {safe_path}: git_exit={exc.returncode}"
+        ) from exc
+    except OSError as exc:
+        raise RepositoryScanError(
+            f"tracked index lookup failed for {safe_path}: {type(exc).__name__}"
+        ) from exc
     entries = [part for part in indexed.stdout.split(b"\0") if part]
     if len(entries) != 1 or b"\t" not in entries[0]:
         raise RepositoryScanError(f"tracked index entry is ambiguous for {safe_path}")
@@ -181,8 +187,14 @@ def _read_index_blob(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-    except (OSError, UnicodeDecodeError, subprocess.CalledProcessError) as exc:
-        raise RepositoryScanError(f"tracked blob read failed for {safe_path}: {exc}") from exc
+    except subprocess.CalledProcessError as exc:
+        raise RepositoryScanError(
+            f"tracked blob read failed for {safe_path}: git_exit={exc.returncode}"
+        ) from exc
+    except (OSError, UnicodeDecodeError) as exc:
+        raise RepositoryScanError(
+            f"tracked blob read failed for {safe_path}: {type(exc).__name__}"
+        ) from exc
     return blob.stdout
 
 
@@ -228,9 +240,11 @@ def _inventory(
     classes: tuple[FingerprintClass, ...],
 ) -> dict[str, object]:
     """Build a machine-readable inventory without prohibited path components."""
-    records: dict[str, dict[str, object]] = {}
+    records: dict[str, dict[str, object]] = {
+        item.class_id: {"count": 0, "paths": []} for item in classes
+    }
     for finding in findings:
-        record = records.setdefault(finding.class_id, {"count": 0, "paths": []})
+        record = records[finding.class_id]
         record["count"] = int(record["count"]) + 1
         paths = record["paths"]
         assert isinstance(paths, list)

@@ -124,7 +124,8 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
         self.assertIn("unexpected_old_references", plan)
         self.assertIn("allowed_historical_old_references", plan)
         self.assertIn("phase2_changed_paths", plan)
-        self.assertIn("PHASE2_PRESERVATION_GATE=PASS", plan)
+        self.assertIn("if phase2_changed_paths:", plan)
+        self.assertIn("raise SystemExit(", plan)
 
     def test_migration_plan_compares_complete_ruleset_semantics(self):
         plan = self.read(
