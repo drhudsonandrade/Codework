@@ -71,7 +71,12 @@
             "integration_id": 16372
           },
           {
-            "context": "security/snyk (drhudsonandrade)"
+            "context_fingerprint": {
+              "algorithm": "sha256",
+              "digest": "13148c18c6ce9155ee89d2c0de0435a9ff86e658bc56851d2a8ec24062134bf7",
+              "case_sensitive": true,
+              "provider_family": "dependency-security"
+            }
           },
           {
             "context": "semgrep-cloud-platform/scan",

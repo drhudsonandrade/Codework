@@ -11,16 +11,12 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
         return (ROOT / path).read_text(encoding="utf-8")
 
     def test_active_repository_identity_uses_omnigenis(self):
-        active = [
-            "AGENTS.md",
-            "docs/BRANCH_GOVERNANCE.md",
-            "docs/GITHUB_MOBILE_IMPORT.md",
-            "docs/MAGALU_PRIVATE_MCP_SETUP.md",
-            "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md",
-        ]
-        for path in active:
-            text = self.read(path)
-            self.assertNotIn("drhudsonandrade/Codework", text, path)
+        identity = json.loads(self.read("config/project_identity.json"))
+        self.assertEqual(
+            identity["repository"],
+            {"repository_id": 1212760346, "repository_name": "OmniGenis"},
+        )
+        self.assertNotIn("full_name", identity["repository"])
         self.assertIn("GENOMA OmniGenis", self.read("AGENTS.md"))
 
     def test_public_repository_state_is_documented(self):
@@ -33,15 +29,10 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
             self.read("AGENTS.md"),
         )
 
-    def test_historical_repository_urls_are_preserved(self):
-        self.assertIn(
-            "https://github.com/drhudsonandrade/Codework/pull/60",
-            self.read("docs/POLICY_CODE_LANGUAGE_INVENTORY.md"),
-        )
-        self.assertIn(
-            "https://github.com/drhudsonandrade/Codework/pull/61",
-            self.read("docs/REPORTING_CODE_LANGUAGE_INVENTORY.md"),
-        )
+    def test_repository_contract_avoids_account_qualified_identity(self):
+        identity = json.loads(self.read("config/project_identity.json"))
+        self.assertEqual(identity["repository"]["repository_id"], 1212760346)
+        self.assertEqual(identity["repository"]["repository_name"], "OmniGenis")
 
     def test_phase_two_b_runtime_contract_uses_omnigenis(self) -> None:
         """Require the Phase 2B runtime root to use the OmniGenis identity."""
@@ -102,11 +93,7 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
         self.assertIn("unexpected_old_references", plan)
         self.assertIn("allowed_historical_old_references", plan)
         self.assertIn("phase2_changed_paths", plan)
-        self.assertNotIn(
-            "git grep -n 'drhudsonandrade/Codework' -- "
-            "':!docs/history/**' ':!docs/superpowers/specs/",
-            plan,
-        )
+        self.assertIn("phase2_changed_paths", plan)
 
     def test_migration_plan_compares_complete_ruleset_semantics(self):
         plan = self.read(

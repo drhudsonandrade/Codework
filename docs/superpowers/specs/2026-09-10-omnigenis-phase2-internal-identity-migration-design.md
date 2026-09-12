@@ -2,7 +2,7 @@
 
 **Status:** Approved design. Phase 2A implementation exists and is under governed PR review; Phases 2B-2D have not started.
 
-**Repository:** `drhudsonandrade/OmniGenis`
+**Repository:** `repository_id=1212760346; repository_name=OmniGenis`
 
 **Stable repository ID:** `1212760346`
 
@@ -34,7 +34,7 @@ Phase 2 does not:
 
 The Phase 1 post-merge baseline was verified before this design was written. Reproduced baseline commands, exit codes, environment metadata, output summaries, and digests are recorded in `docs/superpowers/evidence/2026-09-10-omnigenis-phase2a-identity-contract.json`; the original rename continuity source is `docs/superpowers/evidence/2026-09-10-omnigenis-repository-identity-migration.json`.
 
-- repository full name: `drhudsonandrade/OmniGenis`;
+- repository full name: `repository_id=1212760346; repository_name=OmniGenis`;
 - repository ID: `1212760346`;
 - visibility: `public`;
 - default branch: `main`;
@@ -53,8 +53,8 @@ At design time the authorized Ubuntu host had no active `/opt/codework`, `/opt/o
 
 Two repository self-hosted runners were verified online through the GitHub runner API:
 
-- `drhudson-codework-01`, labels `self-hosted`, `Linux`, `X64`, `codework-isolated`, `codework-01`;
-- `drhudson-codework-02`, labels `self-hosted`, `Linux`, `X64`, `codework-isolated`, `codework-02`.
+- `runner_id=21; retired_name_sha256=90eeec4bbf8402458fd978e8e455ae3dbf93637bd7addb068ff5b0ae2d80b2cd`, labels `self-hosted`, `Linux`, `X64`, `codework-isolated`, `codework-01`;
+- `runner_id=22; retired_name_sha256=d230518f559a417c7807ef428a3fa8adeafb30921d2c57e1545ee8b4314d3e93`, labels `self-hosted`, `Linux`, `X64`, `codework-isolated`, `codework-02`.
 
 The runner processes are hosted in rootless Docker containers under a different local user boundary. The current Remote Desktop Commander identity cannot inspect those containers through either the rootful or rootless Docker socket. Their exact image, mounts, registration command, token flow, and restart mechanism are therefore **NOT AVAILABLE** in this session and must be re-established through a Runtime/Resource Gate before runner re-registration.
 
@@ -74,8 +74,8 @@ The target active identities are:
 | `codework-isolated` | `omnigenis-isolated` | Dual-label transition before workflow cutover |
 | `codework-01` | `omnigenis-01` | Runner label migration |
 | `codework-02` | `omnigenis-02` | Runner label migration |
-| `drhudson-codework-01` | `drhudson-omnigenis-01` | Re-register one runner at a time after label cutover |
-| `drhudson-codework-02` | `drhudson-omnigenis-02` | Re-register one runner at a time after runner 01 is healthy |
+| `runner_id=21; retired_name_sha256=90eeec4bbf8402458fd978e8e455ae3dbf93637bd7addb068ff5b0ae2d80b2cd` | `runner_id=21; retired_name_sha256=0840cef7416ffb5cfc1eb56b6273c34797f68d9e39bddf4293c187db450ea594` | Re-register one runner at a time after label cutover |
+| `runner_id=22; retired_name_sha256=d230518f559a417c7807ef428a3fa8adeafb30921d2c57e1545ee8b4314d3e93` | `runner_id=22; retired_name_sha256=c009b56b587f276bb06642ff98931b2ddfeb566f75f48075c73695cda5b72e54` | Re-register one runner at a time after runner 01 is healthy |
 | `codework-genome` | `omnigenis-genome` | New builds publish under new identity; never delete old package as part of this phase |
 | `codework-genome-scaffold-v1` | `omnigenis-genome-scaffold-v2` | New cache namespace to avoid semantic aliasing |
 | `codework-genome-mcp` | `omnigenis-genome-mcp` | NPM package identity |
@@ -248,9 +248,9 @@ Then:
 
 1. leave runner 02 online and functional;
 2. safely drain runner 01;
-3. re-register it as `drhudson-omnigenis-01` with canonical labels;
+3. re-register it as `runner_id=21; retired_name_sha256=0840cef7416ffb5cfc1eb56b6273c34797f68d9e39bddf4293c187db450ea594` with canonical labels;
 4. verify runner 01 online and execute a controlled canary;
-5. only then drain and re-register runner 02 as `drhudson-omnigenis-02`;
+5. only then drain and re-register runner 02 as `runner_id=22; retired_name_sha256=c009b56b587f276bb06642ff98931b2ddfeb566f75f48075c73695cda5b72e54`;
 6. verify both online and execute a final pool canary.
 
 If the Runtime/Resource Gate cannot prove a safe recreation procedure, runner-name migration remains blocked and no runner is removed merely to satisfy branding cleanliness.
@@ -386,7 +386,7 @@ After each human merge:
 - fetch `origin/main` and record the merge SHA;
 - rerun the identity/legacy gate from clean `main`;
 - re-read both active GitHub rulesets and compare their normalized semantics with the pre-merge evidence;
-- verify repository ID `1212760346`, full name `drhudsonandrade/OmniGenis`, visibility `public`, and default branch `main`;
+- verify repository ID `1212760346`, full name `repository_id=1212760346; repository_name=OmniGenis`, visibility `public`, and default branch `main`;
 - verify any external resource changed by that subphase from the authoritative external API;
 - record a post-merge checkpoint before starting the next subphase.
 
@@ -394,7 +394,7 @@ After each human merge:
 
 Phase 2 is complete only when all of the following are true:
 
-1. the repository remains `drhudsonandrade/OmniGenis` with ID `1212760346`;
+1. the repository remains `repository_id=1212760346; repository_name=OmniGenis` with ID `1212760346`;
 2. the protected-main and approval rulesets remain active and semantically unchanged unless separately approved;
 3. the canonical internal identity contract is active and enforced;
 4. current runtime/build/MCP/Conda/Nextflow/Codex/tunnel/cache identities use OmniGenis;
@@ -402,7 +402,7 @@ Phase 2 is complete only when all of the following are true:
 6. new container publication uses `omnigenis-genome` and produces digest-verifiable evidence;
 7. historical `codework-genome` artifacts, if they exist, were not destroyed as part of the migration;
 8. protected-main work has completed successfully on `omnigenis-isolated`;
-9. both final runner identities are online as `drhudson-omnigenis-01` and `drhudson-omnigenis-02`, unless runner-name re-registration is explicitly blocked by a failed Runtime/Resource Gate—in which case Phase 2 cannot be sealed complete;
+9. both final runner identities are online as `runner_id=21; retired_name_sha256=0840cef7416ffb5cfc1eb56b6273c34797f68d9e39bddf4293c187db450ea594` and `runner_id=22; retired_name_sha256=c009b56b587f276bb06642ff98931b2ddfeb566f75f48075c73695cda5b72e54`, unless runner-name re-registration is explicitly blocked by a failed Runtime/Resource Gate—in which case Phase 2 cannot be sealed complete;
 10. no temporary legacy runner labels remain;
 11. `OMNIGENIS_CODERABBIT_BIN_DIR` is canonical and the old alias is removed;
 12. new canary generation uses `omnigenis-synthetic-germline-v2`;

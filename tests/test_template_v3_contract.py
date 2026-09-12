@@ -157,7 +157,7 @@ class TemplateV3ContractTest(unittest.TestCase):
             CURRENT_RULESET_TEMPLATE_LABEL,
         )
         with self.assertRaises(TemplateV3Error):
-            _system_value_for_source("GENOMA-HUDSON-RULESET-v2.8", systems)
+            _system_value_for_source("GENOMA-RULESET-v2.8", systems)
         self.assertEqual(_system_value_for_source("OTHER", systems), "value")
         self.assertIsNone(_system_value_for_source("UNKNOWN", systems))
 
@@ -165,15 +165,15 @@ class TemplateV3ContractTest(unittest.TestCase):
         """The coordinate pack accepts only the complete canonical ruleset marker."""
         from scripts.build_report_coordinate_pack import _ruleset_control_sources
 
-        canonical = "GENOMA-HUDSON-RULESET-v3.4"
+        canonical = "GENOMA-RULESET-v3.4"
         self.assertEqual(_ruleset_control_sources(canonical), [canonical])
         malformed = (
-            "GENOMA-HUDSON-RULESET-v3.3",
-            "GENOMA-HUDSON-RULESET-v3.4-TEST",
-            "GENOMA-HUDSON-RULESET-v3.4beta",
-            "GENOMA-HUDSON-RULESET-v3.4_alterado",
-            "GENOMA-HUDSON-RULESET-v3.4.5",
-            "XGENOMA-HUDSON-RULESET-v3.4",
+            "GENOMA-RULESET-v3.3",
+            "GENOMA-RULESET-v3.4-TEST",
+            "GENOMA-RULESET-v3.4beta",
+            "GENOMA-RULESET-v3.4_alterado",
+            "GENOMA-RULESET-v3.4.5",
+            "XGENOMA-RULESET-v3.4",
         )
         for marker in malformed:
             with self.subTest(marker=marker):

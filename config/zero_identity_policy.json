@@ -1,0 +1,9 @@
+{
+  "schema": "omnigenis-zero-identity-policy-v1",
+  "classes": [
+    {"id": "P1", "length": 8, "sha256": "dd052083021cc0cd9c53c4456f395785eea0021d5ea56f5fb3869a6be535786f"},
+    {"id": "P2", "length": 6, "sha256": "0f6360072cf8ed9f46f90ce9d01fae4e42f5e8ff629499d2206c68ed403e2fe7"},
+    {"id": "P3", "length": 7, "sha256": "60965168ce762e949600281ba6d01fee136e5b6e8257b1f216f9025ed324474c"},
+    {"id": "P4", "length": 6, "sha256": "c857d09db23e6822e3600bc06ad8d58f92ed62bc8efd81c753f77048662cb97d"}
+  ]
+}

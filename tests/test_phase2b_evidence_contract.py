@@ -157,7 +157,13 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
             [GIT_EXECUTABLE, "show", f"{evidence_commit}:{EVIDENCE_RELATIVE}"],
             cwd=ROOT,
         )
-        self.assertEqual(committed_evidence, EVIDENCE.read_bytes())
+        provenance = evidence["deidentification_provenance"]
+        self.assertEqual(
+            hashlib.sha256(committed_evidence).hexdigest(),
+            provenance["historical_blob_sha256"],
+        )
+        self.assertEqual(provenance["evidence_commit"], evidence_commit)
+        self.assertEqual(provenance["merge_commit"], PHASE2B_MERGE_COMMIT)
         ancestry = subprocess.run(
             [GIT_EXECUTABLE, "merge-base", "--is-ancestor", PHASE2B_MERGE_COMMIT, "HEAD"],
             cwd=ROOT,
@@ -256,11 +262,10 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
         protected = evidence["protected_boundaries"]
         self.assertEqual(protected["runner_cutover"], "NOT_STARTED_PHASE_2C")
         runners = protected["runner_snapshot"]
-        expected_names = {
-            f"drhudson-{LEGACY_WORD}-01",
-            f"drhudson-{LEGACY_WORD}-02",
-        }
-        self.assertEqual({runner["name"] for runner in runners}, expected_names)
+        self.assertEqual({runner["id"] for runner in runners}, {21, 22})
+        for runner in runners:
+            self.assertRegex(runner["retired_name_sha256"], r"^[0-9a-f]{64}$")
+            self.assertNotIn("name", runner)
         legacy_pool = LEGACY_WORD + "-isolated"
         for runner in runners:
             self.assertIn(legacy_pool, runner["labels"])

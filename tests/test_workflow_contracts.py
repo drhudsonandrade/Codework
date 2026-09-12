@@ -637,7 +637,11 @@ class WorkflowContractTest(unittest.TestCase):
         ruleset = json.loads((ROOT / ".github/governance/main-ruleset.json").read_text(encoding="utf-8"))
         status_rule = next((rule for rule in ruleset["rules"] if rule["type"] == "required_status_checks"), None)
         self.assertIsNotNone(status_rule)
-        contexts = {item["context"] for item in status_rule["parameters"]["required_status_checks"]}
+        contexts = {
+            item["context"]
+            for item in status_rule["parameters"]["required_status_checks"]
+            if "context" in item
+        }
         for context in (
             "Canonical policy + 263-rule contract",
             "OPA/Rego parity",

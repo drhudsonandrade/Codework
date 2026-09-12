@@ -18,6 +18,6 @@ npm start
 npx @modelcontextprotocol/inspector@latest
 ```
 
-Use `http://127.0.0.1:3000/mcp` in MCP Inspector. The production VM binds the server to loopback through Docker Compose and connects it to ChatGPT with OpenAI Secure MCP Tunnel.
+Use `http://127.0.0.1:3000/mcp` in MCP Inspector. The production VM binds the server to loopback through Docker Compose and connects it to AI client with OpenAI Secure MCP Tunnel.
 
 Never put genomic inputs or credentials in tool arguments. This first version deliberately limits execution to the synthetic canary.

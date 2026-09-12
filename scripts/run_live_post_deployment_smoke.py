@@ -271,7 +271,7 @@ def main() -> int:
         raise RuntimeError(f"Project Instructions snapshot verification failed: {exc}") from exc
 
     # A repository-local owner export proves only the snapshot bytes. It cannot prove that
-    # the persistent ChatGPT Project setting is still installed. Fail closed until an
+    # the persistent interactive AI workspace setting is still installed. Fail closed until an
     # authenticated authoritative-source read is available.
     project_bootstrap_ok = False
 

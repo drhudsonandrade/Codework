@@ -40,6 +40,14 @@ def _resolve_evidence_commit(
 ) -> str:
     """Resolve the unique evidence-only child under PR or merged-history topology."""
     evidence_bytes = (repo / evidence_relative).read_bytes()
+    historical_digest = None
+    try:
+        payload = json.loads(evidence_bytes.decode("utf-8"))
+        historical_digest = payload.get("deidentification_provenance", {}).get(
+            "historical_blob_sha256"
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        pass
     candidates: list[str] = []
     for line in _git_output(repo, "rev-list", "--parents", "HEAD").splitlines():
         fields = line.split()
@@ -54,7 +62,10 @@ def _resolve_evidence_commit(
         committed = subprocess.check_output(
             [GIT_EXECUTABLE, "show", f"{commit}:{evidence_relative}"], cwd=repo
         )
-        if committed == evidence_bytes:
+        if historical_digest is not None:
+            if hashlib.sha256(committed).hexdigest() == historical_digest:
+                candidates.append(commit)
+        elif committed == evidence_bytes:
             candidates.append(commit)
     if len(candidates) != 1:
         raise AssertionError(
@@ -123,6 +134,11 @@ class Phase2CRunnerEvidenceContractTest(unittest.TestCase):
         evidence_commit = _resolve_evidence_commit(
             ROOT, implementation, EVIDENCE_RELATIVE
         )
+        provenance = evidence["deidentification_provenance"]
+        committed = subprocess.check_output(
+            [GIT_EXECUTABLE, "show", f"{evidence_commit}:{EVIDENCE_RELATIVE}"], cwd=ROOT
+        )
+        self.assertEqual(hashlib.sha256(committed).hexdigest(), provenance["historical_blob_sha256"])
         self.assertEqual(
             _git_output(ROOT, "rev-parse", f"{evidence_commit}^"), implementation
         )
@@ -154,7 +170,12 @@ class Phase2CRunnerEvidenceContractTest(unittest.TestCase):
         self.assertEqual(set(before), {21, 22})
         self.assertEqual(set(after), {21, 22})
         for runner_id in (21, 22):
-            self.assertEqual(after[runner_id]["name"], before[runner_id]["name"])
+            self.assertEqual(
+                after[runner_id]["retired_name_sha256"],
+                before[runner_id]["retired_name_sha256"],
+            )
+            self.assertRegex(after[runner_id]["retired_name_sha256"], r"^[0-9a-f]{64}$")
+            self.assertNotIn("name", after[runner_id])
             self.assertEqual(after[runner_id]["status"], "online")
             self.assertFalse(after[runner_id]["busy"])
 
@@ -214,9 +235,12 @@ class Phase2CRunnerEvidenceContractTest(unittest.TestCase):
         evidence = self.load()
         prerequisite = evidence["phase2b_prerequisite"]
         self.assertEqual(prerequisite["status"], "VERIFIED")
+        registry, qualified = prerequisite["image_reference"].split("/", 1)
+        package_path, digest = qualified.rsplit("@", 1)
+        self.assertEqual(registry, "ghcr.io")
+        self.assertEqual(package_path.rsplit("/", 1)[-1], "omnigenis-genome")
         self.assertEqual(
-            prerequisite["image_reference"],
-            "ghcr.io/drhudsonandrade/omnigenis-genome@"
+            digest,
             "sha256:b34cddd157132f0b039bebb1674abb4957e024fd0332568fc3ae9c2ca0fa8454",
         )
         self.assertEqual(prerequisite["workflow_run_id"], 34617560951)

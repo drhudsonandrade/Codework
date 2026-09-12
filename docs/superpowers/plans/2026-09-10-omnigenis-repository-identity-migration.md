@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rename the existing GitHub repository from `drhudsonandrade/Codework` to `drhudsonandrade/OmniGenis` while preserving repository identity, governance, CI, scientific contracts, and intentionally deferred internal `codework-*` compatibility surfaces.
+**Goal:** Rename the existing GitHub repository from `repository_id=1212760346; historical_repository_name=Codework` to `repository_id=1212760346; repository_name=OmniGenis` while preserving repository identity, governance, CI, scientific contracts, and intentionally deferred internal `codework-*` compatibility surfaces.
 
 **Architecture:** Execute the repository mutation as a controlled identity migration, capture pre/post evidence around the stable GitHub repository object, then update only active repository-address references through a governed post-rename pull request. Internal runtime names remain unchanged until a separately approved Phase 2.
 
@@ -39,7 +39,7 @@
 - Create outside Git: `/tmp/omnigenis-rename-pre/manifest.sha256`
 
 **Interfaces:**
-- Consumes: authenticated `gh`, repository `drhudsonandrade/Codework`, current `origin/main`.
+- Consumes: authenticated `gh`, repository `repository_id=1212760346; historical_repository_name=Codework`, current `origin/main`.
 - Produces: immutable pre-mutation evidence used by Tasks 2 and 3.
 
 - [ ] **Step 1: Refresh the remote and assert the approved baseline has not moved**
@@ -55,13 +55,13 @@ Expected: exit `0`. If `origin/main` differs, stop and revalidate the plan again
 ```bash
 rm -rf /tmp/omnigenis-rename-pre
 mkdir -p /tmp/omnigenis-rename-pre
-gh api repos/drhudsonandrade/Codework > /tmp/omnigenis-rename-pre/repository.json
-gh api repos/drhudsonandrade/Codework/commits/main > /tmp/omnigenis-rename-pre/main.json
-gh api repos/drhudsonandrade/Codework/rulesets > /tmp/omnigenis-rename-pre/rulesets.json
-gh api repos/drhudsonandrade/Codework/rulesets/22347095 > /tmp/omnigenis-rename-pre/ruleset-22347095.json
-gh api repos/drhudsonandrade/Codework/rulesets/21303100 > /tmp/omnigenis-rename-pre/ruleset-21303100.json
-gh api 'repos/drhudsonandrade/Codework/pulls?state=open&per_page=100' > /tmp/omnigenis-rename-pre/open-pulls.json
-gh api --paginate --slurp 'repos/drhudsonandrade/Codework/branches?per_page=100' > /tmp/omnigenis-rename-pre/branches.json
+gh api repos/$repo > /tmp/omnigenis-rename-pre/repository.json
+gh api repos/$repo/commits/main > /tmp/omnigenis-rename-pre/main.json
+gh api repos/$repo/rulesets > /tmp/omnigenis-rename-pre/rulesets.json
+gh api repos/$repo/rulesets/22347095 > /tmp/omnigenis-rename-pre/ruleset-22347095.json
+gh api repos/$repo/rulesets/21303100 > /tmp/omnigenis-rename-pre/ruleset-21303100.json
+gh api 'repos/$repo/pulls?state=open&per_page=100' > /tmp/omnigenis-rename-pre/open-pulls.json
+gh api --paginate --slurp 'repos/$repo/branches?per_page=100' > /tmp/omnigenis-rename-pre/branches.json
 (cd /tmp/omnigenis-rename-pre && sha256sum *.json | sort > manifest.sha256)
 ```
 
@@ -103,14 +103,14 @@ Expected: `PRE_RENAME_GATE=PASS`.
 
 **Interfaces:**
 - Consumes: Task 1 evidence and authenticated repository-admin capability through `gh api`.
-- Produces: canonical repository name `drhudsonandrade/OmniGenis` on the same repository ID.
+- Produces: canonical repository name `repository_id=1212760346; repository_name=OmniGenis` on the same repository ID.
 
 - [ ] **Step 1: Recheck the mutation preconditions immediately before PATCH**
 
 ```bash
-test "$(gh api repos/drhudsonandrade/Codework --jq .id)" = "1212760346"
-test "$(gh api repos/drhudsonandrade/Codework/commits/main --jq .sha)" = "ae3cd2166d1f6ed5875fdb8be7d82543c962ee54"
-test "$(gh api 'repos/drhudsonandrade/Codework/pulls?state=open&per_page=100' --jq 'length')" = "0"
+test "$(gh api repos/$repo --jq .id)" = "1212760346"
+test "$(gh api repos/$repo/commits/main --jq .sha)" = "ae3cd2166d1f6ed5875fdb8be7d82543c962ee54"
+test "$(gh api 'repos/$repo/pulls?state=open&per_page=100' --jq 'length')" = "0"
 ```
 
 Expected: exit `0`; otherwise stop.
@@ -118,7 +118,7 @@ Expected: exit `0`; otherwise stop.
 - [ ] **Step 2: Perform the repository rename using the existing GitHub object**
 
 ```bash
-gh api --method PATCH repos/drhudsonandrade/Codework -f name=OmniGenis
+gh api --method PATCH repos/$repo -f name=OmniGenis
 ```
 
 Expected: response field `name` is `OmniGenis` and `id` remains `1212760346`.- [ ] **Step 3: Capture post-rename state and verify identity continuity**
@@ -126,11 +126,11 @@ Expected: response field `name` is `OmniGenis` and `id` remains `1212760346`.- [
 ```bash
 rm -rf /tmp/omnigenis-rename-post
 mkdir -p /tmp/omnigenis-rename-post
-gh api repos/drhudsonandrade/OmniGenis > /tmp/omnigenis-rename-post/repository.json
-gh api repos/drhudsonandrade/OmniGenis/commits/main > /tmp/omnigenis-rename-post/main.json
-gh api repos/drhudsonandrade/OmniGenis/rulesets > /tmp/omnigenis-rename-post/rulesets.json
-gh api repos/drhudsonandrade/OmniGenis/rulesets/22347095 > /tmp/omnigenis-rename-post/ruleset-22347095.json
-gh api repos/drhudsonandrade/OmniGenis/rulesets/21303100 > /tmp/omnigenis-rename-post/ruleset-21303100.json
+gh api repos/$repo > /tmp/omnigenis-rename-post/repository.json
+gh api repos/$repo/commits/main > /tmp/omnigenis-rename-post/main.json
+gh api repos/$repo/rulesets > /tmp/omnigenis-rename-post/rulesets.json
+gh api repos/$repo/rulesets/22347095 > /tmp/omnigenis-rename-post/ruleset-22347095.json
+gh api repos/$repo/rulesets/21303100 > /tmp/omnigenis-rename-post/ruleset-21303100.json
 (cd /tmp/omnigenis-rename-post && sha256sum *.json | sort > manifest.sha256)
 python3 - <<'PY'
 import json
@@ -172,7 +172,7 @@ ruleset_semantics_post = {
 
 assert repo['id'] == 1212760346
 assert repo['name'] == 'OmniGenis'
-assert repo['full_name'] == 'drhudsonandrade/OmniGenis'
+assert repo['full_name'] == 'repository_id=1212760346; repository_name=OmniGenis'
 assert repo['visibility'] == 'public'
 assert repo['default_branch'] == 'main'
 assert main['sha'] == 'ae3cd2166d1f6ed5875fdb8be7d82543c962ee54'
@@ -187,8 +187,8 @@ PY
 Expected: `POST_RENAME_GATE=PASS`.- [ ] **Step 4: Verify old and new Git endpoints resolve to the same `main` SHA**
 
 ```bash
-old_sha="$(git ls-remote https://github.com/drhudsonandrade/Codework.git refs/heads/main | cut -f1)"
-new_sha="$(git ls-remote https://github.com/drhudsonandrade/OmniGenis.git refs/heads/main | cut -f1)"
+old_sha="$(git ls-remote https://github.com/repository_id=1212760346; historical_repository_name=Codework.git refs/heads/main | cut -f1)"
+new_sha="$(git ls-remote https://github.com/repository_id=1212760346; repository_name=OmniGenis.git refs/heads/main | cut -f1)"
 test "$old_sha" = "$new_sha"
 test "$new_sha" = "ae3cd2166d1f6ed5875fdb8be7d82543c962ee54"
 printf 'OLD_URL_MAIN=%s\nNEW_URL_MAIN=%s\n' "$old_sha" "$new_sha"
@@ -201,7 +201,7 @@ Expected: both endpoints resolve to the same pre-rename commit.
 If Task 2 Step 3 shows a changed repository ID, lost rulesets, wrong visibility, or wrong default branch, stop all further work. If the new repository endpoint is functional, restore the same object name with:
 
 ```bash
-gh api --method PATCH repos/drhudsonandrade/OmniGenis -f name=Codework
+gh api --method PATCH repos/$repo -f name=Codework
 ```
 
 Then verify repository ID `1212760346` and the pre-rename `main` SHA before reporting the failure. Do not create another repository and do not bypass governance.
@@ -220,9 +220,9 @@ Then verify repository ID `1212760346` and the pre-rename `main` SHA before repo
 
 ```bash
 cd /srv/remote-desktop-commander-workspace/codework-audit/Codework
-git remote set-url origin https://github.com/drhudsonandrade/OmniGenis.git
+git remote set-url origin https://github.com/repository_id=1212760346; repository_name=OmniGenis.git
 git fetch origin --prune
-test "$(git remote get-url origin)" = "https://github.com/drhudsonandrade/OmniGenis.git"
+test "$(git remote get-url origin)" = "https://github.com/repository_id=1212760346; repository_name=OmniGenis.git"
 test "$(git rev-parse origin/main)" = "ae3cd2166d1f6ed5875fdb8be7d82543c962ee54"
 ```
 
@@ -301,7 +301,7 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
         ]
         for path in active:
             text = self.read(path)
-            self.assertNotIn("drhudsonandrade/Codework", text, path)
+            self.assertNotIn("repository_id=1212760346; historical_repository_name=Codework", text, path)
         self.assertIn("GENOMA OmniGenis", self.read("AGENTS.md"))
     def test_public_repository_state_is_documented(self):
         self.assertIn("Public, reproducible genomics execution repository", self.read("README.md"))
@@ -309,11 +309,11 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
 
     def test_historical_repository_urls_are_preserved(self):
         self.assertIn(
-            "https://github.com/drhudsonandrade/Codework/pull/60",
+            "repository_id=1212760346; pr_number=60",
             self.read("docs/POLICY_CODE_LANGUAGE_INVENTORY.md"),
         )
         self.assertIn(
-            "https://github.com/drhudsonandrade/Codework/pull/61",
+            "repository_id=1212760346; pr_number=61",
             self.read("docs/REPORTING_CODE_LANGUAGE_INVENTORY.md"),
         )
 
@@ -376,7 +376,7 @@ Apply only current-state repository identity changes:
 
 ```text
 docs/BRANCH_GOVERNANCE.md:
-`drhudsonandrade/Codework` → `drhudsonandrade/OmniGenis`
+`repository_id=1212760346; historical_repository_name=Codework` → `repository_id=1212760346; repository_name=OmniGenis`
 
 docs/GITHUB_MOBILE_IMPORT.md:
 current repository name `Codework` → `OmniGenis`
@@ -416,7 +416,7 @@ python3 - <<'PY'
 import subprocess
 from pathlib import Path
 
-needle = 'drhudsonandrade/Codework'
+needle = 'repository_id=1212760346; historical_repository_name=Codework'
 allowed_historical_old_references = {
     'docs/POLICY_CODE_LANGUAGE_INVENTORY.md',
     'docs/REPORTING_CODE_LANGUAGE_INVENTORY.md',
@@ -580,7 +580,7 @@ Expected: one focused implementation commit after fresh local validation.
 
 **Interfaces:**
 - Consumes: exact validated implementation HEAD from Task 6.
-- Produces: a draft/ready PR whose checks prove that protected-main integrations still operate under `drhudsonandrade/OmniGenis`.
+- Produces: a draft/ready PR whose checks prove that protected-main integrations still operate under `repository_id=1212760346; repository_name=OmniGenis`.
 
 - [ ] **Step 1: Run the optional local CodeRabbit review only if actually available and authenticated**
 
@@ -600,7 +600,7 @@ Expected: either an actual review result or an explicit unavailable status; neve
 git push -u origin chore/omnigenis-repository-identity
 ```
 
-Expected: push target is `https://github.com/drhudsonandrade/OmniGenis.git`.
+Expected: push target is `https://github.com/repository_id=1212760346; repository_name=OmniGenis.git`.
 
 - [ ] **Step 3: Create the pull request as draft**
 
@@ -623,7 +623,7 @@ gh pr create --draft --base main --head chore/omnigenis-repository-identity \
   --body-file /tmp/omnigenis-pr-body.md
 ```
 
-Expected: a draft PR in `drhudsonandrade/OmniGenis`.- [ ] **Step 4: Mark the exact validated HEAD ready for external review**
+Expected: a draft PR in `repository_id=1212760346; repository_name=OmniGenis`.- [ ] **Step 4: Mark the exact validated HEAD ready for external review**
 
 ```bash
 PR_NUMBER="$(gh pr view --json number --jq .number)"
@@ -639,14 +639,14 @@ gh pr checks "$PR_NUMBER" --watch --interval 20
 gh pr checks "$PR_NUMBER" --required
 ```
 
-Required protected-main contexts must remain satisfiable, including `static`, `container-canary`, `Canonical policy + 263-rule contract`, `OPA/Rego parity`, `Real Docker + canonical read-only mount`, `CodeRabbit`, `GitGuardian Security Checks`, the five DeepSource contexts, `security/snyk (drhudsonandrade)`, and `semgrep-cloud-platform/scan`.
+Required protected-main contexts must remain satisfiable, including `static`, `container-canary`, `Canonical policy + 263-rule contract`, `OPA/Rego parity`, `Real Docker + canonical read-only mount`, `CodeRabbit`, `GitGuardian Security Checks`, the five DeepSource contexts, `security/snyk (legacy-operatorandrade)`, and `semgrep-cloud-platform/scan`.
 
 - [ ] **Step 6: Verify rulesets again under the new repository identity**
 
 ```bash
-gh api repos/drhudsonandrade/OmniGenis/rulesets --jq '.[] | [.id,.name,.enforcement] | @tsv'
-gh api repos/drhudsonandrade/OmniGenis/rulesets/21303100 --jq '.rules'
-gh api repos/drhudsonandrade/OmniGenis/rulesets/22347095 --jq '.rules'
+gh api repos/$repo/rulesets --jq '.[] | [.id,.name,.enforcement] | @tsv'
+gh api repos/$repo/rulesets/21303100 --jq '.rules'
+gh api repos/$repo/rulesets/22347095 --jq '.rules'
 ```
 
 Expected: both rulesets remain active and protected-main checks are not weakened.- [ ] **Step 7: Treat integration identity failures as blocking**
@@ -690,12 +690,12 @@ cd /srv/remote-desktop-commander-workspace/codework-audit/Codework
 git fetch origin --prune
 git remote get-url origin
 git log -1 --oneline origin/main
-gh api repos/drhudsonandrade/OmniGenis --jq '[.id,.full_name,.visibility,.default_branch] | @tsv'
-gh api repos/drhudsonandrade/OmniGenis/rulesets --jq '.[] | [.id,.name,.enforcement] | @tsv'
-git ls-remote https://github.com/drhudsonandrade/Codework.git refs/heads/main
-git ls-remote https://github.com/drhudsonandrade/OmniGenis.git refs/heads/main
+gh api repos/$repo --jq '[.id,.full_name,.visibility,.default_branch] | @tsv'
+gh api repos/$repo/rulesets --jq '.[] | [.id,.name,.enforcement] | @tsv'
+git ls-remote https://github.com/repository_id=1212760346; historical_repository_name=Codework.git refs/heads/main
+git ls-remote https://github.com/repository_id=1212760346; repository_name=OmniGenis.git refs/heads/main
 ```
 
-Expected: canonical repository identity is `drhudsonandrade/OmniGenis`, repository ID remains `1212760346`, visibility remains public, `origin` uses the new URL, rulesets remain active, and old/new Git endpoints resolve to the same current `main` history.
+Expected: canonical repository identity is `repository_id=1212760346; repository_name=OmniGenis`, repository ID remains `1212760346`, visibility remains public, `origin` uses the new URL, rulesets remain active, and old/new Git endpoints resolve to the same current `main` history.
 
 Phase 2 internal `codework-*` renaming remains explicitly deferred and requires a separate design, approval, implementation plan, compatibility analysis, and test cycle.

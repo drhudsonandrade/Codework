@@ -130,8 +130,8 @@
           "codework-isolated",
           "codework-01"
         ],
-        "name": "drhudson-codework-01",
-        "status": "online"
+        "status": "online",
+        "retired_name_sha256": "90eeec4bbf8402458fd978e8e455ae3dbf93637bd7addb068ff5b0ae2d80b2cd"
       },
       {
         "busy": false,
@@ -143,8 +143,8 @@
           "codework-isolated",
           "codework-02"
         ],
-        "name": "drhudson-codework-02",
-        "status": "online"
+        "status": "online",
+        "retired_name_sha256": "d230518f559a417c7807ef428a3fa8adeafb30921d2c57e1545ee8b4314d3e93"
       }
     ],
     "scientific_surface_changes": []
@@ -306,5 +306,12 @@
       "output_sha256": "3c0dc015021366a6895ca1777bd4be46995994861b27bb8fcaa7cb47a143f2fd",
       "summary": "PASS repository_contract and all repository validators"
     }
+  },
+  "deidentification_provenance": {
+    "merge_commit": "a1e669dd613f68f4d82ca7f1f565772ec8098cb1",
+    "evidence_commit": "87edc2c958150736884ad37297f96a8eb7a7464f",
+    "historical_blob_sha256": "36e2d0e9bd719e5c1691bc4e9f0a62095dd9f44958cfd5705214d4018a1c8378",
+    "reason": "current-tree zero-identity migration",
+    "historical_fact_preserved": true
   }
 }

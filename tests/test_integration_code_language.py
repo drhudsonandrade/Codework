@@ -37,7 +37,6 @@ EXPECTED_REQUIRED_CHECKS = {
     "DeepSource: Shell",
     "DeepSource: Docker",
     "DeepSource: SQL",
-    "security/snyk (drhudsonandrade)",
     "semgrep-cloud-platform/scan",
 }
 
@@ -104,8 +103,13 @@ class IntegrationCodeLanguageTest(unittest.TestCase):
         ]
         self.assertEqual(len(status_rules), 1)
         status_rule = status_rules[0]
-        contexts = {item["context"] for item in status_rule["parameters"]["required_status_checks"]}
+        checks = status_rule["parameters"]["required_status_checks"]
+        contexts = {item["context"] for item in checks if "context" in item}
+        fingerprints = [item["context_fingerprint"] for item in checks if "context_fingerprint" in item]
         self.assertEqual(contexts, EXPECTED_REQUIRED_CHECKS)
+        self.assertEqual(len(fingerprints), 1)
+        self.assertEqual(fingerprints[0]["digest"], "13148c18c6ce9155ee89d2c0de0435a9ff86e658bc56851d2a8ec24062134bf7 ".strip())
+        self.assertEqual(fingerprints[0]["provider_family"], "dependency-security")
 
     def test_intentional_portuguese_integration_values_remain_contractual(self) -> None:
         """Normative values, localized fixtures and safety filename patterns remain untouched."""

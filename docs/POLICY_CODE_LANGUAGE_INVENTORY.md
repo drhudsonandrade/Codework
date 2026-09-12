@@ -105,7 +105,7 @@ The positive exact-HEAD execution ran on commit
 additional count beyond the root suite that includes them. The combined log
 SHA-256 is `066e9d0e4dd375079e9518dc90833cb9c63825b9c88b4d875793eaf645f1bc2a`.
 Commands, results, digests and subsequent correction validation are bound in the
-[exact-HEAD evidence record](https://github.com/drhudsonandrade/Codework/pull/60#issuecomment-5596016415).
+[exact-HEAD evidence record](repository_id=1212760346; pr_number=60; comment_id=5596016415).
 For any later HEAD, validation is PENDING until that linked record names the
 matching commit and tree with actual results. Historical PASS is not inherited.
 

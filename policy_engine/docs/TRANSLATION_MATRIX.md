@@ -6,4 +6,4 @@ Each section `0–262` is compiled as `GENOMA-V3.4-S000` … `GENOMA-V3.4-S262`,
 
 There are three execution forms: a **deterministic gate** for verifiable invariants; a **structured attestation** for rules that depend on curation/evidence/context, requiring status, evidence, justification, and traceability; and **unavailability blocking**, without converting a missing resource/source into PASS.
 
-The system is executable without ChatGPT, but automation does not replace clinical assessment or missing data.
+The system is executable without AI client, but automation does not replace clinical assessment or missing data.

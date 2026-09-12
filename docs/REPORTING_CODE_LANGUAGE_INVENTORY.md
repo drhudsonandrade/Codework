@@ -98,7 +98,7 @@ single-page shrinking in report 10, are not redesigned by this migration.
 
 ## Exact-commit evidence and remaining work
 
-The [stage-five exact-HEAD evidence record](https://github.com/drhudsonandrade/Codework/pull/61#issuecomment-5601896618)
+The [stage-five exact-HEAD evidence record](repository_id=1212760346; pr_number=61; comment_id=5601896618)
 identifies the commit/tree actually tested, commands, results and retained log
 hashes. Until it names the delivered HEAD, implementation validation is PENDING.
 A source document cannot embed its own final Git SHA; the real linked record

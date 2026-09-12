@@ -199,7 +199,7 @@ Run the MCP server on loopback only, configure CPU/RAM limits, health checks and
 
 - [ ] **Step 3: Document secret-safe tunnel setup**
 
-Create the tunnel in OpenAI Platform, associate it with the ChatGPT workspace, install `tunnel-client` on the VM, use `doctor`, then add the tunnel under ChatGPT Developer Mode. Secrets are entered directly on the VM or its secret manager.
+Create the tunnel in OpenAI Platform, associate it with the interactive AI workspace, install `tunnel-client` on the VM, use `doctor`, then add the tunnel under AI workspace Developer Mode. Secrets are entered directly on the VM or its secret manager.
 
 - [ ] **Step 4: Document GitHub self-hosted runner safety**
 

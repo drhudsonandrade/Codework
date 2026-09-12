@@ -1,14 +1,14 @@
 # Local-First CI Session Checkpoint
 
 **Date:** 2026-09-03
-**Repository:** `drhudsonandrade/Codework`
+**Repository:** `repository_id=1212760346; historical_repository_name=Codework`
 **Local path:** `%USERPROFILE%\Documents\Codework`
 **Branch:** `ci/local-first-actions-optimization-impl`
 **Last committed design:** `3f37ea1 docs: design local-first targeted CI architecture`
 
 ## Completed
 
-- GitHub CLI installed and authenticated as `drhudsonandrade`.
+- GitHub CLI installed and authenticated as `legacy-operatorandrade`.
 - Codex CLI installed but intentionally not used for this architecture.
 - Remote Desktop Commander access expanded to Desktop, Documents, and Downloads.
 - `Codework` cloned locally from GitHub.

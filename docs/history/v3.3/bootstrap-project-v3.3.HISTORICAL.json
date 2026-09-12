@@ -6,7 +6,7 @@
   "canonical_sha256": "187f28a9d9195ee02aa3a3d308549ee804e44ef6043cf9d0bfbfe931ca68810a",
   "verified_at": "2026-08-16T08:36:00-03:00",
   "actor_type": "SERVICE",
-  "actor_id": "ChatGPT-GENOMA-HUD-session",
+  "actor_id": "GENOMA-interactive-session",
   "method": "direct verification of current Project Instructions supplied to the session",
   "checks": {
     "consult_ruleset_before_relevant_genetic_analysis": true,
@@ -18,5 +18,10 @@
     "operational_status_contract_present": true,
     "post_deployment_requires_live_15_of_15_zero_critical": true
   },
-  "limitations": "This attestation records the bootstrap present in the current ChatGPT Project Instructions. GitHub cannot introspect future ChatGPT project configuration; renew this attestation whenever Project Instructions change. The deterministic core itself does not depend on ChatGPT or this bootstrap."
+  "limitations": "This attestation records the bootstrap present in the current persistent project instructions. GitHub cannot introspect future AI client project configuration; renew this attestation whenever Project Instructions change. The deterministic core itself does not depend on AI client or this bootstrap.",
+  "provenance_migration": {
+    "status": "DEIDENTIFIED_CURRENT_TREE",
+    "pre_deidentification_sha256": "87af4f99bcd6b6f3f857a1ca725103e95dabf70c3c926d7f0d4e83b037e69fd8",
+    "reason": "Current tracked-tree identity policy requires de-identification while preserving the original byte digest."
+  }
 }

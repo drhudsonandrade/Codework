@@ -30,8 +30,8 @@ EXPECTED_HISTORICAL_PREFIXES = [
 
 IDENTITY = {
     "schema": "omnigenis-project-identity-v1",
-    "version": "2026-09-10.1",
-    "repository": {"product_name": "OmniGenis", "full_name": "drhudsonandrade/OmniGenis"},
+    "version": "2026-09-11.1",
+    "repository": {"repository_id": 1212760346, "repository_name": "OmniGenis"},
     "runtime": {
         "root": "/opt/omnigenis",
         "config_root": "/etc/omnigenis",
@@ -49,7 +49,7 @@ IDENTITY = {
     "runners": {
         "pool_label": "omnigenis-isolated",
         "per_runner_labels": ["omnigenis-01", "omnigenis-02"],
-        "runner_names": ["drhudson-omnigenis-01", "drhudson-omnigenis-02"],
+        "runner_names": ["omnigenis-runner-01", "omnigenis-runner-02"],
     },
     "codex": {
         "marketplace": "omnigenis-codex",

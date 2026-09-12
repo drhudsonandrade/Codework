@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -42,6 +43,72 @@ class RepoContractTest(unittest.TestCase):
             errors = validator.validate(root)
         guard.assert_called_once_with(root)
         self.assertIn("project identity sentinel", errors)
+
+    def test_validate_repo_invokes_zero_identity_guard(self):
+        validator = load_validator()
+        root = Path(__file__).resolve().parents[1]
+        with patch.object(
+            validator,
+            "validate_zero_identity",
+            return_value=["zero identity sentinel"],
+        ) as guard:
+            errors = validator.validate(root)
+        guard.assert_called_once_with(root)
+        self.assertIn("zero identity sentinel", errors)
+
+    def test_zero_identity_paths_are_required(self):
+        validator = load_validator()
+        for relative in (
+            "config/zero_identity_policy.json",
+            "scripts/zero_identity_guard.py",
+        ):
+            self.assertIn(relative, validator.REQUIRED_PATHS)
+
+    def test_official_validator_rejects_each_prohibited_fingerprint_class(self):
+        validator = load_validator()
+        policy_source = Path(__file__).resolve().parents[1] / "config" / "zero_identity_policy.json"
+        mutations = {
+            "P1": bytes.fromhex("6472687564736f6e"),
+            "P2": bytes.fromhex("687564736f6e"),
+            "P3": bytes.fromhex("63686174677074"),
+            "P4": bytes.fromhex("636c61756465"),
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            (root / "config").mkdir()
+            (root / "config" / "zero_identity_policy.json").write_bytes(
+                policy_source.read_bytes()
+            )
+            subprocess.run(
+                ["git", "add", "config/zero_identity_policy.json"],
+                cwd=root,
+                check=True,
+            )
+            for class_id, payload in mutations.items():
+                with self.subTest(class_id=class_id):
+                    target = root / "identity-mutation.bin"
+                    target.write_bytes(b"safe-" + payload + b"-fixture")
+                    subprocess.run(
+                        ["git", "add", "identity-mutation.bin"],
+                        cwd=root,
+                        check=True,
+                    )
+                    errors = validator.validate(root)
+                    self.assertTrue(
+                        any(
+                            class_id in error and "identity-mutation.bin" in error
+                            for error in errors
+                        ),
+                        errors,
+                    )
+                    subprocess.run(
+                        ["git", "rm", "--cached", "-f", "identity-mutation.bin"],
+                        cwd=root,
+                        check=True,
+                        stdout=subprocess.DEVNULL,
+                    )
+                    target.unlink()
 
     def test_identity_contract_paths_are_required(self):
         validator = load_validator()

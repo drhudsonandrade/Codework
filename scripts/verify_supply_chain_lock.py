@@ -6,6 +6,11 @@ import re
 import sys
 from pathlib import Path
 
+try:
+    from scripts.governance_context_identity import expected_check_is_well_formed
+except ModuleNotFoundError:
+    from governance_context_identity import expected_check_is_well_formed
+
 ROOT = Path(__file__).resolve().parents[1]
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
 USE = re.compile(r"^\s*-?\s*uses:\s*([^\s#]+)")
@@ -15,6 +20,22 @@ def fail(message: str) -> None:
     print(f"FAIL\t{message}")
     raise SystemExit(1)
 
+
+
+def _verify_required_check_schema(ruleset: dict[str, object]) -> None:
+    """Require every tracked required check to use one supported identity form."""
+    status_rule = next(
+        (rule for rule in ruleset.get("rules", []) if isinstance(rule, dict) and rule.get("type") == "required_status_checks"),
+        None,
+    )
+    if not isinstance(status_rule, dict):
+        fail("main ruleset required_status_checks rule missing")
+    parameters = status_rule.get("parameters")
+    checks = parameters.get("required_status_checks") if isinstance(parameters, dict) else None
+    if not isinstance(checks, list) or not checks:
+        fail("main ruleset required_status_checks list missing")
+    if not all(expected_check_is_well_formed(item) for item in checks):
+        fail("main ruleset required check identity schema invalid")
 
 def _verify_external_secret_scanner(runtime: dict[str, object], ruleset: dict[str, object]) -> None:
     scanner = runtime.get("secret_scanner")
@@ -86,6 +107,7 @@ def main() -> int:
     if not dockerfile.startswith(f"FROM {base}\n"):
         fail("Dockerfile base image is not the immutable runtime-lock reference")
 
+    _verify_required_check_schema(ruleset)
     _verify_external_secret_scanner(runtime, ruleset)
 
     env = (ROOT / "environment.yml").read_text(encoding="utf-8")

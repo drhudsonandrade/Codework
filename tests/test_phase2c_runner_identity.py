@@ -66,7 +66,7 @@ class Phase2CRunnerIdentityTest(unittest.TestCase):
         self.assertEqual(runners["per_runner_labels"], ["omnigenis-01", "omnigenis-02"])
         self.assertEqual(
             runners["runner_names"],
-            ["drhudson-omnigenis-01", "drhudson-omnigenis-02"],
+            ["omnigenis-runner-01", "omnigenis-runner-02"],
         )
 
     def test_phase_two_c_ledger_entries_are_sealed(self) -> None:

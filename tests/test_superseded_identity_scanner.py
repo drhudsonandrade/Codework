@@ -150,7 +150,7 @@ class HistoricalOccurrenceIsAllowedTest(unittest.TestCase):
         self.assertEqual(_scan({"tests/test_freshness.py": 'PAYLOAD = {"checked_at": "2026-08-14T12:00:00Z"}\n'}), [])
 
     def test_negative_regression_fixture_is_allowed(self):
-        source = 'def test_rejects_old_marker():\n    assert not accepts("GENOMA-HUDSON-RULESET-v3.3")\n'
+        source = 'def test_rejects_old_marker():\n    assert not accepts("GENOMA-RULESET-v3.3")\n'
         self.assertEqual(_scan({"tests/test_markers.py": source}), [])
 
     def test_python_comment_and_docstring_mentions_are_allowed(self):

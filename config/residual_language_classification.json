@@ -7,7 +7,7 @@
       "reason": "The immutable historical tree preserves superseded normative and evidence records; this aggregate fingerprint binds every detected path and line without copying superseded identifiers outside the historical root.",
       "files": 8,
       "count": 93,
-      "fingerprint": "f3b34d0de8aee0b11435e88f5790dd63e7683a7e3bb888d69d8f7282f7093c84"
+      "fingerprint": "2fb1465256d281d2b60c44b6128b54d0c878ea8a9782bb7921d35a52e5f6b56f"
     }
   ],
   "entries": [
@@ -282,7 +282,7 @@
       "category": "canonical",
       "reason": "Canonical or sealed identity content retains exact identifiers/bytes; translating it would alter an integrity or template contract.",
       "count": 5,
-      "fingerprint": "b77264a92ed874c95311d1a32df9a7f62a14e829715067d7c2b91e1b26948358"
+      "fingerprint": "a60de21a249f84a50fd50a561b6f8292604fb7d3c6e741b1f0b006343a744857"
     },
     {
       "path": "deploy/attestations/project-instructions-v3.4.txt",
@@ -359,7 +359,7 @@
       "category": "compatibility-preserved",
       "reason": "Active documentation contains only reviewed canonical, wire, localized, or quoted values protected by the Stage 7 documentation contract.",
       "count": 2,
-      "fingerprint": "5f95edd4b302ca3e9caf9fe692fed92e92fc488865ce0820e1cc2030a20bbf56"
+      "fingerprint": "3e66f2209492503d49a36f06c8ad3c9e65e057c5479bc98b6e5bae42c4074fd3"
     },
     {
       "path": "docs/PGX_ALLELE_DISCRIMINATION.md",

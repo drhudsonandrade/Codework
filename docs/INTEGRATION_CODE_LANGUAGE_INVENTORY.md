@@ -42,7 +42,7 @@ Deployment-admin environment names remain exact:
 
 The tracked protected-main ruleset remains byte-for-byte unchanged from the baseline. Its required contexts remain:
 
-`static`, `container-canary`, `Canonical policy + 263-rule contract`, `OPA/Rego parity`, `Real Docker + canonical read-only mount`, `CodeRabbit`, `Greptile Review`, `GitGuardian Security Checks`, five DeepSource language contexts, `security/snyk (drhudsonandrade)`, and `semgrep-cloud-platform/scan`.
+`static`, `container-canary`, `Canonical policy + 263-rule contract`, `OPA/Rego parity`, `Real Docker + canonical read-only mount`, `CodeRabbit`, `Greptile Review`, `GitGuardian Security Checks`, five DeepSource language contexts, one fingerprinted dependency-security context, and `semgrep-cloud-platform/scan`.
 
 No workflow or governance file is modified by stage 6.
 

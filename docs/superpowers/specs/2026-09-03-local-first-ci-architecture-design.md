@@ -2,9 +2,9 @@
 
 **Date:** 2026-09-03
 **Status:** Implementation tracked in PR #36; final human merge approval pending
-**Repository:** `drhudsonandrade/Codework`
+**Repository:** `repository_id=1212760346; historical_repository_name=Codework`
 **Branch:** `ci/local-first-actions-optimization-impl`
-**Governance verification:** before merge, re-read `.github/governance/main-ruleset.json` and query `GET /repos/drhudsonandrade/Codework/rulesets` plus every active ruleset returned by that endpoint. Treat the live GitHub response as authoritative for currently enforced checks and the tracked file as desired-state documentation; record any divergence in the PR before merge.
+**Governance verification:** before merge, re-read `.github/governance/main-ruleset.json` and query `GET /repos/$repo/rulesets` plus every active ruleset returned by that endpoint. Treat the live GitHub response as authoritative for currently enforced checks and the tracked file as desired-state documentation; record any divergence in the PR before merge.
 
 ## 1. Objective
 
@@ -14,7 +14,7 @@ Development becomes local-first on the NOAR VM. GitHub remains authoritative, bu
 
 ## 2. Selected architecture
 
-- ChatGPT normal chat: planning, analysis, coordination, and implementation control.
+- AI client normal chat: planning, analysis, coordination, and implementation control.
 - Remote Desktop Commander: edit files on NOAR and execute Python, Node, Git, shell tests, and validators.
 - VS Code: inspect and edit the local repository.
 - Git + GitHub CLI: branches, commits, controlled pushes, and pull requests.

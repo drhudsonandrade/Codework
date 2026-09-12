@@ -61,6 +61,16 @@ class SupplyChainLockTest(unittest.TestCase):
                 with self.assertRaises(SystemExit):
                     verify_supply_chain_lock._verify_external_secret_scanner(mutated, ruleset)
 
+    def test_required_check_schema_accepts_literal_and_fingerprint_identities(self):
+        ruleset = json.loads((ROOT / ".github/governance/main-ruleset.json").read_text())
+        verify_supply_chain_lock._verify_required_check_schema(ruleset)
+        mutated = copy.deepcopy(ruleset)
+        status = next(rule for rule in mutated["rules"] if rule["type"] == "required_status_checks")
+        fingerprinted = next(item for item in status["parameters"]["required_status_checks"] if "context_fingerprint" in item)
+        fingerprinted["context_fingerprint"]["digest"] = "0" * 63
+        with self.assertRaises(SystemExit):
+            verify_supply_chain_lock._verify_required_check_schema(mutated)
+
     def test_supply_chain_verifier_does_not_reference_retired_gitleaks(self):
         verifier = (ROOT / "scripts/verify_supply_chain_lock.py").read_text(encoding="utf-8")
         self.assertNotIn("gitleaks", verifier.casefold())

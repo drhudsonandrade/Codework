@@ -1,0 +1,132 @@
+{
+  "base_sha": "fe0c91c99fe4cd57e14c69cc3b3c58edcb4e8be8",
+  "class_counts": {
+    "P1": {
+      "blob": 0,
+      "path": 0
+    },
+    "P2": {
+      "blob": 0,
+      "path": 0
+    },
+    "P3": {
+      "blob": 0,
+      "path": 0
+    },
+    "P4": {
+      "blob": 0,
+      "path": 0
+    }
+  },
+  "implementation_head_sha": "db3d513decae3a78cd31cb842fe1fe0ecab94bf4",
+  "implementation_tree_sha": "93f107eb9d13bbd3ecad0c1ae5b1eedd5d9548d8",
+  "policy_sha256": "46ff364a66718b4390cbbc38caea586124b637663183d4c33d370086ea6c4a07",
+  "post_merge": {
+    "canonical_runner_names": [
+      "omnigenis-runner-01",
+      "omnigenis-runner-02"
+    ],
+    "continuity_gate": "REQUIRED_BEFORE_REREGISTRATION",
+    "runner_operation": "PENDING_HUMAN_MERGE"
+  },
+  "protected_surfaces": {
+    "manifests/RULESET_V3.4.sha256": {
+      "classification": "normative",
+      "sha256": "42f0d50fd1f9b3e2ed74203d789c2cec77f18b18be23ee5e92e41bdc9f465796",
+      "unchanged_from_base": true
+    },
+    "normative/sealed/MANIFEST.json": {
+      "classification": "normative",
+      "sha256": "3926adb962509f430434eaa0d8d7ac3a1d93ee0185c786b37456ef3963d0298a",
+      "unchanged_from_base": true
+    },
+    "policy_engine/genoma_policy/engine.py": {
+      "classification": "scientific",
+      "sha256": "e6a8867f31850f4f18713183e25a90b01389f4d7799c2817d378809c868b3cf4",
+      "unchanged_from_base": true
+    },
+    "scripts/score_variants.py": {
+      "classification": "scientific",
+      "sha256": "717c12ced6f0176bbaf0a161bbdc706fd600313ce6f8bf517560f355757119f6",
+      "unchanged_from_base": true
+    },
+    "workflows/array.nf": {
+      "classification": "scientific",
+      "sha256": "7bebb3b8ebc9f8082f8f84ed7bb670008c04ec9f8ae16b673ddab44545dc0d30",
+      "unchanged_from_base": true
+    },
+    "workflows/wgs.nf": {
+      "classification": "scientific",
+      "sha256": "cfab1bb35b61e74d5ca8a51b1e487702a0e9aeeff0a99477b55b36a2f2633abf",
+      "unchanged_from_base": true
+    }
+  },
+  "repository_id": 1212760346,
+  "schema": "omnigenis-zero-identity-seal-v1",
+  "secret_material_recorded": false,
+  "validation_provenance": {
+    "code_language": {
+      "command": "python3 scripts/code_language_guard.py --check",
+      "exit_code": 0,
+      "output_kind": "inline_sanitized_output",
+      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sanitized_output": ""
+    },
+    "diff_check": {
+      "command": "git diff --check",
+      "exit_code": 0,
+      "output_kind": "inline_sanitized_output",
+      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sanitized_output": ""
+    },
+    "docs_language": {
+      "command": "python3 -m unittest tests.test_developer_documentation_language -v",
+      "exit_code": 0,
+      "output_kind": "inline_sanitized_output",
+      "output_sha256": "ac4870668612777d42f3eef5aad8b6eb29b40c76452f29090f57c2cdabef68c9",
+      "sanitized_output": "Ran 27 tests\nOK\n"
+    },
+    "project_identity": {
+      "command": "python3 scripts/project_identity_guard.py --check",
+      "exit_code": 0,
+      "output_kind": "inline_sanitized_output",
+      "output_sha256": "0c6537c2763c5efb04594bf3441d6e02a721a5f1f220fe4490de707fea3aad2d",
+      "sanitized_output": "PASS\tproject_identity_contract\n"
+    },
+    "residual_language": {
+      "command": "python3 scripts/residual_language_audit.py --check",
+      "exit_code": 0,
+      "output_kind": "inline_sanitized_output",
+      "output_sha256": "3aa068a3ee76de0f29694f99d95a5e14143a3ed1743f142bd60781ef1cdcfc25",
+      "sanitized_output": "{\"category_files\": {\"canonical\": 13, \"compatibility-preserved\": 108, \"historical\": 27, \"localized\": 68, \"normative\": 36}, \"category_lines\": {\"canonical\": 31, \"compatibility-preserved\": 4861, \"historical\": 766, \"localized\": 1740, \"normative\": 204}, \"clean\": true, \"detected_lines\": 7602, \"drift\": [], \"missing\": [], \"schema\": \"genoma-residual-language-audit-v1\", \"tracked_files_with_residuals\": 252, \"unclassified\": []}\n"
+    },
+    "shell_syntax": {
+      "command": "find scripts -type f -name '*.sh' -exec bash -n {} +",
+      "exit_code": 0,
+      "output_kind": "inline_sanitized_output",
+      "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sanitized_output": ""
+    },
+    "supply_chain": {
+      "command": "python3 scripts/verify_supply_chain_lock.py",
+      "exit_code": 0,
+      "output_kind": "inline_sanitized_output",
+      "output_sha256": "3ffbf1e78306655dbb2f214974a4e24c842e6378da0e2d8840d43b2eb4939c7c",
+      "sanitized_output": "PASS\tactions_immutable\t10 action identities observed\nPASS\tcontainer_digests\tbase image\nPASS\texternal_secret_scanner\tGitGuardian Security Checks@46505\nPASS\truntime_versions\texact critical conda pins\n"
+    },
+    "validate_repo": {
+      "command": "python3 scripts/validate_repo.py",
+      "exit_code": 0,
+      "output_kind": "inline_sanitized_output",
+      "output_sha256": "3c0dc015021366a6895ca1777bd4be46995994861b27bb8fcaa7cb47a143f2fd",
+      "sanitized_output": "PASS\trepository_contract\nPASS\truleset_manifest_contract\tv3.4 raw SHA-256 pinned\nPASS\trepository_active_rulesets\t0\nPASS\tsealed_normative_transport\tshared decoder\nPASS\tgrch38_manifest\t9/9\nPASS\tpre_dna_readiness_contract\tlatest-tested candidate + canaries + freshness + runtime/resource gate\nPASS\twgs_scientific_data_plane_contract\treal SNV/indel path + explicit unsupported classes\nPASS\tarray_scientific_data_plane_contract\tQC + target-first evidence + policy/report handoff\nPASS\tevidence_adapter_contract\tClinVar/ClinGen/CPIC/ClinPGx/gnomAD/PGS Catalog\nPASS\tsupply_chain_contract\tworkflow/action/container lock paths present\nPASS\treporting_contract\t11-model deterministic renderer and reference identities\nPASS\toptional_adapters\tcore has no external runtime dependency\n"
+    },
+    "zero_identity": {
+      "command": "python3 scripts/zero_identity_guard.py --check",
+      "exit_code": 0,
+      "output_kind": "inline_sanitized_output",
+      "output_sha256": "c3d9578a5523c7d94201489a5809df65f0529e2ae4e5e0df64cd3eb604b62e8c",
+      "sanitized_output": "PASS\tzero_identity_guard\tfindings=0\n"
+    }
+  }
+}

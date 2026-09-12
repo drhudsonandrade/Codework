@@ -27,4 +27,4 @@ For FASTQ, the workflow performs a pre-alignment integrity/reference/toolchain g
 
 ## Optional service boundary
 
-Cloudflare, Temporal, Supabase, Vercel, microfn, MCP and ChatGPT may be placed around this workflow as ingress, orchestration, indexing or UI. None is required to materialize the reference, verify it, run the policy engine, or execute the per-sample gate.
+Cloudflare, Temporal, Supabase, Vercel, microfn, MCP and AI client may be placed around this workflow as ingress, orchestration, indexing or UI. None is required to materialize the reference, verify it, run the policy engine, or execute the per-sample gate.

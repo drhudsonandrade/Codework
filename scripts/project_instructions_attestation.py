@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fail-closed verifier for an owner-exported GENOMA Project Instructions snapshot.
 
-This module deliberately does **not** prove that the persistent ChatGPT Project
+This module deliberately does **not** prove that the persistent interactive AI workspace
 configuration is currently installed. A repository-local copy can prove only the bytes
 that were supplied/exported by the owner. Therefore a verified snapshot always keeps
 ``project_bootstrap_installed`` false. A POST-DEPLOYMENT PASS requires a separate,
@@ -143,7 +143,7 @@ def build_attestation(
         "checks_evidence": checks,
         "limitations": (
             "VERIFICADO applies only to the bytes of this owner-exported snapshot. "
-            "No authenticated machine-readable read of the authoritative persistent ChatGPT Project Instructions "
+            "No authenticated machine-readable read of the authoritative persistent persistent project instructions "
             "was available, so this artifact MUST NOT set PROJECT_BOOTSTRAP_INSTALLED=true. "
             "Refresh the snapshot whenever Project Instructions change and obtain authoritative persistent-source "
             "evidence before a POST-DEPLOYMENT PASS."

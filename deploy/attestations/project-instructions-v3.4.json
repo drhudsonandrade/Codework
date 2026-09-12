@@ -11,7 +11,7 @@
   "actor_type": "OWNER_EXPORT",
   "source": {
     "kind": "OWNER_EXPORTED_PROJECT_INSTRUCTIONS",
-    "locator": "chatgpt-project://GENOMA/instructions",
+    "locator": "project-instructions://GENOMA/instructions",
     "sha256": "c1cf295a7aede4efd2fb6270505d2aa3229e19e8e4fb20acb18dd87340ce4164",
     "size_bytes": 1437
   },
@@ -52,5 +52,5 @@
       "line": 1
     }
   },
-  "limitations": "VERIFICADO applies only to the bytes of this owner-exported snapshot. No authenticated machine-readable read of the authoritative persistent ChatGPT Project Instructions was available, so this artifact MUST NOT set PROJECT_BOOTSTRAP_INSTALLED=true. Refresh the snapshot whenever Project Instructions change and obtain authoritative persistent-source evidence before a POST-DEPLOYMENT PASS."
+  "limitations": "VERIFICADO applies only to the bytes of this owner-exported snapshot. No authenticated machine-readable read of the authoritative persistent persistent project instructions was available, so this artifact MUST NOT set PROJECT_BOOTSTRAP_INSTALLED=true. Refresh the snapshot whenever Project Instructions change and obtain authoritative persistent-source evidence before a POST-DEPLOYMENT PASS."
 }

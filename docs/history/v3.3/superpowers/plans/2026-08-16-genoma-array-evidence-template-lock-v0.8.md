@@ -4,7 +4,7 @@
 
 **Goal:** Integrate partial-genome SNP-array processing into the deterministic Scientific Data Plane, add a broad traceable Evidence/Annotation Plane, make the 11 v3.0 report templates content-addressed/private/immutable inside the private repository, harden GitHub Actions/dependency identities, and finish a fresh post-deployment witness on `main`.
 
-**Architecture:** Preserve the existing `Policy Control Plane → Scientific Data Plane → Evidence Plane → Audit Plane`. Add `array` as a first-class Nextflow mode; keep interpretation limited to interrogated loci; use evidence adapters through a budgeted query planner that records every retrieval and limitation; store the exact v3.0 PDFs under content-addressed paths with a signed-style manifest contract; pin workflow actions by immutable commit SHA and generate a machine-readable dependency lock. Cloudflare, Temporal, Supabase and ChatGPT remain optional adapters only.
+**Architecture:** Preserve the existing `Policy Control Plane → Scientific Data Plane → Evidence Plane → Audit Plane`. Add `array` as a first-class Nextflow mode; keep interpretation limited to interrogated loci; use evidence adapters through a budgeted query planner that records every retrieval and limitation; store the exact v3.0 PDFs under content-addressed paths with a signed-style manifest contract; pin workflow actions by immutable commit SHA and generate a machine-readable dependency lock. Cloudflare, Temporal, Supabase and AI client remain optional adapters only.
 
 **Tech Stack:** Python 3.11/3.12, Nextflow DSL2 26.04.6, Docker/OCI, GitHub Actions, PyMuPDF 1.26.7, existing policy engine, existing evidence adapters, SHA-256 content addressing.
 
