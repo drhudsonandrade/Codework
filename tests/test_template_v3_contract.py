@@ -176,6 +176,30 @@ class TemplateV3ContractTest(unittest.TestCase):
         self.assertEqual(_system_value_for_source("OTHER", systems), "value")
         self.assertIsNone(_system_value_for_source("UNKNOWN", systems))
 
+    def test_pinned_legacy_ruleset_source_remains_compatible_by_digest(self):
+        """The hash-pinned v3 coordinate pack remains readable after de-identification."""
+        from reporting.template_v3 import (
+            CURRENT_RULESET_TEMPLATE_LABEL,
+            _system_value_for_source,
+            _validate_controlled_span_sources,
+        )
+
+        legacy_source = bytes.fromhex(
+            "47454e4f4d412d485544534f4e2d52554c455345542d76332e34"
+        ).decode("ascii")
+        payload = {
+            "reports": {
+                "01": {
+                    "controlled_spans": [{"source_text": legacy_source}]
+                }
+            }
+        }
+        _validate_controlled_span_sources(payload)
+        self.assertEqual(
+            _system_value_for_source(legacy_source, {}),
+            CURRENT_RULESET_TEMPLATE_LABEL,
+        )
+
     def test_coordinate_pack_accepts_only_complete_canonical_ruleset_marker(self):
         """The coordinate pack accepts only the complete canonical ruleset marker."""
         from scripts.build_report_coordinate_pack import _ruleset_control_sources

@@ -73,6 +73,29 @@ class ZeroIdentityGuardTest(unittest.TestCase):
                 self.track(root, relative, b"safe")
                 self.assertTrue(any(f.class_id == class_id and f.path == relative and f.offset == 2 for f in self.findings(root)))
 
+    def test_find_matches_discovers_letter_runs_once_for_all_lengths(self) -> None:
+        from scripts import zero_identity_guard
+
+        self.assertTrue(
+            hasattr(zero_identity_guard, "_candidate_runs"),
+            "scanner must expose the single-pass candidate-run iterator",
+        )
+        classes = load_policy(Path(__file__).parents[1] / "config/zero_identity_policy.json")
+        candidate_runs = zero_identity_guard._candidate_runs
+        with mock.patch.object(
+            zero_identity_guard, "_candidate_runs", wraps=candidate_runs
+        ) as runs, mock.patch.object(
+            zero_identity_guard,
+            "_candidate_offsets",
+            side_effect=AssertionError("per-length full-data rescans are forbidden"),
+        ):
+            matches = zero_identity_guard._find_matches(
+                b"prefix-" + MUTATIONS["P2"] + b"-suffix",
+                classes,
+            )
+        self.assertEqual(runs.call_count, 1)
+        self.assertIn(("P2", 7), matches)
+
     def test_binary_blob_is_scanned(self) -> None:
         root = self.make_repo()
         self.track(root, "binary.dat", b"\x00\xff" + MUTATIONS["P4"] + b"\x00")

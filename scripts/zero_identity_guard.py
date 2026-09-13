@@ -79,29 +79,40 @@ def load_policy(path: Path = DEFAULT_POLICY) -> tuple[FingerprintClass, ...]:
     return tuple(classes)
 
 
+_ASCII_LOWER_TABLE = bytes.maketrans(
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    b"abcdefghijklmnopqrstuvwxyz",
+)
+
+
 def _ascii_lower(data: bytes) -> bytes:
     """Lower only ASCII uppercase bytes without Unicode decoding."""
-    return bytes(byte + 32 if 65 <= byte <= 90 else byte for byte in data)
+    return data.translate(_ASCII_LOWER_TABLE)
 
 
-def _candidate_offsets(data: bytes, length: int) -> Iterable[int]:
-    """Yield windows that can match the alphabetic policy fingerprints."""
-    if length > len(data):
-        return
+def _candidate_runs(data: bytes) -> Iterable[tuple[int, int]]:
+    """Yield maximal lowercase-ASCII letter runs as half-open offsets."""
     run_start: int | None = None
     for index, byte in enumerate(data):
         is_letter = 97 <= byte <= 122
         if is_letter and run_start is None:
             run_start = index
-        if not is_letter and run_start is not None:
-            run_length = index - run_start
-            for offset in range(run_start, run_start + max(0, run_length - length + 1)):
-                yield offset
+        elif not is_letter and run_start is not None:
+            yield run_start, index
             run_start = None
     if run_start is not None:
-        run_length = len(data) - run_start
-        for offset in range(run_start, run_start + max(0, run_length - length + 1)):
-            yield offset
+        yield run_start, len(data)
+
+
+def _candidate_offsets(data: bytes, length: int) -> Iterable[int]:
+    """Yield candidate windows for one length from the shared run iterator."""
+    if length > len(data):
+        return
+    for run_start, run_end in _candidate_runs(data):
+        run_length = run_end - run_start
+        if run_length < length:
+            continue
+        yield from range(run_start, run_end - length + 1)
 
 
 def _find_matches(data: bytes, classes: tuple[FingerprintClass, ...]) -> list[tuple[str, int]]:
@@ -111,12 +122,16 @@ def _find_matches(data: bytes, classes: tuple[FingerprintClass, ...]) -> list[tu
     for item in classes:
         by_length.setdefault(item.length, {})[item.sha256] = item.class_id
     matches: list[tuple[str, int]] = []
-    for length, digests in by_length.items():
-        for offset in _candidate_offsets(lowered, length):
-            digest = hashlib.sha256(lowered[offset : offset + length]).hexdigest()
-            class_id = digests.get(digest)
-            if class_id is not None:
-                matches.append((class_id, offset))
+    for run_start, run_end in _candidate_runs(lowered):
+        run_length = run_end - run_start
+        for length, digests in by_length.items():
+            if run_length < length:
+                continue
+            for offset in range(run_start, run_end - length + 1):
+                digest = hashlib.sha256(lowered[offset : offset + length]).hexdigest()
+                class_id = digests.get(digest)
+                if class_id is not None:
+                    matches.append((class_id, offset))
     return matches
 
 

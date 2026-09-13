@@ -4,7 +4,11 @@ import json
 from pathlib import Path
 import unittest
 
-from scripts.governance_context_identity import context_digest, match_expected_check
+from scripts.governance_context_identity import (
+    context_digest,
+    expected_check_is_well_formed,
+    match_expected_check,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 ACCOUNT_CONTEXT = bytes.fromhex(
@@ -33,6 +37,24 @@ class GovernanceContextIdentityTest(unittest.TestCase):
         }
         self.assertTrue(match_expected_check({"context": ACCOUNT_CONTEXT}, expected))
         self.assertFalse(match_expected_check({"context": ACCOUNT_CONTEXT + "x"}, expected))
+
+    def test_fingerprint_identity_rejects_any_simultaneous_context_key(self) -> None:
+        fingerprint = {
+            "algorithm": "sha256",
+            "digest": ACCOUNT_CONTEXT_SHA256,
+            "case_sensitive": True,
+            "provider_family": "dependency-security",
+        }
+        for invalid_context in ("", None, 123):
+            with self.subTest(context=invalid_context):
+                expected = {
+                    "context": invalid_context,
+                    "context_fingerprint": dict(fingerprint),
+                }
+                self.assertFalse(expected_check_is_well_formed(expected))
+                self.assertFalse(
+                    match_expected_check({"context": ACCOUNT_CONTEXT}, expected)
+                )
 
     def test_integration_id_is_still_load_bearing_when_present(self) -> None:
         expected = {"context": "GitGuardian Security Checks", "integration_id": 46505}

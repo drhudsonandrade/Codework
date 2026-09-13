@@ -85,6 +85,21 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
             ):
                 self.assertIn(key, ruleset)
 
+    def test_authenticated_recovery_evidence_does_not_invent_account_login(self) -> None:
+        evidence = json.loads(
+            self.read(
+                "docs/superpowers/evidence/"
+                "2026-09-10-omnigenis-repository-identity-migration.json"
+            )
+        )
+        installation = evidence[
+            "authenticated_recovery_reference_verification"
+        ]["github_app_installation"]
+        self.assertNotIn("account_login", installation)
+        self.assertEqual(installation["installation_id"], 153834452)
+        self.assertEqual(installation["repository_id"], 1212760346)
+        self.assertTrue(installation["repository_access_verified"])
+
     def test_deidentified_evidence_references_are_runtime_resolvable(self) -> None:
         """Require migrated evidence references to resolve without persisted owner identity."""
         records = {

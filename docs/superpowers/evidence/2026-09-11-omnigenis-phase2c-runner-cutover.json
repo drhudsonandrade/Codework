@@ -12,8 +12,10 @@
     "workflow_run_id": 34617560951,
     "successful_attempt": 2,
     "publish_job_id": 103363105798,
-    "image_reference": "ghcr.io/<runtime-owner>/omnigenis-genome@sha256:b34cddd157132f0b039bebb1674abb4957e024fd0332568fc3ae9c2ca0fa8454",
-    "artifact_id": 10276395379
+    "artifact_id": 10276395379,
+    "registry": "ghcr.io",
+    "package": "omnigenis-genome",
+    "digest": "sha256:b34cddd157132f0b039bebb1674abb4957e024fd0332568fc3ae9c2ca0fa8454"
   },
   "runner_snapshot_before": [
     {

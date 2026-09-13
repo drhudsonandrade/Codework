@@ -30,9 +30,13 @@ def expected_check_is_well_formed(expected: object) -> bool:
     """Validate either a literal or fingerprinted tracked check identity."""
     if not isinstance(expected, dict):
         return False
-    has_context = isinstance(expected.get("context"), str) and bool(expected.get("context"))
+    has_context = "context" in expected
     has_fingerprint = "context_fingerprint" in expected
     if has_context == has_fingerprint:
+        return False
+    if has_context and (
+        not isinstance(expected.get("context"), str) or not expected.get("context")
+    ):
         return False
     if has_fingerprint and not _fingerprint_is_valid(expected.get("context_fingerprint")):
         return False

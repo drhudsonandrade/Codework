@@ -17,7 +17,7 @@ EVIDENCE = ROOT / EVIDENCE_RELATIVE
 BASE_MAIN_SHA = "a1e669dd613f68f4d82ca7f1f565772ec8098cb1"
 PHASE2C_MERGE_COMMIT = "fe0c91c99fe4cd57e14c69cc3b3c58edcb4e8be8"
 PHASE2C_EVIDENCE_COMMIT = "0c2c1649355cd998210baacdecb24681a18030ad"
-PHASE2C_CURRENT_EVIDENCE_SHA256 = "1c0639f1f050cde7f7c845b33a091dd2c08073cffe8dbedb12a40dea4e9c7a7d"
+PHASE2C_CURRENT_EVIDENCE_SHA256 = "2b8e153fc2353ba7c5a0f134e31edac463462778dc77a1a11009ac8a3f77c45c"
 PHASE2C_HISTORICAL_EVIDENCE_SHA256 = "0bc5dce4319e1ed8bef878c7a18f1bf7b4e24ace7b04a9d68fb7a7edd622d67a"
 LEGACY = "code" + "work"
 GIT_EXECUTABLE = shutil.which("git")
@@ -250,12 +250,11 @@ class Phase2CRunnerEvidenceContractTest(unittest.TestCase):
         evidence = self.load()
         prerequisite = evidence["phase2b_prerequisite"]
         self.assertEqual(prerequisite["status"], "VERIFIED")
-        registry, qualified = prerequisite["image_reference"].split("/", 1)
-        package_path, digest = qualified.rsplit("@", 1)
-        self.assertEqual(registry, "ghcr.io")
-        self.assertEqual(package_path.rsplit("/", 1)[-1], "omnigenis-genome")
+        self.assertNotIn("image_reference", prerequisite)
+        self.assertEqual(prerequisite["registry"], "ghcr.io")
+        self.assertEqual(prerequisite["package"], "omnigenis-genome")
         self.assertEqual(
-            digest,
+            prerequisite["digest"],
             "sha256:b34cddd157132f0b039bebb1674abb4957e024fd0332568fc3ae9c2ca0fa8454",
         )
         self.assertEqual(prerequisite["workflow_run_id"], 34617560951)

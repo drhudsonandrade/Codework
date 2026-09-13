@@ -29,6 +29,7 @@ MANIFEST_PATH = Path(__file__).with_name("reference_v3_manifest.json")
 RULESET_TEMPLATE_PREFIX = "GENOMA-RULESET-v"
 CURRENT_RULESET_TEMPLATE_SOURCE = "GENOMA-RULESET-v3.4"
 CURRENT_RULESET_TEMPLATE_LABEL = "GENOMA-RULESET-v3.4"
+LEGACY_RULESET_TEMPLATE_SOURCE_SHA256 = "e9d2e43c9c775b9bef05e7d33cd18ada3ef9e1e4bbfeda4db2617de1ab75cd97"
 SINGLE_LINE_LEADING = 1.2
 POPPLER_TIMEOUT_SECONDS = 120
 
@@ -49,6 +50,14 @@ SYSTEM_REPLACEMENTS = {
 def _is_genoma_ruleset_marker(source_text: str) -> bool:
     """Return whether text claims any GENOMA ruleset namespace."""
     return source_text.startswith("GENOMA-") and "RULESET-v" in source_text
+
+
+def _is_legacy_pinned_ruleset_source(source_text: str) -> bool:
+    """Recognize the immutable pre-deidentification template marker by digest only."""
+    return (
+        hashlib.sha256(source_text.encode("utf-8")).hexdigest()
+        == LEGACY_RULESET_TEMPLATE_SOURCE_SHA256
+    )
 
 
 class TemplateV3Error(RuntimeError):
@@ -126,7 +135,11 @@ def _validate_controlled_span_sources(payload: dict[str, Any]) -> None:
     for report_id, meta in payload.get("reports", {}).items():
         for item in meta.get("controlled_spans", []):
             source = str(item.get("source_text", ""))
-            if _is_genoma_ruleset_marker(source) and source != CURRENT_RULESET_TEMPLATE_SOURCE:
+            if (
+                _is_genoma_ruleset_marker(source)
+                and source != CURRENT_RULESET_TEMPLATE_SOURCE
+                and not _is_legacy_pinned_ruleset_source(source)
+            ):
                 raise TemplateV3Error(
                     f"noncanonical ruleset marker in v3 reference manifest for report {report_id}: {source}"
                 )
@@ -504,7 +517,10 @@ def _system_value_for_source(source_text: str, systems: dict[str, Any]) -> Any |
     The ruleset label is handled here rather than through the generic map so that a template
     carrying a superseded marker fails loudly instead of rendering the wrong identity.
     """
-    if source_text == CURRENT_RULESET_TEMPLATE_SOURCE:
+    if (
+        source_text == CURRENT_RULESET_TEMPLATE_SOURCE
+        or _is_legacy_pinned_ruleset_source(source_text)
+    ):
         return CURRENT_RULESET_TEMPLATE_LABEL
     if _is_genoma_ruleset_marker(source_text):
         raise TemplateV3Error(f"noncanonical ruleset marker in template source: {source_text}")

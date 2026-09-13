@@ -25,6 +25,7 @@ class Phase2BPostMergeGhcrEvidenceTest(unittest.TestCase):
         self.assertEqual(evidence["successful_attempt"], 2)
         self.assertEqual(evidence["publish_job_id"], 103363105798)
         self.assertEqual(evidence["status"], "VERIFIED")
+        self.assertNotIn("image_reference", evidence)
         self.assertEqual(evidence["registry"], "ghcr.io")
         self.assertEqual(evidence["package"], "omnigenis-genome")
         self.assertEqual(
