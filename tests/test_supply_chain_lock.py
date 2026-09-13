@@ -61,6 +61,43 @@ class SupplyChainLockTest(unittest.TestCase):
                 with self.assertRaises(SystemExit):
                     verify_supply_chain_lock._verify_external_secret_scanner(mutated, ruleset)
 
+    def test_required_check_schema_accepts_literal_and_fingerprint_identities(self):
+        ruleset = json.loads((ROOT / ".github/governance/main-ruleset.json").read_text())
+        verify_supply_chain_lock._verify_required_check_schema(ruleset)
+        mutated = copy.deepcopy(ruleset)
+        status = next(
+            (rule for rule in mutated["rules"] if rule["type"] == "required_status_checks"),
+            None,
+        )
+        self.assertIsNotNone(status)
+        assert status is not None
+        fingerprinted = next(
+            (
+                item
+                for item in status["parameters"]["required_status_checks"]
+                if "context_fingerprint" in item
+            ),
+            None,
+        )
+        self.assertIsNotNone(fingerprinted)
+        assert fingerprinted is not None
+        fingerprinted["context_fingerprint"]["digest"] = "0" * 63
+        with self.assertRaises(SystemExit):
+            verify_supply_chain_lock._verify_required_check_schema(mutated)
+
+    def test_required_check_schema_rejects_duplicate_status_rules(self):
+        ruleset = json.loads((ROOT / ".github/governance/main-ruleset.json").read_text())
+        status_rules = [
+            rule
+            for rule in ruleset["rules"]
+            if rule["type"] == "required_status_checks"
+        ]
+        self.assertEqual(len(status_rules), 1)
+        mutated = copy.deepcopy(ruleset)
+        mutated["rules"].append(copy.deepcopy(status_rules[0]))
+        with self.assertRaises(SystemExit):
+            verify_supply_chain_lock._verify_required_check_schema(mutated)
+
     def test_supply_chain_verifier_does_not_reference_retired_gitleaks(self):
         verifier = (ROOT / "scripts/verify_supply_chain_lock.py").read_text(encoding="utf-8")
         self.assertNotIn("gitleaks", verifier.casefold())

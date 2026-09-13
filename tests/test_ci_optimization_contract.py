@@ -126,6 +126,7 @@ NGS_TRIGGER_SCRIPT_PATHS = (
     "scripts/freshness_gate.py",
     "scripts/generate_all_reports.py",
     "scripts/generate_canary.py",
+    "scripts/governance_context_identity.py",
     "scripts/latest_runtime_resource_gate.py",
     "scripts/materialize_ruleset.py",
     "scripts/prepare_latest_candidate.py",
@@ -139,6 +140,7 @@ NGS_TRIGGER_SCRIPT_PATHS = (
     "scripts/runtime_resource_gate.py",
     "scripts/runtime_stack.py",
     "scripts/score_variants.py",
+    "scripts/zero_identity_guard.py",
     "scripts/sealed_ruleset.py",
     "scripts/validate_bwa_mem2_functional.sh",
     "scripts/validate_grch38.sh",
@@ -781,9 +783,15 @@ class CIOptimizationContractTest(unittest.TestCase):
     def test_ngs_runtime_gate_matches_approved_phase_two_b_semantics(self):
         """Keep the Phase 2B NGS workflow pinned to its approved semantics."""
         workflow = _read("genoma-ngs-runtime-gate.yml")
-        allowed_line = "      - 'scripts/project_identity_guard.py'\n"
-        self.assertEqual(workflow.count(allowed_line), 2)
-        normalized = workflow.replace(allowed_line, "")
+        allowed_lines = (
+            "      - 'scripts/project_identity_guard.py'\n",
+            "      - 'scripts/governance_context_identity.py'\n",
+            "      - 'scripts/zero_identity_guard.py'\n",
+        )
+        normalized = workflow
+        for allowed_line in allowed_lines:
+            self.assertEqual(workflow.count(allowed_line), 2)
+            normalized = normalized.replace(allowed_line, "")
         digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
         self.assertEqual(NGS_RUNTIME_WORKFLOW_APPROVED_SHA256, digest)
 

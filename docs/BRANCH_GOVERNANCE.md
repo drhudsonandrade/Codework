@@ -24,7 +24,7 @@ The required checks must be selected from checks that have actually reported on 
 The desired state for `main` is split into two layered rulesets:
 
 - `.github/governance/main-ruleset.json` - deletion, non-fast-forward, and all required CI/security status checks, with **no bypass actors**;
-- `.github/governance/main-approval-ruleset.json` - pull-request/review policy only, with `drhudsonandrade` as a `User` bypass actor in `pull_request` mode.
+- `.github/governance/main-approval-ruleset.json` - pull-request/review policy only, with the approved User bypass actor represented by provider-stable identity rather than a persisted account name.
 
 The approval-layer bypass does not apply to the Security & CI ruleset, so required checks cannot be bypassed through this architecture. These files are desired-state artifacts, not evidence that GitHub has applied the rulesets.
 
@@ -59,7 +59,7 @@ If the repository plan/settings cannot express the documented layered restrictio
 
 After applying the GitHub settings, record all of the following in the closure report:
 
-- repository: `drhudsonandrade/OmniGenis`;
+- repository ID: `1212760346`; repository name: `OmniGenis`;
 - branch names: `main`, `audit-evidence`;
 - observed protected/ruleset state for each branch;
 - required status checks actually configured on `main`;
@@ -75,3 +75,17 @@ The repository must remain **GOVERNANCE PENDING** until the live GitHub settings
 - Rulesets: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets
 - Available rules, including required status checks and force-push controls: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets
 - Protected branches: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches
+
+Provider account-derived required checks are stored as SHA-256 fingerprints plus provider-family metadata. The tracked `main-ruleset.json` is therefore a neutral desired-state specification, not a provider API payload. Before applying or restoring it, fetch the authenticated live ruleset, materialize the fingerprinted entry, inspect the generated provider payload, and only then submit that generated payload to GitHub.
+
+```bash
+repo="$(gh api repositories/1212760346 --jq .full_name)"
+test -n "$repo"
+gh api "repos/$repo/rulesets/21303100" > "$RUNNER_TEMP/live-main-ruleset.json"
+python3 scripts/governance_context_identity.py \
+  --spec .github/governance/main-ruleset.json \
+  --live "$RUNNER_TEMP/live-main-ruleset.json" \
+  --output "$RUNNER_TEMP/materialized-main-ruleset.json"
+```
+
+Never send `.github/governance/main-ruleset.json` directly to the provider API while it contains `context_fingerprint`. The materializer must resolve every fingerprint uniquely from authenticated live state or fail closed.

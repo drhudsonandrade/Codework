@@ -3,6 +3,7 @@ import json
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+ACCOUNT_DERIVED_CHECK_SHA256 = "13148c18c6ce9155ee89d2c0de0435a9ff86e658bc56851d2a8ec24062134bf7"
 
 
 class RepositoryIdentityMigrationTest(unittest.TestCase):
@@ -11,16 +12,12 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
         return (ROOT / path).read_text(encoding="utf-8")
 
     def test_active_repository_identity_uses_omnigenis(self):
-        active = [
-            "AGENTS.md",
-            "docs/BRANCH_GOVERNANCE.md",
-            "docs/GITHUB_MOBILE_IMPORT.md",
-            "docs/MAGALU_PRIVATE_MCP_SETUP.md",
-            "docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md",
-        ]
-        for path in active:
-            text = self.read(path)
-            self.assertNotIn("drhudsonandrade/Codework", text, path)
+        identity = json.loads(self.read("config/project_identity.json"))
+        self.assertEqual(
+            identity["repository"],
+            {"repository_id": 1212760346, "repository_name": "OmniGenis"},
+        )
+        self.assertNotIn("full_name", identity["repository"])
         self.assertIn("GENOMA OmniGenis", self.read("AGENTS.md"))
 
     def test_public_repository_state_is_documented(self):
@@ -33,15 +30,10 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
             self.read("AGENTS.md"),
         )
 
-    def test_historical_repository_urls_are_preserved(self):
-        self.assertIn(
-            "https://github.com/drhudsonandrade/Codework/pull/60",
-            self.read("docs/POLICY_CODE_LANGUAGE_INVENTORY.md"),
-        )
-        self.assertIn(
-            "https://github.com/drhudsonandrade/Codework/pull/61",
-            self.read("docs/REPORTING_CODE_LANGUAGE_INVENTORY.md"),
-        )
+    def test_repository_contract_avoids_account_qualified_identity(self):
+        identity = json.loads(self.read("config/project_identity.json"))
+        self.assertEqual(identity["repository"]["repository_id"], 1212760346)
+        self.assertEqual(identity["repository"]["repository_name"], "OmniGenis")
 
     def test_phase_two_b_runtime_contract_uses_omnigenis(self) -> None:
         """Require the Phase 2B runtime root to use the OmniGenis identity."""
@@ -94,6 +86,90 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
             ):
                 self.assertIn(key, ruleset)
 
+    def test_authenticated_recovery_evidence_does_not_invent_account_login(self) -> None:
+        evidence = json.loads(
+            self.read(
+                "docs/superpowers/evidence/"
+                "2026-09-10-omnigenis-repository-identity-migration.json"
+            )
+        )
+        installation = evidence[
+            "authenticated_recovery_reference_verification"
+        ]["github_app_installation"]
+        self.assertNotIn("account_login", installation)
+        self.assertEqual(installation["installation_id"], 153834452)
+        self.assertEqual(installation["repository_id"], 1212760346)
+        self.assertIs(installation["repository_access_verified"], True)
+
+    def test_deidentified_ruleset_evidence_uses_typed_fingerprint_not_fake_context(self) -> None:
+        evidence = json.loads(
+            self.read(
+                "docs/superpowers/evidence/"
+                "2026-09-10-omnigenis-repository-identity-migration.json"
+            )
+        )
+        fake_identity = "legacy-" + "operator" + "andrade"
+        serialized = json.dumps(evidence, sort_keys=True)
+        self.assertNotIn(fake_identity, serialized)
+        fingerprint = {
+            "context_fingerprint": {
+                "algorithm": "sha256",
+                "digest": ACCOUNT_DERIVED_CHECK_SHA256,
+                "case_sensitive": True,
+                "provider_family": "dependency-security",
+            }
+        }
+        self.assertIn(fingerprint, evidence["required_status_contexts"])
+        for phase in ("ruleset_semantics_pre", "ruleset_semantics_post"):
+            protected = evidence[phase]["21303100"]
+            self.assertIn(fingerprint, protected["required_status_contexts"])
+            status_rule = next(
+                rule
+                for rule in protected["rules"]
+                if rule["type"] == "required_status_checks"
+            )
+            self.assertIn(
+                fingerprint,
+                status_rule["parameters"]["required_status_checks"],
+            )
+
+        for relative in (
+            "docs/superpowers/checkpoints/2026-09-03-local-first-ci-session.md",
+            "docs/superpowers/plans/2026-09-10-omnigenis-repository-identity-migration.md",
+        ):
+            self.assertNotIn(fake_identity, self.read(relative), relative)
+
+    def test_deidentified_evidence_references_are_runtime_resolvable(self) -> None:
+        """Require migrated evidence references to resolve without persisted owner identity."""
+        records = {
+            "docs/POLICY_CODE_LANGUAGE_INVENTORY.md": "5596016415",
+            "docs/REPORTING_CODE_LANGUAGE_INVENTORY.md": "5601896618",
+            "docs/superpowers/plans/2026-09-09-policy-evidence-audit-english.md": "5596016415",
+            "docs/superpowers/plans/2026-09-09-reporting-english-locale.md": "5601896618",
+        }
+        for path, comment_id in records.items():
+            with self.subTest(path=path):
+                text = self.read(path)
+                self.assertIn("gh api repositories/1212760346 --jq .full_name", text)
+                self.assertIn(f"issues/comments/{comment_id}", text)
+                self.assertNotIn("](repository_id=", text)
+
+    def test_phase_one_evidence_uses_typed_repository_locators(self) -> None:
+        """Keep deidentified provenance typed instead of masquerading as URLs/full_name."""
+        evidence = json.loads(
+            self.read(
+                "docs/superpowers/evidence/"
+                "2026-09-10-omnigenis-repository-identity-migration.json"
+            )
+        )
+        endpoint = evidence["git_endpoint_verification"]
+        self.assertNotIn("new_url", endpoint)
+        self.assertNotIn("old_url", endpoint)
+        self.assertEqual(endpoint["new_locator"]["repository_id"], 1212760346)
+        self.assertEqual(endpoint["new_locator"]["repository_name"], "OmniGenis")
+        self.assertEqual(endpoint["old_locator"]["repository_id"], 1212760346)
+        self.assertIn("historical_repository_name", endpoint["old_locator"])
+
     def test_migration_plan_uses_fail_closed_reference_and_phase_two_gates(self):
         plan = self.read(
             "docs/superpowers/plans/"
@@ -102,11 +178,12 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
         self.assertIn("unexpected_old_references", plan)
         self.assertIn("allowed_historical_old_references", plan)
         self.assertIn("phase2_changed_paths", plan)
-        self.assertNotIn(
-            "git grep -n 'drhudsonandrade/Codework' -- "
-            "':!docs/history/**' ':!docs/superpowers/specs/",
-            plan,
-        )
+        self.assertIn("if phase2_changed_paths:", plan)
+        phase_two_gate = plan.split("if phase2_changed_paths:", 1)[1].split(
+            "print('PHASE2_PRESERVATION_GATE=PASS')",
+            1,
+        )[0]
+        self.assertIn("raise SystemExit(", phase_two_gate)
 
     def test_migration_plan_compares_complete_ruleset_semantics(self):
         plan = self.read(

@@ -4,6 +4,10 @@
 
 `config/project_identity.json` is the canonical target identity registry for the Phase 2 internal-name migration. It does not dynamically configure every runtime consumer; repository guards compare active literals against the approved contract during later cutover phases.
 
+## Canonical repository authority
+
+The canonical repository identity is owner-neutral: repository ID `1212760346` and repository name `OmniGenis`. Provider-qualified repository names are resolved only at runtime when required and are never persisted as canonical identity. Canonical future runner names are `omnigenis-runner-01` and `omnigenis-runner-02`.
+
 ## Phase 2A behavior
 
 Phase 2A changes no runtime identity. `config/legacy_identity_ledger.json` records reviewed active legacy-identity compatibility occurrences. Counts may decrease but may not increase, and an unclassified occurrence fails `scripts/validate_repo.py`.

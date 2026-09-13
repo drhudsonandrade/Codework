@@ -12,13 +12,14 @@
     "workflow_run_id": 34617560951,
     "successful_attempt": 2,
     "publish_job_id": 103363105798,
-    "image_reference": "ghcr.io/drhudsonandrade/omnigenis-genome@sha256:b34cddd157132f0b039bebb1674abb4957e024fd0332568fc3ae9c2ca0fa8454",
-    "artifact_id": 10276395379
+    "artifact_id": 10276395379,
+    "registry": "ghcr.io",
+    "package": "omnigenis-genome",
+    "digest": "sha256:b34cddd157132f0b039bebb1674abb4957e024fd0332568fc3ae9c2ca0fa8454"
   },
   "runner_snapshot_before": [
     {
       "id": 21,
-      "name": "drhudson-codework-01",
       "status": "online",
       "busy": false,
       "labels": [
@@ -27,11 +28,11 @@
         "X64",
         "codework-isolated",
         "codework-01"
-      ]
+      ],
+      "retired_name_sha256": "90eeec4bbf8402458fd978e8e455ae3dbf93637bd7addb068ff5b0ae2d80b2cd"
     },
     {
       "id": 22,
-      "name": "drhudson-codework-02",
       "status": "online",
       "busy": false,
       "labels": [
@@ -40,7 +41,8 @@
         "X64",
         "codework-isolated",
         "codework-02"
-      ]
+      ],
+      "retired_name_sha256": "d230518f559a417c7807ef428a3fa8adeafb30921d2c57e1545ee8b4314d3e93"
     }
   ],
   "runner_snapshot_after": [
@@ -56,8 +58,8 @@
         "omnigenis-isolated",
         "omnigenis-01"
       ],
-      "name": "drhudson-codework-01",
-      "status": "online"
+      "status": "online",
+      "retired_name_sha256": "90eeec4bbf8402458fd978e8e455ae3dbf93637bd7addb068ff5b0ae2d80b2cd"
     },
     {
       "busy": false,
@@ -71,8 +73,8 @@
         "omnigenis-isolated",
         "omnigenis-02"
       ],
-      "name": "drhudson-codework-02",
-      "status": "online"
+      "status": "online",
+      "retired_name_sha256": "d230518f559a417c7807ef428a3fa8adeafb30921d2c57e1545ee8b4314d3e93"
     }
   ],
   "repository_selector_cutover": "NOT_MERGED",
@@ -287,5 +289,12 @@
     "legacy_runner_label_removal": "BLOCKED_UNTIL_CANARY_PASS",
     "runner_name_reregistration": "BLOCKED_UNTIL_RUNTIME_RESOURCE_GATE"
   },
-  "secret_material_recorded": false
+  "secret_material_recorded": false,
+  "deidentification_provenance": {
+    "merge_commit": "fe0c91c99fe4cd57e14c69cc3b3c58edcb4e8be8",
+    "evidence_commit": "0c2c1649355cd998210baacdecb24681a18030ad",
+    "historical_blob_sha256": "0bc5dce4319e1ed8bef878c7a18f1bf7b4e24ace7b04a9d68fb7a7edd622d67a",
+    "reason": "current-tree zero-identity migration",
+    "historical_fact_preserved": true
+  }
 }

@@ -124,8 +124,8 @@ writer to reduce concurrent work; no other branch should overwrite this implemen
 
 ## Delivered-HEAD evidence binding
 
-The [exact-HEAD evidence record](https://github.com/drhudsonandrade/Codework/pull/61#issuecomment-5601896618)
-is the authoritative locator for completed validation. It must name the tested
+The exact-HEAD evidence record is the authoritative locator for completed validation.
+Resolve it at runtime with `repo=$(gh api repositories/1212760346 --jq .full_name); gh api "repos/$repo/issues/comments/5601896618"`. It must name the tested
 commit and tree, actual command results and retained log SHA-256 digests. Until
 it names the delivered HEAD, that HEAD's validation is PENDING. The planning
 commit or the baseline suite cannot certify a later implementation commit.
@@ -445,8 +445,8 @@ Current presentation-gate methods:
 The following log files were actually read and hashed in the correction
 resumption. They describe pre-commit RED/GREEN worktree tests and must not be
 represented as full exact-HEAD release validation. Paths are local locators on
-`drhudson`, not public download URLs. The [exact-HEAD evidence record](https://github.com/drhudsonandrade/Codework/pull/61#issuecomment-5601896618)
-links these historical results to their later corrected implementation; a later
+`legacy-operator`, not public download URLs. Resolve the exact-HEAD evidence record with
+`repo=$(gh api repositories/1212760346 --jq .full_name); gh api "repos/$repo/issues/comments/5601896618"`; it links these historical results to their later corrected implementation. A later
 commit still requires its own validation log.
 
 | Historical log | Exact retained path | SHA-256 |
@@ -461,7 +461,7 @@ commit still requires its own validation log.
 The dashboard for the reviewed `61963e3f40174238da33f1cf61eae14b233a80a1`
 reported eight issues, including five type diagnostics in two formerly unchanged
 reporting modules. That source is the
-[commit-specific DeepSource run](https://app.deepsource.com/gh/drhudsonandrade/Codework/run/41339631-e574-4456-bee9-18d4da27b19d/python/).
+commit-specific DeepSource run. Resolve the repository owner/name at runtime with `repo=$(gh api repositories/1212760346 --jq .full_name)` and inspect run `41339631-e574-4456-bee9-18d4da27b19d`, analyzer `python`, in the DeepSource repository view.
 This is a narrow review-driven scope extension, not a change to scientific,
 publication or post-deployment decisions.
 

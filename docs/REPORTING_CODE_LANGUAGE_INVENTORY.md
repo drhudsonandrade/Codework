@@ -98,8 +98,9 @@ single-page shrinking in report 10, are not redesigned by this migration.
 
 ## Exact-commit evidence and remaining work
 
-The [stage-five exact-HEAD evidence record](https://github.com/drhudsonandrade/Codework/pull/61#issuecomment-5601896618)
-identifies the commit/tree actually tested, commands, results and retained log
+The stage-five exact-HEAD evidence record identifies the commit/tree actually
+tested, commands, results and retained log hashes. Resolve it at runtime with
+`repo=$(gh api repositories/1212760346 --jq .full_name); gh api "repos/$repo/issues/comments/5601896618"`. The record
 hashes. Until it names the delivered HEAD, implementation validation is PENDING.
 A source document cannot embed its own final Git SHA; the real linked record
 avoids self-reference without inventing a revision or inheriting an old PASS.

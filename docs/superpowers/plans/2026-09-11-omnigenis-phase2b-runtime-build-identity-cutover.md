@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Base Phase 2B on post-merge `main` commit `4c0e5222248b5f9f2537d627091b80afc9c9e120` or a later verified descendant if `main` moves before execution.
-- Repository object must remain `drhudsonandrade/OmniGenis`, repository ID `1212760346`, visibility `public`, default branch `main`.
+- Repository object must remain `repository_id=1212760346; repository_name=OmniGenis`, repository ID `1212760346`, visibility `public`, default branch `main`.
 - Preserve canonical GENOMA v3.4 identity, sealed normative bytes, scientific thresholds, evidence semantics, report taxonomy, and genomic behavior.
 - All new or modified code, tests, comments, docstrings, technical messages, configuration descriptions, and developer-facing documentation must be English-first.
 - Do not rename `codework-isolated`, `codework-01`, `codework-02`, or the live runner names in Phase 2B; those belong exclusively to Phase 2C.
@@ -59,13 +59,15 @@ Run:
 ```bash
 set -euo pipefail
 printf 'HEAD=%s\n' "$(git rev-parse HEAD)"
+repo="$(gh api repositories/1212760346 --jq .full_name)"
+test -n "$repo"
 for path in /opt/codework /opt/omnigenis /etc/codework /etc/omnigenis; do
   test -e "$path" && echo "PRESENT $path" || echo "ABSENT $path"
 done
 systemctl list-unit-files --type=service --no-legend 2>/dev/null \
   | grep -E 'genome-mcp|tunnel-client|omnigenis|codework' || true
 printenv | grep -E '^(CODEWORK|OMNIGENIS)_' || true
-gh api repos/drhudsonandrade/OmniGenis/actions/runners \
+gh api repos/$repo/actions/runners \
   --jq '.runners[] | [.id,.name,.status,.busy,([.labels[].name]|join(","))] | @tsv'
 ```
 
@@ -809,7 +811,7 @@ Expected: complete post-merge regression PASS and no active Phase 2B legacy iden
 
 - [ ] **Step 2: Revalidate repository identity and complete ruleset semantics**
 
-Confirm repository ID `1212760346`, full name `drhudsonandrade/OmniGenis`, public visibility, default branch `main`, and exact semantic equality of rulesets `21303100` and `22347095` against the pinned Phase 1/2A evidence. Any semantic drift blocks Phase 2C.
+Confirm canonical repository identity (`repository_id=1212760346`, `repository_name=OmniGenis`), public visibility, default branch `main`, and exact semantic equality of rulesets `21303100` and `22347095` against the pinned Phase 1/2A evidence. Resolve provider `full_name` only at runtime when an API address is required. Any semantic drift blocks Phase 2C.
 - [ ] **Step 3: Prove real protected-main publication of the new GHCR identity**
 
 Locate the `scaffold-validation` run for the exact merge SHA:

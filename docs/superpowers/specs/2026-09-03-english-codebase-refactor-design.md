@@ -3,7 +3,7 @@
 **Date:** 2026-09-03
 **Status:** Stages 1-6 merged (PR #38, #58, #59, #60, #61 and #62); stage 7 developer-documentation language migration in implementation. See `docs/DEVELOPER_DOCUMENTATION_LANGUAGE_INVENTORY.md`.
 **Strategy:** Progressive migration by layers
-**Repository:** `drhudsonandrade/Codework`
+**Repository:** `repository_id=1212760346; historical_repository_name=Codework`
 **Implementation reference:** `scripts/code_language_guard.py`
 **Reproducible validation:** `python3 -m unittest tests.test_code_language_guard -v` and `python3 scripts/code_language_guard.py --check` (the checkout must contain full Git history, equivalent to `actions/checkout` with `fetch-depth: 0`, because provenance verification resolves the recorded baseline commit)
 

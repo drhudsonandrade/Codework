@@ -7,10 +7,10 @@ CONTRACT = ROOT / "config" / "project_identity.json"
 
 EXPECTED = {
     "schema": "omnigenis-project-identity-v1",
-    "version": "2026-09-10.1",
+    "version": "2026-09-11.1",
     "repository": {
-        "product_name": "OmniGenis",
-        "full_name": "drhudsonandrade/OmniGenis",
+        "repository_id": 1212760346,
+        "repository_name": "OmniGenis",
     },
     "runtime": {
         "root": "/opt/omnigenis",
@@ -29,7 +29,7 @@ EXPECTED = {
     "runners": {
         "pool_label": "omnigenis-isolated",
         "per_runner_labels": ["omnigenis-01", "omnigenis-02"],
-        "runner_names": ["drhudson-omnigenis-01", "drhudson-omnigenis-02"],
+        "runner_names": ["omnigenis-runner-01", "omnigenis-runner-02"],
     },
     "codex": {
         "marketplace": "omnigenis-codex",
@@ -47,7 +47,9 @@ EXPECTED = {
 class ProjectIdentityContractTest(unittest.TestCase):
     def test_identity_contract_is_exact(self) -> None:
         self.assertTrue(CONTRACT.is_file())
-        self.assertEqual(json.loads(CONTRACT.read_text(encoding="utf-8")), EXPECTED)
+        payload = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        self.assertNotIn("full_name", payload["repository"])
+        self.assertEqual(payload, EXPECTED)
 
     def test_contract_contains_no_legacy_identity(self) -> None:
         raw = CONTRACT.read_text(encoding="utf-8")

@@ -207,39 +207,25 @@
       "retire_by": "2C"
     },
     {
-      "id": "repository-old-full-name-test",
-      "locations": {
-        "tests/test_repository_identity_migration.py": 2
-      },
-      "matcher": {
-        "kind": "regex",
-        "value": "drhudsonandrade/Codework(?=[\"\\'])"
-      },
-      "reason": "Phase 1 compatibility assertion for the old repository full name.",
-      "replacement": "drhudsonandrade/OmniGenis",
-      "retire_by": "2D"
-    },
-    {
       "disposition": "preserve_historical",
       "id": "historical-repository-pr-urls",
       "locations": {
         "docs/POLICY_CODE_LANGUAGE_INVENTORY.md": 1,
-        "docs/REPORTING_CODE_LANGUAGE_INVENTORY.md": 1,
-        "tests/test_repository_identity_migration.py": 2
+        "docs/REPORTING_CODE_LANGUAGE_INVENTORY.md": 1
       },
       "matcher": {
         "kind": "regex",
-        "value": "https://github\\.com/drhudsonandrade/Codework/pull/(?:60|61)(?:#issuecomment-[0-9]+)?"
+        "value": "https://github\\.com/[A-Za-z0-9_-]+/Codework/pull/(?:60|61)(?:#issuecomment-[0-9]+)?"
       },
-      "reason": "Historical PR evidence URLs retain the repository path used when recorded.",
-      "retire_by": "2D"
+      "reason": "Historical PR evidence remains classified until structured-ID de-identification.",
+      "retire_by": "ZERO_IDENTITY_TREE_PURGE"
     },
     {
       "id": "product-word-active",
       "locations": {},
       "matcher": {
         "kind": "regex",
-        "value": "(?<!drhudsonandrade/)(?<![A-Za-z0-9_-])Codework(?![A-Za-z0-9_-])"
+        "value": "(?<!/)(?<![A-Za-z0-9_-])Codework(?![A-Za-z0-9_-])"
       },
       "reason": "Legacy product word in active descriptions and compatibility tests.",
       "replacement": "OmniGenis",

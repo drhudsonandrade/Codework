@@ -61,7 +61,7 @@ Generate the snapshot attestation only after exporting the settings:
 ```bash
 python3 -m scripts.project_instructions_attestation \
   --source deploy/attestations/project-instructions-v3.4.txt \
-  --source-locator 'chatgpt-project://GENOMA/instructions' \
+  --source-locator 'project-instructions://GENOMA/instructions' \
   --verified-at '<RFC3339>' \
   --output deploy/attestations/project-instructions-v3.4.json \
   --write

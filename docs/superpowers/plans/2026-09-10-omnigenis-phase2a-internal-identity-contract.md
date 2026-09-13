@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Phase 2A MUST NOT modify runtime behavior, runner metadata, GitHub Actions routing semantics, Docker image names, GHCR publication, MCP runtime identity, Conda identity, Nextflow identity, filesystem deployment paths, or external resources. The only workflow-file change allowed is adding `scripts/project_identity_guard.py` to the existing NGS runtime-gate `pull_request` and `push` path filters so dependency-closure validation remains complete.
-- Repository ID remains `1212760346`; canonical GitHub identity remains `drhudsonandrade/OmniGenis`.
+- Repository ID remains `1212760346`; canonical repository identity remains the owner-neutral pair `repository_id=1212760346` and `repository_name=OmniGenis`.
 - Canonical GENOMA v3.4 identity, sealed normative bytes, scientific thresholds, report taxonomy, evidence semantics, and genomic interpretation remain unchanged.
 - All newly added or modified code, tests, comments, docstrings, technical messages, configuration descriptions, and developer-facing documentation are written in English.
 - Existing Codework-derived runtime literals remain temporarily unchanged in 2A and are permitted only through the reviewed legacy ledger.
@@ -51,7 +51,8 @@ EXPECTED = {
     "version": "2026-09-10.1",
     "repository": {
         "product_name": "OmniGenis",
-        "full_name": "drhudsonandrade/OmniGenis",
+        "repository_id": 1212760346,
+        "repository_name": "OmniGenis",
     },
     "runtime": {
         "root": "/opt/omnigenis",
@@ -70,7 +71,7 @@ EXPECTED = {
     "runners": {
         "pool_label": "omnigenis-isolated",
         "per_runner_labels": ["omnigenis-01", "omnigenis-02"],
-        "runner_names": ["drhudson-omnigenis-01", "drhudson-omnigenis-02"],
+        "runner_names": ["runner_id=21; retired_name_sha256=0840cef7416ffb5cfc1eb56b6273c34797f68d9e39bddf4293c187db450ea594", "runner_id=22; retired_name_sha256=c009b56b587f276bb06642ff98931b2ddfeb566f75f48075c73695cda5b72e54"],
     },
     "codex": {
         "marketplace": "omnigenis-codex",
@@ -120,7 +121,8 @@ Create `config/project_identity.json` with exactly this content:
   "version": "2026-09-10.1",
   "repository": {
     "product_name": "OmniGenis",
-    "full_name": "drhudsonandrade/OmniGenis"
+    "repository_id": 1212760346,
+    "repository_name": "OmniGenis"
   },
   "runtime": {
     "root": "/opt/omnigenis",
@@ -145,8 +147,8 @@ Create `config/project_identity.json` with exactly this content:
       "omnigenis-02"
     ],
     "runner_names": [
-      "drhudson-omnigenis-01",
-      "drhudson-omnigenis-02"
+      "runner_id=21; retired_name_sha256=0840cef7416ffb5cfc1eb56b6273c34797f68d9e39bddf4293c187db450ea594",
+      "runner_id=22; retired_name_sha256=c009b56b587f276bb06642ff98931b2ddfeb566f75f48075c73695cda5b72e54"
     ]
   },
   "codex": {
@@ -212,7 +214,7 @@ from scripts.project_identity_guard import validate_project_identity
 IDENTITY = {
     "schema": "omnigenis-project-identity-v1",
     "version": "2026-09-10.1",
-    "repository": {"product_name": "OmniGenis", "full_name": "drhudsonandrade/OmniGenis"},
+    "repository": {"product_name": "OmniGenis", "repository_id": 1212760346, "repository_name": "OmniGenis"},
     "runtime": {
         "root": "/opt/omnigenis",
         "config_root": "/etc/omnigenis",
@@ -230,7 +232,7 @@ IDENTITY = {
     "runners": {
         "pool_label": "omnigenis-isolated",
         "per_runner_labels": ["omnigenis-01", "omnigenis-02"],
-        "runner_names": ["drhudson-omnigenis-01", "drhudson-omnigenis-02"],
+        "runner_names": ["runner_id=21; retired_name_sha256=0840cef7416ffb5cfc1eb56b6273c34797f68d9e39bddf4293c187db450ea594", "runner_id=22; retired_name_sha256=c009b56b587f276bb06642ff98931b2ddfeb566f75f48075c73695cda5b72e54"],
     },
     "codex": {
         "marketplace": "omnigenis-codex",
@@ -864,11 +866,13 @@ The durable evidence schema is `omnigenis-phase2a-identity-contract-evidence-v2`
 Baseline verification commands are exactly:
 
 ```bash
-gh api repos/drhudsonandrade/OmniGenis --jq '{id,full_name,visibility,default_branch}'
-gh api repos/drhudsonandrade/OmniGenis/rulesets/21303100 --jq '{id,name,enforcement,conditions,rules,bypass_actors}'
-gh api repos/drhudsonandrade/OmniGenis/rulesets/22347095 --jq '{id,name,enforcement,conditions,rules,bypass_actors}'
-git ls-remote https://github.com/drhudsonandrade/Codework.git refs/heads/main
-git ls-remote https://github.com/drhudsonandrade/OmniGenis.git refs/heads/main
+repo="$(gh api repositories/1212760346 --jq .full_name)"
+owner="${repo%%/*}"
+gh api "repos/$repo" --jq '{id,full_name,visibility,default_branch}'
+gh api "repos/$repo/rulesets/21303100" --jq '{id,name,enforcement,conditions,rules,bypass_actors}'
+gh api "repos/$repo/rulesets/22347095" --jq '{id,name,enforcement,conditions,rules,bypass_actors}'
+git ls-remote "https://github.com/$owner/Codework.git" refs/heads/main
+git ls-remote "https://github.com/$repo.git" refs/heads/main
 # In a detached worktree at baseline SHA 939dfea5cc7cb2745638168d518d2005e941e9c6:
 /tmp/codework-ci-artifact-opt-venv/bin/python scripts/validate_repo.py
 /tmp/codework-ci-artifact-opt-venv/bin/python -m unittest discover -s tests -v
@@ -1162,7 +1166,7 @@ git switch main
 git reset --hard origin/main
 python3 scripts/project_identity_guard.py --check
 python3 scripts/validate_repo.py
-gh api repos/drhudsonandrade/OmniGenis/rulesets --jq '.[] | [.id,.name,.enforcement] | @tsv'
+gh api repos/$repo/rulesets --jq '.[] | [.id,.name,.enforcement] | @tsv'
 ```
 
 Also verify repository ID `1212760346`, visibility `public`, default branch `main`, and capture the new `origin/main` SHA.

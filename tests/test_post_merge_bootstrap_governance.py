@@ -40,7 +40,7 @@ def _write_project_attestation(root: Path) -> tuple[Path, Path]:
             "--source",
             str(source),
             "--source-locator",
-            "chatgpt-project://GENOMA/instructions",
+            "project-instructions://GENOMA/instructions",
             "--verified-at",
             "2026-08-24T05:20:00Z",
             "--output",
@@ -89,7 +89,7 @@ class PostMergeBootstrapGovernanceTests(unittest.TestCase):
             self.assertEqual(payload["evidence_classification"], "VERIFIED_OWNER_SNAPSHOT_ONLY")
             self.assertFalse(payload["project_bootstrap_installed"])
             self.assertEqual(payload["installation_status"], "NÃO DISPONÍVEL")
-            self.assertEqual(payload["source"]["locator"], "chatgpt-project://GENOMA/instructions")
+            self.assertEqual(payload["source"]["locator"], "project-instructions://GENOMA/instructions")
             verified = subprocess.run(
                 [
                     sys.executable,
@@ -123,7 +123,7 @@ class PostMergeBootstrapGovernanceTests(unittest.TestCase):
                     "--source",
                     str(source),
                     "--source-locator",
-                    "chatgpt-project://GENOMA/instructions",
+                    "project-instructions://GENOMA/instructions",
                     "--verified-at",
                     "2026-08-24T05:20:00Z",
                     "--output",
@@ -296,7 +296,9 @@ class PostMergeBootstrapGovernanceTests(unittest.TestCase):
         self.assertEqual(types, {"deletion", "non_fast_forward", "required_status_checks"})
         self.assertNotIn("pull_request", types)
         status_rule = next(rule for rule in ruleset["rules"] if rule["type"] == "required_status_checks")
-        checks = {item["context"]: item.get("integration_id") for item in status_rule["parameters"]["required_status_checks"]}
+        required_checks = status_rule["parameters"]["required_status_checks"]
+        checks = {item["context"]: item.get("integration_id") for item in required_checks if "context" in item}
+        fingerprints = [item["context_fingerprint"] for item in required_checks if "context_fingerprint" in item]
         self.assertIn("CodeRabbit", checks)
         self.assertEqual(checks.get("Greptile Review"), 867647)
         self.assertEqual(checks.get("GitGuardian Security Checks"), 46505)
@@ -308,7 +310,9 @@ class PostMergeBootstrapGovernanceTests(unittest.TestCase):
             "DeepSource: SQL",
         ):
             self.assertEqual(checks.get(context), 16372)
-        self.assertIn("security/snyk (drhudsonandrade)", checks)
+        self.assertEqual(len(fingerprints), 1)
+        self.assertEqual(fingerprints[0]["digest"], "13148c18c6ce9155ee89d2c0de0435a9ff86e658bc56851d2a8ec24062134bf7 ".strip())
+        self.assertEqual(fingerprints[0]["provider_family"], "dependency-security")
         self.assertEqual(checks.get("semgrep-cloud-platform/scan"), 4836909)
         self.assertNotIn("Gitleaks secret scan", checks)
         self.assertTrue(status_rule["parameters"]["strict_required_status_checks_policy"])

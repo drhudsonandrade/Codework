@@ -17,6 +17,11 @@ if str(ROOT) not in sys.path:
 from scripts.code_language_guard import LanguagePolicyError, validate_code_language  # noqa: E402
 from scripts.residual_language_audit import ResidualLanguageError, audit_repository  # noqa: E402
 from scripts.project_identity_guard import validate_project_identity  # noqa: E402
+from scripts.zero_identity_guard import (  # noqa: E402
+    PolicyError,
+    RepositoryScanError,
+    validate_zero_identity,
+)
 from scripts.sealed_ruleset import (  # noqa: E402
     EXPECTED_NAME,
     EXPECTED_SHA,
@@ -38,10 +43,12 @@ REQUIRED_PATHS = (
     "config/code_language_policy.json", "config/code_language_legacy_baseline.json",
     "config/residual_language_classification.json",
     "config/project_identity.json", "config/legacy_identity_ledger.json",
+    "config/zero_identity_policy.json",
     "manifests/GRCh38.sources.tsv", "manifests/GRCh38.lock.sha256.example", "manifests/RULESET_V3.4.sha256",
     "normative/sealed/MANIFEST.json", "normative/sealed/README.md",
     "scripts/__init__.py", "scripts/sealed_ruleset.py", "scripts/code_language_guard.py",
     "scripts/residual_language_audit.py", "scripts/project_identity_guard.py",
+    "scripts/zero_identity_guard.py",
     "scripts/check_versions.sh", "scripts/fetch_grch38.sh",
     "scripts/build_bwa_mem2_index.sh", "scripts/validate_grch38.sh", "scripts/validate_bwa_mem2_functional.sh",
     "scripts/generate_canary.py", "scripts/score_variants.py", "scripts/run_canary.sh", "scripts/verify_ruleset.sh",
@@ -779,6 +786,10 @@ def validate(root: Path) -> list[str]:
         if not (root / relative).is_file()
     )
     errors.extend(validate_project_identity(root))
+    try:
+        errors.extend(validate_zero_identity(root))
+    except (PolicyError, RepositoryScanError) as exc:
+        errors.append(f"zero identity guard failed: {type(exc).__name__}: {exc}")
     errors.extend(
         f"superseded active ruleset path must be archived outside executable surfaces: {relative}"
         for relative in FORBIDDEN_ACTIVE_PATHS

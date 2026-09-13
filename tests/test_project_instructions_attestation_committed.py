@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "deploy" / "attestations" / "project-instructions-v3.4.txt"
 ATTESTATION = ROOT / "deploy" / "attestations" / "project-instructions-v3.4.json"
 EXPECTED_SOURCE_SHA256 = "c1cf295a7aede4efd2fb6270505d2aa3229e19e8e4fb20acb18dd87340ce4164"
-EXPECTED_ATTESTATION_SHA256 = "399a8d629bf73a879465bf3861bf6117e637c399033cbacabb83cae176538054"
+EXPECTED_ATTESTATION_SHA256 = "b943b07b26cd3d48db69cb68a71bb0583e15f9ce65dee9b264ee70f591285829"
 
 
 class CommittedProjectInstructionsAttestationTests(unittest.TestCase):
@@ -32,7 +32,7 @@ class CommittedProjectInstructionsAttestationTests(unittest.TestCase):
         self.assertEqual(evidence["installation_status"], "NÃO DISPONÍVEL")
         self.assertEqual(evidence["source_sha256"], EXPECTED_SOURCE_SHA256)
         self.assertEqual(evidence["file_sha256"], EXPECTED_ATTESTATION_SHA256)
-        self.assertEqual(evidence["source_locator"], "chatgpt-project://GENOMA/instructions")
+        self.assertEqual(evidence["source_locator"], "project-instructions://GENOMA/instructions")
         self.assertEqual(evidence["ruleset_identity"], "v3.4/VIGENTE/17/08/2026")
 
     def test_local_snapshot_cannot_be_promoted_to_installed_by_editing_json(self) -> None:

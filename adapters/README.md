@@ -1,6 +1,6 @@
 # Optional adapters — anti-lock-in contract
 
-The GENOMA core has **zero required Cloudflare, Temporal, Supabase, Vercel, microfn, OpenAI or ChatGPT runtime dependency**. Every optional service must call the same stable CLI/HTTP contracts and may disappear without changing scientific truth.
+The GENOMA core has **zero required Cloudflare, Temporal, Supabase, Vercel, microfn, OpenAI or AI client runtime dependency**. Every optional service must call the same stable CLI/HTTP contracts and may disappear without changing scientific truth.
 
 | Adapter | Optional role | What it may do | What it must never do |
 |---|---|---|---|
@@ -9,7 +9,7 @@ The GENOMA core has **zero required Cloudflare, Temporal, Supabase, Vercel, micr
 | Supabase | evidence projection | searchable index/materialized views with RLS | become the only copy of evidence/audit history |
 | Vercel | UI | dashboard, reports, operator controls | run NGS calling or own normative state |
 | microfn | glue | tiny health/webhook adapters | contain scientific rules or secrets by default |
-| OpenAI/ChatGPT | interface | translate user intent to manifests, explain deterministic results | satisfy gates by narrative; fabricate tool/data execution |
+| AI/MCP | interface | translate user intent to manifests, explain deterministic results | satisfy gates by narrative; fabricate tool/data execution |
 
 ## Port contract
 

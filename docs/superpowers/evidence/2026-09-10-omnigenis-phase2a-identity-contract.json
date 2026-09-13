@@ -2,34 +2,42 @@
   "base_sha": "939dfea5cc7cb2745638168d518d2005e941e9c6",
   "baseline_provenance": {
     "git_endpoint_continuity": {
-      "command": "git ls-remote https://github.com/drhudsonandrade/Codework.git refs/heads/main && git ls-remote https://github.com/drhudsonandrade/OmniGenis.git refs/heads/main",
-      "environment": "github_cli_live",
-      "exit_code": 0,
       "output": {
         "locator": "inline:baseline_provenance.git_endpoint_continuity.output.summary",
         "raw_output_retention": "ephemeral local execution artifact; digest retained here",
         "raw_output_sha256": "02beb0acd93a9e932c4ae8293d5c01dc6f957333cc7347389bc48ae79b1bf9e2",
-        "sha256": "a436f690db5b7a3cff0e20929d433a0e2936ec940620f58bcd2d23380a7f63d1",
-        "summary": "old_url_main=939dfea5cc7cb2745638168d518d2005e941e9c6; new_url_main=939dfea5cc7cb2745638168d518d2005e941e9c6; same_main_history=true"
+        "sha256": "800dcd25363f547f800d541333e1da28b61ad90576f49f36008b7731cfe463bf",
+        "summary": "old_endpoint_locator=runtime-owner/Codework.git; new_endpoint_locator=repository_id:1212760346; old_main=939dfea5cc7cb2745638168d518d2005e941e9c6; new_main=939dfea5cc7cb2745638168d518d2005e941e9c6; same_main_history=true",
+        "historical_summary_sha256": "a436f690db5b7a3cff0e20929d433a0e2936ec940620f58bcd2d23380a7f63d1",
+        "summary_provenance": "DEIDENTIFIED_DERIVATIVE_OF_HISTORICAL_OUTPUT"
       },
       "source_output_sha256": {
         "new": "51b499c0c1e69aec509280447fc5f7471d7e6f220c483fa21ca81dd75112c2c4",
         "old": "51b499c0c1e69aec509280447fc5f7471d7e6f220c483fa21ca81dd75112c2c4"
       },
-      "status": "PASS"
+      "reproduction_command": "repo=\"$(gh api repositories/1212760346 --jq .full_name)\"; owner=\"${repo%%/*}\"; git ls-remote \"https://github.com/$owner/Codework.git\" refs/heads/main && git ls-remote \"https://github.com/$repo.git\" refs/heads/main",
+      "reproduction_command_status": "DOCUMENTED_METHOD_NOT_HISTORICAL_LITERAL_EXECUTION",
+      "historical_command_sha256": "d5a85d93862d27ac8e340346375f73d872562fceb9744ca23f2420d0aef0e6f0",
+      "historical_environment": "github_cli_live",
+      "historical_exit_code": 0,
+      "historical_status": "PASS"
     },
     "repository_metadata": {
-      "command": "gh api repos/drhudsonandrade/OmniGenis --jq {id,full_name,visibility,default_branch}",
-      "environment": "github_cli_live",
-      "exit_code": 0,
       "output": {
         "locator": "inline:baseline_provenance.repository_metadata.output.summary",
         "raw_output_retention": "ephemeral local execution artifact; digest retained here",
         "raw_output_sha256": "0a85c68dfdbb0c63b6d00a353564755658bdf304bfe074e3aa1ddf8904133bb9",
-        "sha256": "0038c91f3803f6ba3b011cfeaeb17ee16f1045d1cad8a8d149f79d8a94ff50aa",
-        "summary": "{\"default_branch\":\"main\",\"full_name\":\"drhudsonandrade/OmniGenis\",\"id\":1212760346,\"visibility\":\"public\"}"
+        "sha256": "e7ce2a8a62d315365c6e73c4328550789c9bf5d783159a4fc58455e24b2f96ff",
+        "summary": "{\"default_branch\":\"main\",\"repository_id\":1212760346,\"repository_name\":\"OmniGenis\",\"visibility\":\"public\"}",
+        "historical_summary_sha256": "0038c91f3803f6ba3b011cfeaeb17ee16f1045d1cad8a8d149f79d8a94ff50aa",
+        "summary_provenance": "DEIDENTIFIED_DERIVATIVE_OF_HISTORICAL_OUTPUT"
       },
-      "status": "PASS"
+      "reproduction_command": "repo=\"$(gh api repositories/1212760346 --jq .full_name)\"; gh api \"repos/$repo\" --jq '{id,full_name,visibility,default_branch}'",
+      "reproduction_command_status": "DOCUMENTED_METHOD_NOT_HISTORICAL_LITERAL_EXECUTION",
+      "historical_command_sha256": "2792dd719238e5a7067f402776895bef599ff7025cd77fdc396d1034ccdbd54e",
+      "historical_environment": "github_cli_live",
+      "historical_exit_code": 0,
+      "historical_status": "PASS"
     },
     "root_suite": {
       "command": "/tmp/codework-ci-artifact-opt-venv/bin/python -m unittest discover -s tests -v",
@@ -45,21 +53,25 @@
       "status": "PASS"
     },
     "rulesets": {
-      "command": "gh api repos/drhudsonandrade/OmniGenis/rulesets/21303100 && gh api repos/drhudsonandrade/OmniGenis/rulesets/22347095",
-      "environment": "github_cli_live",
-      "exit_code": 0,
       "output": {
         "locator": "inline:baseline_provenance.rulesets.output.summary",
         "raw_output_retention": "ephemeral local execution artifact; digest retained here",
         "raw_output_sha256": "3d503173bf8fd7db94e327c3eee8568aab357189a5f05363c5a2952f6ca4354f",
         "sha256": "9dd6f9751d20d160d6a8d7eabb196fa5598b147708ccbf445b1c49e59d4186ed",
-        "summary": "[{\"enforcement\":\"active\",\"id\":21303100,\"name\":\"GENOMA protected main\"},{\"enforcement\":\"active\",\"id\":22347095,\"name\":\"GENOMA approval gate\"}]"
+        "summary": "[{\"enforcement\":\"active\",\"id\":21303100,\"name\":\"GENOMA protected main\"},{\"enforcement\":\"active\",\"id\":22347095,\"name\":\"GENOMA approval gate\"}]",
+        "historical_summary_sha256": "9dd6f9751d20d160d6a8d7eabb196fa5598b147708ccbf445b1c49e59d4186ed",
+        "summary_provenance": "HISTORICAL_SUMMARY_RETAINED"
       },
       "source_output_sha256": {
         "21303100": "34f59e68e7f1fe6f15f805ec34ba0b422bfc0ed82bac21fb5c470fbd777c43b8",
         "22347095": "0b5168721a16d2eb51a9f1c196d1d8062da91f451098773035ece3f89b5d7ce0"
       },
-      "status": "PASS"
+      "reproduction_command": "repo=\"$(gh api repositories/1212760346 --jq .full_name)\"; gh api \"repos/$repo/rulesets/21303100\" && gh api \"repos/$repo/rulesets/22347095\"",
+      "reproduction_command_status": "DOCUMENTED_METHOD_NOT_HISTORICAL_LITERAL_EXECUTION",
+      "historical_command_sha256": "e54587564b15269b7741dbb5d8b84fdc10f48c737958877af66530f6825bdb93",
+      "historical_environment": "github_cli_live",
+      "historical_exit_code": 0,
+      "historical_status": "PASS"
     },
     "validate_repo": {
       "command": "/tmp/codework-ci-artifact-opt-venv/bin/python scripts/validate_repo.py",
@@ -88,7 +100,8 @@
       "authentication": "authenticated CLI; no credential material recorded",
       "gh_version": "2.100.0 (2026-09-03)",
       "git_version": "2.43.0",
-      "repository": "drhudsonandrade/OmniGenis"
+      "repository_id": 1212760346,
+      "repository_name": "OmniGenis"
     },
     "implementation_pinned_python_3_12_3": {
       "git_version": "2.43.0",
@@ -217,8 +230,9 @@
   "provenance_sources": {
     "phase1_migration_evidence": {
       "path": "docs/superpowers/evidence/2026-09-10-omnigenis-repository-identity-migration.json",
+      "pre_deidentification_sha256": "e514dcfdbe477df340a07da8812d7157cdb36e34bef763b52622b7c64ca0aecc",
       "role": "repository rename, repository identity, ruleset and endpoint continuity source",
-      "sha256": "e514dcfdbe477df340a07da8812d7157cdb36e34bef763b52622b7c64ca0aecc"
+      "sha256": "bea6d7c14f73a83c70b60955406ac8a4aeea31a27f80c8266905c7373f9e917d"
     }
   },
   "reviewer_remediation": {

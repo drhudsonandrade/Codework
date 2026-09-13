@@ -87,14 +87,14 @@ published implementation SHA. These counts are not additive independent suites.
 
 ### Local evidence locators and digests
 
-Host: `drhudson` (Ubuntu). The retained evidence directory is:
+Host: `legacy-operator` (Ubuntu). The retained evidence directory is:
 
 `/srv/remote-desktop-commander-workspace/codework-audit/scientific-english-stage3/`
 
 These local filesystem locators are **not public download URLs**. SHA-256 values
 bind the retained files; the commands and portable comparison below let another
-checkout reproduce the checks without access to this host. CI results are linked
-from [PR #59 checks](https://github.com/drhudsonandrade/Codework/pull/59/checks).
+checkout reproduce the checks without access to this host. Retrieve PR #59 checks
+at runtime with `repo=$(gh api repositories/1212760346 --jq .full_name); gh pr checks 59 --repo "$repo"`.
 
 | File beneath that directory | SHA-256 | Recorded scope |
 | --- | --- | --- |
@@ -117,7 +117,7 @@ The ZIP-descriptor assertion was tested on exact commit
 `55057022f964e48f4f5934c52d132900936ca758`, tree
 `b933146abbf2afb8886a4a56b7117a64d3dddeb6`.
 
-Retained complete log on `drhudson`:
+Retained complete log on `legacy-operator`:
 `/srv/remote-desktop-commander-workspace/codework-audit/scientific-english-stage3/review-final-validation.log`
 
 SHA-256: `946177be7f9577ad46d83867864fab2e6edead10cac5845c239961481b6d30bf`.

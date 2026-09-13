@@ -13,11 +13,11 @@ GENOMA adopts standards and patterns from mature genomics/workflow ecosystems wh
 | Evidence query database | rebuildable projection | PostgreSQL/Supabase with grants + RLS | Optional, never canonical |
 | Supply-chain provenance | OCI digest + BuildKit provenance + SBOM | SLSA provenance concepts | Registry/provider replaceable |
 | Policy | Python deterministic gates + Rego parity + structured attestations | Policy-as-code / independent policy engines | Normative TXT remains source |
-| Human/AI interface | CLI + HTTP first; MCP/ChatGPT adapter | vendor UI/agent ecosystems | Fully optional |
+| Human/AI interface | CLI + HTTP first; MCP/AI client adapter | vendor UI/agent ecosystems | Fully optional |
 
 ## Design advantages over monolithic systems
 
-1. **Scientific truth is not in the UI.** A ChatGPT, web application, notebook or future agent can disappear without changing the stored execution evidence.
+1. **Scientific truth is not in the UI.** A AI client, web application, notebook or future agent can disappear without changing the stored execution evidence.
 2. **Normative text is content-addressed.** Each rule is machine-addressable and rules requiring judgement retain structured attestation instead of fake booleans.
 3. **Data plane and policy plane fail independently.** A workflow can execute but fail policy; a policy can be healthy while NGS compute is unavailable. Neither is allowed to impersonate the other.
 4. **Audit evidence is exportable.** JSON/JSONL, SHA-256, OCI digests and plain files survive vendor changes better than proprietary dashboards.

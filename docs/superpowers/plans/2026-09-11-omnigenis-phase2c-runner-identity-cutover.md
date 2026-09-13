@@ -13,8 +13,8 @@
 ## Global Constraints
 
 - Base branch is `main`; Phase 2C begins only after Phase 2B merge commit `a1e669dd613f68f4d82ca7f1f565772ec8098cb1` and successful protected-main GHCR publication.
-- The verified Phase 2B image is `ghcr.io/drhudsonandrade/omnigenis-genome@sha256:b34cddd157132f0b039bebb1674abb4957e024fd0332568fc3ae9c2ca0fa8454` from workflow run `34617560951`, attempt 2, publish job `103363105798`.
-- Current runners are IDs `21` and `22`, names `drhudson-codework-01` and `drhudson-codework-02`; both were online and idle before Phase 2C.
+- The verified Phase 2B image is `ghcr.io/<runtime-owner>/omnigenis-genome@sha256:b34cddd157132f0b039bebb1674abb4957e024fd0332568fc3ae9c2ca0fa8454` from workflow run `34617560951`, attempt 2, publish job `103363105798`.
+- Current runners are IDs `21` and `22`, names `runner_id=21; retired_name_sha256=90eeec4bbf8402458fd978e8e455ae3dbf93637bd7addb068ff5b0ae2d80b2cd` and `runner_id=22; retired_name_sha256=d230518f559a417c7807ef428a3fa8adeafb30921d2c57e1545ee8b4314d3e93`; both were online and idle before Phase 2C.
 - Canonical pool label is `omnigenis-isolated`; canonical per-runner labels are `omnigenis-01` and `omnigenis-02`.
 - Do not remove `codework-isolated`, `codework-01`, or `codework-02` before the real protected-main canary succeeds after merge.
 - Never unregister, stop, or recreate both runners at the same time.
@@ -67,7 +67,7 @@ self.assertEqual(evidence["publish_job_id"], 103363105798)
 self.assertEqual(evidence["status"], "VERIFIED")
 self.assertEqual(
     evidence["image_reference"],
-    "ghcr.io/drhudsonandrade/omnigenis-genome@sha256:b34cddd157132f0b039bebb1674abb4957e024fd0332568fc3ae9c2ca0fa8454",
+    "ghcr.io/<runtime-owner>/omnigenis-genome@sha256:b34cddd157132f0b039bebb1674abb4957e024fd0332568fc3ae9c2ca0fa8454",
 )
 self.assertEqual(evidence["artifact_id"], 10276395379)
 self.assertEqual(evidence["attempt_1_failure_class"], "UPSTREAM_DOCKER_HUB_502")
@@ -121,7 +121,9 @@ git commit -m "docs: seal OmniGenis Phase 2B GHCR publication"
 Execute and save only non-secret fields:
 
 ```bash
-gh api repos/drhudsonandrade/OmniGenis/actions/runners \
+repo="$(gh api repositories/1212760346 --jq .full_name)"
+test -n "$repo"
+gh api repos/$repo/actions/runners \
   --jq '.runners[] | {id,name,status,busy,labels:[.labels[].name]}'
 ```
 
@@ -130,9 +132,9 @@ Require IDs 21 and 22, `status=online`, `busy=false`, legacy pool label present.
 - [ ] **Step 2: Add canonical labels without deleting anything**
 
 ```bash
-gh api --method POST repos/drhudsonandrade/OmniGenis/actions/runners/21/labels \
+gh api --method POST repos/$repo/actions/runners/21/labels \
   -f 'labels[]=omnigenis-isolated' -f 'labels[]=omnigenis-01'
-gh api --method POST repos/drhudsonandrade/OmniGenis/actions/runners/22/labels \
+gh api --method POST repos/$repo/actions/runners/22/labels \
   -f 'labels[]=omnigenis-isolated' -f 'labels[]=omnigenis-02'
 ```
 
@@ -410,5 +412,5 @@ After explicit human merge:
 4. Only after that canary passes, remove `codework-isolated`, `codework-01`, and `codework-02` from runner metadata using label-specific DELETE endpoints; never use a replace-all operation accidentally.
 5. Verify both runners remain online with `omnigenis-isolated` and their canonical per-runner labels.
 6. Rerun the Runtime/Resource Gate before any runner-name re-registration. If recreation details are not verifiably available, stop with names unchanged rather than unregistering a working runner.
-7. If safe recreation is proven, keep runner 02 online while runner 01 is re-registered as `drhudson-omnigenis-01`; verify/canary; then and only then repeat for runner 02.
+7. If safe recreation is proven, keep runner 02 online while runner 01 is re-registered as `runner_id=21; retired_name_sha256=0840cef7416ffb5cfc1eb56b6273c34797f68d9e39bddf4293c187db450ea594`; verify/canary; then and only then repeat for runner 02.
 8. Final runner-name/pool evidence is carried into Phase 2D sealing. No simultaneous two-runner outage is permitted.

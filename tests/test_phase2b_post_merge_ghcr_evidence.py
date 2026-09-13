@@ -7,11 +7,6 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = ROOT / "docs/superpowers/evidence/2026-09-11-omnigenis-phase2b-post-merge-ghcr.json"
 MERGE_COMMIT = "a1e669dd613f68f4d82ca7f1f565772ec8098cb1"
-IMAGE_REFERENCE = (
-    "ghcr.io/drhudsonandrade/omnigenis-genome@"
-    "sha256:b34cddd157132f0b039bebb1674abb4957e024fd0332568fc3ae9c2ca0fa8454"
-)
-
 
 class Phase2BPostMergeGhcrEvidenceTest(unittest.TestCase):
     """Require durable proof that Phase 2B published the canonical image."""
@@ -30,7 +25,14 @@ class Phase2BPostMergeGhcrEvidenceTest(unittest.TestCase):
         self.assertEqual(evidence["successful_attempt"], 2)
         self.assertEqual(evidence["publish_job_id"], 103363105798)
         self.assertEqual(evidence["status"], "VERIFIED")
-        self.assertEqual(evidence["image_reference"], IMAGE_REFERENCE)
+        self.assertNotIn("image_reference", evidence)
+        self.assertEqual(evidence["registry"], "ghcr.io")
+        self.assertEqual(evidence["package"], "omnigenis-genome")
+        self.assertEqual(
+            evidence["digest"],
+            "sha256:b34cddd157132f0b039bebb1674abb4957e024fd0332568fc3ae9c2ca0fa8454",
+        )
+        self.assertEqual(evidence["repository_id"], 1212760346)
         self.assertEqual(evidence["artifact_id"], 10276395379)
 
     def test_initial_failure_is_recorded_as_transient_upstream(self) -> None:

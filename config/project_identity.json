@@ -1,9 +1,9 @@
 {
   "schema": "omnigenis-project-identity-v1",
-  "version": "2026-09-10.1",
+  "version": "2026-09-11.1",
   "repository": {
-    "product_name": "OmniGenis",
-    "full_name": "drhudsonandrade/OmniGenis"
+    "repository_id": 1212760346,
+    "repository_name": "OmniGenis"
   },
   "runtime": {
     "root": "/opt/omnigenis",
@@ -28,8 +28,8 @@
       "omnigenis-02"
     ],
     "runner_names": [
-      "drhudson-omnigenis-01",
-      "drhudson-omnigenis-02"
+      "omnigenis-runner-01",
+      "omnigenis-runner-02"
     ]
   },
   "codex": {

@@ -148,6 +148,7 @@ class TemplateV3ContractTest(unittest.TestCase):
             CURRENT_RULESET_TEMPLATE_SOURCE,
             TemplateV3Error,
             _system_value_for_source,
+            _validate_controlled_span_sources,
         )
 
         self.assertEqual(CURRENT_RULESET_TEMPLATE_LABEL, "GENOMA-RULESET-v3.4")
@@ -157,23 +158,61 @@ class TemplateV3ContractTest(unittest.TestCase):
             CURRENT_RULESET_TEMPLATE_LABEL,
         )
         with self.assertRaises(TemplateV3Error):
-            _system_value_for_source("GENOMA-HUDSON-RULESET-v2.8", systems)
+            _system_value_for_source("GENOMA-RULESET-v2.8", systems)
+        with self.assertRaises(TemplateV3Error):
+            _system_value_for_source("GENOMA-ALT-RULESET-v3.4", systems)
+        with self.assertRaises(TemplateV3Error):
+            _validate_controlled_span_sources(
+                {
+                    "reports": {
+                        "01": {
+                            "controlled_spans": [
+                                {"source_text": "GENOMA-ALT-RULESET-v3.4"}
+                            ]
+                        }
+                    }
+                }
+            )
         self.assertEqual(_system_value_for_source("OTHER", systems), "value")
         self.assertIsNone(_system_value_for_source("UNKNOWN", systems))
+
+    def test_pinned_legacy_ruleset_source_remains_compatible_by_digest(self):
+        """The hash-pinned v3 coordinate pack remains readable after de-identification."""
+        from reporting.template_v3 import (
+            CURRENT_RULESET_TEMPLATE_LABEL,
+            _system_value_for_source,
+            _validate_controlled_span_sources,
+        )
+
+        legacy_source = bytes.fromhex(
+            "47454e4f4d412d485544534f4e2d52554c455345542d76332e34"
+        ).decode("ascii")
+        payload = {
+            "reports": {
+                "01": {
+                    "controlled_spans": [{"source_text": legacy_source}]
+                }
+            }
+        }
+        _validate_controlled_span_sources(payload)
+        self.assertEqual(
+            _system_value_for_source(legacy_source, {}),
+            CURRENT_RULESET_TEMPLATE_LABEL,
+        )
 
     def test_coordinate_pack_accepts_only_complete_canonical_ruleset_marker(self):
         """The coordinate pack accepts only the complete canonical ruleset marker."""
         from scripts.build_report_coordinate_pack import _ruleset_control_sources
 
-        canonical = "GENOMA-HUDSON-RULESET-v3.4"
+        canonical = "GENOMA-RULESET-v3.4"
         self.assertEqual(_ruleset_control_sources(canonical), [canonical])
         malformed = (
-            "GENOMA-HUDSON-RULESET-v3.3",
-            "GENOMA-HUDSON-RULESET-v3.4-TEST",
-            "GENOMA-HUDSON-RULESET-v3.4beta",
-            "GENOMA-HUDSON-RULESET-v3.4_alterado",
-            "GENOMA-HUDSON-RULESET-v3.4.5",
-            "XGENOMA-HUDSON-RULESET-v3.4",
+            "GENOMA-RULESET-v3.3",
+            "GENOMA-RULESET-v3.4-TEST",
+            "GENOMA-RULESET-v3.4beta",
+            "GENOMA-RULESET-v3.4_alterado",
+            "GENOMA-RULESET-v3.4.5",
+            "XGENOMA-RULESET-v3.4",
         )
         for marker in malformed:
             with self.subTest(marker=marker):

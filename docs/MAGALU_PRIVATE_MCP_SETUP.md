@@ -6,7 +6,7 @@
 
 Repository creation, CI success and a synthetic canary do not establish post-deployment status. Promotion requires deployment on the target VM, current runtime/resource gates, a live MCP canary, and the section 260 suite at 15/15 with no critical failure.
 
-The external ruleset manifest is `manifests/RULESET_V3.4.sha256`, and the sealed 13-part transport composition is defined by `normative/sealed/MANIFEST.json`. The executable normative source is that sealed repository transport materialized at runtime by the reviewed materializer; do not maintain a second active ruleset TXT in ChatGPT Project sources or another operational path. The ChatGPT Project may retain only procedural bootstrap instructions plus the canonical identity/digest needed to verify the runtime source.
+The external ruleset manifest is `manifests/RULESET_V3.4.sha256`, and the sealed 13-part transport composition is defined by `normative/sealed/MANIFEST.json`. The executable normative source is that sealed repository transport materialized at runtime by the reviewed materializer; do not maintain a second active ruleset TXT in interactive AI workspace sources or another operational path. The interactive AI workspace may retain only procedural bootstrap instructions plus the canonical identity/digest needed to verify the runtime source.
 
 To verify a securely materialized runtime copy when operating on the target host:
 
@@ -14,20 +14,20 @@ To verify a securely materialized runtime copy when operating on the target host
 scripts/verify_ruleset.sh /secure/runtime/REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt
 ```
 
-This confirms the hash and the `VIGENTE`/`v3.4`/`17/08/2026` header but deliberately leaves deployment pending. In the ChatGPT Project, remove superseded active rulesets and avoid adding a duplicate executable ruleset; keep the current **BOOTSTRAP CURTO** in Project Instructions with the canonical filename/version/date/digest, then run the 15 live prompts in section 260 only against the runtime-materialized source.
+This confirms the hash and the `VIGENTE`/`v3.4`/`17/08/2026` header but deliberately leaves deployment pending. In the interactive AI workspace, remove superseded active rulesets and avoid adding a duplicate executable ruleset; keep the current **BOOTSTRAP CURTO** in Project Instructions with the canonical filename/version/date/digest, then run the 15 live prompts in section 260 only against the runtime-materialized source.
 
 ## 1. GitHub access
 
 You do not need to create folders in advance. Git creates paths such as `.github/workflows` when files are committed.
 
 1. Open <https://github.com/settings/installations> while signed in to the GitHub account that owns the public `OmniGenis` repository.
-2. Locate the ChatGPT/OpenAI GitHub App and choose **Configure**.
+2. Locate the connected GitHub App and choose **Configure**.
 3. Under repository access, choose **Only select repositories** and select `OmniGenis`, or choose all repositories if that broader scope is intentional.
 4. Confirm the requested permissions include repository contents and pull requests. GitHub App permissions are defined by the app; if write permissions are not requested, reconnecting cannot upgrade them.
 5. Open the repository's **Settings → Actions** page and allow Actions for the repository.
 6. The repository is public. Never route untrusted pull-request or fork code to the genomic VM; reserve the private `omnigenis-isolated` runner for trusted protected-`main` execution under the existing workflow gates.
 
-If ChatGPT still shows the repository but calls return `Unknown tool`, start a new ChatGPT conversation after reconnecting. If GitHub returns `403 Resource not accessible by integration`, re-open the installation page and verify that `OmniGenis` is selected; this is an installation-scope problem, not a missing repository folder.
+If AI client still shows the repository but calls return `Unknown tool`, start a new AI client conversation after reconnecting. If GitHub returns `403 Resource not accessible by integration`, re-open the installation page and verify that `OmniGenis` is selected; this is an installation-scope problem, not a missing repository folder.
 
 ## 2. Target VM and persistent storage
 
@@ -37,7 +37,7 @@ Recommended starting point for full GRCh38 indexing and one WGS at a time:
 - 12–24 vCPU.
 - 1–2 TiB encrypted NVMe/block storage mounted at `/srv/genome`.
 - Ubuntu 24.04 LTS or another supported Linux distribution.
-- Object storage for encrypted raw FASTQ/archive copies; do not route 60+ GiB genomic files through ChatGPT.
+- Object storage for encrypted raw FASTQ/archive copies; do not route 60+ GiB genomic files through AI client.
 
 Create a dedicated `genome` system user and persistent directories:
 
@@ -138,14 +138,14 @@ sudo systemctl enable --now genome-mcp.service
 curl --fail http://127.0.0.1:3000/healthz
 ```
 
-Inspect `http://127.0.0.1:3000/mcp` with MCP Inspector before connecting ChatGPT.
+Inspect `http://127.0.0.1:3000/mcp` with MCP Inspector before connecting AI client.
 
 ## 8. OpenAI Secure MCP Tunnel
 
-1. In OpenAI Platform tunnel settings, create a tunnel and associate both the Platform organization and the target ChatGPT workspace.
+1. In OpenAI Platform tunnel settings, create a tunnel and associate both the Platform organization and the target interactive AI workspace.
 2. Grant the operator **Tunnels Read + Use**; creating or editing the tunnel also needs **Read + Manage**.
 3. Download the current public `tunnel-client` release from the Platform page; do not hard-code a floating binary URL in automation.
-4. Enter the runtime API key directly in the VM secret store or `/etc/omnigenis/tunnel-client.env` with mode `0600`. Never paste it into ChatGPT, GitHub, logs or command arguments.
+4. Enter the runtime API key directly in the VM secret store or `/etc/omnigenis/tunnel-client.env` with mode `0600`. Never paste it into AI client, GitHub, logs or command arguments.
 5. Initialize the HTTP profile using the real tunnel id and local MCP URL:
 
 ```bash
@@ -157,14 +157,14 @@ tunnel-client doctor --profile omnigenis-genome --explain
 ```
 
 6. Install `deploy/tunnel-client.service.example` as a reviewed systemd service and keep `tunnel-client run --profile omnigenis-genome` healthy.
-7. In ChatGPT web, enable **Settings → Security and login → Developer mode**. Go to ChatGPT Plugins, choose **+**, select **Tunnel**, and select or paste the `tunnel_id`.
+7. In AI workspace web client, enable **Settings → Security and login → Developer mode**. Go to AI client Plugins, choose **+**, select **Tunnel**, and select or paste the `tunnel_id`.
 8. Review the four discovered tools and keep confirmation enabled for `run_synthetic_canary`.
 
 The private tunnel is for developer-mode/internal use, not public plugin-directory submission.
 
 ## 9. Personal WGS arrival
 
-Upload FASTQ/BAM/CRAM directly to encrypted object or block storage using resumable transfer. Store only object keys and checksums in job metadata; never upload a 60+ GiB WGS through ChatGPT. Before calling variants, confirm input type, sample model, GRCh38 compatibility, read groups, sex/ploidy assumptions, known-sites resources, coverage and contamination/QC requirements.
+Upload FASTQ/BAM/CRAM directly to encrypted object or block storage using resumable transfer. Store only object keys and checksums in job metadata; never upload a 60+ GiB WGS through AI client. Before calling variants, confirm input type, sample model, GRCh38 compatibility, read groups, sex/ploidy assumptions, known-sites resources, coverage and contamination/QC requirements.
 
 For a full clinical-grade workflow, add and validate `nf-core/sarek`/GATK gVCF/BQSR/joint-calling and a GIAB benchmark in a separate reviewed change. The synthetic canary is not a substitute.
 

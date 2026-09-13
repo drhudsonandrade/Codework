@@ -26,7 +26,7 @@ EXPECTED_NAME = "REGRAS_PROJETO_GENOMA_VIGENTE_v3.4_2026-08-17.txt"
 EXPECTED_SHA = "ab7a5f0ba9709e2f92a11ae4630f82ebae70385eab877ad3464fac6bd44a3580"
 EXPECTED_VERSION = "v3.4"
 EXPECTED_DATE = "17/08/2026"
-EXPECTED_ARCHIVED_BOOTSTRAP_SHA = "87af4f99bcd6b6f3f857a1ca725103e95dabf70c3c926d7f0d4e83b037e69fd8"
+EXPECTED_ARCHIVED_BOOTSTRAP_SHA = "33ace0f91f524ddf3fed1ced5ca95bcebcfe230570660615ac6ff57164420e22"
 EXPECTED_SUPERSEDED_FIXTURE_SHA = "5a6f888f176ed4c963c43c24f38697ea363f5772be06c63e70d6a8f5c497e503"
 EXPECTED_BOOTSTRAP_ATTESTATION_SHA = "f7ce057e27a08c1e08c2bb1a74ab6c0fc777f323a852a2d946df344731ee8a2e"
 EXPECTED_BOOTSTRAP_CHECKS = frozenset(
@@ -149,12 +149,19 @@ class V34ActivationContractTests(unittest.TestCase):
         for relative in EXPECTED_FORBIDDEN_ACTIVE_PATHS:
             self.assertFalse((ROOT / relative).exists())
 
-    def test_archived_bootstrap_is_byte_exact_historical_provenance(self) -> None:
+    def test_archived_bootstrap_is_deidentified_and_provenance_bound(self) -> None:
         archived = next(SUPERSEDED_FIXTURE.parent.glob("bootstrap-project-*.HISTORICAL.json"))
         self.assertTrue(archived.is_file())
         self.assertEqual(
             hashlib.sha256(archived.read_bytes()).hexdigest(),
             EXPECTED_ARCHIVED_BOOTSTRAP_SHA,
+        )
+        payload = json.loads(archived.read_text(encoding="utf-8"))
+        migration = payload["provenance_migration"]
+        self.assertEqual(migration["status"], "DEIDENTIFIED_CURRENT_TREE")
+        self.assertEqual(
+            migration["pre_deidentification_sha256"],
+            "87af4f99bcd6b6f3f857a1ca725103e95dabf70c3c926d7f0d4e83b037e69fd8",
         )
 
     def test_stray_superseded_identity_outside_history_is_rejected(self) -> None:

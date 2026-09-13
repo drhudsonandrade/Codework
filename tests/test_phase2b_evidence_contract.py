@@ -22,6 +22,9 @@ PLAN_RELATIVE = (
 PLAN = ROOT / PLAN_RELATIVE
 BASE_SHA = "4c0e5222248b5f9f2537d627091b80afc9c9e120"
 PHASE2B_MERGE_COMMIT = "a1e669dd613f68f4d82ca7f1f565772ec8098cb1"
+PHASE2B_EVIDENCE_COMMIT = "87edc2c958150736884ad37297f96a8eb7a7464f"
+PHASE2B_CURRENT_EVIDENCE_SHA256 = "b829c61985b7738ae1790ea9455bd475afaa3ca4b7c8d5b99feb59b37911a9f3"
+PHASE2B_HISTORICAL_EVIDENCE_SHA256 = "36e2d0e9bd719e5c1691bc4e9f0a62095dd9f44958cfd5705214d4018a1c8378"
 LEGACY_WORD = "code" + "work"
 
 
@@ -129,6 +132,13 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
         }
         self.assertTrue(required.issubset(evidence))
 
+    def test_current_deidentified_evidence_bytes_are_independently_pinned(self) -> None:
+        """Pin the current deidentified evidence independently of its own fields."""
+        self.assertEqual(
+            hashlib.sha256(EVIDENCE.read_bytes()).hexdigest(),
+            PHASE2B_CURRENT_EVIDENCE_SHA256,
+        )
+
     def test_implementation_sha_tree_and_evidence_commit_are_git_bound(self) -> None:
         """Bind merged Phase 2B evidence to its historical implementation commit."""
         evidence = self.load()
@@ -148,6 +158,7 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
         ).split()
         self.assertEqual(len(merge_fields), 3)
         evidence_commit = merge_fields[2]
+        self.assertEqual(evidence_commit, PHASE2B_EVIDENCE_COMMIT)
         self.assertEqual(self.git("rev-parse", f"{evidence_commit}^"), implementation)
         changed = self.git(
             "diff-tree", "--no-commit-id", "--name-only", "-r", evidence_commit
@@ -157,7 +168,17 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
             [GIT_EXECUTABLE, "show", f"{evidence_commit}:{EVIDENCE_RELATIVE}"],
             cwd=ROOT,
         )
-        self.assertEqual(committed_evidence, EVIDENCE.read_bytes())
+        provenance = evidence["deidentification_provenance"]
+        self.assertEqual(
+            hashlib.sha256(committed_evidence).hexdigest(),
+            PHASE2B_HISTORICAL_EVIDENCE_SHA256,
+        )
+        self.assertEqual(
+            provenance["historical_blob_sha256"],
+            PHASE2B_HISTORICAL_EVIDENCE_SHA256,
+        )
+        self.assertEqual(provenance["evidence_commit"], PHASE2B_EVIDENCE_COMMIT)
+        self.assertEqual(provenance["merge_commit"], PHASE2B_MERGE_COMMIT)
         ancestry = subprocess.run(
             [GIT_EXECUTABLE, "merge-base", "--is-ancestor", PHASE2B_MERGE_COMMIT, "HEAD"],
             cwd=ROOT,
@@ -256,11 +277,10 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
         protected = evidence["protected_boundaries"]
         self.assertEqual(protected["runner_cutover"], "NOT_STARTED_PHASE_2C")
         runners = protected["runner_snapshot"]
-        expected_names = {
-            f"drhudson-{LEGACY_WORD}-01",
-            f"drhudson-{LEGACY_WORD}-02",
-        }
-        self.assertEqual({runner["name"] for runner in runners}, expected_names)
+        self.assertEqual({runner["id"] for runner in runners}, {21, 22})
+        for runner in runners:
+            self.assertRegex(runner["retired_name_sha256"], r"^[0-9a-f]{64}$")
+            self.assertNotIn("name", runner)
         legacy_pool = LEGACY_WORD + "-isolated"
         for runner in runners:
             self.assertIn(legacy_pool, runner["labels"])
@@ -340,6 +360,15 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
                 "git diff --check",
             ],
         )
+
+    def test_plan_resolves_repository_selector_before_runner_api_calls(self) -> None:
+        """Require a fresh shell to resolve the repository before runner API use."""
+        plan = PLAN.read_text(encoding="utf-8")
+        initializer = 'repo="$(gh api repositories/1212760346 --jq .full_name)"'
+        first_runner_call = "gh api repos/$repo/actions/runners"
+        self.assertIn(initializer, plan)
+        self.assertIn(first_runner_call, plan)
+        self.assertLess(plan.index(initializer), plan.index(first_runner_call))
 
     def test_plan_bootstrap_defers_evidence_contract_and_full_suite(self) -> None:
         """Keep evidence-dependent gates out of the pre-evidence bootstrap cycle."""

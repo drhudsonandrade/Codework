@@ -1,9 +1,9 @@
 # OmniGenis Repository Identity Migration Design
 
-**Date:** 2026-09-10  
-**Status:** Approved design, pre-implementation  
-**Repository before migration:** `drhudsonandrade/Codework`  
-**Repository after migration:** `drhudsonandrade/OmniGenis`  
+**Date:** 2026-09-10
+**Status:** Approved design, pre-implementation
+**Repository before migration:** `repository_id=1212760346; historical_repository_name=Codework`
+**Repository after migration:** `repository_id=1212760346; repository_name=OmniGenis`
 **Baseline commit:** `ae3cd2166d1f6ed5875fdb8be7d82543c962ee54`
 
 ## 1. Objective
@@ -26,7 +26,7 @@ The baseline contains 415 tracked files. A deterministic scan found 46 tracked f
 
 Phase 1 distinguishes four classes:
 
-1. **Repository-address identity** — `drhudsonandrade/Codework`, clone URLs, installation instructions, active repository links, and documentation that instructs operators to select the repository by name. These are Phase 1 migration targets.
+1. **Repository-address identity** — `repository_id=1212760346; historical_repository_name=Codework`, clone URLs, installation instructions, active repository links, and documentation that instructs operators to select the repository by name. These are Phase 1 migration targets.
 2. **Current human-facing repository identity** — active headings or prose that call the repository `Codework` as its present name. These may become `OmniGenis` where they describe current state rather than history.
 3. **Historical evidence** — old PR URLs, prior run URLs, checkpoints, audits, and documents whose truth depends on recording the name used at that time. These remain unchanged unless a new explanatory note is needed.
 4. **Internal technical contracts** — `/opt/codework`, `/etc/codework`, `codework-genome`, `codework-isolated`, `codework-genome-mcp`, `codework-private-genome`, `codework-codex`, `CODEWORK_CODERABBIT_BIN_DIR`, and `codework/genome-runtime`. These are explicitly deferred to Phase 2.
@@ -53,15 +53,15 @@ Use GitHub's supported repository rename operation on the existing repository ob
 
 After the mutation, verify that the repository ID remains `1212760346`, `main` resolves to the same commit SHA that existed immediately before the rename, visibility remains public as explicitly approved, and the two active rulesets remain attached and enforced.
 
-Verify that the old repository URL redirects to the new repository and that the new canonical repository URL is `https://github.com/drhudsonandrade/OmniGenis`.
+Verify the redirect without persisting an owner-qualified URL: resolve `repo=$(gh api repositories/1212760346 --jq .full_name)` and `owner=${repo%%/*}` at runtime, then compare the historical `$owner/Codework` endpoint with `$repo`. Persist only `repository_id=1212760346` and `repository_name=OmniGenis` as canonical identity.
 
 ### Phase 1C — local remote migration
 
-Update the authorized Ubuntu workspace remote from `https://github.com/drhudsonandrade/Codework.git` to `https://github.com/drhudsonandrade/OmniGenis.git`. Verify fetch resolution and that the stable repository history is unchanged.
+Update the authorized Ubuntu workspace remote by resolving `repo=$(gh api repositories/1212760346 --jq .full_name)` and `owner=${repo%%/*}` at runtime, then migrate from `https://github.com/$owner/Codework.git` to `https://github.com/$repo.git`. Verify fetch resolution and that the stable repository history is unchanged; do not persist the runtime-qualified `owner/name`.
 
 ### Phase 1D — active repository-reference update
 
-Create a dedicated implementation branch from the post-rename `main`. Update only active references whose meaning is the current GitHub repository identity. Candidate surfaces include `AGENTS.md`, `README.md` if needed, `docs/BRANCH_GOVERNANCE.md`, `docs/GITHUB_MOBILE_IMPORT.md`, `docs/MAGALU_PRIVATE_MCP_SETUP.md`, `docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md`, active setup instructions, and any executable code that hard-codes `drhudsonandrade/Codework` as a repository address.
+Create a dedicated implementation branch from the post-rename `main`. Update only active references whose meaning is the current GitHub repository identity. Candidate surfaces include `AGENTS.md`, `README.md` if needed, `docs/BRANCH_GOVERNANCE.md`, `docs/GITHUB_MOBILE_IMPORT.md`, `docs/MAGALU_PRIVATE_MCP_SETUP.md`, `docs/RECOVERY_AND_ACTIVATION_RUNBOOK.md`, active setup instructions, and any executable code that hard-codes `repository_id=1212760346; historical_repository_name=Codework` as a repository address.
 
 Do not rewrite historical PR/run URLs merely because GitHub redirects them. Their original path is historical evidence and remains valid as evidence of what existed when the record was created.
 
@@ -77,11 +77,11 @@ If an external integration loses repository authorization or reports only agains
 
 ## 6. GitHub Actions and package behavior
 
-The current repository uses relative reusable workflow invocation (`./.github/workflows/genoma-audit.yml`) rather than `uses: drhudsonandrade/Codework/...`. Therefore the known GitHub limitation for renamed repositories referenced as external reusable actions is not currently a blocking dependency.
+The current repository uses relative reusable workflow invocation (`./.github/workflows/genoma-audit.yml`) rather than `uses: repository_id=1212760346; historical_repository_name=Codework/...`. Therefore the known GitHub limitation for renamed repositories referenced as external reusable actions is not currently a blocking dependency.
 
 Phase 1 preserves the existing GHCR package/image names such as `codework-genome` and `genoma-policy-engine`. The repository rename changes the source repository identity, not package naming contracts. Any package rename belongs to Phase 2 and requires an explicit compatibility and retention plan.
 
-Workflow expressions based on `${{ github.repository }}` should naturally resolve to `drhudsonandrade/OmniGenis` after the rename. Hard-coded repository-address literals must be identified and reviewed individually.
+GitHub Actions exposes the numeric ID as `${{ github.repository_id }}` and the provider-qualified `owner/name` as `${{ github.repository }}`. Treat the latter as a runtime provider value, not canonical persisted identity. Hard-coded repository-address literals must be identified and reviewed individually.
 
 The self-hosted runner label `codework-isolated` is an execution-routing contract and is not renamed in Phase 1. Changing a runner label at the same time as the repository rename would create an unnecessary CI availability risk.
 
@@ -108,7 +108,7 @@ Local Git checks include the new `origin` URL, successful fetch, identical expec
 
 Code validation must at minimum execute `python3 scripts/validate_repo.py`, `python3 scripts/verify_supply_chain_lock.py`, the relevant root regression tests, documentation/language guards, `git diff --check`, and any tests introduced specifically for rename boundaries. If the implementation touches MCP, policy-engine, Docker, or workflow behavior beyond repository-address literals, run the corresponding AGENTS.md validation set and treat that as scope escalation.
 
-The test PR after the rename must demonstrate that the required GitHub checks can be produced under `drhudsonandrade/OmniGenis`, including CodeRabbit, GitGuardian, DeepSource, Snyk, Semgrep, static validation, container-canary, and policy checks applicable to the PR.
+The test PR after the rename must demonstrate that the required GitHub checks can be produced under `repository_id=1212760346; repository_name=OmniGenis`, including CodeRabbit, GitGuardian, DeepSource, Snyk, Semgrep, static validation, container-canary, and policy checks applicable to the PR.
 
 ## 9. Rollback and failure handling
 

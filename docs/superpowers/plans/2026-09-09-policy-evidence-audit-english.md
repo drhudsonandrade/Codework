@@ -26,7 +26,7 @@ No duplicate implementation, new state, schema or compatibility wrapper is neede
 - Do not replace quoted normative strings in diagnostics or fixtures.
 - No real genomic data, clinical interpretation, calling or deployment.
 - No permission changes, no direct implementation commit to main, no auto-merge.
-- Prior executor workspace was inaccessible to the `hudson` account. Work uses a
+- Prior executor workspace was inaccessible to the `operator` account. Work uses a
   separate full-history GitHub clone and worktree; old evidence is not overwritten.
 
 ## Evidence scope of completed checkboxes
@@ -35,7 +35,7 @@ Completed implementation checkboxes below refer to the initial implementation
 commit `270580ec85129f2e9a89ef8c2950d6309aa30cd9`, tree
 `a7999bca24cab207c0aaf0ee399c81d9e18133b7`, or to explicitly labeled historical
 RED/mutation worktree runs. They do not certify a later correction commit.
-The [exact-HEAD evidence record](https://github.com/drhudsonandrade/Codework/pull/60#issuecomment-5596016415)
+The exact-HEAD evidence record (resolve with `repo=$(gh api repositories/1212760346 --jq .full_name); gh api "repos/$repo/issues/comments/5596016415"`)
 binds subsequent validation to the actual tested commit, tree, commands and log
 digests. Until the record matches the delivered HEAD, its validation is PENDING.
 Review completion and merge are separate from local validation.
@@ -363,8 +363,8 @@ The header read `VIGENTE`, `v3.4`, `17/08/2026`; all 263 sections were verified.
 Only that temporary materialization was removed. No deployment status is granted.
 
 Remote executions of the same initial implementation are independently linked:
-[canonical policy workflow](https://github.com/drhudsonandrade/Codework/actions/runs/34311670771)
-and [scaffold workflow](https://github.com/drhudsonandrade/Codework/actions/runs/34311670863).
+the canonical policy workflow (`repo=$(gh api repositories/1212760346 --jq .full_name); gh run view 34311670771 --repo "$repo"`)
+and scaffold workflow (`repo=$(gh api repositories/1212760346 --jq .full_name); gh run view 34311670863 --repo "$repo"`).
 Consult their actual job outcomes; scope-skipped jobs are not executions.
 
 ## Historical RED, mutation and diagnostic evidence
@@ -404,7 +404,7 @@ this correction.
 
 A commit cannot embed its own final SHA without changing that SHA. Therefore
 **correction validation remains PENDING in this static note** until the
-[exact-HEAD evidence record](https://github.com/drhudsonandrade/Codework/pull/60#issuecomment-5596016415)
+exact-HEAD evidence record (`repo=$(gh api repositories/1212760346 --jq .full_name); gh api "repos/$repo/issues/comments/5596016415"`)
 identifies the delivered commit and its Git tree, with commands, actual results
 and artifact digests. This is a real existing evidence link, not a placeholder.
 A reviewer must compare its tested SHA to the PR HEAD. Neither this historical
@@ -412,7 +412,7 @@ note nor a prior CI success certifies a different commit. External review and
 manual merge remain independent requirements even after local validation.
 
 Retained local evidence root:
-`/home/hudson/DeskRemoteWorkspace/codework-audit/policy-english-stage4/`.
+`/home/operator/DeskRemoteWorkspace/codework-audit/policy-english-stage4/`.
 Initial logs remain preserved. Correction logs use distinct filenames rather
 than overwriting the initial exact-HEAD proof. Local paths are not public
 artifact URLs; the committed procedures and linked evidence record provide the

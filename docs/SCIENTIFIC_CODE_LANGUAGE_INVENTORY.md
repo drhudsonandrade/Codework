@@ -43,6 +43,6 @@ An executable-AST comparison permits only docstring removal, the three explicit 
 
 The lexical regression detects known terms; it is not a full natural-language proof that every remaining string is English. Intentional quotations and localized content are not defects. Zero Python legacy-baseline entries is not a claim of zero Portuguese in the repository.
 
-Local execution is on the Ubuntu `drhudson` executor. At inspection time Nextflow was not on its PATH, and Docker socket access returned permission denied. No permission changes were attempted. No local Nextflow or container canary, real genomic calling, clinical interpretation, or deployment is claimed. Existing synthetic Python and shell tests and applicable external CI are reported separately in the PR with the exact SHA and actual outcomes.
+Local execution is on the Ubuntu `legacy-operator` executor. At inspection time Nextflow was not on its PATH, and Docker socket access returned permission denied. No permission changes were attempted. No local Nextflow or container canary, real genomic calling, clinical interpretation, or deployment is claimed. Existing synthetic Python and shell tests and applicable external CI are reported separately in the PR with the exact SHA and actual outcomes.
 
 The immutable validation logs, before/after comparisons and runtime gate observations are kept outside Git in the stage-three evidence directory; their hashes and final check links are recorded in the PR. No personal genetic data or regenerated scientific artifacts are included in this change.
