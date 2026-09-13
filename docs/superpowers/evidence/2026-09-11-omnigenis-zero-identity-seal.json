@@ -18,8 +18,8 @@
       "path": 0
     }
   },
-  "implementation_head_sha": "b742d5ce7ee45e27750ca3c57cf565cbadce6339",
-  "implementation_tree_sha": "b643240122d571337c742a17c4ee3be10190fa81",
+  "implementation_head_sha": "f980835994e1ea94e17097312a8a27fce3a411f2",
+  "implementation_tree_sha": "dc01409c45740aee5a41c06065ac695c2e42db78",
   "policy_sha256": "46ff364a66718b4390cbbc38caea586124b637663183d4c33d370086ea6c4a07",
   "post_merge": {
     "canonical_runner_names": [
@@ -91,24 +91,22 @@
       "environment": "python-3.12.3-reporting-lock",
       "execution_basis": "exact implementation commit; excludes only the evidence-topology test module that requires the evidence child",
       "exit_code": 0,
-      "output_kind": "sanitized_summary_plus_raw_log_digest",
-      "output_sha256": "2f7f32cc6235e65254ffe092dbebe8c7e09f54ebc5111b65dcacf5116119ccac",
-      "raw_output_sha256": "004be13eee42d8f603c72a54bfe0812d25f735d52844612e00c1f13b9eed8ee4",
-      "sanitized_output": "Ran 1146 tests in 253.260s\nOK (skipped=1)\n",
-      "validated_head_sha": "b742d5ce7ee45e27750ca3c57cf565cbadce6339",
-      "validated_tree_sha": "b643240122d571337c742a17c4ee3be10190fa81"
+      "output_kind": "inline_sanitized_summary",
+      "output_sha256": "314df99f4c46e9689fb9cc36e0bd3f9274740e9e374246a58013b091b38d5696",
+      "sanitized_output": "Ran 1151 tests in 261.758s\nOK (skipped=1)\n",
+      "validated_head_sha": "f980835994e1ea94e17097312a8a27fce3a411f2",
+      "validated_tree_sha": "dc01409c45740aee5a41c06065ac695c2e42db78"
     },
     "pre_evidence_full_suite": {
-      "command": "PYTHONPATH=tests python3 -m unittest discover -s tests -v",
+      "command": "PYTHONPATH=tests python3 -m unittest $(find tests -maxdepth 1 -name 'test_*.py' ! -name 'test_zero_identity_seal.py' -printf '%f\\n' | sort | sed 's/\\.py$//' | tr '\\n' ' ') -v",
       "environment": "python-3.12.3-reporting-lock",
-      "execution_basis": "staged prospective implementation tree before the evidence-only child; exact tree later committed as implementation",
+      "execution_basis": "staged prospective implementation tree before the evidence-only child; excludes only the evidence-topology module that requires the new evidence child",
       "exit_code": 0,
-      "git_head_during_execution": "60ae0332a7ad02f46112474825d7c8b5797dca17",
-      "output_kind": "sanitized_summary_plus_raw_log_digest",
-      "output_sha256": "a1417e5edcc6451f48a31f85f2bf9c7ffe18911ddd4b67d17426bd5fd5e84c3a",
-      "raw_output_sha256": "c71a791c998fc46ef5995a73a0e773b8c7c9e7e704cc905b77eb38908b43b727",
-      "sanitized_output": "Ran 1154 tests in 248.593s\nOK (skipped=1)\n",
-      "validated_tree_sha": "b643240122d571337c742a17c4ee3be10190fa81"
+      "git_head_during_execution": "b9bdc924dec14d0912e28bb7c03c4ae35be8c55d",
+      "output_kind": "inline_sanitized_summary",
+      "output_sha256": "a3c540fc25cbcb42b2dab958744ab4526112a7f9f04a4f2a93fcb4a54d0a2057",
+      "sanitized_output": "Ran 1151 tests in 261.523s\nOK (skipped=1)\n",
+      "validated_tree_sha": "dc01409c45740aee5a41c06065ac695c2e42db78"
     },
     "project_identity": {
       "command": "python3 scripts/project_identity_guard.py --check",
