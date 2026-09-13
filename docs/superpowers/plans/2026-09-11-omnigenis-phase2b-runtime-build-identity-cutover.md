@@ -59,6 +59,8 @@ Run:
 ```bash
 set -euo pipefail
 printf 'HEAD=%s\n' "$(git rev-parse HEAD)"
+repo="$(gh api repositories/1212760346 --jq .full_name)"
+test -n "$repo"
 for path in /opt/codework /opt/omnigenis /etc/codework /etc/omnigenis; do
   test -e "$path" && echo "PRESENT $path" || echo "ABSENT $path"
 done

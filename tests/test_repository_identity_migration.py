@@ -3,6 +3,7 @@ import json
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+ACCOUNT_DERIVED_CHECK_SHA256 = "13148c18c6ce9155ee89d2c0de0435a9ff86e658bc56851d2a8ec24062134bf7"
 
 
 class RepositoryIdentityMigrationTest(unittest.TestCase):
@@ -100,6 +101,44 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
         self.assertEqual(installation["repository_id"], 1212760346)
         self.assertTrue(installation["repository_access_verified"])
 
+    def test_deidentified_ruleset_evidence_uses_typed_fingerprint_not_fake_context(self) -> None:
+        evidence = json.loads(
+            self.read(
+                "docs/superpowers/evidence/"
+                "2026-09-10-omnigenis-repository-identity-migration.json"
+            )
+        )
+        fake_identity = "legacy-" + "operator" + "andrade"
+        serialized = json.dumps(evidence, sort_keys=True)
+        self.assertNotIn(fake_identity, serialized)
+        fingerprint = {
+            "context_fingerprint": {
+                "algorithm": "sha256",
+                "digest": ACCOUNT_DERIVED_CHECK_SHA256,
+                "case_sensitive": True,
+                "provider_family": "dependency-security",
+            }
+        }
+        self.assertIn(fingerprint, evidence["required_status_contexts"])
+        for phase in ("ruleset_semantics_pre", "ruleset_semantics_post"):
+            protected = evidence[phase]["21303100"]
+            self.assertIn(fingerprint, protected["required_status_contexts"])
+            status_rule = next(
+                rule
+                for rule in protected["rules"]
+                if rule["type"] == "required_status_checks"
+            )
+            self.assertIn(
+                fingerprint,
+                status_rule["parameters"]["required_status_checks"],
+            )
+
+        for relative in (
+            "docs/superpowers/checkpoints/2026-09-03-local-first-ci-session.md",
+            "docs/superpowers/plans/2026-09-10-omnigenis-repository-identity-migration.md",
+        ):
+            self.assertNotIn(fake_identity, self.read(relative), relative)
+
     def test_deidentified_evidence_references_are_runtime_resolvable(self) -> None:
         """Require migrated evidence references to resolve without persisted owner identity."""
         records = {
@@ -140,7 +179,11 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
         self.assertIn("allowed_historical_old_references", plan)
         self.assertIn("phase2_changed_paths", plan)
         self.assertIn("if phase2_changed_paths:", plan)
-        self.assertIn("raise SystemExit(", plan)
+        phase_two_gate = plan.split("if phase2_changed_paths:", 1)[1].split(
+            "print('PHASE2_PRESERVATION_GATE=PASS')",
+            1,
+        )[0]
+        self.assertIn("raise SystemExit(", phase_two_gate)
 
     def test_migration_plan_compares_complete_ruleset_semantics(self):
         plan = self.read(

@@ -8,7 +8,7 @@
 
 ## Completed
 
-- GitHub CLI installed and authenticated as `legacy-operatorandrade`.
+- GitHub CLI installed and authenticated; the historical account login is intentionally de-identified in the current tracked tree.
 - Codex CLI installed but intentionally not used for this architecture.
 - Remote Desktop Commander access expanded to Desktop, Documents, and Downloads.
 - `Codework` cloned locally from GitHub.

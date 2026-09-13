@@ -39,12 +39,12 @@ class Finding:
     offset: int
 
 
-def load_policy(path: Path = DEFAULT_POLICY) -> tuple[FingerprintClass, ...]:
-    """Load and validate the fingerprint-only repository policy."""
+def _parse_policy_bytes(data: bytes) -> tuple[FingerprintClass, ...]:
+    """Parse and validate fingerprint policy bytes from one authoritative tree."""
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        raise PolicyError(f"unable to load zero-identity policy: {exc}") from exc
+        payload = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise PolicyError(f"unable to parse zero-identity policy: {exc}") from exc
     if not isinstance(payload, dict) or payload.get("schema") != _SCHEMA:
         raise PolicyError("zero-identity policy schema mismatch")
     raw_classes = payload.get("classes")
@@ -77,6 +77,15 @@ def load_policy(path: Path = DEFAULT_POLICY) -> tuple[FingerprintClass, ...]:
     if seen_ids != _REQUIRED_CLASS_IDS:
         raise PolicyError("zero-identity policy must define exactly P1, P2, P3, and P4")
     return tuple(classes)
+
+
+def load_policy(path: Path = DEFAULT_POLICY) -> tuple[FingerprintClass, ...]:
+    """Load and validate a fingerprint policy from an explicit filesystem path."""
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        raise PolicyError(f"unable to load zero-identity policy: {exc}") from exc
+    return _parse_policy_bytes(data)
 
 
 _ASCII_LOWER_TABLE = bytes.maketrans(
@@ -213,6 +222,16 @@ def _read_index_blob(
     return blob.stdout
 
 
+def _load_index_policy(root: Path) -> tuple[FingerprintClass, ...]:
+    """Load the policy from the same stage-0 index that supplies scanned blobs."""
+    data = _read_index_blob(
+        root,
+        b"config/zero_identity_policy.json",
+        (),
+    )
+    return _parse_policy_bytes(data)
+
+
 def _safe_diagnostic_path(path: str, classes: tuple[FingerprintClass, ...]) -> str:
     """Redact only path components that themselves contain prohibited fingerprints."""
     raw = path.encode("utf-8", "surrogateescape")
@@ -229,7 +248,7 @@ def _safe_diagnostic_path(path: str, classes: tuple[FingerprintClass, ...]) -> s
 def scan_repository(root: Path, policy_path: Path | None = None) -> list[Finding]:
     """Scan every tracked path and blob for fingerprint matches."""
     root = root.resolve()
-    classes = load_policy(policy_path or root / "config/zero_identity_policy.json")
+    classes = load_policy(policy_path) if policy_path is not None else _load_index_policy(root)
     findings: list[Finding] = []
     for path_bytes in _tracked_paths(root):
         path = path_bytes.decode("utf-8", "surrogateescape")
@@ -242,8 +261,9 @@ def scan_repository(root: Path, policy_path: Path | None = None) -> list[Finding
 
 
 def validate_zero_identity(root: Path) -> list[str]:
-    """Return stable diagnostics without echoing prohibited path components."""
-    classes = load_policy(root.resolve() / "config/zero_identity_policy.json")
+    """Return stable diagnostics using the same indexed policy as the scan."""
+    root = root.resolve()
+    classes = _load_index_policy(root)
     return [
         f"{item.class_id}\t{_safe_diagnostic_path(item.path, classes)}\tbyte_offset={item.offset}"
         for item in scan_repository(root)
@@ -286,7 +306,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"FAIL\tzero_identity_guard\t{exc}", file=sys.stderr)
         return 2
     if args.inventory_json:
-        print(json.dumps(_inventory(findings, load_policy()), indent=2, sort_keys=True))
+        print(json.dumps(_inventory(findings, _load_index_policy(ROOT)), indent=2, sort_keys=True))
         return 0
     if findings:
         print(f"FAIL\tzero_identity_guard\tfindings={len(findings)}", file=sys.stderr)

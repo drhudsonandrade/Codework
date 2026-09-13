@@ -95,7 +95,14 @@
     "DeepSource: Shell",
     "DeepSource: Docker",
     "DeepSource: SQL",
-    "security/snyk (legacy-operatorandrade)",
+    {
+      "context_fingerprint": {
+        "algorithm": "sha256",
+        "digest": "13148c18c6ce9155ee89d2c0de0435a9ff86e658bc56851d2a8ec24062134bf7",
+        "case_sensitive": true,
+        "provider_family": "dependency-security"
+      }
+    },
     "semgrep-cloud-platform/scan"
   ],
   "ruleset_semantics_match": true,
@@ -126,7 +133,14 @@
         "DeepSource: Shell",
         "DeepSource: Docker",
         "DeepSource: SQL",
-        "security/snyk (legacy-operatorandrade)",
+        {
+          "context_fingerprint": {
+            "algorithm": "sha256",
+            "digest": "13148c18c6ce9155ee89d2c0de0435a9ff86e658bc56851d2a8ec24062134bf7",
+            "case_sensitive": true,
+            "provider_family": "dependency-security"
+          }
+        },
         "semgrep-cloud-platform/scan"
       ],
       "rules": [
@@ -183,7 +197,12 @@
                 "integration_id": 16372
               },
               {
-                "context": "security/snyk (legacy-operatorandrade)"
+                "context_fingerprint": {
+                  "algorithm": "sha256",
+                  "digest": "13148c18c6ce9155ee89d2c0de0435a9ff86e658bc56851d2a8ec24062134bf7",
+                  "case_sensitive": true,
+                  "provider_family": "dependency-security"
+                }
               },
               {
                 "context": "semgrep-cloud-platform/scan",
@@ -264,7 +283,14 @@
         "DeepSource: Shell",
         "DeepSource: Docker",
         "DeepSource: SQL",
-        "security/snyk (legacy-operatorandrade)",
+        {
+          "context_fingerprint": {
+            "algorithm": "sha256",
+            "digest": "13148c18c6ce9155ee89d2c0de0435a9ff86e658bc56851d2a8ec24062134bf7",
+            "case_sensitive": true,
+            "provider_family": "dependency-security"
+          }
+        },
         "semgrep-cloud-platform/scan"
       ],
       "rules": [
@@ -321,7 +347,12 @@
                 "integration_id": 16372
               },
               {
-                "context": "security/snyk (legacy-operatorandrade)"
+                "context_fingerprint": {
+                  "algorithm": "sha256",
+                  "digest": "13148c18c6ce9155ee89d2c0de0435a9ff86e658bc56851d2a8ec24062134bf7",
+                  "case_sensitive": true,
+                  "provider_family": "dependency-security"
+                }
               },
               {
                 "context": "semgrep-cloud-platform/scan",
@@ -414,5 +445,6 @@
   "historical_repository_identity": {
     "repository_id": 1212760346,
     "historical_repository_name": "Codework"
-  }
+  },
+  "deidentification_note": "Account-derived required-check context is represented by an exact SHA-256 fingerprint; the historical raw provider captures remain attested only by their preserved digests."
 }

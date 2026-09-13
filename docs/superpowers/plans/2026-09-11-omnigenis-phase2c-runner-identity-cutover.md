@@ -121,6 +121,8 @@ git commit -m "docs: seal OmniGenis Phase 2B GHCR publication"
 Execute and save only non-secret fields:
 
 ```bash
+repo="$(gh api repositories/1212760346 --jq .full_name)"
+test -n "$repo"
 gh api repos/$repo/actions/runners \
   --jq '.runners[] | {id,name,status,busy,labels:[.labels[].name]}'
 ```

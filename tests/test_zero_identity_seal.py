@@ -190,6 +190,12 @@ class ZeroIdentitySealTest(unittest.TestCase):
             self.assertEqual(hashlib.sha256(output).hexdigest(), record["output_sha256"], name)
             self.assertTrue(record["command"], name)
             self.assertNotIn("/tmp/", record["command"], name)
+            if "raw_output_sha256" in record:
+                self.assertIn("raw_output_locator", record, name)
+                locator = record["raw_output_locator"]
+                self.assertIsInstance(locator, str, name)
+                self.assertTrue(locator, name)
+                self.assertFalse(Path(locator).is_absolute(), name)
 
     def test_post_merge_runner_operation_remains_pending(self) -> None:
         evidence = self.load()

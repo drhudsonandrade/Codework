@@ -8,6 +8,7 @@ from scripts.governance_context_identity import (
     context_digest,
     expected_check_is_well_formed,
     match_expected_check,
+    materialize_ruleset_spec,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -60,6 +61,35 @@ class GovernanceContextIdentityTest(unittest.TestCase):
         expected = {"context": "GitGuardian Security Checks", "integration_id": 46505}
         self.assertTrue(match_expected_check({"context": "GitGuardian Security Checks", "integration_id": 46505}, expected))
         self.assertFalse(match_expected_check({"context": "GitGuardian Security Checks", "integration_id": 46506}, expected))
+
+    def test_materializer_resolves_fingerprint_from_authenticated_live_state(self) -> None:
+        payload = json.loads(
+            (ROOT / ".github/governance/main-ruleset.json").read_text(encoding="utf-8")
+        )
+        live = json.loads(json.dumps(payload))
+        status = next(
+            rule for rule in live["rules"] if rule["type"] == "required_status_checks"
+        )
+        fingerprint_index = next(
+            index
+            for index, item in enumerate(status["parameters"]["required_status_checks"])
+            if "context_fingerprint" in item
+        )
+        status["parameters"]["required_status_checks"][fingerprint_index] = {
+            "context": ACCOUNT_CONTEXT
+        }
+
+        provider_payload = materialize_ruleset_spec(payload, live)
+        self.assertNotIn("schema", provider_payload)
+        self.assertNotIn("provider_payload", provider_payload)
+        provider_status = next(
+            rule
+            for rule in provider_payload["rules"]
+            if rule["type"] == "required_status_checks"
+        )
+        checks = provider_status["parameters"]["required_status_checks"]
+        self.assertFalse(any("context_fingerprint" in item for item in checks))
+        self.assertTrue(any(item.get("context") == ACCOUNT_CONTEXT for item in checks))
 
     def test_tracked_ruleset_uses_digest_for_account_derived_check(self) -> None:
         payload = json.loads((ROOT / ".github/governance/main-ruleset.json").read_text(encoding="utf-8"))

@@ -8,6 +8,7 @@ from tests.test_ci_optimization_contract import _job_block
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
+PLAN = ROOT / "docs" / "superpowers" / "plans" / "2026-09-11-omnigenis-phase2c-runner-identity-cutover.md"
 LEGACY = "code" + "work"
 CANONICAL_POOL = "omnigenis-isolated"
 TRUSTED_SELECTOR = (
@@ -24,6 +25,15 @@ class Phase2CRunnerIdentityTest(unittest.TestCase):
     def read(relative: str) -> str:
         """Read an active repository text file as UTF-8."""
         return (ROOT / relative).read_text(encoding="utf-8")
+
+    def test_plan_resolves_repository_selector_before_runner_api_calls(self) -> None:
+        """Require the runner plan to work from a fresh shell."""
+        plan = PLAN.read_text(encoding="utf-8")
+        initializer = 'repo="$(gh api repositories/1212760346 --jq .full_name)"'
+        first_runner_call = "gh api repos/$repo/actions/runners"
+        self.assertIn(initializer, plan)
+        self.assertIn(first_runner_call, plan)
+        self.assertLess(plan.index(initializer), plan.index(first_runner_call))
 
     def test_three_trusted_jobs_use_exact_canonical_selector(self) -> None:
         """Require the canonical pool on exactly the trusted heavy jobs."""

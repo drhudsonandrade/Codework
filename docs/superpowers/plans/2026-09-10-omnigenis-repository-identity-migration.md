@@ -648,7 +648,7 @@ gh pr checks "$PR_NUMBER" --watch --interval 20
 gh pr checks "$PR_NUMBER" --required
 ```
 
-Required protected-main contexts must remain satisfiable, including `static`, `container-canary`, `Canonical policy + 263-rule contract`, `OPA/Rego parity`, `Real Docker + canonical read-only mount`, `CodeRabbit`, `GitGuardian Security Checks`, the five DeepSource contexts, `security/snyk (legacy-operatorandrade)`, and `semgrep-cloud-platform/scan`.
+Required protected-main contexts must remain satisfiable, including `static`, `container-canary`, `Canonical policy + 263-rule contract`, `OPA/Rego parity`, `Real Docker + canonical read-only mount`, `CodeRabbit`, `GitGuardian Security Checks`, the five DeepSource contexts, the account-derived Snyk check identified by SHA-256 fingerprint `13148c18c6ce9155ee89d2c0de0435a9ff86e658bc56851d2a8ec24062134bf7`, and `semgrep-cloud-platform/scan`.
 
 - [ ] **Step 6: Verify rulesets again under the new repository identity**
 

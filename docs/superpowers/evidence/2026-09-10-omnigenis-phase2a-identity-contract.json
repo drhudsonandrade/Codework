@@ -232,7 +232,7 @@
       "path": "docs/superpowers/evidence/2026-09-10-omnigenis-repository-identity-migration.json",
       "pre_deidentification_sha256": "e514dcfdbe477df340a07da8812d7157cdb36e34bef763b52622b7c64ca0aecc",
       "role": "repository rename, repository identity, ruleset and endpoint continuity source",
-      "sha256": "d60776be8738ebe391f80b5da9ccdc39b4cba222a9edece152ca2a08220ac630"
+      "sha256": "bea6d7c14f73a83c70b60955406ac8a4aeea31a27f80c8266905c7373f9e917d"
     }
   },
   "reviewer_remediation": {

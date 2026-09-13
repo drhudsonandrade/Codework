@@ -65,6 +65,23 @@ class ZeroIdentityGuardTest(unittest.TestCase):
         self.track(root, "mixed.txt", b"x" + mixed)
         self.assertTrue(any(f.class_id == "P3" and f.offset == 1 for f in self.findings(root)))
 
+    def test_default_scan_uses_policy_from_same_index_as_tracked_blobs(self) -> None:
+        root = self.make_repo()
+        self.track(root, "staged.bin", MUTATIONS["P2"])
+        policy_path = root / "config" / "zero_identity_policy.json"
+        weakened = json.loads(policy_path.read_text(encoding="utf-8"))
+        for item in weakened["classes"]:
+            if item["id"] == "P2":
+                item["sha256"] = "0" * 64
+        policy_path.write_text(json.dumps(weakened), encoding="utf-8")
+
+        findings = self.findings(root)
+        self.assertTrue(
+            any(f.class_id == "P2" and f.path == "staged.bin" for f in findings)
+        )
+        diagnostics = validate_zero_identity(root)
+        self.assertTrue(any(line.startswith("P2\tstaged.bin\t") for line in diagnostics))
+
     def test_each_class_is_detected_in_tracked_path_name(self) -> None:
         for class_id, token in MUTATIONS.items():
             with self.subTest(class_id=class_id):

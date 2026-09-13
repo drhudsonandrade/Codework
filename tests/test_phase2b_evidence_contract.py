@@ -361,6 +361,15 @@ class Phase2BEvidenceContractTest(unittest.TestCase):
             ],
         )
 
+    def test_plan_resolves_repository_selector_before_runner_api_calls(self) -> None:
+        """Require a fresh shell to resolve the repository before runner API use."""
+        plan = PLAN.read_text(encoding="utf-8")
+        initializer = 'repo="$(gh api repositories/1212760346 --jq .full_name)"'
+        first_runner_call = "gh api repos/$repo/actions/runners"
+        self.assertIn(initializer, plan)
+        self.assertIn(first_runner_call, plan)
+        self.assertLess(plan.index(initializer), plan.index(first_runner_call))
+
     def test_plan_bootstrap_defers_evidence_contract_and_full_suite(self) -> None:
         """Keep evidence-dependent gates out of the pre-evidence bootstrap cycle."""
         plan = PLAN.read_text(encoding="utf-8")
