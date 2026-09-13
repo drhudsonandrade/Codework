@@ -99,7 +99,7 @@ class RepositoryIdentityMigrationTest(unittest.TestCase):
         self.assertNotIn("account_login", installation)
         self.assertEqual(installation["installation_id"], 153834452)
         self.assertEqual(installation["repository_id"], 1212760346)
-        self.assertTrue(installation["repository_access_verified"])
+        self.assertIs(installation["repository_access_verified"], True)
 
     def test_deidentified_ruleset_evidence_uses_typed_fingerprint_not_fake_context(self) -> None:
         evidence = json.loads(
