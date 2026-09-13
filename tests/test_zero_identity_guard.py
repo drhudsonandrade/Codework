@@ -115,9 +115,11 @@ class ZeroIdentityGuardTest(unittest.TestCase):
         path = path_bytes.decode("ascii")
         classes = load_policy(root / "config/zero_identity_policy.json")
         exc = subprocess.CalledProcessError(2, ["git", "ls-files", "-s", "-z", "--", path])
-        with mock.patch("scripts.zero_identity_guard.subprocess.run", side_effect=exc):
-            with self.assertRaises(RepositoryScanError) as ctx:
-                _read_index_blob(root, path_bytes, classes)
+        with (
+            mock.patch("scripts.zero_identity_guard.subprocess.run", side_effect=exc),
+            self.assertRaises(RepositoryScanError) as ctx,
+        ):
+            _read_index_blob(root, path_bytes, classes)
         rendered = str(ctx.exception).encode("utf-8").lower()
         self.assertNotIn(token, rendered)
         self.assertIn(b"git_exit=2", rendered)

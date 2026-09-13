@@ -164,9 +164,9 @@ class ZeroIdentitySealTest(unittest.TestCase):
                 mock.patch(f"{module}.ROOT", repo),
                 mock.patch(f"{module}.EVIDENCE", evidence_path),
                 mock.patch(f"{module}.EVIDENCE_RELATIVE", evidence_relative),
+                self.assertRaises(AssertionError),
             ):
-                with self.assertRaises(AssertionError):
-                    _resolve_evidence_commit(implementation)
+                _resolve_evidence_commit(implementation)
 
     def test_all_fingerprint_classes_are_zero(self) -> None:
         evidence = self.load()
