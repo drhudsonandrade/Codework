@@ -18,8 +18,8 @@
       "path": 0
     }
   },
-  "implementation_head_sha": "f980835994e1ea94e17097312a8a27fce3a411f2",
-  "implementation_tree_sha": "dc01409c45740aee5a41c06065ac695c2e42db78",
+  "implementation_head_sha": "3864448c8cf0d63e30026476f030b32bd65383fa",
+  "implementation_tree_sha": "bc57325735b87103266ce4482eae843367868f7d",
   "policy_sha256": "46ff364a66718b4390cbbc38caea586124b637663183d4c33d370086ea6c4a07",
   "post_merge": {
     "canonical_runner_names": [
@@ -92,21 +92,21 @@
       "execution_basis": "exact implementation commit; excludes only the evidence-topology test module that requires the evidence child",
       "exit_code": 0,
       "output_kind": "inline_sanitized_summary",
-      "output_sha256": "314df99f4c46e9689fb9cc36e0bd3f9274740e9e374246a58013b091b38d5696",
-      "sanitized_output": "Ran 1151 tests in 261.758s\nOK (skipped=1)\n",
-      "validated_head_sha": "f980835994e1ea94e17097312a8a27fce3a411f2",
-      "validated_tree_sha": "dc01409c45740aee5a41c06065ac695c2e42db78"
+      "output_sha256": "1d05b524a85066b87ce3c2ecddbd884c2e026c8bc1ee1103b7d3b4b39eabea9d",
+      "sanitized_output": "Ran 1151 tests in 252.389s\nOK (skipped=1)\n",
+      "validated_head_sha": "3864448c8cf0d63e30026476f030b32bd65383fa",
+      "validated_tree_sha": "bc57325735b87103266ce4482eae843367868f7d"
     },
     "pre_evidence_full_suite": {
       "command": "PYTHONPATH=tests python3 -m unittest $(find tests -maxdepth 1 -name 'test_*.py' ! -name 'test_zero_identity_seal.py' -printf '%f\\n' | sort | sed 's/\\.py$//' | tr '\\n' ' ') -v",
       "environment": "python-3.12.3-reporting-lock",
       "execution_basis": "staged prospective implementation tree before the evidence-only child; excludes only the evidence-topology module that requires the new evidence child",
       "exit_code": 0,
-      "git_head_during_execution": "b9bdc924dec14d0912e28bb7c03c4ae35be8c55d",
+      "git_head_during_execution": "e45dde7413deb34373afca8891d64faedff916fa",
       "output_kind": "inline_sanitized_summary",
-      "output_sha256": "a3c540fc25cbcb42b2dab958744ab4526112a7f9f04a4f2a93fcb4a54d0a2057",
-      "sanitized_output": "Ran 1151 tests in 261.523s\nOK (skipped=1)\n",
-      "validated_tree_sha": "dc01409c45740aee5a41c06065ac695c2e42db78"
+      "output_sha256": "8f6d2838da3e2209ccb4b49b29dfb9da2c72802ce595602e045a7cc5e821cdea",
+      "sanitized_output": "Ran 1151 tests in 252.295s\nOK (skipped=1)\n",
+      "validated_tree_sha": "bc57325735b87103266ce4482eae843367868f7d"
     },
     "project_identity": {
       "command": "python3 scripts/project_identity_guard.py --check",
